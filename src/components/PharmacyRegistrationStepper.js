@@ -7,11 +7,7 @@ import {
 } from "@mui/material";
 import axios from "axios";
 
-// ===== Constants & Helpers =====
-const API_BASE =
-  process.env.REACT_APP_API_BASE_URL ||
-  (typeof window !== "undefined" && window.REACT_APP_API_BASE_URL) ||
-  "";
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 const initialForm = {
   name: "", ownerName: "", city: "", area: "", address: "",
@@ -440,7 +436,7 @@ export default function PharmacyRegistrationStepper() {
       if (files.digitalSignature) fd.append("digitalSignature", files.digitalSignature);
 
       setMsg("");
-      await axios.post(`${API_BASE}/api/pharmacy/register`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      await axios.post(`${API_BASE_URL}/api/pharmacy/register`, fd, { headers: { "Content-Type": "multipart/form-data" } });
       setMsg("Registration submitted! Await admin approval.");
       setForm({ ...initialForm });
       setFiles({});

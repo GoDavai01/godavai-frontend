@@ -8,7 +8,7 @@ import PaymentIcon from "@mui/icons-material/Payment";
 import axios from "axios";
 
 // Use API base from environment variable
-const API_BASE = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 export default function PrescriptionQuoteModal({ open, onClose, quote, token, refreshOrders }) {
   const [loading, setLoading] = useState(false);
@@ -20,7 +20,7 @@ export default function PrescriptionQuoteModal({ open, onClose, quote, token, re
     try {
       // 1. Create Razorpay backend order
       const razorpayOrder = await axios.post(
-        `${API_BASE}/api/payment/razorpay/order`,
+        `${API_BASE_URL}/api/payment/razorpay/order`,
         { amount: Math.round(quote.quotePrice * 100), currency: "INR", receipt: "quote_" + quote._id }
       );
       const options = {
@@ -34,13 +34,13 @@ export default function PrescriptionQuoteModal({ open, onClose, quote, token, re
           try {
             // 2. On payment success, mark paid
             await axios.post(
-              `${API_BASE}/api/orders/${quote._id}/payment-success`,
+              `${API_BASE_URL}/api/orders/${quote._id}/payment-success`,
               { paymentDetails: response },
               { headers: { Authorization: `Bearer ${token}` } }
             );
             // 3. Convert prescription to normal order
             const convertRes = await axios.post(
-              `${API_BASE}/api/prescriptions/${quote._id}/convert-to-order`,
+              `${API_BASE_URL}/api/prescriptions/${quote._id}/convert-to-order`,
               {},
               { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -114,7 +114,7 @@ export default function PrescriptionQuoteModal({ open, onClose, quote, token, re
               setLoading(true);
               try {
                 await axios.put(
-                  `${API_BASE}/api/orders/${quote._id}/reject`,
+                  `${API_BASE_URL}/api/orders/${quote._id}/reject`,
                   {},
                   { headers: { Authorization: `Bearer ${token}` } }
                 );

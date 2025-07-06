@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Box, Typography, TextField, Button, Snackbar, Alert } from "@mui/material";
 import axios from "axios";
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || "";
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 export default function PharmacyLogin() {
   const [step, setStep] = useState(1); // 1: enter mobile & PIN, 2: enter OTP
@@ -18,7 +18,7 @@ export default function PharmacyLogin() {
   const handleSendOTP = async () => {
     setLoading(true);
     try {
-      await axios.post(`${API_BASE}/api/pharmacy/send-otp`, { contact, pin });
+      await axios.post(`${API_BASE_URL}/api/pharmacy/send-otp`, { contact, pin });
       setStep(2);
       setMsg("OTP sent to your registered mobile.");
     } catch (err) {
@@ -33,7 +33,7 @@ export default function PharmacyLogin() {
   const handleVerifyOTP = async () => {
     setLoading(true);
     try {
-      const res = await axios.post(`${API_BASE}/api/pharmacy/verify-otp`, { contact, otp });
+      const res = await axios.post(`${API_BASE_URL}/api/pharmacy/verify-otp`, { contact, otp });
       localStorage.setItem("pharmacyToken", res.data.token);
       setMsg("Login success!");
       setTimeout(() => navigate("/pharmacy/dashboard"), 800);

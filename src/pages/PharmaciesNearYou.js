@@ -17,7 +17,7 @@ const AREA_MAP = {
   Chennai: ["T Nagar", "Velachery", "Anna Nagar"],
 };
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || "";
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 export default function PharmaciesNearYou() {
   const [city, setCity] = useState(localStorage.getItem("city") || "Mumbai");
@@ -40,7 +40,7 @@ export default function PharmaciesNearYou() {
 
   useEffect(() => {
     setLoading(true);
-    let url = `${API_BASE}/api/pharmacies?city=${encodeURIComponent(city)}`;
+    let url = `${API_BASE_URL}/api/pharmacies?city=${encodeURIComponent(city)}`;
     if (area) url += `&area=${encodeURIComponent(area)}`;
     fetch(url)
       .then(res => res.json())

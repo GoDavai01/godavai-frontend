@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useCart } from '../context/CartContext';
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || "";
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 const highlight = (str, color = "#13C0A2") => (
   <span style={{ color, fontWeight: 800 }}>{str}</span>
@@ -29,7 +29,7 @@ const SearchResults = () => {
 
     // 1. Fetch active pharmacies for city/area
     axios
-      .get(`${API_BASE}/api/pharmacies`, {
+      .get(`${API_BASE_URL}/api/pharmacies`, {
         params: {
           city: selectedCity,
           area: selectedArea,
@@ -42,7 +42,7 @@ const SearchResults = () => {
 
         // 2. Now fetch offers for this medicine
         axios
-          .get(`${API_BASE}/api/medicines/by-name`, {
+          .get(`${API_BASE_URL}/api/medicines/by-name`, {
             params: {
               name: query,
               city: selectedCity,
@@ -69,7 +69,7 @@ const SearchResults = () => {
   useEffect(() => {
     if (!query) return;
     axios
-      .get(`${API_BASE}/api/medicines/search`, {
+      .get(`${API_BASE_URL}/api/medicines/search`, {
         params: { q: query, city: selectedCity, area: selectedArea }
       })
       .then((res) => {

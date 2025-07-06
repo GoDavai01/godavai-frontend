@@ -94,7 +94,7 @@ export default function OrderTracking() {
 
   useEffect(() => {
     setLoading(true);
-    axios.get(`${API_BASE}/api/orders/${orderId}`)
+    axios.get(`${API_BASE_URL}/api/orders/${orderId}`)
       .then(res => {
         setOrder({ ...res.data, __type: "order" });
         setLoading(false);
@@ -105,7 +105,7 @@ export default function OrderTracking() {
         if (res.data.pharmacyRating) setPharmacyRating(res.data.pharmacyRating);
       })
       .catch(() => {
-        axios.get(`${API_BASE}/api/prescriptions/order/${orderId}`, { headers: { Authorization: `Bearer ${getToken()}` } })
+        axios.get(`${API_BASE_URL}/api/prescriptions/order/${orderId}`, { headers: { Authorization: `Bearer ${getToken()}` } })
           .then(res => {
             setOrder({ ...res.data, __type: "prescription" });
             setLoading(false);
@@ -129,7 +129,7 @@ export default function OrderTracking() {
     const fetchETA = async () => {
       if (order && order.driverLocation && order.address && order.status === "out_for_delivery") {
         try {
-          const res = await axios.get(`${API_BASE}/api/orders/${order._id}/eta`);
+          const res = await axios.get(`${API_BASE_URL}/api/orders/${order._id}/eta`);
           setEta(res.data.eta || "N/A");
         } catch {
           setEta("N/A");
@@ -156,7 +156,7 @@ export default function OrderTracking() {
 
   const handleAcceptQuote = async () => {
     setQuoteActionLoading(true);
-    await axios.post(`${API_BASE}/api/orders/${order._id}/accept`);
+    await axios.post(`${API_BASE_URL}/api/orders/${order._id}/accept`);
     setQuoteActionLoading(false);
     setQuoteDialog(false);
     window.location.reload();
@@ -164,7 +164,7 @@ export default function OrderTracking() {
 
   const handleRejectQuote = async () => {
     setQuoteActionLoading(true);
-    await axios.put(`${API_BASE}/api/orders/${order._id}/status`, { status: "rejected", statusText: "Rejected by User" });
+    await axios.put(`${API_BASE_URL}/api/orders/${order._id}/status`, { status: "rejected", statusText: "Rejected by User" });
     setQuoteActionLoading(false);
     setQuoteDialog(false);
     window.location.reload();
@@ -173,7 +173,7 @@ export default function OrderTracking() {
   const handleRatingSubmit = async () => {
     setRatingSubmitting(true);
     try {
-      await axios.post(`${API_BASE}/api/orders/${order._id}/ratings`, {
+      await axios.post(`${API_BASE_URL}/api/orders/${order._id}/ratings`, {
         pharmacyRating,
         deliveryRating,
         deliveryBehavior
@@ -441,7 +441,7 @@ export default function OrderTracking() {
                         src={
                           order.prescriptionUrl.startsWith("http")
                             ? order.prescriptionUrl
-                            : `${API_BASE}${order.prescriptionUrl}`
+                            : `${API_BASE_URL}${order.prescriptionUrl}`
                         }
                         alt="Prescription"
                         style={{
@@ -518,7 +518,7 @@ export default function OrderTracking() {
                         src={
                           order.prescription.startsWith("http")
                             ? order.prescription
-                            : `${API_BASE}${order.prescription}`
+                            : `${API_BASE_URL}${order.prescription}`
                         }
                         alt="Prescription"
                         style={{

@@ -4,7 +4,7 @@ import { useCart } from "../context/CartContext";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || "";
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 export default function PharmaciesPage() {
   const [pharmacies, setPharmacies] = useState([]);
@@ -16,7 +16,7 @@ export default function PharmaciesPage() {
   const selectedCity = localStorage.getItem("city") || "Delhi";
 
   useEffect(() => {
-    axios.get(`${API_BASE}/api/pharmacies?city=${encodeURIComponent(selectedCity)}`)
+    axios.get(`${API_BASE_URL}/api/pharmacies?city=${encodeURIComponent(selectedCity)}`)
       .then(res => setPharmacies(res.data))
       .catch(() => setPharmacies([]))
       .finally(() => setLoading(false));
