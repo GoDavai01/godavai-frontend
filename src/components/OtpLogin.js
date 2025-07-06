@@ -25,7 +25,7 @@ export default function OtpLogin({ onLogin }) {
     }
     setLoading(true);
     try {
-      await axios.post("${API_BASE_URL}/api/auth/send-otp", { identifier });
+      await axios.post(`${API_BASE_URL}/api/auth/send-otp`, { identifier });
       setStep(2);
       setSnack({ open: true, msg: "OTP sent!", severity: "success" });
     } catch (err) {
@@ -41,7 +41,7 @@ export default function OtpLogin({ onLogin }) {
     }
     setLoading(true);
     try {
-      const res = await axios.post("${API_BASE_URL}/api/auth/verify-otp", { identifier, otp });
+      const res = await axios.post(`${API_BASE_URL}/api/auth/verify-otp`, { identifier, otp });
       setSnack({ open: true, msg: "Login Successful!", severity: "success" });
 
       // Save token, decode user, update AuthContext
