@@ -58,7 +58,7 @@ export default function CartPage() {
       const medicines = cart.map((med) => med._id);
       const city = cart[0]?.city || "Delhi";
       const area = "";
-      const res = await fetch("${API_BASE_URL}/api/pharmacies/available-for-cart", {
+      const res = await fetch(`${API_BASE_URL}/api/pharmacies/available-for-cart`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ city, area, medicines }),

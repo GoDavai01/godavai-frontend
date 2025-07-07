@@ -50,7 +50,7 @@ useEffect(() => {
   async function sendMsg() {
     if (!input.trim()) return;
     setSending(true);
-    const res = await axios.post("${API_BASE_URL}/api/support-chat/message", {
+    const res = await axios.post(`${API_BASE_URL}/api/support-chat/message`, {
       orderId,
       text: input
     }, {

@@ -17,7 +17,7 @@ export default function AdminRegistration() {
   const handleSubmit = async () => {
     try {
       // Use relative URL for production!
-      await axios.post("${API_BASE_URL}/api/admin/register", data);
+      await axios.post(`${API_BASE_URL}/api/admin/register`, data);
       setMsg("Admin registered!");
       setData({ email: "", password: "", name: "", code: "" });
     } catch (e) {

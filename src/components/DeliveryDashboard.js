@@ -178,7 +178,7 @@ export default function DeliveryDashboard() {
             const { latitude, longitude } = pos.coords;
             for (const o of orders) {
               if (o.status !== "delivered") {
-                await axios.post("${API_BASE_URL}/api/delivery/update-location", {
+                await axios.post(`${API_BASE_URL}/api/delivery/update-location`, {
                   partnerId: partner._id,
                   orderId: o._id,
                   lat: latitude,
@@ -240,7 +240,7 @@ export default function DeliveryDashboard() {
     });
     setPartner(resProfile.data.partner || {});
     setActive(resProfile.data.partner?.active || false);
-    const resOrders = await axios.get("${API_BASE_URL}/api/delivery/orders", {
+    const resOrders = await axios.get(`${API_BASE_URL}/api/delivery/orders`, {
       headers: {
         Authorization: `Bearer ${token}`,
         deliverypartnerid: partnerId
@@ -294,7 +294,7 @@ export default function DeliveryDashboard() {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post("${API_BASE_URL}/api/delivery/login", loginForm);
+      const res = await axios.post(`${API_BASE_URL}/api/delivery/login`, loginForm);
       localStorage.setItem("deliveryToken", res.data.token);
       localStorage.setItem("deliveryPartnerId", res.data.partner._id);
       setPartner(res.data.partner);
@@ -319,7 +319,7 @@ export default function DeliveryDashboard() {
   // Forgot/Reset Password Logic
   const handleForgotStart = async () => {
     try {
-      await axios.post("${API_BASE_URL}/api/delivery/forgot-password", { mobile: forgotForm.mobile });
+      await axios.post(`${API_BASE_URL}/api/delivery/forgot-password`, { mobile: forgotForm.mobile });
       setSnackbar({ open: true, message: "OTP sent to mobile!", severity: "success" });
       setResetPhase(1);
     } catch {
@@ -328,7 +328,7 @@ export default function DeliveryDashboard() {
   };
   const handleResetPassword = async () => {
     try {
-      await axios.post("${API_BASE_URL}/api/delivery/reset-password", {
+      await axios.post(`${API_BASE_URL}/api/delivery/reset-password`, {
         mobile: forgotForm.mobile,
         otp: forgotForm.otp,
         newPassword: forgotForm.newPassword

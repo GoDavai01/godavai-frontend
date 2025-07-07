@@ -183,7 +183,7 @@ export default function MyOrdersPage() {
       const res = await axios.get(`${API_BASE_URL}/api/allorders/myorders-userid/${userId}`);
       let presRes = [];
       try {
-        presRes = await axios.get("${API_BASE_URL}/api/prescriptions/user-orders", {
+        presRes = await axios.get(`${API_BASE_URL}/api/prescriptions/user-orders`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
         });
       } catch {}

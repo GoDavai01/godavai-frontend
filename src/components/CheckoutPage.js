@@ -95,7 +95,7 @@ const handlePlaceOrder = async (
       prescriptionUrl = prescriptionPreview;
     }
     const res = await axios.post(
-      "${API_BASE_URL}/api/orders",
+      `${API_BASE_URL}/api/orders`,
       {
         items: cart,
         address: addresses.find((a) => a.id === selectedAddressId),
@@ -426,7 +426,7 @@ export default function CheckoutPage() {
     let orderBackend;
     try {
       orderBackend = await axios.post(
-        "${API_BASE_URL}/api/payments/razorpay/order",
+        `${API_BASE_URL}/api/payments/razorpay/order`,
         {
           amount: Math.round(fullTotal * 100),
           currency: "INR",

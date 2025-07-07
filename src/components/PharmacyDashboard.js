@@ -187,10 +187,10 @@ export default function PharmacyDashboard() {
   useEffect(() => {
     if (!token) return;
     const fetchAll = () => {
-      axios.get("${API_BASE_URL}/api/pharmacy/orders", { headers: { Authorization: `Bearer ${token}` } })
+      axios.get(`${API_BASE_URL}/api/pharmacy/orders`, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => setOrders(res.data))
         .catch(() => setOrders([]));
-      axios.get("${API_BASE_URL}/api/pharmacy/me", { headers: { Authorization: `Bearer ${token}` } })
+      axios.get(`${API_BASE_URL}/api/pharmacy/me`, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => {
           setActive(res.data.active);
           setPharmacy(res.data);
@@ -227,7 +227,7 @@ export default function PharmacyDashboard() {
   // Fetch medicines (always, so autocomplete works)
   useEffect(() => {
     if (!token) return;
-    axios.get("${API_BASE_URL}/api/pharmacy/medicines", {
+    axios.get(`${API_BASE_URL}/api/pharmacy/medicines`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(res => setMedicines(res.data))
@@ -238,7 +238,7 @@ export default function PharmacyDashboard() {
   const handleLogin = async () => {
     setLoading(true);
     try {
-      const res = await axios.post("${API_BASE_URL}/api/pharmacy/login", login);
+      const res = await axios.post(`${API_BASE_URL}/api/pharmacy/login`, login);
       setToken(res.data.token);
       localStorage.setItem("pharmacyToken", res.data.token);
       setMsg("Logged in as pharmacy!");
@@ -317,7 +317,7 @@ export default function PharmacyDashboard() {
       }
 
       await axios.post(
-        "${API_BASE_URL}/api/pharmacy/medicines",
+        `${API_BASE_URL}/api/pharmacy/medicines`,
         data,
         { headers }
       );
@@ -451,7 +451,7 @@ export default function PharmacyDashboard() {
               onChange={async (e) => {
                 setActive(e.target.checked);
                 await axios.patch(
-                  "${API_BASE_URL}/api/pharmacy/active",
+                  `${API_BASE_URL}/api/pharmacy/active`,
                   { active: e.target.checked },
                   { headers: { Authorization: `Bearer ${token}` } }
                 );

@@ -45,13 +45,13 @@ function SupportChatsAdminPanel() {
   }, [filter]);
 
   const handleReply = async () => {
-    await axios.post("${API_BASE_URL}/api/support-chat/admin-reply", { chatId: chat._id, text: replyMsg });
+    await axios.post(`${API_BASE_URL}/api/support-chat/admin-reply`, { chatId: chat._id, text: replyMsg });
     setReplyMsg("");
     setChat(null);
   };
 
   const handleCloseChat = async (chatId) => {
-    await axios.post("${API_BASE_URL}/api/support-chat/close", { chatId });
+    await axios.post(`${API_BASE_URL}/api/support-chat/close`, { chatId });
     setChat(null);
   };
 
@@ -116,7 +116,7 @@ function DeliveryPartnerChatsAdminPanel() {
   const [selectedChat, setSelectedChat] = useState(null);
 
   useEffect(() => {
-    const fetchChats = () => axios.get("${API_BASE_URL}/api/admin/delivery-chats")
+    const fetchChats = () => axios.get(`${API_BASE_URL}/api/admin/delivery-chats`)
       .then(res => setChats(res.data));
     fetchChats();
     const interval = setInterval(fetchChats, 4000);
@@ -197,7 +197,7 @@ function PaymentsPayoutsPanel({ token }) {
 
   const fetchPayments = async () => {
     try {
-      const res = await fetch("${API_BASE_URL}/api/payments", {
+      const res = await fetch(`${API_BASE_URL}/api/payments`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -397,17 +397,17 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!token) return;
     const interval = setInterval(() => {
-      axios.get("${API_BASE_URL}/api/admin/stats", { headers: { Authorization: `Bearer ${token}` } })
+      axios.get(`${API_BASE_URL}/api/admin/stats`, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => setStats(res.data)).catch(() => { });
-      axios.get("${API_BASE_URL}/api/admin/pending-pharmacies", { headers: { Authorization: `Bearer ${token}` } })
+      axios.get(`${API_BASE_URL}/api/admin/pending-pharmacies`, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => setPendingPharmacies(res.data)).catch(() => { });
-      axios.get("${API_BASE_URL}/api/offers").then((res) => setOffers(res.data)).catch(() => { });
-      axios.get("${API_BASE_URL}/api/orders", { headers: { Authorization: `Bearer ${token}` } })
+      axios.get(`${API_BASE_URL}/api/offers`).then((res) => setOffers(res.data)).catch(() => { });
+      axios.get(`${API_BASE_URL}/api/orders`, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => setOrderList(res.data)).catch(() => { });
-      axios.get("${API_BASE_URL}/api/users", { headers: { Authorization: `Bearer ${token}` } })
+      axios.get(`${API_BASE_URL}/api/users`, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => setUserList(res.data)).catch(() => { });
-      axios.get("${API_BASE_URL}/api/admin/pharmacies").then(res => setPharmacyList(res.data)).catch(() => { });
-      axios.get("${API_BASE_URL}/api/pharmacies?all=1").then((res) => {
+      axios.get(`${API_BASE_URL}/api/admin/pharmacies`).then(res => setPharmacyList(res.data)).catch(() => { });
+      axios.get(`${API_BASE_URL}/api/pharmacies?all=1`).then((res) => {
         setPharmacies(res.data);
         const cities = Array.from(new Set(res.data.map(p => p.city).filter(Boolean)));
         setCityList(["All", ...cities]);
@@ -415,9 +415,9 @@ export default function AdminDashboard() {
         const areas = Array.from(new Set(filteredPharms.map(p => p.area).filter(Boolean)));
         setAreaList(["All", ...areas]);
       }).catch(() => { });
-      axios.get("${API_BASE_URL}/api/delivery/partners", { headers: { Authorization: `Bearer ${token}` } })
+      axios.get(`${API_BASE_URL}/api/delivery/partners`, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => setDeliveryPartners(res.data)).catch(() => { });
-      axios.get("${API_BASE_URL}/api/delivery/pending", { headers: { Authorization: `Bearer ${token}` } })
+      axios.get(`${API_BASE_URL}/api/delivery/pending`, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => setPendingDeliveryPartners(res.data)).catch(() => { });
     }, 3000);
     return () => clearInterval(interval);
@@ -425,7 +425,7 @@ export default function AdminDashboard() {
 
   const handleLogin = async () => {
     try {
-      const res = await axios.post("${API_BASE_URL}/api/admin/login", login);
+      const res = await axios.post(`${API_BASE_URL}/api/admin/login`, login);
       setToken(res.data.token);
       localStorage.setItem("adminToken", res.data.token);
       setMsg("Logged in as admin!");
@@ -442,7 +442,7 @@ export default function AdminDashboard() {
 
   const approveDeliveryPartner = async (id) => {
     try {
-      await axios.post("${API_BASE_URL}/api/delivery/approve", { id }, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.post(`${API_BASE_URL}/api/delivery/approve`, { id }, { headers: { Authorization: `Bearer ${token}` } });
       setMsg("Delivery Partner approved!");
       setPendingDeliveryPartners(prev => prev.filter(p => p._id !== id));
     } catch {
@@ -475,7 +475,7 @@ export default function AdminDashboard() {
 
   const approvePharmacy = async (id) => {
     try {
-      await axios.post("${API_BASE_URL}/api/admin/approve-pharmacy", { pharmacyId: id }, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.post(`${API_BASE_URL}/api/admin/approve-pharmacy`, { pharmacyId: id }, { headers: { Authorization: `Bearer ${token}` } });
       setMsg("Pharmacy approved!");
       setPendingPharmacies((prev) => prev.filter((p) => p._id !== id));
     } catch {
@@ -1114,7 +1114,7 @@ export default function AdminDashboard() {
             <TextField label="Code" value={offer.code} onChange={(e) => setOffer({ ...offer, code: e.target.value })} />
             <TextField label="Image URL" value={offer.image} onChange={(e) => setOffer({ ...offer, image: e.target.value })} />
             <Button variant="contained" onClick={() => {
-              axios.post("${API_BASE_URL}/api/admin/offer", offer, { headers: { Authorization: `Bearer ${token}` } })
+              axios.post(`${API_BASE_URL}/api/admin/offer`, offer, { headers: { Authorization: `Bearer ${token}` } })
                 .then(() => { setMsg("Offer added!"); setOffer({ title: "", description: "", code: "", image: "" }); })
                 .catch(() => setMsg("Failed to add offer"));
             }}>

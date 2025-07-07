@@ -164,7 +164,7 @@ export default function PrescriptionUploadModal({
         const data = new FormData();
         data.append("prescription", file);
         const uploadRes = await axios.post(
-          "${API_BASE_URL}/prescriptions/upload",
+          `${API_BASE_URL}/prescriptions/upload`,
           data,
           {
             headers: {
@@ -176,7 +176,7 @@ export default function PrescriptionUploadModal({
         prescriptionUrl = uploadRes.data.prescriptionUrl || uploadRes.data.url;
       }
       const orderRes = await axios.post(
-        "${API_BASE_URL}/prescriptions/order",
+        `${API_BASE_URL}/prescriptions/order`,
         {
           prescriptionUrl,
           city: userCity,
