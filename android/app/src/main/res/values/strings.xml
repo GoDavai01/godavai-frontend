@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GoDavai</string>
+    <string name="title_activity_main">godavai</string>
+    <string name="package_name">com.godavai.app</string>
+    <string name="custom_url_scheme">com.godavai.app</string>
+</resources>

@@ -1,0 +1,10 @@
+{
+  "appId": "com.godavai.app",
+  "appName": "godavai",
+  "webDir": "build",
+  "bundledWebRuntime": false,
+  "server": {
+    "url": "https://www.godavaii.com",
+    "cleartext": true
+  }
+}
