@@ -1,5 +1,3 @@
-// PharmacyRegistrationStepper.js
-
 import React, { useState } from "react";
 import {
   Box, Button, TextField, Typography, Stepper, Step, StepLabel,
@@ -62,7 +60,7 @@ function computeTimings(form) {
   return JSON.stringify({ is24Hours: false, open, close });
 }
 
-// Snackbar severity helper
+// Helper for snackbar severity
 const getMsgSeverity = (msg) => {
   if (!msg) return "info";
   const lower = msg.toLowerCase();
@@ -73,14 +71,12 @@ const getMsgSeverity = (msg) => {
     lower.includes("highlighted") ||
     lower.includes("missing") ||
     lower.includes("invalid")
-  )
-    return "error";
+  ) return "error";
   if (
     lower.includes("success") ||
     lower.includes("submitted") ||
     lower.includes("approved")
-  )
-    return "success";
+  ) return "success";
   return "info";
 };
 
@@ -524,7 +520,23 @@ export default function PharmacyRegistrationStepper() {
   };
 
   // Go back a step
-  const handleBack = () => setStep(s => s - 1);
+  const handleBack = () => {
+    // Clear ONLY file fields of the current step when going back to it (avoid file "leakage")
+    setFiles(f => {
+      const newFiles = { ...f };
+      if (step === 1) {
+        Object.keys(requiredDocs).concat(Object.keys(optionalDocs)).forEach(k => { delete newFiles[k]; });
+      }
+      if (step === 2) {
+        ["identityProof", "addressProof", "photo"].forEach(k => { delete newFiles[k]; });
+      }
+      if (step === 3) {
+        delete newFiles["digitalSignature"];
+      }
+      return newFiles;
+    });
+    setStep(s => s - 1);
+  };
 
   // ===== RENDER =====
   return (
