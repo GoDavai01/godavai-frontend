@@ -62,6 +62,28 @@ function computeTimings(form) {
   return JSON.stringify({ is24Hours: false, open, close });
 }
 
+// Snackbar severity helper
+const getMsgSeverity = (msg) => {
+  if (!msg) return "info";
+  const lower = msg.toLowerCase();
+  if (
+    lower.includes("fail") ||
+    lower.includes("error") ||
+    lower.includes("required") ||
+    lower.includes("highlighted") ||
+    lower.includes("missing") ||
+    lower.includes("invalid")
+  )
+    return "error";
+  if (
+    lower.includes("success") ||
+    lower.includes("submitted") ||
+    lower.includes("approved")
+  )
+    return "success";
+  return "info";
+};
+
 // ===== StepContent Component (EXTRACTED) =====
 const StepContent = React.memo(function StepContent({
   step, form, errors, handleChange, handleFile, handleTimingChange,
@@ -87,17 +109,17 @@ const StepContent = React.memo(function StepContent({
             onChange={handleChange} required error={!!errors.email} helperText={errors.email ? "Valid email required" : ""} />
           <TextField label="Password" name="password" type="password" value={safe(form.password)}
             onChange={handleChange} required error={!!errors.password} helperText={errors.password ? "Min 6 characters" : ""} />
-            <TextField
-  label="Set 4-digit Login PIN"
-  name="pin"
-  value={safe(form.pin)}
-  onChange={handleChange}
-  required
-  type="password"
-  inputProps={{ maxLength: 4, inputMode: "numeric", pattern: "\\d{4}" }}
-  error={!!errors.pin}
-  helperText={errors.pin ? "PIN must be 4 digits, unique, not same as mobile" : ""}
-/>
+          <TextField
+            label="Set 4-digit Login PIN"
+            name="pin"
+            value={safe(form.pin)}
+            onChange={handleChange}
+            required
+            type="password"
+            inputProps={{ maxLength: 4, inputMode: "numeric", pattern: "\\d{4}" }}
+            error={!!errors.pin}
+            helperText={errors.pin ? "PIN must be 4 digits, unique, not same as mobile" : ""}
+          />
 
           <Box>
             <FormControlLabel
@@ -220,29 +242,28 @@ const StepContent = React.memo(function StepContent({
             <Box key={k}>
               <InputLabel required>{requiredDocs[k]}</InputLabel>
               <input type="file" accept={fileTypes} onChange={e => handleFile(e, k)} />
-{files[k] && (
-  <Typography variant="caption" color="primary">
-    {files[k].name}
-  </Typography>
-)}
-<Typography color="error" variant="caption">
-  {fileErrors[k] || (errors[k] && "Required")}
-</Typography>
-
+              {files[k] instanceof File && (
+                <Typography variant="caption" color="primary">
+                  {files[k].name}
+                </Typography>
+              )}
+              <Typography color="error" variant="caption">
+                {fileErrors[k] || (errors[k] && "Required")}
+              </Typography>
             </Box>
           ))}
           {Object.keys(optionalDocs).map(k => (
             <Box key={k}>
               <InputLabel>{optionalDocs[k]}</InputLabel>
               <input type="file" accept={fileTypes} onChange={e => handleFile(e, k)} />
-    {files[k] && (
-      <Typography variant="caption" color="primary">
-        {files[k].name}
-      </Typography>
-    )}
-    <Typography color="error" variant="caption">
-      {fileErrors[k]}
-    </Typography>
+              {files[k] instanceof File && (
+                <Typography variant="caption" color="primary">
+                  {files[k].name}
+                </Typography>
+              )}
+              <Typography color="error" variant="caption">
+                {fileErrors[k]}
+              </Typography>
             </Box>
           ))}
         </Stack>
@@ -250,32 +271,32 @@ const StepContent = React.memo(function StepContent({
     case 2:
       return (
         <Stack spacing={2}>
-         <InputLabel required>Identity Proof (Aadhaar/PAN/Passport)</InputLabel>
-<input type="file" accept={fileTypes} onChange={e => handleFile(e, "identityProof")} />
-{files.identityProof && (
-  <Typography variant="caption" color="primary">
-    {files.identityProof.name}
-  </Typography>
-)}
-<Typography color="error" variant="caption">{fileErrors.identityProof || (errors.identityProof && "Required")}</Typography>
+          <InputLabel required>Identity Proof (Aadhaar/PAN/Passport)</InputLabel>
+          <input type="file" accept={fileTypes} onChange={e => handleFile(e, "identityProof")} />
+          {files.identityProof instanceof File && (
+            <Typography variant="caption" color="primary">
+              {files.identityProof.name}
+            </Typography>
+          )}
+          <Typography color="error" variant="caption">{fileErrors.identityProof || (errors.identityProof && "Required")}</Typography>
 
-<InputLabel required>Address Proof (Utility bill/VoterID/Rent agreement)</InputLabel>
-<input type="file" accept={fileTypes} onChange={e => handleFile(e, "addressProof")} />
-{files.addressProof && (
-  <Typography variant="caption" color="primary">
-    {files.addressProof.name}
-  </Typography>
-)}
-<Typography color="error" variant="caption">{fileErrors.addressProof || (errors.addressProof && "Required")}</Typography>
+          <InputLabel required>Address Proof (Utility bill/VoterID/Rent agreement)</InputLabel>
+          <input type="file" accept={fileTypes} onChange={e => handleFile(e, "addressProof")} />
+          {files.addressProof instanceof File && (
+            <Typography variant="caption" color="primary">
+              {files.addressProof.name}
+            </Typography>
+          )}
+          <Typography color="error" variant="caption">{fileErrors.addressProof || (errors.addressProof && "Required")}</Typography>
 
-<InputLabel required>Passport-size Photo</InputLabel>
-<input type="file" accept={fileTypes} onChange={e => handleFile(e, "photo")} />
-{files.photo && (
-  <Typography variant="caption" color="primary">
-    {files.photo.name}
-  </Typography>
-)}
-<Typography color="error" variant="caption">{fileErrors.photo || (errors.photo && "Required")}</Typography>
+          <InputLabel required>Passport-size Photo</InputLabel>
+          <input type="file" accept={fileTypes} onChange={e => handleFile(e, "photo")} />
+          {files.photo instanceof File && (
+            <Typography variant="caption" color="primary">
+              {files.photo.name}
+            </Typography>
+          )}
+          <Typography color="error" variant="caption">{fileErrors.photo || (errors.photo && "Required")}</Typography>
         </Stack>
       );
     case 3:
@@ -293,13 +314,13 @@ const StepContent = React.memo(function StepContent({
           <TextField label="Business Contact Number (if different)" name="businessContact" value={safe(form.businessContact)} onChange={handleChange} />
           <TextField label="Emergency/Alternate Number" name="emergencyContact" value={safe(form.emergencyContact)} onChange={handleChange} />
           <InputLabel>Digital Signature (optional)</InputLabel>
-<input type="file" accept={fileTypes} onChange={e => handleFile(e, "digitalSignature")} />
-{files.digitalSignature && (
-  <Typography variant="caption" color="primary">
-    {files.digitalSignature.name}
-  </Typography>
-)}
-<Typography color="error" variant="caption">{fileErrors.digitalSignature}</Typography>
+          <input type="file" accept={fileTypes} onChange={e => handleFile(e, "digitalSignature")} />
+          {files.digitalSignature instanceof File && (
+            <Typography variant="caption" color="primary">
+              {files.digitalSignature.name}
+            </Typography>
+          )}
+          <Typography color="error" variant="caption">{fileErrors.digitalSignature}</Typography>
         </Stack>
       );
     case 4:
@@ -452,171 +473,171 @@ export default function PharmacyRegistrationStepper() {
     setLoading(true);
     try {
       const fd = new FormData();
-Object.keys(form).forEach(k => fd.append(k, form[k] || ""));
-fd.set("pharmacyTimings", computeTimings(form)); // Required for backend!
+      Object.keys(form).forEach(k => fd.append(k, form[k] || ""));
+      fd.set("pharmacyTimings", computeTimings(form)); // Required for backend!
 
-// Append all file fields at once
-Object.keys(files).forEach(k => {
-  if (files[k]) fd.append(k, files[k]);
-});
+      // Append all file fields at once
+      Object.keys(files).forEach(k => {
+        if (files[k]) fd.append(k, files[k]);
+      });
 
-// Validate: Ensure all required files present
-["qualificationCert", "councilCert", "retailLicense", "gstCert", "identityProof", "addressProof", "photo"].forEach(f => {
-  if (!files[f]) {
-    alert(`You must upload: ${f.replace(/([A-Z])/g, " $1")}`);
-    throw new Error("Missing file: " + f);
-  }
-});
+      // Validate: Ensure all required files present
+      ["qualificationCert", "councilCert", "retailLicense", "gstCert", "identityProof", "addressProof", "photo"].forEach(f => {
+        if (!files[f]) {
+          alert(`You must upload: ${f.replace(/([A-Z])/g, " $1")}`);
+          throw new Error("Missing file: " + f);
+        }
+      });
 
-// Debug: Print all form data before sending
-console.log("FormData about to send:");
-for (let [key, value] of fd.entries()) {
-  if (value instanceof File) {
-    console.log(key, "(file):", value.name);
-  } else {
-    console.log(key, value);
-  }
-}
-    setMsg("");
-    await axios.post(`${API_BASE_URL}/api/pharmacy/register`, fd, { headers: { "Content-Type": "multipart/form-data" } });
-    setMsg("Registration submitted! Await admin approval.");
-    // Only reset form and files HERE (on success)
-    setForm({ ...initialForm });
-    setFiles({});
-    setStep(0);
-  } catch (err) {
-    // Do NOT reset the form here
-    if (err.response?.data?.fieldsMissing) {
-      const missing = err.response.data.fieldsMissing;
-      let newErrors = { ...errors };
-      missing.forEach(f => newErrors[f] = true);
-      setErrors(newErrors);
-      setMsg(
-        "Please fill the highlighted fields: " +
-        missing.map(f => f.replace(/([A-Z])/g, ' $1')).join(", ")
-      );
-    } else {
-      setMsg(err.response?.data?.message || "Registration failed. Check your details!");
+      // Debug: Print all form data before sending
+      console.log("FormData about to send:");
+      for (let [key, value] of fd.entries()) {
+        if (value instanceof File) {
+          console.log(key, "(file):", value.name);
+        } else {
+          console.log(key, value);
+        }
+      }
+      setMsg("");
+      await axios.post(`${API_BASE_URL}/api/pharmacy/register`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      setMsg("Registration submitted! Await admin approval.");
+      // Only reset form and files HERE (on success)
+      setForm({ ...initialForm });
+      setFiles({});
+      setStep(0);
+    } catch (err) {
+      // Do NOT reset the form here
+      if (err.response?.data?.fieldsMissing) {
+        const missing = err.response.data.fieldsMissing;
+        let newErrors = { ...errors };
+        missing.forEach(f => newErrors[f] = true);
+        setErrors(newErrors);
+        setMsg(
+          "Please fill the highlighted fields: " +
+          missing.map(f => f.replace(/([A-Z])/g, ' $1')).join(", ")
+        );
+      } else {
+        setMsg(err.response?.data?.message || "Registration failed. Check your details!");
+      }
     }
-  }
-  setLoading(false);
-};
+    setLoading(false);
+  };
 
   // Go back a step
   const handleBack = () => setStep(s => s - 1);
 
   // ===== RENDER =====
   return (
-  <Box
-    sx={{
-      width: "100%",
-      maxWidth: { xs: 360, sm: 450, md: 550 },
-      mx: "auto",
-      mt: 3,
-      p: { xs: 1.5, sm: 2, md: 3 },
-      pb: { xs: 8, md: 12 },
-      borderRadius: 4,
-      bgcolor: "#fff",
-      boxShadow: 4,
-      minHeight: { xs: "100vh", md: "90vh" }
-    }}
-  >
-    <Typography
-      variant="h5"
-      sx={{
-        mb: 3,
-        fontWeight: 900,
-        color: "#13C0A2",
-        textAlign: "center",
-        fontSize: { xs: 20, sm: 24 }
-      }}
-    >
-      Pharmacy Registration
-    </Typography>
     <Box
       sx={{
         width: "100%",
-        overflowX: "auto",
-        mb: 2,
-        pb: 1,
-        // Hide horizontal scrollbar (optional)
-        "&::-webkit-scrollbar": { display: "none" }
+        maxWidth: { xs: 360, sm: 450, md: 550 },
+        mx: "auto",
+        mt: 3,
+        p: { xs: 1.5, sm: 2, md: 3 },
+        pb: { xs: 8, md: 12 },
+        borderRadius: 4,
+        bgcolor: "#fff",
+        boxShadow: 4,
+        minHeight: { xs: "100vh", md: "90vh" }
       }}
     >
-      <Stepper
-        activeStep={step}
-        alternativeLabel
+      <Typography
+        variant="h5"
         sx={{
-          minWidth: 370, // ensures min width for step dots/badges
-          width: "100%",
-          flexWrap: "nowrap"
+          mb: 3,
+          fontWeight: 900,
+          color: "#13C0A2",
+          textAlign: "center",
+          fontSize: { xs: 20, sm: 24 }
         }}
       >
-        {steps.map(label => (
-          <Step key={label}>
-            <StepLabel
-              sx={{
-                fontSize: { xs: 12, sm: 14 },
-                ".MuiStepLabel-label": { fontSize: { xs: 10, sm: 14 } }
-              }}
-            >
-              {label}
-            </StepLabel>
-          </Step>
-        ))}
-      </Stepper>
-    </Box>
-    <form onSubmit={handleStepSubmit} autoComplete="off">
-      <Box sx={{ mt: 3 }}>
-        <StepContent
-          step={step}
-          form={form}
-          errors={errors}
-          handleChange={handleChange}
-          handleFile={handleFile}
-          handleTimingChange={handleTimingChange}
-          fileErrors={fileErrors}
-          requiredDocs={requiredDocs}
-          optionalDocs={optionalDocs}
-          selectMenuProps={selectMenuProps}
-          hours={hours}
-          minutes={minutes}
-          safe={safe}
-          files={files}
-        />
-        {msg && (
-          <Snackbar open={!!msg} autoHideDuration={3200} onClose={() => setMsg("")}>
-            <Alert onClose={() => setMsg("")} severity={msg.toLowerCase().includes("fail") ? "error" : "success"}>
-              {msg}
-            </Alert>
-          </Snackbar>
-        )}
-        <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-          {step > 0 && step < 5 && (
-            <Button onClick={handleBack} variant="outlined" type="button">
-              Back
-            </Button>
-          )}
-          {step < 4 && (
-            <Button variant="contained" type="submit">
-              Next
-            </Button>
-          )}
-          {step === 4 && (
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              color="primary"
-              disabled={loading}
-              sx={{ fontWeight: 700 }}
-            >
-              {loading ? "Submitting..." : "Submit Registration"}
-            </Button>
-          )}
-        </Stack>
+        Pharmacy Registration
+      </Typography>
+      <Box
+        sx={{
+          width: "100%",
+          overflowX: "auto",
+          mb: 2,
+          pb: 1,
+          // Hide horizontal scrollbar (optional)
+          "&::-webkit-scrollbar": { display: "none" }
+        }}
+      >
+        <Stepper
+          activeStep={step}
+          alternativeLabel
+          sx={{
+            minWidth: 370, // ensures min width for step dots/badges
+            width: "100%",
+            flexWrap: "nowrap"
+          }}
+        >
+          {steps.map(label => (
+            <Step key={label}>
+              <StepLabel
+                sx={{
+                  fontSize: { xs: 12, sm: 14 },
+                  ".MuiStepLabel-label": { fontSize: { xs: 10, sm: 14 } }
+                }}
+              >
+                {label}
+              </StepLabel>
+            </Step>
+          ))}
+        </Stepper>
       </Box>
-    </form>
-  </Box>
-);
+      <form onSubmit={handleStepSubmit} autoComplete="off">
+        <Box sx={{ mt: 3 }}>
+          <StepContent
+            step={step}
+            form={form}
+            errors={errors}
+            handleChange={handleChange}
+            handleFile={handleFile}
+            handleTimingChange={handleTimingChange}
+            fileErrors={fileErrors}
+            requiredDocs={requiredDocs}
+            optionalDocs={optionalDocs}
+            selectMenuProps={selectMenuProps}
+            hours={hours}
+            minutes={minutes}
+            safe={safe}
+            files={files}
+          />
+          {msg && (
+            <Snackbar open={!!msg} autoHideDuration={3200} onClose={() => setMsg("")}>
+              <Alert onClose={() => setMsg("")} severity={getMsgSeverity(msg)}>
+                {msg}
+              </Alert>
+            </Snackbar>
+          )}
+          <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+            {step > 0 && step < 5 && (
+              <Button onClick={handleBack} variant="outlined" type="button">
+                Back
+              </Button>
+            )}
+            {step < 4 && (
+              <Button variant="contained" type="submit">
+                Next
+              </Button>
+            )}
+            {step === 4 && (
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                color="primary"
+                disabled={loading}
+                sx={{ fontWeight: 700 }}
+              >
+                {loading ? "Submitting..." : "Submit Registration"}
+              </Button>
+            )}
+          </Stack>
+        </Box>
+      </form>
+    </Box>
+  );
 }
