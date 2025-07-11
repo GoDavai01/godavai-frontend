@@ -435,80 +435,145 @@ export default function PharmacyRegistrationStepper() {
       fd.append("photo", files.photo);
       if (files.digitalSignature) fd.append("digitalSignature", files.digitalSignature);
 
-      setMsg("");
-      await axios.post(`${API_BASE_URL}/api/pharmacy/register`, fd, { headers: { "Content-Type": "multipart/form-data" } });
-      setMsg("Registration submitted! Await admin approval.");
-      setForm({ ...initialForm });
-      setFiles({});
-      setStep(0);
-    } catch (err) {
+    setMsg("");
+    await axios.post(`${API_BASE_URL}/api/pharmacy/register`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+    setMsg("Registration submitted! Await admin approval.");
+    // Only reset form and files HERE (on success)
+    setForm({ ...initialForm });
+    setFiles({});
+    setStep(0);
+  } catch (err) {
+    // Do NOT reset the form here
+    if (err.response?.data?.fieldsMissing) {
+      const missing = err.response.data.fieldsMissing;
+      let newErrors = { ...errors };
+      missing.forEach(f => newErrors[f] = true);
+      setErrors(newErrors);
+      setMsg(
+        "Please fill the highlighted fields: " +
+        missing.map(f => f.replace(/([A-Z])/g, ' $1')).join(", ")
+      );
+    } else {
       setMsg(err.response?.data?.message || "Registration failed. Check your details!");
     }
-    setLoading(false);
-  };
+  }
+  setLoading(false);
+};
 
   // Go back a step
   const handleBack = () => setStep(s => s - 1);
 
   // ===== RENDER =====
   return (
-    <Box sx={{ maxWidth: 550, mx: "auto", mt: 3, p: 3, pb: 12, borderRadius: 4, bgcolor: "#fff", boxShadow: 4 }}>
-      <Typography variant="h5" sx={{ mb: 3, fontWeight: 900, color: "#13C0A2" }}>
-        Pharmacy Registration
-      </Typography>
-      <Stepper activeStep={step} alternativeLabel>
-        {steps.map(label => <Step key={label}><StepLabel>{label}</StepLabel></Step>)}
+  <Box
+    sx={{
+      width: "100%",
+      maxWidth: { xs: 360, sm: 450, md: 550 },
+      mx: "auto",
+      mt: 3,
+      p: { xs: 1.5, sm: 2, md: 3 },
+      pb: { xs: 8, md: 12 },
+      borderRadius: 4,
+      bgcolor: "#fff",
+      boxShadow: 4,
+      minHeight: { xs: "100vh", md: "90vh" }
+    }}
+  >
+    <Typography
+      variant="h5"
+      sx={{
+        mb: 3,
+        fontWeight: 900,
+        color: "#13C0A2",
+        textAlign: "center",
+        fontSize: { xs: 20, sm: 24 }
+      }}
+    >
+      Pharmacy Registration
+    </Typography>
+    <Box
+      sx={{
+        width: "100%",
+        overflowX: "auto",
+        mb: 2,
+        pb: 1,
+        // Hide horizontal scrollbar (optional)
+        "&::-webkit-scrollbar": { display: "none" }
+      }}
+    >
+      <Stepper
+        activeStep={step}
+        alternativeLabel
+        sx={{
+          minWidth: 370, // ensures min width for step dots/badges
+          width: "100%",
+          flexWrap: "nowrap"
+        }}
+      >
+        {steps.map(label => (
+          <Step key={label}>
+            <StepLabel
+              sx={{
+                fontSize: { xs: 12, sm: 14 },
+                ".MuiStepLabel-label": { fontSize: { xs: 10, sm: 14 } }
+              }}
+            >
+              {label}
+            </StepLabel>
+          </Step>
+        ))}
       </Stepper>
-      <form onSubmit={handleStepSubmit} autoComplete="off">
-        <Box sx={{ mt: 3 }}>
-          <StepContent
-            step={step}
-            form={form}
-            errors={errors}
-            handleChange={handleChange}
-            handleFile={handleFile}
-            handleTimingChange={handleTimingChange}
-            fileErrors={fileErrors}
-            requiredDocs={requiredDocs}
-            optionalDocs={optionalDocs}
-            selectMenuProps={selectMenuProps}
-            hours={hours}
-            minutes={minutes}
-            safe={safe}
-          />
-          {msg && (
-            <Snackbar open={!!msg} autoHideDuration={3200} onClose={() => setMsg("")}>
-              <Alert onClose={() => setMsg("")} severity={msg.toLowerCase().includes("fail") ? "error" : "success"}>
-                {msg}
-              </Alert>
-            </Snackbar>
-          )}
-          <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-            {step > 0 && step < 5 && (
-              <Button onClick={handleBack} variant="outlined" type="button">
-                Back
-              </Button>
-            )}
-            {step < 4 && (
-              <Button variant="contained" type="submit">
-                Next
-              </Button>
-            )}
-            {step === 4 && (
-              <Button
-                type="submit"
-                fullWidth
-                variant="contained"
-                color="primary"
-                disabled={loading}
-                sx={{ fontWeight: 700 }}
-              >
-                {loading ? "Submitting..." : "Submit Registration"}
-              </Button>
-            )}
-          </Stack>
-        </Box>
-      </form>
     </Box>
-  );
+    <form onSubmit={handleStepSubmit} autoComplete="off">
+      <Box sx={{ mt: 3 }}>
+        <StepContent
+          step={step}
+          form={form}
+          errors={errors}
+          handleChange={handleChange}
+          handleFile={handleFile}
+          handleTimingChange={handleTimingChange}
+          fileErrors={fileErrors}
+          requiredDocs={requiredDocs}
+          optionalDocs={optionalDocs}
+          selectMenuProps={selectMenuProps}
+          hours={hours}
+          minutes={minutes}
+          safe={safe}
+        />
+        {msg && (
+          <Snackbar open={!!msg} autoHideDuration={3200} onClose={() => setMsg("")}>
+            <Alert onClose={() => setMsg("")} severity={msg.toLowerCase().includes("fail") ? "error" : "success"}>
+              {msg}
+            </Alert>
+          </Snackbar>
+        )}
+        <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+          {step > 0 && step < 5 && (
+            <Button onClick={handleBack} variant="outlined" type="button">
+              Back
+            </Button>
+          )}
+          {step < 4 && (
+            <Button variant="contained" type="submit">
+              Next
+            </Button>
+          )}
+          {step === 4 && (
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              color="primary"
+              disabled={loading}
+              sx={{ fontWeight: 700 }}
+            >
+              {loading ? "Submitting..." : "Submit Registration"}
+            </Button>
+          )}
+        </Stack>
+      </Box>
+    </form>
+  </Box>
+);
 }

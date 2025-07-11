@@ -330,16 +330,43 @@ export default function ProfilePage() {
             <EditIcon sx={{ color: "#1976d2" }} />
           </IconButton>
         </Box>
-        <Stack spacing={0.3} ml={3} flex={1}>
-          <Typography variant="h5" sx={{ fontWeight: 700, color: "#232323" }}>
-            {user.name}
-          </Typography>
-          <Stack direction="row" alignItems="center" spacing={1}>
-            <EmailIcon sx={{ fontSize: 19, color: "#1976d2" }} />
-            <Typography sx={{ color: "#1976d2", fontSize: 17 }}>{user.email}</Typography>
-          </Stack>
-          <Typography sx={{ color: "#1976d2", fontSize: 16 }}>{user.mobile}</Typography>
-        </Stack>
+        <Stack spacing={0.3} ml={3} flex={1} minWidth={0}>
+  <Typography variant="h5" sx={{ fontWeight: 700, color: "#232323", wordBreak: "break-word" }}>
+    {user.name}
+  </Typography>
+  <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+    <EmailIcon sx={{ fontSize: 19, color: "#1976d2" }} />
+    <Typography
+      sx={{
+        color: "#1976d2",
+        fontSize: 17,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: { xs: "normal", sm: "nowrap" },
+        maxWidth: { xs: "170px", sm: "270px" },
+        display: "block",
+        wordBreak: "break-all",
+      }}
+      title={user.email}
+    >
+      {user.email}
+    </Typography>
+  </Stack>
+  <Typography
+    sx={{
+      color: "#1976d2",
+      fontSize: 16,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      maxWidth: { xs: "150px", sm: "200px" },
+      display: "block",
+    }}
+    title={user.mobile}
+  >
+    {user.mobile}
+  </Typography>
+</Stack>
       </Paper>
 
       {/* --- Addresses Section --- */}
