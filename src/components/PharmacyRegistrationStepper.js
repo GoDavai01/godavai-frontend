@@ -435,62 +435,52 @@ export default function PharmacyRegistrationStepper() {
 
   // Navigation/Submission: All handled in form's onSubmit
   const handleStepSubmit = async (e) => {
-  if (e) e.preventDefault();
+    if (e) e.preventDefault();
 
-  const errMsg = validateStep();
-  if (errMsg) {
-    setMsg(errMsg);
-    return;
-  }
-
-  if (step < steps.length - 1) {
-    setStep(s => s + 1);
-    return;
-  }
-
-  // Final submit
-  setLoading(true);
-  try {
-    // Build FormData with ALL fields and files
-    const fd = new FormData();
-    Object.keys(form).forEach(k => {
-      if (k === "declarationAccepted") {
-        fd.append(k, form[k] ? "true" : "");
-      } else {
-        fd.append(k, form[k] == null ? "" : form[k]);
-      }
-    });
-    fd.set("pharmacyTimings", computeTimings(form)); // Required by backend!
-
-    Object.keys(files).forEach(k => {
-      if (files[k]) fd.append(k, files[k]);
-    });
-
-    // Ensure all required docs/files are attached
-    ["qualificationCert", "councilCert", "retailLicense", "gstCert", "identityProof", "addressProof", "photo"].forEach(f => {
-      if (!files[f]) {
-        alert(`You must upload: ${f.replace(/([A-Z])/g, " $1")}`);
-        throw new Error("Missing file: " + f);
-      }
-    });
-
-    // DEBUG LOG: This prints EVERY form field and file being sent
-    console.log("FormData about to send:");
-    for (let pair of fd.entries()) {
-      // If it's a file, print its name; otherwise, print the value
-      if (pair[1] instanceof File) {
-        console.log(pair[0], "(file):", pair[1].name);
-      } else {
-        console.log(pair[0], pair[1]);
-      }
+    const errMsg = validateStep();
+    if (errMsg) {
+      setMsg(errMsg);
+      return;
     }
-    console.log([...fd.entries()]);
 
+    if (step < steps.length - 1) {
+      setStep(s => s + 1);
+      return;
+    }
+
+    // Final submit
+    setLoading(true);
+    try {
+      const fd = new FormData();
+Object.keys(form).forEach(k => fd.append(k, form[k] || ""));
+fd.set("pharmacyTimings", computeTimings(form)); // Required for backend!
+
+// Append all file fields at once
+Object.keys(files).forEach(k => {
+  if (files[k]) fd.append(k, files[k]);
+});
+
+// Validate: Ensure all required files present
+["qualificationCert", "councilCert", "retailLicense", "gstCert", "identityProof", "addressProof", "photo"].forEach(f => {
+  if (!files[f]) {
+    alert(`You must upload: ${f.replace(/([A-Z])/g, " $1")}`);
+    throw new Error("Missing file: " + f);
+  }
+});
+
+// Debug: Print all form data before sending
+console.log("FormData about to send:");
+for (let [key, value] of fd.entries()) {
+  if (value instanceof File) {
+    console.log(key, "(file):", value.name);
+  } else {
+    console.log(key, value);
+  }
+}
     setMsg("");
-    await axios.post(`${API_BASE_URL}/api/pharmacy/register`, fd, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    await axios.post(`${API_BASE_URL}/api/pharmacy/register`, fd, { headers: { "Content-Type": "multipart/form-data" } });
     setMsg("Registration submitted! Await admin approval.");
+    // Only reset form and files HERE (on success)
     setForm({ ...initialForm });
     setFiles({});
     setStep(0);
