@@ -435,43 +435,62 @@ export default function PharmacyRegistrationStepper() {
 
   // Navigation/Submission: All handled in form's onSubmit
   const handleStepSubmit = async (e) => {
-    if (e) e.preventDefault();
+  if (e) e.preventDefault();
 
-    const errMsg = validateStep();
-    if (errMsg) {
-      setMsg(errMsg);
-      return;
+  const errMsg = validateStep();
+  if (errMsg) {
+    setMsg(errMsg);
+    return;
+  }
+
+  if (step < steps.length - 1) {
+    setStep(s => s + 1);
+    return;
+  }
+
+  // Final submit
+  setLoading(true);
+  try {
+    // Build FormData with ALL fields and files
+    const fd = new FormData();
+    Object.keys(form).forEach(k => {
+      if (k === "declarationAccepted") {
+        fd.append(k, form[k] ? "true" : "");
+      } else {
+        fd.append(k, form[k] == null ? "" : form[k]);
+      }
+    });
+    fd.set("pharmacyTimings", computeTimings(form)); // Required by backend!
+
+    Object.keys(files).forEach(k => {
+      if (files[k]) fd.append(k, files[k]);
+    });
+
+    // Ensure all required docs/files are attached
+    ["qualificationCert", "councilCert", "retailLicense", "gstCert", "identityProof", "addressProof", "photo"].forEach(f => {
+      if (!files[f]) {
+        alert(`You must upload: ${f.replace(/([A-Z])/g, " $1")}`);
+        throw new Error("Missing file: " + f);
+      }
+    });
+
+    // DEBUG LOG: This prints EVERY form field and file being sent
+    console.log("FormData about to send:");
+    for (let pair of fd.entries()) {
+      // If it's a file, print its name; otherwise, print the value
+      if (pair[1] instanceof File) {
+        console.log(pair[0], "(file):", pair[1].name);
+      } else {
+        console.log(pair[0], pair[1]);
+      }
     }
-
-    if (step < steps.length - 1) {
-      setStep(s => s + 1);
-      return;
-    }
-
-    // Final submit
-    setLoading(true);
-    try {
-      const fd = new FormData();
-      Object.keys(form).forEach(k => fd.append(k, form[k] || ""));
-      fd.set("pharmacyTimings", computeTimings(form)); // only now, not in state!
-      Object.keys(files).forEach(k => { if (files[k]) fd.append(k, files[k]); });
-
-      fd.append("qualificationCert", files.qualificationCert);
-      fd.append("councilCert", files.councilCert);
-      fd.append("retailLicense", files.retailLicense);
-      fd.append("gstCert", files.gstCert);
-      if (files.wholesaleLicense) fd.append("wholesaleLicense", files.wholesaleLicense);
-      if (files.shopEstablishmentCert) fd.append("shopEstablishmentCert", files.shopEstablishmentCert);
-      if (files.tradeLicense) fd.append("tradeLicense", files.tradeLicense);
-      fd.append("identityProof", files.identityProof);
-      fd.append("addressProof", files.addressProof);
-      fd.append("photo", files.photo);
-      if (files.digitalSignature) fd.append("digitalSignature", files.digitalSignature);
+    console.log([...fd.entries()]);
 
     setMsg("");
-    await axios.post(`${API_BASE_URL}/api/pharmacy/register`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+    await axios.post(`${API_BASE_URL}/api/pharmacy/register`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
     setMsg("Registration submitted! Await admin approval.");
-    // Only reset form and files HERE (on success)
     setForm({ ...initialForm });
     setFiles({});
     setStep(0);
