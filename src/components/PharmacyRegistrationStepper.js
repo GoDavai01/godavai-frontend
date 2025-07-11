@@ -65,7 +65,7 @@ function computeTimings(form) {
 // ===== StepContent Component (EXTRACTED) =====
 const StepContent = React.memo(function StepContent({
   step, form, errors, handleChange, handleFile, handleTimingChange,
-  fileErrors, requiredDocs, optionalDocs, selectMenuProps, hours, minutes, safe
+  fileErrors, requiredDocs, optionalDocs, selectMenuProps, hours, minutes, safe, files
 }) {
   switch (step) {
     case 0:
@@ -220,18 +220,29 @@ const StepContent = React.memo(function StepContent({
             <Box key={k}>
               <InputLabel required>{requiredDocs[k]}</InputLabel>
               <input type="file" accept={fileTypes} onChange={e => handleFile(e, k)} />
-              <Typography color="error" variant="caption">
-                {fileErrors[k] || (errors[k] && "Required")}
-              </Typography>
+{files[k] && (
+  <Typography variant="caption" color="primary">
+    {files[k].name}
+  </Typography>
+)}
+<Typography color="error" variant="caption">
+  {fileErrors[k] || (errors[k] && "Required")}
+</Typography>
+
             </Box>
           ))}
           {Object.keys(optionalDocs).map(k => (
             <Box key={k}>
               <InputLabel>{optionalDocs[k]}</InputLabel>
               <input type="file" accept={fileTypes} onChange={e => handleFile(e, k)} />
-              <Typography color="error" variant="caption">
-                {fileErrors[k]}
-              </Typography>
+    {files[k] && (
+      <Typography variant="caption" color="primary">
+        {files[k].name}
+      </Typography>
+    )}
+    <Typography color="error" variant="caption">
+      {fileErrors[k]}
+    </Typography>
             </Box>
           ))}
         </Stack>
@@ -239,15 +250,32 @@ const StepContent = React.memo(function StepContent({
     case 2:
       return (
         <Stack spacing={2}>
-          <InputLabel required>Identity Proof (Aadhaar/PAN/Passport)</InputLabel>
-          <input type="file" accept={fileTypes} onChange={e => handleFile(e, "identityProof")} />
-          <Typography color="error" variant="caption">{fileErrors.identityProof || (errors.identityProof && "Required")}</Typography>
-          <InputLabel required>Address Proof (Utility bill/VoterID/Rent agreement)</InputLabel>
-          <input type="file" accept={fileTypes} onChange={e => handleFile(e, "addressProof")} />
-          <Typography color="error" variant="caption">{fileErrors.addressProof || (errors.addressProof && "Required")}</Typography>
-          <InputLabel required>Passport-size Photo</InputLabel>
-          <input type="file" accept={fileTypes} onChange={e => handleFile(e, "photo")} />
-          <Typography color="error" variant="caption">{fileErrors.photo || (errors.photo && "Required")}</Typography>
+         <InputLabel required>Identity Proof (Aadhaar/PAN/Passport)</InputLabel>
+<input type="file" accept={fileTypes} onChange={e => handleFile(e, "identityProof")} />
+{files.identityProof && (
+  <Typography variant="caption" color="primary">
+    {files.identityProof.name}
+  </Typography>
+)}
+<Typography color="error" variant="caption">{fileErrors.identityProof || (errors.identityProof && "Required")}</Typography>
+
+<InputLabel required>Address Proof (Utility bill/VoterID/Rent agreement)</InputLabel>
+<input type="file" accept={fileTypes} onChange={e => handleFile(e, "addressProof")} />
+{files.addressProof && (
+  <Typography variant="caption" color="primary">
+    {files.addressProof.name}
+  </Typography>
+)}
+<Typography color="error" variant="caption">{fileErrors.addressProof || (errors.addressProof && "Required")}</Typography>
+
+<InputLabel required>Passport-size Photo</InputLabel>
+<input type="file" accept={fileTypes} onChange={e => handleFile(e, "photo")} />
+{files.photo && (
+  <Typography variant="caption" color="primary">
+    {files.photo.name}
+  </Typography>
+)}
+<Typography color="error" variant="caption">{fileErrors.photo || (errors.photo && "Required")}</Typography>
         </Stack>
       );
     case 3:
@@ -265,8 +293,13 @@ const StepContent = React.memo(function StepContent({
           <TextField label="Business Contact Number (if different)" name="businessContact" value={safe(form.businessContact)} onChange={handleChange} />
           <TextField label="Emergency/Alternate Number" name="emergencyContact" value={safe(form.emergencyContact)} onChange={handleChange} />
           <InputLabel>Digital Signature (optional)</InputLabel>
-          <input type="file" accept={fileTypes} onChange={e => handleFile(e, "digitalSignature")} />
-          <Typography color="error" variant="caption">{fileErrors.digitalSignature}</Typography>
+<input type="file" accept={fileTypes} onChange={e => handleFile(e, "digitalSignature")} />
+{files.digitalSignature && (
+  <Typography variant="caption" color="primary">
+    {files.digitalSignature.name}
+  </Typography>
+)}
+<Typography color="error" variant="caption">{fileErrors.digitalSignature}</Typography>
         </Stack>
       );
     case 4:
@@ -540,6 +573,7 @@ export default function PharmacyRegistrationStepper() {
           hours={hours}
           minutes={minutes}
           safe={safe}
+          files={files}
         />
         {msg && (
           <Snackbar open={!!msg} autoHideDuration={3200} onClose={() => setMsg("")}>
