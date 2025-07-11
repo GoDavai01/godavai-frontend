@@ -116,6 +116,7 @@ const StepContent = React.memo(function StepContent({
             error={!!errors.pin}
             helperText={errors.pin ? "PIN must be 4 digits, unique, not same as mobile" : ""}
           />
+
           <Box>
             <FormControlLabel
               control={
@@ -451,18 +452,36 @@ export default function PharmacyRegistrationStepper() {
 
   // Navigation/Submission: All handled in form's onSubmit
   const handleStepSubmit = async (e) => {
-    if (e) e.preventDefault();
+  if (e) e.preventDefault();
 
-    const errMsg = validateStep();
-    if (errMsg) {
-      setMsg(errMsg);
-      return;
-    }
+  const errMsg = validateStep();
+  if (errMsg) {
+    setMsg(errMsg);
+    return;
+  }
 
-    if (step < steps.length - 1) {
-      setStep(s => s + 1);
-      return;
-    }
+  // Go to next step
+  if (step < steps.length - 1) {
+    // --- CLEAR FILES OF NEXT STEP ---
+    setFiles(f => {
+      const newFiles = { ...f };
+      if (step + 1 === 1) {
+        // Step 1: clear all doc files
+        Object.keys(requiredDocs).concat(Object.keys(optionalDocs)).forEach(k => { delete newFiles[k]; });
+      }
+      if (step + 1 === 2) {
+        // Step 2: clear all identity files
+        ["identityProof", "addressProof", "photo"].forEach(k => { delete newFiles[k]; });
+      }
+      if (step + 1 === 3) {
+        // Step 3: clear digital signature
+        delete newFiles["digitalSignature"];
+      }
+      return newFiles;
+    });
+    setStep(s => s + 1);
+    return;
+  }
 
     // Final submit
     setLoading(true);
@@ -520,14 +539,14 @@ export default function PharmacyRegistrationStepper() {
 
   // Go back a step
   const handleBack = () => {
-    // Clear ONLY file fields of the step you're leaving (fixes file leakage)
+    // Clear ONLY file fields of the current step when going back to it (avoid file "leakage")
     setFiles(f => {
       const newFiles = { ...f };
-      if (step === 2) {
-        ["identityProof", "addressProof", "photo"].forEach(k => { delete newFiles[k]; });
-      }
       if (step === 1) {
         Object.keys(requiredDocs).concat(Object.keys(optionalDocs)).forEach(k => { delete newFiles[k]; });
+      }
+      if (step === 2) {
+        ["identityProof", "addressProof", "photo"].forEach(k => { delete newFiles[k]; });
       }
       if (step === 3) {
         delete newFiles["digitalSignature"];
@@ -537,6 +556,7 @@ export default function PharmacyRegistrationStepper() {
     setStep(s => s - 1);
   };
 
+  // ===== RENDER =====
   return (
     <Box
       sx={{
