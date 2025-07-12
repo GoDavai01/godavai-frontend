@@ -14,6 +14,9 @@ import Navbar from "./Navbar";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
+const [activeOrder, setActiveOrder] = useState(null);
+
+
 const offerBanners = [
   { img: "/images/offer1.png" },
   { img: "/images/offer2.png" },
@@ -52,44 +55,55 @@ export default function Home() {
 
   // Always keep Track Order bar in sync with real ongoing orders (not just localStorage)
   useEffect(() => {
-    const checkOrder = async () => {
-      let id = localStorage.getItem("activeOrderId");
-      if (id) {
-        try {
-          const res = await axios.get(`${API_BASE_URL}/api/orders/${id}`);
-          if (res.data.status === "delivered" || res.data.status === "cancelled") {
-            localStorage.removeItem("activeOrderId");
-            setActiveOrderId(null);
-          } else {
-            setActiveOrderId(id);
-            return;
-          }
-        } catch {
+  const checkOrder = async () => {
+    let id = localStorage.getItem("activeOrderId");
+    if (id) {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/api/orders/${id}`);
+        const order = res.data;
+        // If delivered or cancelled, clear bar
+        if (order.status === "delivered" || order.status === "cancelled" || order.status === "rejected") {
+          localStorage.removeItem("activeOrderId");
           setActiveOrderId(null);
+          setActiveOrder(null);
+        } else {
+          setActiveOrderId(id);
+          setActiveOrder(order);
+          return;
         }
+      } catch {
+        setActiveOrderId(null);
+        setActiveOrder(null);
       }
-      if (user && user._id) {
-        try {
-          const ordersRes = await axios.get(`${API_BASE_URL}/api/orders?user=${user._id}&limit=5`);
-          const ongoing = (ordersRes.data || []).find(
-            o => o.status !== "delivered" && o.status !== "cancelled"
-          );
-          if (ongoing && ongoing._id) {
-            localStorage.setItem("activeOrderId", ongoing._id);
-            setActiveOrderId(ongoing._id);
-          } else {
-            setActiveOrderId(null);
-          }
-        } catch {
+    } else {
+      setActiveOrder(null);
+    }
+    // Fallback: Try to find any ongoing order from list
+    if (user && user._id) {
+      try {
+        const ordersRes = await axios.get(`${API_BASE_URL}/api/orders?user=${user._id}&limit=5`);
+        const ongoing = (ordersRes.data || []).find(
+          o => o.status !== "delivered" && o.status !== "cancelled" && o.status !== "rejected"
+        );
+        if (ongoing && ongoing._id) {
+          localStorage.setItem("activeOrderId", ongoing._id);
+          setActiveOrderId(ongoing._id);
+          setActiveOrder(ongoing);
+        } else {
           setActiveOrderId(null);
+          setActiveOrder(null);
         }
+      } catch {
+        setActiveOrderId(null);
+        setActiveOrder(null);
       }
-    };
+    }
+  };
 
-    checkOrder();
-    const interval = setInterval(checkOrder, 3000);
-    return () => clearInterval(interval);
-  }, [user && user._id]);
+  checkOrder();
+  const interval = setInterval(checkOrder, 3000);
+  return () => clearInterval(interval);
+}, [user && user._id]);
 
  useEffect(() => {
   // 1. Get city & area from localStorage if needed
@@ -132,6 +146,13 @@ export default function Home() {
   // -------- FIX: calculate cart bar visibility --------
   const cartBarVisible = cartCount > 0;
   // ----------------------------------------------------
+
+  const hideTrackBar =
+  !activeOrder ||
+  (
+    ["cancelled", "rejected"].includes(activeOrder.status) &&
+    localStorage.getItem(`order:${activeOrder._id}:cancelSeen`) === "true"
+  );
 
   return (
     <Box sx={{ bgcolor: "#f9fafb", minHeight: "100vh", pb: 12 }}>
@@ -322,7 +343,7 @@ export default function Home() {
       </Box>
 
       {/* Track Order Bar (ALWAYS sits above the view cart bar if cart is visible) */}
-      {activeOrderId && (
+      {!hideTrackBar && activeOrderId && (
         <Box
           sx={{
             position: "fixed",

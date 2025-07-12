@@ -216,6 +216,8 @@ export default function OrderTracking() {
       </Box>
     );
     if (order.status === "rejected" || order.status === "cancelled") {
+      // Mark as "viewed" in localStorage
+  localStorage.setItem(`order:${order._id}:cancelSeen`, "true");
   return (
     <Box sx={{ mt: 10, textAlign: "center" }}>
       <Typography variant="h6" color="error">
