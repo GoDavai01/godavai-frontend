@@ -780,7 +780,7 @@ export default function ProfilePage() {
     if (localStorage.getItem("deliveryToken")) {
       navigate("/delivery/dashboard");
     } else {
-      navigate("/delivery/login");
+      navigate("/delivery/dashboard");
     }
   }}
 >
