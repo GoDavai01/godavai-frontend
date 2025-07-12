@@ -392,6 +392,27 @@ export default function PharmacyDashboard() {
     setLoading(false);
   };
 
+  const handleSendOtp = async () => {
+  if (!login.email || !login.password) {
+    setMsg("Enter mobile/email & PIN.");
+    return;
+  }
+  setLoading(true);
+  try {
+    // Let backend decide if it's mobile or email
+    const isEmail = login.email.includes("@");
+    const res = await axios.post(
+      `${API_BASE_URL}/api/pharmacy/send-otp`,
+      { contact: login.email, pin: login.password }
+    );
+    setMsg("OTP sent! " + (isEmail ? "Check your email." : "Check your mobile."));
+  } catch (err) {
+    setMsg(err.response?.data?.message || "Failed to send OTP");
+  }
+  setLoading(false);
+};
+
+
   // Handle file select
   const handleImageChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -405,33 +426,42 @@ export default function PharmacyDashboard() {
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
       {!token ? (
-        <Box sx={{ mt: 7, maxWidth: 380, mx: "auto" }}>
-          <Typography variant="h5" mb={2}>Pharmacy Login</Typography>
-          <TextField
-            label="Contact Email"
-            fullWidth sx={{ mb: 2 }}
-            value={login.email}
-            onChange={e => setLogin({ ...login, email: e.target.value })}
-            onFocus={() => setIsEditing(true)}
-            onBlur={() => setIsEditing(false)}
-          />
-          <TextField
-            label="Password"
-            type="password"
-            fullWidth sx={{ mb: 2 }}
-            value={login.password}
-            onChange={e => setLogin({ ...login, password: e.target.value })}
-            onFocus={() => setIsEditing(true)}
-            onBlur={() => setIsEditing(false)}
-          />
-          <Button
-            variant="contained"
-            fullWidth
-            onClick={handleLogin}
-            disabled={loading}
-          >
-            {loading ? "Logging in..." : "Login"}
-          </Button>
+       <Box sx={{ mt: 7, maxWidth: 380, mx: "auto" }}>
+  <Typography variant="h5" mb={2}>Pharmacy Login</Typography>
+  <TextField
+    label="Mobile number or Email"
+    fullWidth sx={{ mb: 2 }}
+    value={login.email}
+    onChange={e => setLogin({ ...login, email: e.target.value })}
+    onFocus={() => setIsEditing(true)}
+    onBlur={() => setIsEditing(false)}
+  />
+  <TextField
+    label="Password"
+    type="password"
+    fullWidth sx={{ mb: 2 }}
+    value={login.password}
+    onChange={e => setLogin({ ...login, password: e.target.value })}
+    onFocus={() => setIsEditing(true)}
+    onBlur={() => setIsEditing(false)}
+  />
+  <Button
+    variant="outlined"
+    fullWidth
+    onClick={handleSendOtp}
+    disabled={loading}
+    sx={{ mb: 2 }}
+  >
+    {loading ? "Sending OTP..." : "Send OTP"}
+  </Button>
+  <Button
+    variant="contained"
+    fullWidth
+    onClick={handleLogin}
+    disabled={loading}
+  >
+    {loading ? "Logging in..." : "Login"}
+  </Button>
           <Snackbar open={!!msg} autoHideDuration={2400} onClose={() => setMsg("")}>
             <Alert onClose={() => setMsg("")} severity={msg.includes("fail") ? "error" : "success"}>{msg}</Alert>
           </Snackbar>

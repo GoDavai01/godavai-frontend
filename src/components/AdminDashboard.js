@@ -990,10 +990,84 @@ export default function AdminDashboard() {
             <Typography sx={{ color: "#aaa", mb: 2 }}>No pending pharmacies.</Typography>
           ) : (
             pendingPharmacies.map((pharm) => (
-              <Box key={pharm._id} sx={{ my: 1, p: 2, bgcolor: "#23272a", borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span><b>{pharm.name}</b> ({pharm.area}, {pharm.city}) – {pharm.contact}</span>
-                <Button size="small" variant="contained" color="success" onClick={() => approvePharmacy(pharm._id)}>Approve</Button>
-              </Box>
+              <Box
+  key={pharm._id}
+  sx={{
+    my: 1,
+    p: 2,
+    bgcolor: "#23272a",
+    borderRadius: 2,
+    mb: 2,
+    display: "flex",
+    flexDirection: { xs: "column", sm: "row" },
+    alignItems: { xs: "flex-start", sm: "center" },
+    justifyContent: "space-between",
+  }}
+>
+  <Box sx={{ minWidth: 0 }}>
+    <span>
+      <b>{pharm.name}</b> ({pharm.area}, {pharm.city}) – {pharm.contact}
+    </span>
+    {/* Documents preview for admin review */}
+    <Box sx={{ mt: 1 }}>
+      {[
+        { label: "Qualification Cert", key: "qualificationCert" },
+        { label: "Council Cert", key: "councilCert" },
+        { label: "Retail License", key: "retailLicense" },
+        { label: "Wholesale License", key: "wholesaleLicense" },
+        { label: "GST Cert", key: "gstCert" },
+        { label: "Shop Establishment", key: "shopEstablishmentCert" },
+        { label: "Trade License", key: "tradeLicense" },
+        { label: "Identity Proof", key: "identityProof" },
+        { label: "Address Proof", key: "addressProof" },
+        { label: "Digital Signature", key: "digitalSignature" },
+      ].map(doc => (
+        pharm[doc.key] && (
+          <div key={doc.key}>
+            <span style={{ color: "#FFD43B", fontWeight: 600 }}>{doc.label}: </span>
+            {pharm[doc.key].endsWith(".jpg") ||
+            pharm[doc.key].endsWith(".jpeg") ||
+            pharm[doc.key].endsWith(".png") ? (
+              <img
+                src={`https://api.godavaii.com${pharm[doc.key]}`}
+                alt={doc.label}
+                style={{ maxWidth: 120, margin: "6px 0", borderRadius: 6, display: "block" }}
+              />
+            ) : (
+              <a
+                href={`https://api.godavaii.com${pharm[doc.key]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "#FFD43B" }}
+              >
+                View Document
+              </a>
+            )}
+          </div>
+        )
+      ))}
+      {pharm.photo && (
+        <div>
+          <span style={{ color: "#FFD43B", fontWeight: 600 }}>Photo: </span>
+          <img
+            src={`https://api.godavaii.com${pharm.photo}`}
+            style={{ maxWidth: 120, borderRadius: 8, margin: "6px 0" }}
+            alt="Pharmacist"
+          />
+        </div>
+      )}
+    </Box>
+  </Box>
+  <Button
+    size="small"
+    variant="contained"
+    color="success"
+    sx={{ mt: { xs: 2, sm: 0 } }}
+    onClick={() => approvePharmacy(pharm._id)}
+  >
+    Approve
+  </Button>
+</Box>
             ))
           )}
         </Box>
