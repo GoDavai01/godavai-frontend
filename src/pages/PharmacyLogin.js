@@ -7,7 +7,7 @@ import axios from "axios";
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 export default function PharmacyLogin() {
-  const [step, setStep] = useState(1); // 1: enter mobile & PIN, 2: enter OTP
+  const [step, setStep] = useState(1); // 1: enter contact & PIN, 2: enter OTP
   const [contact, setContact] = useState("");
   const [pin, setPin] = useState("");
   const [otp, setOtp] = useState("");
@@ -20,7 +20,7 @@ export default function PharmacyLogin() {
     try {
       await axios.post(`${API_BASE_URL}/api/pharmacy/send-otp`, { contact, pin });
       setStep(2);
-      setMsg("OTP sent to your registered mobile.");
+      setMsg(contact.includes("@") ? "OTP sent to your registered email." : "OTP sent to your registered mobile.");
     } catch (err) {
       setMsg(
         err.response?.data?.message ||
@@ -46,19 +46,23 @@ export default function PharmacyLogin() {
     setLoading(false);
   };
 
+  // Input validation helpers
+  const isMobile = contact && /^\d{10}$/.test(contact);
+  const isEmail = contact && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact);
+
   return (
     <Box sx={{ mt: 10, maxWidth: 380, mx: "auto" }}>
       <Typography variant="h5" mb={2}>Pharmacy Login</Typography>
       {step === 1 && (
         <>
           <TextField
-            label="Registered Mobile Number"
+            label="Mobile number or Email"
             fullWidth
             sx={{ mb: 2 }}
             value={contact}
-            onChange={e => setContact(e.target.value.replace(/\D/g, "").slice(0, 10))}
-            inputProps={{ maxLength: 10 }}
+            onChange={e => setContact(e.target.value.trim())}
             required
+            autoFocus
           />
           <TextField
             label="4-digit PIN"
@@ -73,7 +77,7 @@ export default function PharmacyLogin() {
             variant="contained"
             fullWidth
             onClick={handleSendOTP}
-            disabled={loading || contact.length !== 10 || pin.length !== 4}
+            disabled={loading || (!isMobile && !isEmail) || pin.length !== 4}
           >
             {loading ? "Sending OTP..." : "Send OTP"}
           </Button>
@@ -104,7 +108,7 @@ export default function PharmacyLogin() {
             onClick={() => { setStep(1); setOtp(""); }}
             disabled={loading}
           >
-            Change Mobile Number/PIN
+            Change Mobile/Email or PIN
           </Button>
         </>
       )}
