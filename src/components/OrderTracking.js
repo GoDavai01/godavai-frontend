@@ -88,9 +88,12 @@ export default function OrderTracking() {
   });
 
   useEffect(() => {
-    let interval = setInterval(() => setRefreshTick(tick => tick + 1), 3000);
-    return () => clearInterval(interval);
-  }, []);
+  if (!order) return;
+  if (order.status === "rejected" || order.status === "cancelled") return;
+  let interval = setInterval(() => setRefreshTick(tick => tick + 1), 3000);
+  return () => clearInterval(interval);
+}, [order]);
+
 
   useEffect(() => {
     setLoading(true);
@@ -212,13 +215,29 @@ export default function OrderTracking() {
         <Button sx={{ mt: 2, fontWeight: 700, bgcolor: "#13C0A2", color: "#fff" }} onClick={() => navigate("/orders")}>Go to My Orders</Button>
       </Box>
     );
+    if (order.status === "rejected" || order.status === "cancelled") {
+  return (
+    <Box sx={{ mt: 10, textAlign: "center" }}>
+      <Typography variant="h6" color="error">
+        This order was {order.status === "rejected" ? "rejected" : "cancelled"} by the pharmacy.
+      </Typography>
+      <Button
+        sx={{ mt: 2, fontWeight: 700, bgcolor: "#13C0A2", color: "#fff" }}
+        onClick={() => navigate("/orders")}
+      >
+        Go to My Orders
+      </Button>
+    </Box>
+  );
+}
 
   const currentStep = typeof order.status === "number" ? order.status : (
-    order.status === "placed" ? 0 :
-      order.status === "processing" ? 1 :
-        order.status === "out_for_delivery" ? 2 :
-          order.status === "delivered" ? 3 : 0
-  );
+  order.status === "placed" ? 0 :
+  order.status === "processing" ? 1 :
+  order.status === "out_for_delivery" ? 2 :
+  order.status === "delivered" ? 3 :
+  order.status === "rejected" || order.status === "cancelled" ? -1 : 0
+);
   const isDelivered = currentStep === 3;
 
   const stepTimes = [
