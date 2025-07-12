@@ -14,9 +14,6 @@ import Navbar from "./Navbar";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
-const [activeOrder, setActiveOrder] = useState(null);
-
-
 const offerBanners = [
   { img: "/images/offer1.png" },
   { img: "/images/offer2.png" },
@@ -49,6 +46,7 @@ export default function Home() {
   const { cart, addToCart } = useCart();
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const navigate = useNavigate();
+  const [activeOrder, setActiveOrder] = useState(null);
 
   // Track Order Bar State
   const [activeOrderId, setActiveOrderId] = useState(() => localStorage.getItem("activeOrderId"));
