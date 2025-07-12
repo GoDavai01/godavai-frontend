@@ -463,8 +463,17 @@ export default function PharmacyDashboard() {
     {loading ? "Logging in..." : "Login"}
   </Button>
           <Snackbar open={!!msg} autoHideDuration={2400} onClose={() => setMsg("")}>
-            <Alert onClose={() => setMsg("")} severity={msg.includes("fail") ? "error" : "success"}>{msg}</Alert>
-          </Snackbar>
+  <Alert
+    onClose={() => setMsg("")}
+    severity={
+      /fail|error|not found|invalid|incorrect|missing|unable/i.test(msg)
+        ? "error"
+        : "success"
+    }
+  >
+    {msg}
+  </Alert>
+</Snackbar>
         </Box>
       ) : (
         <Box sx={{ p: 2, maxWidth: 900, mx: "auto", position: "relative", minHeight: "95vh", pb: 8 }}>
