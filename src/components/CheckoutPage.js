@@ -243,11 +243,11 @@ export default function CheckoutPage() {
 
   // --- Unified Bill Calculation (quote OR cart) ---
   const tipAmounts = [10, 15, 20, 30];
-  const platformFee = 10;
+  const platformFee = 3;
   const availableOffers = [
     { code: "NEW15", desc: "Get 15% off for new users. Max ₹100 off." },
-    { code: "FREESHIP", desc: "Free delivery on orders above ₹399." },
-    { code: "SAVE30", desc: "Save ₹30 on your next order!" },
+    { code: "FREESHIP", desc: "Free delivery on orders above ₹499." },
+    { code: "SAVE30", desc: "Save ₹25 on your next order!" },
   ];
 
   // --- Bill calculation logic (depends on flow) ---
