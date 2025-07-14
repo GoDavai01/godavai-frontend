@@ -2,6 +2,7 @@
 import React, { useEffect } from "react";
 import axios from "axios";
 import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import "./i18n";
 import { ThemeProvider } from "./context/ThemeContext";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -9,7 +10,7 @@ import CssBaseline from "@mui/material/CssBaseline";
 import { CartProvider } from "./context/CartContext";
 import { AuthProvider } from "./context/AuthContext";
 
-import Navbar from "./components/Navbar";
+import Navbar from "./components/Navbar"; 
 import BottomNavBar from "./components/BottomNavBar";
 import MainLayout from "./components/MainLayout";
 import Home from "./components/Home";
