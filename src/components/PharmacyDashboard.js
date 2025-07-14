@@ -12,6 +12,8 @@ import DoneIcon from "@mui/icons-material/Done";
 import CloseIcon from "@mui/icons-material/Close";
 import PrescriptionOrdersTab from "./PrescriptionOrdersTab";
 import PhotoCamera from "@mui/icons-material/PhotoCamera";
+import Checkbox from "@mui/material/Checkbox";
+import ListItemText from "@mui/material/ListItemText";
 import axios from "axios";
 import { Table, TableHead, TableRow, TableCell, TableBody } from "@mui/material";
 
@@ -587,37 +589,48 @@ export default function PharmacyDashboard() {
                   </Typography>
                   {/* Dosage / Note Edit */}
                   {editOrderId === (order.id || order._id) ? (
-                    <Box sx={{ mt: 1 }}>
-                      <TextField
-                        label="Dosage"
-                        fullWidth
-                        value={edit.dosage}
-                        onChange={e => setEdit({ ...edit, dosage: e.target.value })}
-                        sx={{ mb: 1 }}
-                        onFocus={() => setIsEditing(true)}
-                        onBlur={() => setIsEditing(false)}
-                      />
-                      <TextField
-                        label="Note"
-                        fullWidth
-                        value={edit.note}
-                        onChange={e => setEdit({ ...edit, note: e.target.value })}
-                        sx={{ mb: 1 }}
-                        onFocus={() => setIsEditing(true)}
-                        onBlur={() => setIsEditing(false)}
-                      />
-                      <Button size="small" variant="contained" onClick={handleSave} sx={{ mr: 1 }} disabled={loading}>Save</Button>
-                      <Button size="small" onClick={() => setEditOrderId("")} disabled={loading}>Cancel</Button>
-                    </Box>
-                  ) : (
-                    <Box sx={{ mt: 1 }}>
-                      <Typography variant="body2">Dosage: {order.dosage || "-"}</Typography>
-                      <Typography variant="body2">Note: {order.note || "-"}</Typography>
-                      <Button size="small" sx={{ mt: 1 }} onClick={() => handleEditOrder(order)} disabled={loading}>
-                        Edit Dosage/Note
-                      </Button>
-                    </Box>
-                  )}
+  // Only allow editing if order is not delivered or rejected
+  (order.status !== 3 && order.status !== "delivered" && order.status !== -1 && order.status !== "rejected") ? (
+    <Box sx={{ mt: 1 }}>
+      <TextField
+        label="Dosage"
+        fullWidth
+        value={edit.dosage}
+        onChange={e => setEdit({ ...edit, dosage: e.target.value })}
+        sx={{ mb: 1 }}
+        onFocus={() => setIsEditing(true)}
+        onBlur={() => setIsEditing(false)}
+      />
+      <TextField
+        label="Note"
+        fullWidth
+        value={edit.note}
+        onChange={e => setEdit({ ...edit, note: e.target.value })}
+        sx={{ mb: 1 }}
+        onFocus={() => setIsEditing(true)}
+        onBlur={() => setIsEditing(false)}
+      />
+      <Button size="small" variant="contained" onClick={handleSave} sx={{ mr: 1 }} disabled={loading}>Save</Button>
+      <Button size="small" onClick={() => setEditOrderId("")} disabled={loading}>Cancel</Button>
+    </Box>
+  ) : (
+    <Box sx={{ mt: 1 }}>
+      <Typography variant="body2">Dosage: {order.dosage || "-"}</Typography>
+      <Typography variant="body2">Note: {order.note || "-"}</Typography>
+    </Box>
+  )
+) : (
+  <Box sx={{ mt: 1 }}>
+    <Typography variant="body2">Dosage: {order.dosage || "-"}</Typography>
+    <Typography variant="body2">Note: {order.note || "-"}</Typography>
+    {/* Show edit button only if not delivered or rejected */}
+    {(order.status !== 3 && order.status !== "delivered" && order.status !== -1 && order.status !== "rejected") && (
+      <Button size="small" sx={{ mt: 1 }} onClick={() => handleEditOrder(order)} disabled={loading}>
+        Edit Dosage/Note
+      </Button>
+    )}
+  </Box>
+)}
                   {/* Status Buttons */}
                   <Box sx={{ mt: 2 }}>
                     {/* Accept/Reject if status is placed/pending/0 */}
@@ -716,7 +729,10 @@ export default function PharmacyDashboard() {
                         <span style={{ color: "#13C0A2", fontWeight: 400 }}> ({med.brand})</span>
                       )}
                       {" — "}
-                      <span style={{color:"#FFD43B"}}>{med.category || "Miscellaneous"}</span>
+                      <span style={{ color: "#FFD43B" }}>
+  {(Array.isArray(med.category) ? med.category.join(', ') : med.category) || "Miscellaneous"}
+</span>
+
                       <br />
                       <b>Selling Price:</b> ₹{med.price} | <b>MRP:</b> ₹{med.mrp} | <b>Stock:</b> {med.stock}
                     </Typography>
@@ -788,17 +804,23 @@ export default function PharmacyDashboard() {
                       onBlur={() => setIsEditing(false)}
                     />
                     <FormControl fullWidth>
-                      <InputLabel>Category</InputLabel>
-                      <Select
-                        value={editMedForm.category || ""}
-                        label="Category"
-                        onChange={e => setEditMedForm(f => ({ ...f, category: e.target.value }))}
-                      >
-                        {MED_CATEGORIES.map(opt => (
-                          <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+  <InputLabel>Category</InputLabel>
+  <Select
+    multiple
+    value={editMedForm.category}
+    label="Category"
+    onChange={e => setEditMedForm(f => ({ ...f, category: e.target.value }))}
+    renderValue={(selected) => selected.join(', ')}
+  >
+    {MED_CATEGORIES.map(opt => (
+      <MenuItem key={opt} value={opt}>
+        <Checkbox checked={editMedForm.category.indexOf(opt) > -1} />
+        <ListItemText primary={opt} />
+      </MenuItem>
+    ))}
+  </Select>
+</FormControl>
+
                     {editMedForm.category === "Other" && (
                       <TextField
                         label="Custom Category"
@@ -873,24 +895,26 @@ export default function PharmacyDashboard() {
                     onBlur={() => setIsEditing(false)}
                   />
                   <FormControl fullWidth>
-                    <InputLabel>Category</InputLabel>
-                    <Select
-                      value={medForm.category || ""}
-                      label="Category"
-                      onChange={e => setMedForm(f => ({ ...f, category: e.target.value }))}
-                      MenuProps={{
-                        PaperProps: {
-                          style: {
-                            zIndex: 2000,
-                          }
-                        }
-                      }}
-                    >
-                      {MED_CATEGORIES.map(opt => (
-                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
+  <InputLabel>Category</InputLabel>
+  <Select
+    multiple
+    value={medForm.category}
+    label="Category"
+    onChange={e => setMedForm(f => ({ ...f, category: e.target.value }))}
+    renderValue={(selected) => selected.join(', ')}
+    MenuProps={{
+      PaperProps: { style: { zIndex: 2000 } }
+    }}
+  >
+    {MED_CATEGORIES.map(opt => (
+      <MenuItem key={opt} value={opt}>
+        <Checkbox checked={medForm.category.indexOf(opt) > -1} />
+        <ListItemText primary={opt} />
+      </MenuItem>
+    ))}
+  </Select>
+</FormControl>
+
                   {medForm.category === "Other" && (
                     <TextField
                       label="Custom Category"
