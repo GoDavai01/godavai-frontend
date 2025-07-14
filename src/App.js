@@ -71,14 +71,13 @@ function AppContent() {
 
         {/* Protected routes - user must be logged in */}
         <Route element={<MainLayout />}>
-          <Route
-            path="/home"
-            element={
-              <ProtectedRoute>
-                <Home />
-              </ProtectedRoute>
-            }
-          />
+         <Route
+  path="/home"
+  element={
+    <Home />
+  }
+/>
+
           <Route
             path="/medicines/:pharmacyId"
             element={
