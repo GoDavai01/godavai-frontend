@@ -45,30 +45,11 @@ const cardIcons = {
 };
 
 export default function ProfilePage() {
-const navigate = useNavigate();
-const { user, setUser, logout, token, addresses, updateAddresses, loading } = useAuth();
+  const navigate = useNavigate();
+  const { user, setUser, logout, token, addresses, updateAddresses, loading } = useAuth();
 
-if (loading) {
-  return (
-    <Box sx={{ textAlign: "center", mt: 10 }}>
-      <Typography variant="h6">Loading profile...</Typography>
-    </Box>
-  );
-}
-
-if (!user) {
-  return (
-    <Box sx={{ textAlign: "center", mt: 10 }}>
-      <Typography variant="h6">You must be logged in to view this page.</Typography>
-      <Button variant="contained" sx={{ mt: 2 }} onClick={() => navigate("/login")}>
-        Go to Login
-      </Button>
-    </Box>
-  );
-}
-
+  // ---- ALL HOOKS AT TOP (NO CONDITIONALS!) ----
   const [chatSupportOpen, setChatSupportOpen] = useState(false);
-
   const [openSections, setOpenSections] = useState({
     addresses: true,
     wallet: false,
@@ -81,12 +62,7 @@ if (!user) {
     support: false,
     refer: false,
   });
-  const toggleSection = (key) =>
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
-
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
-
-  // --- MANDATORY PROFILE FIELDS DIALOG ---
   const [editDialog, setEditDialog] = useState(false);
   const [editData, setEditData] = useState({
     name: user?.name || "",
@@ -98,7 +74,47 @@ if (!user) {
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar || "");
   const fileInputRef = useRef();
 
-  // Open the dialog if any required field is missing
+  const [changePassOpen, setChangePassOpen] = useState(false);
+  const [changeEmailOpen, setChangeEmailOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const [editingAddress, setEditingAddress] = useState(null);
+  const [showAddressForm, setShowAddressForm] = useState(false);
+
+  const [cards, setCards] = useState([]);
+  const [cardDialog, setCardDialog] = useState(false);
+  const [editingCard, setEditingCard] = useState(null);
+  const [cardForm, setCardForm] = useState({
+    number: "",
+    name: "",
+    expiry: "",
+    brand: "",
+  });
+  const [cardTypeIcon, setCardTypeIcon] = useState(null);
+
+  const [orders, setOrders] = useState([]);
+  const [orderDetail, setOrderDetail] = useState(null);
+
+  const { t, i18n } = useTranslation();
+  const { mode, setMode } = useThemeMode();
+  const [language, setLanguage] = useState(i18n.language || "en");
+
+  const [orderUpdates, setOrderUpdates] = useState(true);
+  const [offerPromos, setOfferPromos] = useState(true);
+  const [dataSharing, setDataSharing] = useState(true);
+  const [twoFA, setTwoFA] = useState(false);
+
+  const [supportDialog, setSupportDialog] = useState(false);
+  const [supportMsg, setSupportMsg] = useState("");
+  const [chatDialog, setChatDialog] = useState(false);
+  const [chatMsg, setChatMsg] = useState("");
+
+  const referralCode = `GODAVAI-USER-${user?._id || "XXXX"}`;
+  // --------------------------------------------
+  // --- Section expand toggle
+  const toggleSection = (key) => setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  // --- MANDATORY PROFILE FIELDS DIALOG ---
   useEffect(() => {
     if (user && (!user.name || !user.email || !user.dob)) {
       setEditDialog(true);
@@ -139,8 +155,7 @@ if (!user) {
 
   const handleProfileSave = async () => {
     try {
-      // --- API BASE URL ---
-      const res = await axios.put(`${API_BASE_URL}/api/users/${user._id}`, editData);
+      await axios.put(`${API_BASE_URL}/api/users/${user._id}`, editData);
       setSnackbar({ open: true, message: "Profile updated!", severity: "success" });
 
       // Fetch latest from backend!
@@ -154,18 +169,10 @@ if (!user) {
     }
   };
 
-  // --- Settings Dialogs ---
-  const [changePassOpen, setChangePassOpen] = useState(false);
-  const [changeEmailOpen, setChangeEmailOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-
   // --- Addresses (static, no backend here) ---
-  const [editingAddress, setEditingAddress] = useState(null);
-  const [showAddressForm, setShowAddressForm] = useState(false);
   const handleAddressSave = async (newAddr) => {
     let updated;
     if (newAddr.id && addresses.some((a) => a.id === newAddr.id)) {
-      // Edit
       updated = addresses.map((a) => (a.id === newAddr.id ? newAddr : a));
     } else {
       newAddr.id = Date.now().toString();
@@ -187,19 +194,7 @@ if (!user) {
     await updateAddresses(updated);
     setSnackbar({ open: true, message: "Address deleted!", severity: "success" });
   };
-
-  // --- Cards (local only) ---
-  const [cards, setCards] = useState([]);
-  const [cardDialog, setCardDialog] = useState(false);
-  const [editingCard, setEditingCard] = useState(null);
-  const [cardForm, setCardForm] = useState({
-    number: "",
-    name: "",
-    expiry: "",
-    brand: "",
-  });
-  const [cardTypeIcon, setCardTypeIcon] = useState(null);
-
+  
   function detectCardType(number) {
     if (!number) return "";
     const result = creditCardType(number.replace(/\s/g, ''));
@@ -251,10 +246,6 @@ if (!user) {
     setCardDialog(true);
   }
 
-  // --- Orders (fetch from backend) ---
-  const [orders, setOrders] = useState([]);
-  const [orderDetail, setOrderDetail] = useState(null);
-
   useEffect(() => {
     if (user?._id) {
       axios.get(`${API_BASE_URL}/api/orders/myorders-userid/${user._id}`)
@@ -267,6 +258,25 @@ if (!user) {
         .catch(() => setOrders([]));
     }
   }, [user]);
+
+  // Early returns OK below hooks
+  if (loading) {
+    return (
+      <Box sx={{ textAlign: "center", mt: 10 }}>
+        <Typography variant="h6">Loading profile...</Typography>
+      </Box>
+    );
+  }
+  if (!user) {
+    return (
+      <Box sx={{ textAlign: "center", mt: 10 }}>
+        <Typography variant="h6">You must be logged in to view this page.</Typography>
+        <Button variant="contained" sx={{ mt: 2 }} onClick={() => navigate("/login")}>
+          Go to Login
+        </Button>
+      </Box>
+    );
+  }
 
   const handleOrderAgain = (order) => {
     const pharmacyId =
@@ -284,14 +294,9 @@ if (!user) {
     }
   };
 
-  // --- Loyalty
   const totalSpent = orders.reduce((sum, o) => sum + (o.total || 0), 0);
   const loyaltyPoints = Math.floor(totalSpent);
 
-  // --- Personalization
-  const { t, i18n } = useTranslation();
-  const { mode, setMode } = useThemeMode();
-  const [language, setLanguage] = useState(i18n.language || "en");
   const handleLanguageChange = (lng) => {
     setLanguage(lng);
     i18n.changeLanguage(lng);
@@ -299,22 +304,6 @@ if (!user) {
   };
   const handleThemeChange = (theme) => setMode(theme);
 
-  // --- Settings toggles
-  const [orderUpdates, setOrderUpdates] = useState(true);
-  const [offerPromos, setOfferPromos] = useState(true);
-  const [dataSharing, setDataSharing] = useState(true);
-  const [twoFA, setTwoFA] = useState(false);
-
-  // --- Support/Feedback ---
-  const [supportDialog, setSupportDialog] = useState(false);
-  const [supportMsg, setSupportMsg] = useState("");
-  const [chatDialog, setChatDialog] = useState(false);
-  const [chatMsg, setChatMsg] = useState("");
-
-  // --- Referral code
-  const referralCode = `GODAVAI-USER-${user?._id || "XXXX"}`;
-
-  // --- Logout (context)
   const handleLogout = () => {
     logout();
     setSnackbar({ open: true, message: "Logged out!", severity: "info" });
