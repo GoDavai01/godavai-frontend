@@ -259,6 +259,15 @@ export default function ProfilePage() {
     }
   }, [user]);
 
+  const DEMO_USER = {
+  _id: "demo123",
+  name: "Test User",
+  email: "testuser@godavaii.com",
+  mobile: "9876543210",
+  dob: "1999-07-14",
+  avatar: "",
+};
+
   // Early returns OK below hooks
   if (loading) {
     return (
@@ -267,16 +276,7 @@ export default function ProfilePage() {
       </Box>
     );
   }
-  if (!user) {
-    return (
-      <Box sx={{ textAlign: "center", mt: 10 }}>
-        <Typography variant="h6">You must be logged in to view this page.</Typography>
-        <Button variant="contained" sx={{ mt: 2 }} onClick={() => navigate("/login")}>
-          Go to Login
-        </Button>
-      </Box>
-    );
-  }
+const profileUser = user || DEMO_USER;
 
   const handleOrderAgain = (order) => {
     const pharmacyId =
@@ -324,7 +324,7 @@ return (
       }}>
       <Box sx={{ position: "relative" }}>
         <Avatar
-          src={user?.avatar || "https://ui-avatars.com/api/?name=" + encodeURIComponent(user?.name || "Guest")}
+          src={profileUser?.avatar || "https://ui-avatars.com/api/?name=" + encodeURIComponent(profileUser?.name || "Guest")}
           sx={{
             width: 90, height: 90, fontSize: 40, border: "3px solid #fff", boxShadow: 3, bgcolor: "#bcbcbc"
           }}
@@ -341,7 +341,7 @@ return (
       </Box>
       <Stack spacing={0.3} ml={3} flex={1} minWidth={0}>
         <Typography variant="h5" sx={{ fontWeight: 700, color: "#232323", wordBreak: "break-word" }}>
-          {user?.name || "Guest"}
+          {profileUser?.name || "Guest"}
         </Typography>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
           <EmailIcon sx={{ fontSize: 19, color: "#1976d2" }} />
