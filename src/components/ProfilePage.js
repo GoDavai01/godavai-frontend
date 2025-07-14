@@ -45,8 +45,28 @@ const cardIcons = {
 };
 
 export default function ProfilePage() {
-  const navigate = useNavigate();
-  const { user, setUser, logout, token, addresses, updateAddresses } = useAuth();
+const navigate = useNavigate();
+const { user, setUser, logout, token, addresses, updateAddresses, loading } = useAuth();
+
+if (loading) {
+  return (
+    <Box sx={{ textAlign: "center", mt: 10 }}>
+      <Typography variant="h6">Loading profile...</Typography>
+    </Box>
+  );
+}
+
+if (!user) {
+  return (
+    <Box sx={{ textAlign: "center", mt: 10 }}>
+      <Typography variant="h6">You must be logged in to view this page.</Typography>
+      <Button variant="contained" sx={{ mt: 2 }} onClick={() => navigate("/login")}>
+        Go to Login
+      </Button>
+    </Box>
+  );
+}
+
   const [chatSupportOpen, setChatSupportOpen] = useState(false);
 
   const [openSections, setOpenSections] = useState({
@@ -301,73 +321,73 @@ export default function ProfilePage() {
     setTimeout(() => navigate("/login"), 1000);
   };
 
-  // --- UI ---
-  return (
-    <Box sx={{ maxWidth: 700, mx: "auto", mt: 4, p: 2, pb: 10 }}>
-      {/* Profile Card */}
-      <Paper elevation={6}
-        sx={{
-          borderRadius: 12, mb: 4, background: "linear-gradient(90deg,#FFD43B 30%,#FFF 100%)",
-          boxShadow: "0 8px 32px 0 rgba(31,38,135,0.13)",
-          px: 3, py: 2, display: "flex", alignItems: "center",
-          position: "relative", width: { xs: "100%", sm: 470 },
-          mx: { xs: "auto", sm: "inherit" }
-        }}>
-        <Box sx={{ position: "relative" }}>
-          <Avatar
-            src={user.avatar || "https://ui-avatars.com/api/?name=" + encodeURIComponent(user.name || "")}
-            sx={{
-              width: 90, height: 90, fontSize: 40, border: "3px solid #fff", boxShadow: 3, bgcolor: "#bcbcbc"
-            }}
-          />
-          <IconButton
-            sx={{
-              position: "absolute", bottom: -8, right: -8, bgcolor: "#fff", border: "2px solid #1976d2", zIndex: 2,
-              boxShadow: 2, "&:hover": { bgcolor: "#e3f2fd" }
-            }}
-            onClick={handleEditProfileOpen}
-          >
-            <EditIcon sx={{ color: "#1976d2" }} />
-          </IconButton>
-        </Box>
-        <Stack spacing={0.3} ml={3} flex={1} minWidth={0}>
-  <Typography variant="h5" sx={{ fontWeight: 700, color: "#232323", wordBreak: "break-word" }}>
-    {user.name}
-  </Typography>
-  <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
-    <EmailIcon sx={{ fontSize: 19, color: "#1976d2" }} />
-    <Typography
+ // --- UI ---
+return (
+  <Box sx={{ maxWidth: 700, mx: "auto", mt: 4, p: 2, pb: 10 }}>
+    {/* Profile Card */}
+    <Paper elevation={6}
       sx={{
-        color: "#1976d2",
-        fontSize: 17,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: { xs: "normal", sm: "nowrap" },
-        maxWidth: { xs: "170px", sm: "270px" },
-        display: "block",
-        wordBreak: "break-all",
-      }}
-      title={user.email}
-    >
-      {user.email}
-    </Typography>
-  </Stack>
-  <Typography
-    sx={{
-      color: "#1976d2",
-      fontSize: 16,
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap",
-      maxWidth: { xs: "150px", sm: "200px" },
-      display: "block",
-    }}
-    title={user.mobile}
-  >
-    {user.mobile}
-  </Typography>
-</Stack>
-      </Paper>
+        borderRadius: 12, mb: 4, background: "linear-gradient(90deg,#FFD43B 30%,#FFF 100%)",
+        boxShadow: "0 8px 32px 0 rgba(31,38,135,0.13)",
+        px: 3, py: 2, display: "flex", alignItems: "center",
+        position: "relative", width: { xs: "100%", sm: 470 },
+        mx: { xs: "auto", sm: "inherit" }
+      }}>
+      <Box sx={{ position: "relative" }}>
+        <Avatar
+          src={user?.avatar || "https://ui-avatars.com/api/?name=" + encodeURIComponent(user?.name || "Guest")}
+          sx={{
+            width: 90, height: 90, fontSize: 40, border: "3px solid #fff", boxShadow: 3, bgcolor: "#bcbcbc"
+          }}
+        />
+        <IconButton
+          sx={{
+            position: "absolute", bottom: -8, right: -8, bgcolor: "#fff", border: "2px solid #1976d2", zIndex: 2,
+            boxShadow: 2, "&:hover": { bgcolor: "#e3f2fd" }
+          }}
+          onClick={handleEditProfileOpen}
+        >
+          <EditIcon sx={{ color: "#1976d2" }} />
+        </IconButton>
+      </Box>
+      <Stack spacing={0.3} ml={3} flex={1} minWidth={0}>
+        <Typography variant="h5" sx={{ fontWeight: 700, color: "#232323", wordBreak: "break-word" }}>
+          {user?.name || "Guest"}
+        </Typography>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+          <EmailIcon sx={{ fontSize: 19, color: "#1976d2" }} />
+          <Typography
+            sx={{
+              color: "#1976d2",
+              fontSize: 17,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: { xs: "normal", sm: "nowrap" },
+              maxWidth: { xs: "170px", sm: "270px" },
+              display: "block",
+              wordBreak: "break-all",
+            }}
+            title={user?.email || "Email not available"}
+          >
+            {user?.email || "Email not available"}
+          </Typography>
+        </Stack>
+        <Typography
+          sx={{
+            color: "#1976d2",
+            fontSize: 16,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            maxWidth: { xs: "150px", sm: "200px" },
+            display: "block",
+          }}
+          title={user?.mobile || "Mobile not set"}
+        >
+          {user?.mobile || "Mobile not set"}
+        </Typography>
+      </Stack>
+    </Paper>
 
       {/* --- Addresses Section --- */}
       <Section
