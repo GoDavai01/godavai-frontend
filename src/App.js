@@ -65,6 +65,7 @@ function AppContent() {
         <Route path="/order-tracking/:orderId" element={<OrderTracking />} />
         <Route path="/orders/:orderId" element={<OrderTracking />} />
         <Route path="/test-standalone" element={<StepperStandalone />} />
+        <Route path="/otp-login" element={<Navigate to="/home" replace />} />
         <Route path="*" element={<NotFound />} />
 
         {/* Protected routes - user must be logged in */}
