@@ -11,10 +11,7 @@ import { useNavigate } from "react-router-dom";
 
 // Demo Areas (update as needed)
 const AREA_MAP = {
-  Mumbai: ["Andheri", "Powai", "Bandra", "Borivali", "Goregaon"],
-  Delhi: ["CP", "Saket", "Karol Bagh", "Dwarka", "Rohini"],
-  Bangalore: ["Koramangala", "Indiranagar", "Whitefield"],
-  Chennai: ["T Nagar", "Velachery", "Anna Nagar"],
+  Delhi: ["Rajouri Garden", "CP", "Saket", "Karol Bagh", "Dwarka", "Rohini"],
 };
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";

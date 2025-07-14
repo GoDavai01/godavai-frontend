@@ -162,6 +162,7 @@ export default function DeliveryDashboard() {
   // Auto-refresh every 3 seconds
   useEffect(() => {
     if (!loggedIn) return;
+    if (firstLoad.current) return;
     const interval = setInterval(() => {
       fetchProfileAndOrders();
     }, 3000);
@@ -198,11 +199,15 @@ export default function DeliveryDashboard() {
   }, [loggedIn, orders, partner]);
 
   useEffect(() => {
-    if (loggedIn) {
-      fetchProfileAndOrders();
-    }
-    // eslint-disable-next-line
-  }, [loggedIn]);
+  if (loggedIn) {
+    setLoading(true);          // <-- always show loading for initial
+    fetchProfileAndOrders().finally(() => {
+      setLoading(false);
+      firstLoad.current = false;
+    });
+  }
+  // eslint-disable-next-line
+}, [loggedIn]);
 
   // Unread badge fetcher
   useEffect(() => {
@@ -229,9 +234,6 @@ export default function DeliveryDashboard() {
 
   // Fetch partner profile and orders (and set active state)
   const fetchProfileAndOrders = async () => {
-  if (firstLoad.current) {
-    setLoading(true);
-  }
   try {
     const token = localStorage.getItem("deliveryToken");
     const partnerId = localStorage.getItem("deliveryPartnerId");
@@ -270,10 +272,6 @@ export default function DeliveryDashboard() {
     setSnackbar({ open: true, message: "Failed to load profile/orders", severity: "error" });
     setLoggedIn(false);
     setLoginDialog(true);
-  }
-  if (firstLoad.current) {
-    setLoading(false);
-    firstLoad.current = false; // set to false after first load!
   }
 };
 
