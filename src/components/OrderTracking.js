@@ -87,27 +87,27 @@ export default function OrderTracking() {
     googleMapsApiKey: "AIzaSyCwztiOU2rdeyoNNDDoM4nQzMrG2pPuTTA",
   });
 
-  useEffect(() => {
-  if (!order) return;
-  if (order.status === "rejected" || order.status === "cancelled") return;
-  let interval = setInterval(() => setRefreshTick(tick => tick + 1), 3000);
-  return () => clearInterval(interval);
-}, [order]);
-
-
-  useEffect(() => {
-    setLoading(true);
-    axios.get(`${API_BASE_URL}/api/orders/${orderId}`)
-      .then(res => {
+  // --- INITIAL LOAD (only once or on quote action) ---
+useEffect(() => {
+  let didCancel = false;
+  setLoading(true);
+  axios.get(`${API_BASE_URL}/api/orders/${orderId}`)
+    .then(res => {
+      if (!didCancel) {
         setOrder({ ...res.data, __type: "order" });
         setLoading(false);
+
+        // Setup ratings/feedback on first load
         if (res.data.deliveryRating && res.data.pharmacyRating && res.data.deliveryBehavior) {
           setFeedbackSubmitted(true);
         }
         if (res.data.deliveryRating) setDeliveryRating(res.data.deliveryRating);
         if (res.data.pharmacyRating) setPharmacyRating(res.data.pharmacyRating);
-      })
-      .catch(() => {
+      }
+    })
+    .catch(() => {
+      if (!didCancel) {
+        // Fallback: try prescription order fetch
         axios.get(`${API_BASE_URL}/api/prescriptions/order/${orderId}`, { headers: { Authorization: `Bearer ${getToken()}` } })
           .then(res => {
             setOrder({ ...res.data, __type: "prescription" });
@@ -117,8 +117,23 @@ export default function OrderTracking() {
             setOrder(null);
             setLoading(false);
           });
-      });
-  }, [orderId, quoteActionLoading, refreshTick]);
+      }
+    });
+  return () => { didCancel = true; };
+}, [orderId, quoteActionLoading]);
+
+// --- POLLING EFFECT (silent, NO loading, NO flicker) ---
+useEffect(() => {
+  if (!order || order.status === "rejected" || order.status === "cancelled") return;
+  const refreshOrderSilently = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/orders/${orderId}`);
+      setOrder(prev => ({ ...res.data, __type: "order" }));
+    } catch {}
+  };
+  const interval = setInterval(refreshOrderSilently, 3000);
+  return () => clearInterval(interval);
+}, [orderId, order && order.status]);
 
   useEffect(() => {
     if (!order) return;
