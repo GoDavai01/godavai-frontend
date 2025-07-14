@@ -18,10 +18,7 @@ import axios from "axios";
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 const AREA_MAP = {
-  Mumbai: ["Andheri", "Powai", "Bandra", "Borivali", "Goregaon"],
-  Delhi: ["CP", "Saket", "Karol Bagh", "Dwarka", "Rohini"],
-  Bangalore: ["Koramangala", "Indiranagar", "Whitefield"],
-  Chennai: ["T Nagar", "Velachery", "Anna Nagar"],
+  Delhi: ["Rajouri Garden", "CP", "Saket", "Karol Bagh", "Dwarka", "Rohini"],
 };
 const cities = Object.keys(AREA_MAP);
 
@@ -32,7 +29,7 @@ export default function Navbar({
   onProfile = () => window.location.href = "/profile"
 }) {
   // Unified city/area state and localStorage key
-  const [city, setCity] = useState(localStorage.getItem("city") || "Mumbai");
+  const [city, setCity] = useState(localStorage.getItem("city") || "Delhi");
   const [area, setArea] = useState(localStorage.getItem("area") || "");
   const [anchorEl, setAnchorEl] = useState(null);
   const [areaDialog, setAreaDialog] = useState(false);
@@ -118,10 +115,7 @@ export default function Navbar({
           }
           // Fuzzy mapping for city
           if (!cities.includes(detectedCity)) {
-            if (detectedCity?.toLowerCase().includes("mumbai")) detectedCity = "Mumbai";
             if (detectedCity?.toLowerCase().includes("delhi")) detectedCity = "Delhi";
-            if (detectedCity?.toLowerCase().includes("bangalore")) detectedCity = "Bangalore";
-            if (detectedCity?.toLowerCase().includes("chennai")) detectedCity = "Chennai";
           }
           if (cities.includes(detectedCity)) {
             setCity(detectedCity);
