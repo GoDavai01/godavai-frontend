@@ -49,6 +49,23 @@ export default function PharmaciesNearYou() {
       .finally(() => setLoading(false));
   }, [city, area, sortBy]);
 
+  // ---- ADD THIS (third useEffect) ----
+useEffect(() => {
+  // Silent refresh after a short delay on first mount
+  const timeout = setTimeout(() => {
+    let url = `${API_BASE_URL}/api/pharmacies?city=${encodeURIComponent(city)}`;
+    if (area) url += `&area=${encodeURIComponent(area)}`;
+    fetch(url)
+      .then(res => res.json())
+      .then(data => setPharmacies(data))
+      .catch(() => {});
+    // No setLoading here (completely silent)
+  }, 700);
+  return () => clearTimeout(timeout);
+  // Only run once, on mount
+  // eslint-disable-next-line
+}, []);
+
   const areaList = AREA_MAP[city] || [];
   const minDeliveryTime = 13;
   const maxDeliveryTime = 29;

@@ -17,7 +17,12 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:500
 const getImageUrl = (img) => {
   if (!img)
     return "https://img.freepik.com/free-vector/medicine-bottle-pills-isolated_1284-42391.jpg?w=400";
-  if (img.startsWith("/uploads/")) return `${img}`; // Use relative path
+  if (img.startsWith("/uploads/")) {
+    // Always fetch from backend!
+    return `${API_BASE_URL}${img}`;
+  }
+  // If already absolute URL
+  if (img.startsWith("http://") || img.startsWith("https://")) return img;
   return img;
 };
 
@@ -62,11 +67,22 @@ export default function Medicines() {
       .finally(() => setLoading(false));
   }, [pharmacyId]);
 
-  const filteredMeds = medicines.filter(med => {
-    const catMatch = selectedCategory === "All" || med.category === selectedCategory;
-    const typeMatch = selectedType === "All" || (med.type && med.type === selectedType);
-    return catMatch && typeMatch;
-  });
+  // --- THE MAIN FIX: this function now supports arrays for category/type ---
+  const matchCategory = (med, selected) => {
+    if (selected === "All") return true;
+    if (!med.category) return false;
+    if (Array.isArray(med.category)) return med.category.includes(selected);
+    return med.category === selected;
+  };
+
+  const matchType = (med, selected) => {
+    if (selected === "All") return true;
+    if (!med.type) return false;
+    if (Array.isArray(med.type)) return med.type.includes(selected);
+    return med.type === selected;
+  };
+
+  const filteredMeds = medicines.filter(med => matchCategory(med, selectedCategory) && matchType(med, selectedType));
 
   return (
     <Box sx={{ bgcolor: "#f9fafb", minHeight: "100vh", pb: 12, pt: 3 }}>
@@ -156,7 +172,8 @@ export default function Medicines() {
                         </Typography>
                       )}
                       <Typography fontSize={13} color="#666" sx={{ mb: 0.5 }}>
-                        {med.category || "Miscellaneous"}
+                        {/* Show ALL categories, not just one */}
+                        {Array.isArray(med.category) ? med.category.join(", ") : (med.category || "Miscellaneous")}
                       </Typography>
                       <Stack direction="row" spacing={1} mt={1}>
                         <Button
@@ -243,7 +260,10 @@ export default function Medicines() {
                 {selectedMed.description || "No description available."}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Category: {selectedMed.category || "Miscellaneous"}
+                Category: {Array.isArray(selectedMed.category) ? selectedMed.category.join(", ") : (selectedMed.category || "Miscellaneous")}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Type: {Array.isArray(selectedMed.type) ? selectedMed.type.join(", ") : (selectedMed.type || "—")}
               </Typography>
               <Typography variant="h6" mt={2}>
                 ₹{selectedMed.price} <Typography component="span" sx={{ textDecoration: "line-through", ml: 1, fontSize: 14, color: "gray" }}>₹{Math.round(selectedMed.price / (1 - (selectedMed.discount || 10) / 100))}</Typography>

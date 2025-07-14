@@ -96,6 +96,17 @@ const MED_CATEGORIES = [
   "Supplements",
   "Other"
 ];
+const TYPE_OPTIONS = [
+  "Tablet",
+  "Syrup",
+  "Injection",
+  "Cream",
+  "Ointment",
+  "Drop",
+  "Spray",
+  "Inhaler",
+  "Other"
+];
 
 // --- Status helpers ---
 function getStatusLabel(status) {
@@ -160,7 +171,9 @@ export default function PharmacyDashboard() {
     stock: "",
     category: "",
     discount: "",
-    customCategory: ""
+    customCategory: "",
+    type: "Tablet",
+    customType: ""
   });
   const [medMsg, setMedMsg] = useState("");
   const [editMedId, setEditMedId] = useState(null);
@@ -171,7 +184,9 @@ export default function PharmacyDashboard() {
     mrp: "",
     stock: "",
     category: "",
-    customCategory: ""
+    customCategory: "",
+    type: "Tablet",
+    customType: ""
   });
   const [medImage, setMedImage] = useState(null);
   const fileInputRef = useRef();
@@ -343,7 +358,9 @@ export default function PharmacyDashboard() {
       mrp: med.mrp,
       stock: med.stock,
       category: med.category,
-      customCategory: ""
+      customCategory: "",
+      type: TYPE_OPTIONS.includes(med.type) ? med.type : "Other",
+      customType: TYPE_OPTIONS.includes(med.type) ? "" : (med.type || "")
     });
   };
 
@@ -709,261 +726,306 @@ export default function PharmacyDashboard() {
           <PrescriptionOrdersTab token={token} medicines={medicines} />
 
           {/* Medicines Management */}
-          <Divider sx={{ my: 3 }} />
-          <Button
-            variant="contained"
-            onClick={() => setShowMeds(!showMeds)}
-            sx={{ mb: 2 }}
+<Divider sx={{ my: 3 }} />
+<Button
+  variant="contained"
+  onClick={() => setShowMeds(!showMeds)}
+  sx={{ mb: 2 }}
+>
+  {showMeds ? "Hide Medicines" : "Manage Medicines"}
+</Button>
+{showMeds && (
+  <Box sx={{ mt: 1, mb: 10 }}>
+    <Typography variant="h6" mb={1}>Medicines</Typography>
+    {medicines.map(med => (
+      <Card key={med.id || med._id} sx={{ mb: 1, bgcolor: "#21272b" }}>
+        <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <Typography sx={{ flex: 1 }}>
+            <b>{med.name}</b>
+            {med.brand && (
+              <span style={{ color: "#13C0A2", fontWeight: 400 }}> ({med.brand})</span>
+            )}
+            {" — "}
+            <span style={{ color: "#FFD43B" }}>
+              {(Array.isArray(med.category) ? med.category.join(', ') : med.category) || "Miscellaneous"}
+            </span>
+            <br />
+            <b>Selling Price:</b> ₹{med.price} | <b>MRP:</b> ₹{med.mrp} | <b>Stock:</b> {med.stock}
+            <br />
+            <b>Type:</b> {med.type || "Tablet"}
+          </Typography>
+          <IconButton
+            color="primary"
+            size="small"
+            onClick={() => handleEditMedicine(med)}
+            disabled={loading}
           >
-            {showMeds ? "Hide Medicines" : "Manage Medicines"}
-          </Button>
-          {showMeds && (
-            <Box sx={{ mt: 1, mb: 10 }}>
-              <Typography variant="h6" mb={1}>Medicines</Typography>
-              {medicines.map(med => (
-                <Card key={med.id || med._id} sx={{ mb: 1, bgcolor: "#21272b" }}>
-                  <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                    <Typography sx={{ flex: 1 }}>
-                      <b>{med.name}</b>
-                      {med.brand && (
-                        <span style={{ color: "#13C0A2", fontWeight: 400 }}> ({med.brand})</span>
-                      )}
-                      {" — "}
-                      <span style={{ color: "#FFD43B" }}>
-  {(Array.isArray(med.category) ? med.category.join(', ') : med.category) || "Miscellaneous"}
-</span>
-
-                      <br />
-                      <b>Selling Price:</b> ₹{med.price} | <b>MRP:</b> ₹{med.mrp} | <b>Stock:</b> {med.stock}
-                    </Typography>
-                    <IconButton
-                      color="primary"
-                      size="small"
-                      onClick={() => handleEditMedicine(med)}
-                      disabled={loading}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      color="error"
-                      size="small"
-                      onClick={() => handleDeleteMedicine(med.id || med._id)}
-                      disabled={loading}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </CardContent>
-                </Card>
+            <EditIcon />
+          </IconButton>
+          <IconButton
+            color="error"
+            size="small"
+            onClick={() => handleDeleteMedicine(med.id || med._id)}
+            disabled={loading}
+          >
+            <DeleteIcon />
+          </IconButton>
+        </CardContent>
+      </Card>
+    ))}
+    {/* EDIT MEDICINE DIALOG */}
+    <Dialog open={!!editMedId} onClose={() => setEditMedId(null)} fullWidth maxWidth="xs">
+      <DialogTitle>Edit Medicine</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} mt={1}>
+          <TextField
+            label="Name"
+            fullWidth
+            value={editMedForm.name}
+            onChange={e => setEditMedForm(f => ({ ...f, name: e.target.value }))}
+            onFocus={() => setIsEditing(true)}
+            onBlur={() => setIsEditing(false)}
+          />
+          <TextField
+            label="Brand"
+            fullWidth
+            value={editMedForm.brand}
+            onChange={e => setEditMedForm(f => ({ ...f, brand: e.target.value }))}
+            onFocus={() => setIsEditing(true)}
+            onBlur={() => setIsEditing(false)}
+          />
+          <TextField
+            label="Selling Price"
+            type="number"
+            fullWidth
+            value={editMedForm.price}
+            onChange={e => setEditMedForm(f => ({ ...f, price: e.target.value }))}
+            onFocus={() => setIsEditing(true)}
+            onBlur={() => setIsEditing(false)}
+          />
+          <TextField
+            label="MRP"
+            type="number"
+            fullWidth
+            value={editMedForm.mrp}
+            onChange={e => setEditMedForm(f => ({ ...f, mrp: e.target.value }))}
+            onFocus={() => setIsEditing(true)}
+            onBlur={() => setIsEditing(false)}
+          />
+          <TextField
+            label="Stock"
+            type="number"
+            fullWidth
+            value={editMedForm.stock}
+            onChange={e => setEditMedForm(f => ({ ...f, stock: e.target.value }))}
+            onFocus={() => setIsEditing(true)}
+            onBlur={() => setIsEditing(false)}
+          />
+          <FormControl fullWidth>
+            <InputLabel>Category</InputLabel>
+            <Select
+              multiple
+              value={editMedForm.category}
+              label="Category"
+              onChange={e => setEditMedForm(f => ({ ...f, category: e.target.value }))}
+              renderValue={(selected) => selected.join(', ')}
+            >
+              {MED_CATEGORIES.map(opt => (
+                <MenuItem key={opt} value={opt}>
+                  <Checkbox checked={editMedForm.category.indexOf(opt) > -1} />
+                  <ListItemText primary={opt} />
+                </MenuItem>
               ))}
-              {/* EDIT MEDICINE DIALOG */}
-              <Dialog open={!!editMedId} onClose={() => setEditMedId(null)} fullWidth maxWidth="xs">
-                <DialogTitle>Edit Medicine</DialogTitle>
-                <DialogContent>
-                  <Stack spacing={2} mt={1}>
-                    <TextField
-                      label="Name"
-                      fullWidth
-                      value={editMedForm.name}
-                      onChange={e => setEditMedForm(f => ({ ...f, name: e.target.value }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
-                    />
-                    <TextField
-                      label="Brand"
-                      fullWidth
-                      value={editMedForm.brand}
-                      onChange={e => setEditMedForm(f => ({ ...f, brand: e.target.value }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
-                    />
-                    <TextField
-                      label="Selling Price"
-                      type="number"
-                      fullWidth
-                      value={editMedForm.price}
-                      onChange={e => setEditMedForm(f => ({ ...f, price: e.target.value }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
-                    />
-                    <TextField
-                      label="MRP"
-                      type="number"
-                      fullWidth
-                      value={editMedForm.mrp}
-                      onChange={e => setEditMedForm(f => ({ ...f, mrp: e.target.value }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
-                    />
-                    <TextField
-                      label="Stock"
-                      type="number"
-                      fullWidth
-                      value={editMedForm.stock}
-                      onChange={e => setEditMedForm(f => ({ ...f, stock: e.target.value }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
-                    />
-                    <FormControl fullWidth>
-  <InputLabel>Category</InputLabel>
-  <Select
-    multiple
-    value={editMedForm.category}
-    label="Category"
-    onChange={e => setEditMedForm(f => ({ ...f, category: e.target.value }))}
-    renderValue={(selected) => selected.join(', ')}
-  >
-    {MED_CATEGORIES.map(opt => (
-      <MenuItem key={opt} value={opt}>
-        <Checkbox checked={editMedForm.category.indexOf(opt) > -1} />
-        <ListItemText primary={opt} />
-      </MenuItem>
-    ))}
-  </Select>
-</FormControl>
-
-                    {editMedForm.category === "Other" && (
-                      <TextField
-                        label="Custom Category"
-                        fullWidth
-                        value={editMedForm.customCategory}
-                        onChange={e => setEditMedForm(f => ({ ...f, customCategory: e.target.value }))}
-                        onFocus={() => setIsEditing(true)}
-                        onBlur={() => setIsEditing(false)}
-                      />
-                    )}
-                  </Stack>
-                </DialogContent>
-                <DialogActions>
-                  <Button onClick={() => setEditMedId(null)} color="error">Cancel</Button>
-                  <Button variant="contained" onClick={handleSaveMedicine} color="success" disabled={loading}>
-                    Save
-                  </Button>
-                </DialogActions>
-              </Dialog>
-
-              {/* ADD MEDICINE SECTION */}
-              <Box sx={{
-                mt: 2, pb: 8, position: "relative",
-                bgcolor: "#181d23", borderRadius: 2, p: 2, boxShadow: 1
-              }}>
-                <Stack spacing={2}>
-                  <TextField
-                    label="Name"
-                    value={medForm.name}
-                    onChange={e => setMedForm(f => ({ ...f, name: e.target.value }))}
-                    onFocus={() => setIsEditing(true)}
-                    onBlur={() => setIsEditing(false)}
-                  />
-                  <TextField
-                    label="Brand"
-                    value={medForm.brand}
-                    onChange={e => setMedForm(f => ({ ...f, brand: e.target.value }))}
-                    onFocus={() => setIsEditing(true)}
-                    onBlur={() => setIsEditing(false)}
-                  />
-                  <TextField
-                    label="Selling Price"
-                    type="number"
-                    value={medForm.price}
-                    onChange={e => setMedForm(f => ({ ...f, price: e.target.value }))}
-                    onFocus={() => setIsEditing(true)}
-                    onBlur={() => setIsEditing(false)}
-                  />
-                  <TextField
-                    label="MRP"
-                    type="number"
-                    value={medForm.mrp}
-                    onChange={e => setMedForm(f => ({ ...f, mrp: e.target.value }))}
-                    onFocus={() => setIsEditing(true)}
-                    onBlur={() => setIsEditing(false)}
-                  />
-                  <TextField
-                    label="Discount (%)"
-                    type="number"
-                    value={medForm.discount}
-                    onChange={(e) => setMedForm(f => ({ ...f, discount: e.target.value }))}
-                    inputProps={{ min: 0, max: 90 }}
-                    onFocus={() => setIsEditing(true)}
-                    onBlur={() => setIsEditing(false)}
-                  />
-                  <TextField
-                    label="Stock"
-                    type="number"
-                    value={medForm.stock}
-                    onChange={e => setMedForm(f => ({ ...f, stock: e.target.value }))}
-                    onFocus={() => setIsEditing(true)}
-                    onBlur={() => setIsEditing(false)}
-                  />
-                  <FormControl fullWidth>
-  <InputLabel>Category</InputLabel>
-  <Select
-    multiple
-    value={medForm.category}
-    label="Category"
-    onChange={e => setMedForm(f => ({ ...f, category: e.target.value }))}
-    renderValue={(selected) => selected.join(', ')}
-    MenuProps={{
-      PaperProps: { style: { zIndex: 2000 } }
-    }}
-  >
-    {MED_CATEGORIES.map(opt => (
-      <MenuItem key={opt} value={opt}>
-        <Checkbox checked={medForm.category.indexOf(opt) > -1} />
-        <ListItemText primary={opt} />
-      </MenuItem>
-    ))}
-  </Select>
-</FormControl>
-
-                  {medForm.category === "Other" && (
-                    <TextField
-                      label="Custom Category"
-                      value={medForm.customCategory}
-                      onChange={e => setMedForm(f => ({ ...f, customCategory: e.target.value }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
-                    />
-                  )}
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      hidden
-                      ref={fileInputRef}
-                      onChange={handleImageChange}
-                    />
-                    <Button
-                      startIcon={<PhotoCamera />}
-                      variant={medImage ? "contained" : "outlined"}
-                      onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                      color={medImage ? "success" : "primary"}
-                      sx={{ minWidth: 120 }}
-                    >
-                      {medImage ? "Image Ready" : "Upload Image"}
-                    </Button>
-                  </Stack>
-                  <Button
-                    variant="contained"
-                    onClick={handleAddMedicine}
-                    disabled={loading}
-                    sx={{
-                      width: "100%",
-                      mt: 1,
-                      position: "sticky",
-                      bottom: 56,
-                      zIndex: 2
-                    }}
-                  >
-                    Add Medicine
-                  </Button>
-                  <Typography color={ medMsg.toLowerCase().includes("fail") || medMsg.toLowerCase().includes("error") ? "error" : "success.main"} variant="body2">
-                    {medMsg}
-                  </Typography>
-                </Stack>
-              </Box>
-            </Box>
+            </Select>
+          </FormControl>
+          {editMedForm.category === "Other" && (
+            <TextField
+              label="Custom Category"
+              fullWidth
+              value={editMedForm.customCategory}
+              onChange={e => setEditMedForm(f => ({ ...f, customCategory: e.target.value }))}
+              onFocus={() => setIsEditing(true)}
+              onBlur={() => setIsEditing(false)}
+            />
           )}
+          {/* --- TYPE FIELD --- */}
+          <FormControl fullWidth>
+            <InputLabel>Type</InputLabel>
+            <Select
+              value={editMedForm.type}
+              label="Type"
+              onChange={e => setEditMedForm(f => ({ ...f, type: e.target.value }))}
+            >
+              {TYPE_OPTIONS.map(opt => (
+                <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {editMedForm.type === "Other" && (
+            <TextField
+              label="Custom Type"
+              fullWidth
+              value={editMedForm.customType}
+              onChange={e => setEditMedForm(f => ({ ...f, customType: e.target.value }))}
+              onFocus={() => setIsEditing(true)}
+              onBlur={() => setIsEditing(false)}
+            />
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setEditMedId(null)} color="error">Cancel</Button>
+        <Button variant="contained" onClick={handleSaveMedicine} color="success" disabled={loading}>
+          Save
+        </Button>
+      </DialogActions>
+    </Dialog>
+
+    {/* ADD MEDICINE SECTION */}
+    <Box sx={{
+      mt: 2, pb: 8, position: "relative",
+      bgcolor: "#181d23", borderRadius: 2, p: 2, boxShadow: 1
+    }}>
+      <Stack spacing={2}>
+        <TextField
+          label="Name"
+          value={medForm.name}
+          onChange={e => setMedForm(f => ({ ...f, name: e.target.value }))}
+          onFocus={() => setIsEditing(true)}
+          onBlur={() => setIsEditing(false)}
+        />
+        <TextField
+          label="Brand"
+          value={medForm.brand}
+          onChange={e => setMedForm(f => ({ ...f, brand: e.target.value }))}
+          onFocus={() => setIsEditing(true)}
+          onBlur={() => setIsEditing(false)}
+        />
+        <TextField
+          label="Selling Price"
+          type="number"
+          value={medForm.price}
+          onChange={e => setMedForm(f => ({ ...f, price: e.target.value }))}
+          onFocus={() => setIsEditing(true)}
+          onBlur={() => setIsEditing(false)}
+        />
+        <TextField
+          label="MRP"
+          type="number"
+          value={medForm.mrp}
+          onChange={e => setMedForm(f => ({ ...f, mrp: e.target.value }))}
+          onFocus={() => setIsEditing(true)}
+          onBlur={() => setIsEditing(false)}
+        />
+        <TextField
+          label="Discount (%)"
+          type="number"
+          value={medForm.discount}
+          onChange={(e) => setMedForm(f => ({ ...f, discount: e.target.value }))}
+          inputProps={{ min: 0, max: 90 }}
+          onFocus={() => setIsEditing(true)}
+          onBlur={() => setIsEditing(false)}
+        />
+        <TextField
+          label="Stock"
+          type="number"
+          value={medForm.stock}
+          onChange={e => setMedForm(f => ({ ...f, stock: e.target.value }))}
+          onFocus={() => setIsEditing(true)}
+          onBlur={() => setIsEditing(false)}
+        />
+        <FormControl fullWidth>
+          <InputLabel>Category</InputLabel>
+          <Select
+            multiple
+            value={medForm.category}
+            label="Category"
+            onChange={e => setMedForm(f => ({ ...f, category: e.target.value }))}
+            renderValue={(selected) => selected.join(', ')}
+            MenuProps={{
+              PaperProps: { style: { zIndex: 2000 } }
+            }}
+          >
+            {MED_CATEGORIES.map(opt => (
+              <MenuItem key={opt} value={opt}>
+                <Checkbox checked={medForm.category.indexOf(opt) > -1} />
+                <ListItemText primary={opt} />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        {medForm.category === "Other" && (
+          <TextField
+            label="Custom Category"
+            value={medForm.customCategory}
+            onChange={e => setMedForm(f => ({ ...f, customCategory: e.target.value }))}
+            onFocus={() => setIsEditing(true)}
+            onBlur={() => setIsEditing(false)}
+          />
+        )}
+        {/* --- TYPE FIELD --- */}
+        <FormControl fullWidth>
+          <InputLabel>Type</InputLabel>
+          <Select
+            value={medForm.type}
+            label="Type"
+            onChange={e => setMedForm(f => ({ ...f, type: e.target.value }))}
+          >
+            {TYPE_OPTIONS.map(opt => (
+              <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        {medForm.type === "Other" && (
+          <TextField
+            label="Custom Type"
+            fullWidth
+            value={medForm.customType}
+            onChange={e => setMedForm(f => ({ ...f, customType: e.target.value }))}
+            onFocus={() => setIsEditing(true)}
+            onBlur={() => setIsEditing(false)}
+          />
+        )}
+        <Stack direction="row" spacing={2} alignItems="center">
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            ref={fileInputRef}
+            onChange={handleImageChange}
+          />
+          <Button
+            startIcon={<PhotoCamera />}
+            variant={medImage ? "contained" : "outlined"}
+            onClick={() => fileInputRef.current && fileInputRef.current.click()}
+            color={medImage ? "success" : "primary"}
+            sx={{ minWidth: 120 }}
+          >
+            {medImage ? "Image Ready" : "Upload Image"}
+          </Button>
+        </Stack>
+        <Button
+          variant="contained"
+          onClick={handleAddMedicine}
+          disabled={loading}
+          sx={{
+            width: "100%",
+            mt: 1,
+            position: "sticky",
+            bottom: 56,
+            zIndex: 2
+          }}
+        >
+          Add Medicine
+        </Button>
+        <Typography color={ medMsg.toLowerCase().includes("fail") || medMsg.toLowerCase().includes("error") ? "error" : "success.main"} variant="body2">
+          {medMsg}
+        </Typography>
+      </Stack>
+    </Box>
+  </Box>
+)}
           <PharmacyPayoutsSection token={token} pharmacyId={pharmacy?._id} />
           {/* LOGOUT BUTTON */}
           <Box sx={{
