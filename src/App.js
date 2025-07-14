@@ -59,7 +59,7 @@ function AppContent() {
       {!hideNavbar && <Navbar />}
       <Routes>
         <Route path="/" element={<WelcomePage />} />
-        // <Route path="/otp-login" element={<OtpLogin />} />
+        {/* <Route path="/otp-login" element={<OtpLogin />} /> */}
         <Route path="/pharmacy/login" element={<PharmacyLogin />} />
         <Route path="/order/:orderId" element={<OrderTracking />} />
         <Route path="/order-tracking/:orderId" element={<OrderTracking />} />
