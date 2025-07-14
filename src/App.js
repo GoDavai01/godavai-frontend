@@ -59,163 +59,37 @@ function AppContent() {
     <>
       {!hideNavbar && <Navbar />}
       <Routes>
-        <Route path="/" element={<WelcomePage />} />
-        {/* <Route path="/otp-login" element={<OtpLogin />} /> */}
-        <Route path="/pharmacy/login" element={<PharmacyLogin />} />
-        <Route path="/order/:orderId" element={<OrderTracking />} />
-        <Route path="/order-tracking/:orderId" element={<OrderTracking />} />
-        <Route path="/orders/:orderId" element={<OrderTracking />} />
-        <Route path="/test-standalone" element={<StepperStandalone />} />
-        <Route path="/otp-login" element={<Navigate to="/home" replace />} />
-        <Route path="*" element={<NotFound />} />
+  <Route path="/" element={<WelcomePage />} />
+  <Route path="/otp-login" element={<Navigate to="/home" replace />} />
+  <Route path="/pharmacy/login" element={<PharmacyLogin />} />
+  <Route path="/order/:orderId" element={<OrderTracking />} />
+  <Route path="/order-tracking/:orderId" element={<OrderTracking />} />
+  <Route path="/orders/:orderId" element={<OrderTracking />} />
+  <Route path="/test-standalone" element={<StepperStandalone />} />
+  <Route path="*" element={<NotFound />} />
 
-        {/* Protected routes - user must be logged in */}
-        <Route element={<MainLayout />}>
-         <Route
-  path="/home"
-  element={
-    <Home />
-  }
-/>
-
-          <Route
-            path="/medicines/:pharmacyId"
-            element={
-              <ProtectedRoute>
-                <Medicines />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/cart"
-            element={
-              <ProtectedRoute>
-                <CartPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/pharmacy/dashboard"
-            element={
-              <ProtectedRoute>
-                <PharmacyDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/pharmacy/register"
-            element={
-              <ProtectedRoute>
-                <PharmacyRegistrationStepper />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/dashboard"
-            element={
-              <ProtectedRoute>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/register"
-            element={
-              <ProtectedRoute>
-                <AdminRegistration />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/delivery/dashboard"
-            element={
-              <ProtectedRoute>
-                <DeliveryDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/delivery/register"
-            element={
-              <ProtectedRoute>
-                <RegisterDeliveryPartner />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/driver-sim"
-            element={
-              <ProtectedRoute>
-                <DriverSimulator />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute>
-                <ProfilePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/pharmacies-near-you"
-            element={
-              <ProtectedRoute>
-                <PharmaciesNearYou />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/checkout"
-            element={
-              <ProtectedRoute>
-                <CheckoutPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/payment"
-            element={
-              <ProtectedRoute>
-                <PaymentPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/payment-success"
-            element={
-              <ProtectedRoute>
-                <PaymentSuccess />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/orders"
-            element={
-              <ProtectedRoute>
-                <MyOrdersPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/search"
-            element={
-              <ProtectedRoute>
-                <SearchResults />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/all-medicines"
-            element={
-              <ProtectedRoute>
-                <AllMedicines />
-              </ProtectedRoute>
-            }
-          />
-        </Route>
-      </Routes>
+  {/* No ProtectedRoute here */}
+  <Route element={<MainLayout />}>
+    <Route path="/home" element={<Home />} />
+    <Route path="/medicines/:pharmacyId" element={<Medicines />} />
+    <Route path="/cart" element={<CartPage />} />
+    <Route path="/pharmacy/dashboard" element={<PharmacyDashboard />} />
+    <Route path="/pharmacy/register" element={<PharmacyRegistrationStepper />} />
+    <Route path="/admin/dashboard" element={<AdminDashboard />} />
+    <Route path="/admin/register" element={<AdminRegistration />} />
+    <Route path="/delivery/dashboard" element={<DeliveryDashboard />} />
+    <Route path="/delivery/register" element={<RegisterDeliveryPartner />} />
+    <Route path="/driver-sim" element={<DriverSimulator />} />
+    <Route path="/profile" element={<ProfilePage />} />
+    <Route path="/pharmacies-near-you" element={<PharmaciesNearYou />} />
+    <Route path="/checkout" element={<CheckoutPage />} />
+    <Route path="/payment" element={<PaymentPage />} />
+    <Route path="/payment-success" element={<PaymentSuccess />} />
+    <Route path="/orders" element={<MyOrdersPage />} />
+    <Route path="/search" element={<SearchResults />} />
+    <Route path="/all-medicines" element={<AllMedicines />} />
+  </Route>
+</Routes>
       {!hideNavbar && <BottomNavBar />}
       <ViewCartBar />
     </>
