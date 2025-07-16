@@ -39,6 +39,7 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
   const inputTimer = useRef();
   const mapRef = useRef(null);
   const markerRef = useRef(null);
+  const scriptLoadedRef = useRef(false);
 
   // Populate initial on open
   useEffect(() => {
