@@ -18,6 +18,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
 
   // Your Google Places API Key
   const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
   const inputTimer = useRef();
 
   // Autocomplete handler (Google Places API)
@@ -31,7 +32,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
     inputTimer.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const url = `/api/place-autocomplete?input=${encodeURIComponent(val)}`;
+        const url = `${API_BASE_URL}/api/place-autocomplete?input=${encodeURIComponent(val)}`;
         const resp = await axios.get(url);
         setOptions((resp.data.predictions || []));  // resp.data.predictions is correct; your backend returns the full Google response.
       } catch {
@@ -45,7 +46,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
   const handleOptionSelect = async (option) => {
     setLoading(true);
     try {
-      const detailsUrl = `/api/place-details?place_id=${option.place_id}`;
+      const detailsUrl = `${API_BASE_URL}/api/place-details?place_id=${option.place_id}`;
       const resp = await axios.get(detailsUrl);
       const result = resp.data.result;
       const formatted = result.formatted_address;
@@ -70,7 +71,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
       try {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        const url = `/api/geocode?lat=${lat}&lng=${lng}`;
+        const url = `${API_BASE_URL}/api/geocode?lat=${lat}&lng=${lng}`;
         const res = await axios.get(url);
         const place = res.data.results[0];
         if (place) {
