@@ -137,38 +137,45 @@ useEffect(() => {
 
   // Draw map and marker when pin changes
   useEffect(() => {
-    if (!open || !pin || !scriptReady) return;
+  if (!open || !pin || !scriptReady) return;
 
-    // Create map if not exists
-    let map = mapRef.current;
-    if (!map) {
-      map = new window.google.maps.Map(document.getElementById("map-preview"), {
-        center: pin,
-        zoom: 17,
-        streetViewControl: false,
-        mapTypeControl: false,
-      });
-      mapRef.current = map;
-    } else {
-      map.setCenter(pin);
-    }
+  const interval = setInterval(() => {
+    const mapDiv = document.getElementById("map-preview");
+    if (mapDiv && mapDiv.offsetHeight > 0 && window.google && window.google.maps) {
+      clearInterval(interval);
 
-    // Marker
-    if (!markerRef.current) {
-      markerRef.current = new window.google.maps.Marker({
-        position: pin,
-        map,
-        draggable: true,
-        title: "Move pin to exact location",
-      });
-      markerRef.current.addListener("dragend", (e) => {
-        const { latLng } = e;
-        setPin({ lat: latLng.lat(), lng: latLng.lng() });
-      });
-    } else {
-      markerRef.current.setPosition(pin);
+      let map = mapRef.current;
+      if (!map) {
+        map = new window.google.maps.Map(mapDiv, {
+          center: pin,
+          zoom: 17,
+          streetViewControl: false,
+          mapTypeControl: false,
+        });
+        mapRef.current = map;
+      } else {
+        map.setCenter(pin);
+      }
+
+      if (!markerRef.current) {
+        markerRef.current = new window.google.maps.Marker({
+          position: pin,
+          map,
+          draggable: true,
+          title: "Move pin to exact location",
+        });
+        markerRef.current.addListener("dragend", (e) => {
+          const { latLng } = e;
+          setPin({ lat: latLng.lat(), lng: latLng.lng() });
+        });
+      } else {
+        markerRef.current.setPosition(pin);
+      }
     }
-  }, [open, pin, scriptReady]);
+  }, 80);
+
+  return () => clearInterval(interval);
+}, [open, pin, scriptReady]);
 
   // Save handler
   const handleSave = () => {
