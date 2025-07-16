@@ -82,10 +82,13 @@ export default function OrderTracking() {
   const [deliveryUnreadCount, setDeliveryUnreadCount] = useState(0);
   const getToken = () => localStorage.getItem('token') || '';
 
+  const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+
   const { isLoaded } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: "AIzaSyCd9Jkk_kd0SwaDLKwehdTpowiHEAnuy8Y",
+  id: "google-map-script",
+  googleMapsApiKey: GOOGLE_MAPS_API_KEY,
   });
+
 
 // --- INITIAL LOAD: Only set loading ONCE ---
 useEffect(() => {

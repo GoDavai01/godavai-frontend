@@ -94,7 +94,7 @@ function DeliveryPayoutsSection({ partner }) {
   );
 }
 
-const GOOGLE_MAPS_API_KEY = "AIzaSyCwztiOU2rdeyoNNDDoM4nQzMrG2pPuTTA";
+const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
 // Helper: Get directions route (async, returns array of latlngs for polyline)
 const getRoute = async (origin, destination) => {
