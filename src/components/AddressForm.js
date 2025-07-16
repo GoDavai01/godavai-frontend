@@ -17,6 +17,7 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
   const [input, setInput] = useState("");
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [scriptReady, setScriptReady] = useState(false);
 
   // Pin/map stuff
   const [selectedPlace, setSelectedPlace] = useState(
@@ -109,28 +110,33 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
   };
 
   // Load Google Maps script if not present
-  function loadScript(src) {
-    if (document.querySelector(`script[src="${src}"]`)) return;
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    document.body.appendChild(script);
+  function loadScript(src, onLoad) {
+  if (document.querySelector(`script[src="${src}"]`)) {
+    // Already present, check if window.google is there
+    if (window.google && window.google.maps) onLoad();
+    return;
   }
-
-  // Use a flag so we only load ONCE per app lifetime, not every open
-  const scriptLoadedRef = useRef(false);
-  useEffect(() => {
-    if (open && GOOGLE_MAPS_API_KEY && !scriptLoadedRef.current) {
-      loadScript(
-        `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`
-      );
-      scriptLoadedRef.current = true;
-    }
-  }, [open]);
+  const script = document.createElement("script");
+  script.src = src;
+  script.async = true;
+  script.onload = onLoad;
+  document.body.appendChild(script);
+}
+useEffect(() => {
+  if (open && GOOGLE_MAPS_API_KEY && !scriptLoadedRef.current) {
+    loadScript(
+      `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`,
+      () => setScriptReady(true)
+    );
+    scriptLoadedRef.current = true;
+  } else if (window.google && window.google.maps) {
+    setScriptReady(true);
+  }
+}, [open]);
 
   // Draw map and marker when pin changes
   useEffect(() => {
-    if (!open || !pin || !window.google || !window.google.maps) return;
+    if (!open || !pin || !scriptReady) return;
 
     // Create map if not exists
     let map = mapRef.current;
@@ -161,7 +167,7 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
     } else {
       markerRef.current.setPosition(pin);
     }
-  }, [open, pin]);
+  }, [open, pin, scriptReady]);
 
   // Save handler
   const handleSave = () => {
