@@ -1,5 +1,5 @@
 // src/components/LocationModal.js
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, Box, CircularProgress, InputAdornment, TextField
@@ -16,10 +16,13 @@ export default function LocationModal({ open, onClose, onSelect }) {
   const [detecting, setDetecting] = useState(false);
   const { setCurrentAddress } = useLocation();
 
-  // Your Google Places API Key
-  const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
   const inputTimer = useRef();
+
+  // --- FIX: Only reset input when modal opens ---
+  useEffect(() => {
+    if (open) setInput("");
+  }, [open]);
 
   // Autocomplete handler (Google Places API)
   const handleInput = (val) => {
@@ -34,7 +37,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
       try {
         const url = `${API_BASE_URL}/api/place-autocomplete?input=${encodeURIComponent(val)}`;
         const resp = await axios.get(url);
-        setOptions((resp.data.predictions || []));  // resp.data.predictions is correct; your backend returns the full Google response.
+        setOptions((resp.data.predictions || []));
       } catch {
         setOptions([]);
       }
@@ -96,7 +99,13 @@ export default function LocationModal({ open, onClose, onSelect }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontWeight: 800, color: "#13C0A2", display: "flex", alignItems: "center", gap: 1 }}>
+      <DialogTitle sx={{
+        fontWeight: 800,
+        color: "#13C0A2",
+        display: "flex",
+        alignItems: "center",
+        gap: 1
+      }}>
         <RoomIcon sx={{ color: "#FFD43B" }} />
         Set Delivery Location
       </DialogTitle>
@@ -107,10 +116,15 @@ export default function LocationModal({ open, onClose, onSelect }) {
           label="Search for address"
           value={input}
           onChange={e => handleInput(e.target.value)}
-          autoFocus
+          autoFocus={open} // Only autofocus on open
           disabled={loading || detecting}
           InputProps={{
-            endAdornment: loading ? <InputAdornment position="end"><CircularProgress size={18} /></InputAdornment> : null
+            endAdornment: loading
+              ? (
+                <InputAdornment position="end">
+                  <CircularProgress size={18} />
+                </InputAdornment>
+              ) : null
           }}
         />
         <Box sx={{ mt: 2 }}>
@@ -132,7 +146,14 @@ export default function LocationModal({ open, onClose, onSelect }) {
               key={option.place_id}
               onClick={() => handleOptionSelect(option)}
               fullWidth
-              sx={{ mt: 2, bgcolor: "#eafcf4", color: "#13C0A2", fontWeight: 700, justifyContent: "flex-start", textAlign: "left" }}
+              sx={{
+                mt: 2,
+                bgcolor: "#eafcf4",
+                color: "#13C0A2",
+                fontWeight: 700,
+                justifyContent: "flex-start",
+                textAlign: "left"
+              }}
               disabled={loading || detecting}
             >
               {option.description}
@@ -141,7 +162,9 @@ export default function LocationModal({ open, onClose, onSelect }) {
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} color="primary" sx={{ fontWeight: 700 }}>Cancel</Button>
+        <Button onClick={onClose} color="primary" sx={{ fontWeight: 700 }}>
+          Cancel
+        </Button>
       </DialogActions>
     </Dialog>
   );

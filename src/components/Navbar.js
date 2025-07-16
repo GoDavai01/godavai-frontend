@@ -135,34 +135,9 @@ export default function Navbar({
             sx={{ cursor: "pointer", mr: 1, flex: 1, minWidth: 0 }}
           >
             {currentAddress?.formatted
-              ? `Delivering to: ${currentAddress.formatted.length > 40 ? currentAddress.formatted.slice(0, 40) + "..." : currentAddress.formatted}`
+              ? `${currentAddress.formatted.length > 40 ? currentAddress.formatted.slice(0, 40) + "..." : currentAddress.formatted}`
               : "Set delivery location"}
           </Typography>
-          <Tooltip title="Detect my location">
-            <span>
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDetectLocation();
-                }}
-                sx={{ color: "#FFD43B", ml: 1 }}
-                disabled={locating}
-              >
-                {locating ? <CircularProgress size={24} color="inherit" /> : <MyLocationIcon />}
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Button
-            variant="text"
-            sx={{ color: "#FFD43B", fontWeight: 700, ml: 0.5, px: 1 }}
-            onClick={e => {
-              e.stopPropagation();
-              setLocationModalOpen(true);
-            }}
-          >
-            Change
-          </Button>
         </Box>
         <IconButton onClick={onProfile} sx={{ ml: 1 }}>
           <Avatar sx={{ bgcolor: "#FFD43B", width: 36, height: 36, color: "#13C0A2" }}>
