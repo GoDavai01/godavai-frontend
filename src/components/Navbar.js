@@ -54,7 +54,7 @@ export default function Navbar({
       try {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
-        const url = `/api/geocode?lat=${lat}&lng=${lng}`;
+        const url = `${API_BASE_URL}/api/geocode?lat=${lat}&lng=${lng}`;
         const res = await axios.get(url);
         const place = res.data.results[0];
         if (place) {
