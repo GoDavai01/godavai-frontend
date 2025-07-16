@@ -7,7 +7,8 @@ import CircularProgress from "@mui/material/CircularProgress";
 import axios from "axios";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY; // <-- production key from env
+// Use .env for production, or hardcode temporarily if .env is not loading in build!
+const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "AIzaSyCd9Jkk_kd0SwaDLKwehdTpowiHEAnuy8Y"; 
 
 export default function AddressForm({ open, onClose, onSave, initial = {} }) {
   const [type, setType] = useState(initial.type || "Home");
@@ -112,70 +113,76 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
 
   // Load Google Maps script if not present
   function loadScript(src, onLoad) {
-  if (document.querySelector(`script[src="${src}"]`)) {
-    // Already present, check if window.google is there
-    if (window.google && window.google.maps) onLoad();
-    return;
-  }
-  const script = document.createElement("script");
-  script.src = src;
-  script.async = true;
-  script.onload = onLoad;
-  document.body.appendChild(script);
-}
-useEffect(() => {
-  if (open && GOOGLE_MAPS_API_KEY && !scriptLoadedRef.current) {
-    loadScript(
-      `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`,
-      () => setScriptReady(true)
-    );
-    scriptLoadedRef.current = true;
-  } else if (window.google && window.google.maps) {
-    setScriptReady(true);
-  }
-}, [open]);
-
-  // Draw map and marker when pin changes
-  useEffect(() => {
-  if (!open || !pin || !scriptReady) return;
-
-  const interval = setInterval(() => {
-    const mapDiv = document.getElementById("map-preview");
-    if (mapDiv && mapDiv.offsetHeight > 0 && window.google && window.google.maps) {
-      clearInterval(interval);
-
-      let map = mapRef.current;
-      if (!map) {
-        map = new window.google.maps.Map(mapDiv, {
-          center: pin,
-          zoom: 17,
-          streetViewControl: false,
-          mapTypeControl: false,
-        });
-        mapRef.current = map;
-      } else {
-        map.setCenter(pin);
-      }
-
-      if (!markerRef.current) {
-        markerRef.current = new window.google.maps.Marker({
-          position: pin,
-          map,
-          draggable: true,
-          title: "Move pin to exact location",
-        });
-        markerRef.current.addListener("dragend", (e) => {
-          const { latLng } = e;
-          setPin({ lat: latLng.lat(), lng: latLng.lng() });
-        });
-      } else {
-        markerRef.current.setPosition(pin);
-      }
+    if (document.querySelector(`script[src="${src}"]`)) {
+      // Already present, check if window.google is there
+      if (window.google && window.google.maps) onLoad();
+      return;
     }
-  }, 80);
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = onLoad;
+    document.body.appendChild(script);
+  }
 
-  return () => clearInterval(interval);
-}, [open, pin, scriptReady]);
+  // Only load script once
+  useEffect(() => {
+    if (open && GOOGLE_MAPS_API_KEY && !scriptLoadedRef.current) {
+      loadScript(
+        `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`,
+        () => setScriptReady(true)
+      );
+      scriptLoadedRef.current = true;
+    } else if (window.google && window.google.maps) {
+      setScriptReady(true);
+    }
+  }, [open]);
+
+  // Draw map and marker when pin changes (robust against modal animation/render delay)
+  useEffect(() => {
+    if (!open || !pin || !scriptReady) return;
+
+    let tries = 0;
+    const maxTries = 25; // try for up to ~2 seconds
+    const interval = setInterval(() => {
+      const mapDiv = document.getElementById("map-preview");
+      if (mapDiv && mapDiv.offsetHeight > 0 && window.google && window.google.maps) {
+        clearInterval(interval);
+
+        let map = mapRef.current;
+        if (!map) {
+          map = new window.google.maps.Map(mapDiv, {
+            center: pin,
+            zoom: 17,
+            streetViewControl: false,
+            mapTypeControl: false,
+          });
+          mapRef.current = map;
+        } else {
+          map.setCenter(pin);
+        }
+
+        if (!markerRef.current) {
+          markerRef.current = new window.google.maps.Marker({
+            position: pin,
+            map,
+            draggable: true,
+            title: "Move pin to exact location",
+          });
+          markerRef.current.addListener("dragend", (e) => {
+            const { latLng } = e;
+            setPin({ lat: latLng.lat(), lng: latLng.lng() });
+          });
+        } else {
+          markerRef.current.setPosition(pin);
+        }
+      }
+      tries++;
+      if (tries > maxTries) clearInterval(interval);
+    }, 80);
+
+    return () => clearInterval(interval);
+  }, [open, pin, scriptReady]);
 
   // Save handler
   const handleSave = () => {
