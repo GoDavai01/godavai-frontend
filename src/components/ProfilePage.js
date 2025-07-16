@@ -46,10 +46,9 @@ const cardIcons = {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { user, setUser, logout, token, addresses, updateAddresses, loading } = useAuth();
-
-  // ---- ALL HOOKS AT TOP (NO CONDITIONALS!) ----
+  const { user, setUser, logout, token, addresses, updateAddresses } = useAuth();
   const [chatSupportOpen, setChatSupportOpen] = useState(false);
+
   const [openSections, setOpenSections] = useState({
     addresses: true,
     wallet: false,
@@ -62,7 +61,12 @@ export default function ProfilePage() {
     support: false,
     refer: false,
   });
+  const toggleSection = (key) =>
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+
+  // --- MANDATORY PROFILE FIELDS DIALOG ---
   const [editDialog, setEditDialog] = useState(false);
   const [editData, setEditData] = useState({
     name: user?.name || "",
@@ -74,47 +78,7 @@ export default function ProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar || "");
   const fileInputRef = useRef();
 
-  const [changePassOpen, setChangePassOpen] = useState(false);
-  const [changeEmailOpen, setChangeEmailOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-
-  const [editingAddress, setEditingAddress] = useState(null);
-  const [showAddressForm, setShowAddressForm] = useState(false);
-
-  const [cards, setCards] = useState([]);
-  const [cardDialog, setCardDialog] = useState(false);
-  const [editingCard, setEditingCard] = useState(null);
-  const [cardForm, setCardForm] = useState({
-    number: "",
-    name: "",
-    expiry: "",
-    brand: "",
-  });
-  const [cardTypeIcon, setCardTypeIcon] = useState(null);
-
-  const [orders, setOrders] = useState([]);
-  const [orderDetail, setOrderDetail] = useState(null);
-
-  const { t, i18n } = useTranslation();
-  const { mode, setMode } = useThemeMode();
-  const [language, setLanguage] = useState(i18n.language || "en");
-
-  const [orderUpdates, setOrderUpdates] = useState(true);
-  const [offerPromos, setOfferPromos] = useState(true);
-  const [dataSharing, setDataSharing] = useState(true);
-  const [twoFA, setTwoFA] = useState(false);
-
-  const [supportDialog, setSupportDialog] = useState(false);
-  const [supportMsg, setSupportMsg] = useState("");
-  const [chatDialog, setChatDialog] = useState(false);
-  const [chatMsg, setChatMsg] = useState("");
-
-  const referralCode = `GODAVAI-USER-${user?._id || "XXXX"}`;
-  // --------------------------------------------
-  // --- Section expand toggle
-  const toggleSection = (key) => setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
-
-  // --- MANDATORY PROFILE FIELDS DIALOG ---
+  // Open the dialog if any required field is missing
   useEffect(() => {
     if (user && (!user.name || !user.email || !user.dob)) {
       setEditDialog(true);
@@ -155,7 +119,8 @@ export default function ProfilePage() {
 
   const handleProfileSave = async () => {
     try {
-      await axios.put(`${API_BASE_URL}/api/users/${user._id}`, editData);
+      // --- API BASE URL ---
+      const res = await axios.put(`${API_BASE_URL}/api/users/${user._id}`, editData);
       setSnackbar({ open: true, message: "Profile updated!", severity: "success" });
 
       // Fetch latest from backend!
@@ -169,10 +134,18 @@ export default function ProfilePage() {
     }
   };
 
+  // --- Settings Dialogs ---
+  const [changePassOpen, setChangePassOpen] = useState(false);
+  const [changeEmailOpen, setChangeEmailOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
   // --- Addresses (static, no backend here) ---
+  const [editingAddress, setEditingAddress] = useState(null);
+  const [showAddressForm, setShowAddressForm] = useState(false);
   const handleAddressSave = async (newAddr) => {
     let updated;
     if (newAddr.id && addresses.some((a) => a.id === newAddr.id)) {
+      // Edit
       updated = addresses.map((a) => (a.id === newAddr.id ? newAddr : a));
     } else {
       newAddr.id = Date.now().toString();
@@ -194,7 +167,19 @@ export default function ProfilePage() {
     await updateAddresses(updated);
     setSnackbar({ open: true, message: "Address deleted!", severity: "success" });
   };
-  
+
+  // --- Cards (local only) ---
+  const [cards, setCards] = useState([]);
+  const [cardDialog, setCardDialog] = useState(false);
+  const [editingCard, setEditingCard] = useState(null);
+  const [cardForm, setCardForm] = useState({
+    number: "",
+    name: "",
+    expiry: "",
+    brand: "",
+  });
+  const [cardTypeIcon, setCardTypeIcon] = useState(null);
+
   function detectCardType(number) {
     if (!number) return "";
     const result = creditCardType(number.replace(/\s/g, ''));
@@ -246,6 +231,10 @@ export default function ProfilePage() {
     setCardDialog(true);
   }
 
+  // --- Orders (fetch from backend) ---
+  const [orders, setOrders] = useState([]);
+  const [orderDetail, setOrderDetail] = useState(null);
+
   useEffect(() => {
     if (user?._id) {
       axios.get(`${API_BASE_URL}/api/orders/myorders-userid/${user._id}`)
@@ -258,25 +247,6 @@ export default function ProfilePage() {
         .catch(() => setOrders([]));
     }
   }, [user]);
-
-  const DEMO_USER = {
-  _id: "demo123",
-  name: "Test User",
-  email: "testuser@godavaii.com",
-  mobile: "9876543210",
-  dob: "1999-07-14",
-  avatar: "",
-};
-
-  // Early returns OK below hooks
-  if (loading) {
-    return (
-      <Box sx={{ textAlign: "center", mt: 10 }}>
-        <Typography variant="h6">Loading profile...</Typography>
-      </Box>
-    );
-  }
-const profileUser = user || DEMO_USER;
 
   const handleOrderAgain = (order) => {
     const pharmacyId =
@@ -294,9 +264,14 @@ const profileUser = user || DEMO_USER;
     }
   };
 
+  // --- Loyalty
   const totalSpent = orders.reduce((sum, o) => sum + (o.total || 0), 0);
   const loyaltyPoints = Math.floor(totalSpent);
 
+  // --- Personalization
+  const { t, i18n } = useTranslation();
+  const { mode, setMode } = useThemeMode();
+  const [language, setLanguage] = useState(i18n.language || "en");
   const handleLanguageChange = (lng) => {
     setLanguage(lng);
     i18n.changeLanguage(lng);
@@ -304,79 +279,95 @@ const profileUser = user || DEMO_USER;
   };
   const handleThemeChange = (theme) => setMode(theme);
 
+  // --- Settings toggles
+  const [orderUpdates, setOrderUpdates] = useState(true);
+  const [offerPromos, setOfferPromos] = useState(true);
+  const [dataSharing, setDataSharing] = useState(true);
+  const [twoFA, setTwoFA] = useState(false);
+
+  // --- Support/Feedback ---
+  const [supportDialog, setSupportDialog] = useState(false);
+  const [supportMsg, setSupportMsg] = useState("");
+  const [chatDialog, setChatDialog] = useState(false);
+  const [chatMsg, setChatMsg] = useState("");
+
+  // --- Referral code
+  const referralCode = `GODAVAI-USER-${user?._id || "XXXX"}`;
+
+  // --- Logout (context)
   const handleLogout = () => {
     logout();
     setSnackbar({ open: true, message: "Logged out!", severity: "info" });
     setTimeout(() => navigate("/login"), 1000);
   };
 
- // --- UI ---
-return (
-  <Box sx={{ maxWidth: 700, mx: "auto", mt: 4, p: 2, pb: 10 }}>
-    {/* Profile Card */}
-    <Paper elevation={6}
-      sx={{
-        borderRadius: 12, mb: 4, background: "linear-gradient(90deg,#FFD43B 30%,#FFF 100%)",
-        boxShadow: "0 8px 32px 0 rgba(31,38,135,0.13)",
-        px: 3, py: 2, display: "flex", alignItems: "center",
-        position: "relative", width: { xs: "100%", sm: 470 },
-        mx: { xs: "auto", sm: "inherit" }
-      }}>
-      <Box sx={{ position: "relative" }}>
-        <Avatar
-          src={profileUser?.avatar || "https://ui-avatars.com/api/?name=" + encodeURIComponent(profileUser?.name || "Guest")}
-          sx={{
-            width: 90, height: 90, fontSize: 40, border: "3px solid #fff", boxShadow: 3, bgcolor: "#bcbcbc"
-          }}
-        />
-        <IconButton
-          sx={{
-            position: "absolute", bottom: -8, right: -8, bgcolor: "#fff", border: "2px solid #1976d2", zIndex: 2,
-            boxShadow: 2, "&:hover": { bgcolor: "#e3f2fd" }
-          }}
-          onClick={handleEditProfileOpen}
-        >
-          <EditIcon sx={{ color: "#1976d2" }} />
-        </IconButton>
-      </Box>
-      <Stack spacing={0.3} ml={3} flex={1} minWidth={0}>
-        <Typography variant="h5" sx={{ fontWeight: 700, color: "#232323", wordBreak: "break-word" }}>
-          {profileUser?.name || "Guest"}
-        </Typography>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
-          <EmailIcon sx={{ fontSize: 19, color: "#1976d2" }} />
-          <Typography
+  // --- UI ---
+  return (
+    <Box sx={{ maxWidth: 700, mx: "auto", mt: 4, p: 2, pb: 10 }}>
+      {/* Profile Card */}
+      <Paper elevation={6}
+        sx={{
+          borderRadius: 12, mb: 4, background: "linear-gradient(90deg,#FFD43B 30%,#FFF 100%)",
+          boxShadow: "0 8px 32px 0 rgba(31,38,135,0.13)",
+          px: 3, py: 2, display: "flex", alignItems: "center",
+          position: "relative", width: { xs: "100%", sm: 470 },
+          mx: { xs: "auto", sm: "inherit" }
+        }}>
+        <Box sx={{ position: "relative" }}>
+          <Avatar
+            src={user.avatar || "https://ui-avatars.com/api/?name=" + encodeURIComponent(user.name || "")}
             sx={{
-              color: "#1976d2",
-              fontSize: 17,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: { xs: "normal", sm: "nowrap" },
-              maxWidth: { xs: "170px", sm: "270px" },
-              display: "block",
-              wordBreak: "break-all",
+              width: 90, height: 90, fontSize: 40, border: "3px solid #fff", boxShadow: 3, bgcolor: "#bcbcbc"
             }}
-            title={user?.email || "Email not available"}
+          />
+          <IconButton
+            sx={{
+              position: "absolute", bottom: -8, right: -8, bgcolor: "#fff", border: "2px solid #1976d2", zIndex: 2,
+              boxShadow: 2, "&:hover": { bgcolor: "#e3f2fd" }
+            }}
+            onClick={handleEditProfileOpen}
           >
-            {user?.email || "Email not available"}
-          </Typography>
-        </Stack>
-        <Typography
-          sx={{
-            color: "#1976d2",
-            fontSize: 16,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            maxWidth: { xs: "150px", sm: "200px" },
-            display: "block",
-          }}
-          title={user?.mobile || "Mobile not set"}
-        >
-          {user?.mobile || "Mobile not set"}
-        </Typography>
-      </Stack>
-    </Paper>
+            <EditIcon sx={{ color: "#1976d2" }} />
+          </IconButton>
+        </Box>
+        <Stack spacing={0.3} ml={3} flex={1} minWidth={0}>
+  <Typography variant="h5" sx={{ fontWeight: 700, color: "#232323", wordBreak: "break-word" }}>
+    {user.name}
+  </Typography>
+  <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+    <EmailIcon sx={{ fontSize: 19, color: "#1976d2" }} />
+    <Typography
+      sx={{
+        color: "#1976d2",
+        fontSize: 17,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: { xs: "normal", sm: "nowrap" },
+        maxWidth: { xs: "170px", sm: "270px" },
+        display: "block",
+        wordBreak: "break-all",
+      }}
+      title={user.email}
+    >
+      {user.email}
+    </Typography>
+  </Stack>
+  <Typography
+    sx={{
+      color: "#1976d2",
+      fontSize: 16,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      maxWidth: { xs: "150px", sm: "200px" },
+      display: "block",
+    }}
+    title={user.mobile}
+  >
+    {user.mobile}
+  </Typography>
+</Stack>
+      </Paper>
 
       {/* --- Addresses Section --- */}
       <Section
@@ -974,3 +965,4 @@ function Section({ icon, title, expanded, onToggle, action, children }) {
     </Paper>
   );
 }
+
