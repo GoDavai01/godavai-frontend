@@ -1,5 +1,5 @@
 // src/components/LocationModal.js
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, Box, CircularProgress, InputAdornment, TextField
@@ -19,16 +19,21 @@ export default function LocationModal({ open, onClose, onSelect }) {
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
   const inputTimer = useRef();
 
-  // --- FIX: Only reset input when modal opens ---
+  // Only reset input when modal opens
   useEffect(() => {
     if (open) setInput("");
   }, [open]);
 
-  // Autocomplete handler (Google Places API)
-  const handleInput = (val) => {
+  // Detect mobile: full screen dialog for mobile UX
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 600;
+
+  // Robust debounced autocomplete handler
+  const handleInput = useCallback((val) => {
     setInput(val);
     if (inputTimer.current) clearTimeout(inputTimer.current);
-    if (!val) {
+
+    // Only fetch for 3+ chars
+    if (!val || val.length < 3) {
       setOptions([]);
       return;
     }
@@ -37,13 +42,13 @@ export default function LocationModal({ open, onClose, onSelect }) {
       try {
         const url = `${API_BASE_URL}/api/place-autocomplete?input=${encodeURIComponent(val)}`;
         const resp = await axios.get(url);
-        setOptions((resp.data.predictions || []));
+        setOptions(resp.data.predictions || []);
       } catch {
         setOptions([]);
       }
       setLoading(false);
-    }, 300);
-  };
+    }, 300); // 300ms debounce, feels smooth
+  }, [API_BASE_URL]);
 
   // On option select: fetch full address by place_id
   const handleOptionSelect = async (option) => {
@@ -98,7 +103,13 @@ export default function LocationModal({ open, onClose, onSelect }) {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+      fullScreen={isMobile}
+    >
       <DialogTitle sx={{
         fontWeight: 800,
         color: "#13C0A2",
@@ -116,7 +127,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
           label="Search for address"
           value={input}
           onChange={e => handleInput(e.target.value)}
-          autoFocus={open} // Only autofocus on open
+          autoFocus={open}
           disabled={loading || detecting}
           InputProps={{
             endAdornment: loading
