@@ -247,9 +247,16 @@ export default function PharmacyDashboard() {
     axios.get(`${API_BASE_URL}/api/pharmacy/medicines`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-      .then(res => setMedicines(res.data))
-      .catch(() => setMedicines([]));
-  }, [token, medMsg]);
+      .then(res => {
+      // Always make category an array!
+      const fixed = (res.data || []).map(m => ({
+        ...m,
+        category: Array.isArray(m.category) ? m.category : m.category ? [m.category] : [],
+      }));
+      setMedicines(fixed);
+    })
+    .catch(() => setMedicines([]));
+}, [token, medMsg]);
 
   // Login handler
   const handleLogin = async () => {
@@ -357,7 +364,11 @@ export default function PharmacyDashboard() {
       price: med.price,
       mrp: med.mrp,
       stock: med.stock,
-      category: med.category,
+      category: Array.isArray(med.category)
+    ? med.category
+    : med.category
+    ? [med.category]
+    : [],
       customCategory: "",
       type: TYPE_OPTIONS.includes(med.type) ? med.type : "Other",
       customType: TYPE_OPTIONS.includes(med.type) ? "" : (med.type || "")
@@ -879,7 +890,7 @@ export default function PharmacyDashboard() {
             <InputLabel>Category</InputLabel>
             <Select
               multiple
-              value={editMedForm.category}
+              value={Array.isArray(editMedForm.category) ? editMedForm.category : (editMedForm.category ? [editMedForm.category] : [])}
               label="Category"
               onChange={e => setEditMedForm(f => ({ ...f, category: e.target.value }))}
               renderValue={(selected) => selected.join(', ')}
@@ -992,7 +1003,7 @@ export default function PharmacyDashboard() {
           <InputLabel>Category</InputLabel>
           <Select
             multiple
-            value={medForm.category}
+            value={Array.isArray(medForm.category) ? medForm.category : (medForm.category ? [medForm.category] : [])}
             label="Category"
             onChange={e => setMedForm(f => ({ ...f, category: e.target.value }))}
             renderValue={(selected) => selected.join(', ')}
