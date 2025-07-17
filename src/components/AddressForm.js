@@ -226,7 +226,7 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
     }}
     sx={{ fontWeight: 700, color: "#13C0A2", borderColor: "#13C0A2", mb: 2 }}
   >
-    Use My Current Location (Navbar)
+    Use My Current Location
   </Button>
         <Stack spacing={2} mt={1}>
           <ToggleButtonGroup value={type} exclusive onChange={(_, t) => t && setType(t)}>

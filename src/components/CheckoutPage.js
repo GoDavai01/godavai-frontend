@@ -37,6 +37,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import AddressSelector from "./AddressSelector";
 import { useAuth } from "../context/AuthContext";
+import { useLocation as useLocContext } from "../context/LocationContext"; // <--- Add this line
 import axios from "axios";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -65,6 +66,7 @@ const handlePlaceOrder = async (
   {
     cart,
     addresses,
+    allAddresses, // <-- ADD THIS
     selectedAddressId,
     wantChemistInstruction,
     dosage,
@@ -98,7 +100,7 @@ const handlePlaceOrder = async (
       `${API_BASE_URL}/api/orders`,
       {
         items: cart,
-        address: addresses.find((a) => a.id === selectedAddressId),
+        address: allAddresses.find((a) => a.id === selectedAddressId),
         dosage: wantChemistInstruction ? "Let chemist suggest" : dosage,
         paymentMethod,
         pharmacyId: selectedPharmacy._id,
@@ -149,6 +151,7 @@ export default function CheckoutPage() {
   // Cart/Auth
   const { cart, clearCart, selectedPharmacy } = useCart();
   const { user, token, addresses, updateAddresses } = useAuth();
+  const { currentAddress } = useLocContext(); // Get current live address from context
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -159,6 +162,25 @@ export default function CheckoutPage() {
   const [quoteItems, setQuoteItems] = useState([]);
   const [quoteTotal, setQuoteTotal] = useState(0);
   const [quoteMessage, setQuoteMessage] = useState("");
+
+  const isCurrentAddrSaved = addresses.some(a =>
+  a.place_id === currentAddress?.place_id ||
+  (a.lat && a.lng && currentAddress?.lat && currentAddress?.lng &&
+    Math.abs(a.lat - currentAddress.lat) < 0.00001 &&
+    Math.abs(a.lng - currentAddress.lng) < 0.00001)
+);
+
+const allAddresses = [
+  ...(!isCurrentAddrSaved && currentAddress ? [{
+    ...currentAddress,
+    id: 'current-location',
+    type: 'Current',
+    name: user?.name || "",
+    phone: user?.phone || "",
+    addressLine: currentAddress.formatted,
+  }] : []),
+  ...addresses,
+];
 
   // ---- STEP 2: Fetch quote order if orderId is in URL ----
   React.useEffect(() => {
@@ -218,7 +240,13 @@ export default function CheckoutPage() {
   const [wantChemistInstruction, setWantChemistInstruction] = useState(false);
 
   // Address state
-  const [selectedAddressId, setSelectedAddressId] = useState(addresses[0]?.id || null);
+  const [selectedAddressId, setSelectedAddressId] = useState(allAddresses[0]?.id || null);
+  React.useEffect(() => {
+  if (!selectedAddressId && allAddresses[0]?.id) {
+    setSelectedAddressId(allAddresses[0].id);
+  }
+}, [allAddresses, selectedAddressId]);
+
   const [addressFormOpen, setAddressFormOpen] = useState(false);
 
   // Payment
@@ -368,7 +396,7 @@ export default function CheckoutPage() {
     }
     const address = isPrescriptionFlow && lockedAddress
       ? lockedAddress
-      : addresses.find((a) => a.id === selectedAddressId);
+      : allAddresses.find((a) => a.id === selectedAddressId);
     if (!address) {
       setSnackbar({
         open: true,
@@ -383,6 +411,7 @@ export default function CheckoutPage() {
         {
           cart,
           addresses,
+          allAddresses, // <-- ADD THIS
           selectedAddressId,
           wantChemistInstruction,
           dosage,
@@ -486,6 +515,7 @@ export default function CheckoutPage() {
           {
             cart,
             addresses,
+            allAddresses, // <-- ADD THIS
             selectedAddressId,
             wantChemistInstruction,
             dosage,
@@ -663,19 +693,19 @@ export default function CheckoutPage() {
 ) : (
   <>
     <AddressSelector
-      addresses={addresses}
-      selectedAddressId={selectedAddressId}
-      onSelect={setSelectedAddressId}
-      onAddAddress={() => setAddressFormOpen(true)}
-      onEdit={addr => setAddressFormOpen(true)}
-      onDelete={handleDeleteAddress} // ADD THIS
-    />
-    <AddressForm
-      open={addressFormOpen}
-      onClose={() => setAddressFormOpen(false)}
-      onSave={handleSaveAddress}
-      initial={addresses.find((a) => a.id === selectedAddressId) || {}}
-    />
+  addresses={allAddresses}
+  selectedAddressId={selectedAddressId}
+  onSelect={setSelectedAddressId}
+  onAddAddress={() => setAddressFormOpen(true)}
+  onEdit={addr => setAddressFormOpen(true)}
+  onDelete={handleDeleteAddress}
+/>
+<AddressForm
+  open={addressFormOpen}
+  onClose={() => setAddressFormOpen(false)}
+  onSave={handleSaveAddress}
+  initial={allAddresses.find((a) => a.id === selectedAddressId) || {}}
+/>
   </>
 )}
 
