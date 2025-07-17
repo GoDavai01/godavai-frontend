@@ -97,14 +97,24 @@ function DeliveryPayoutsSection({ partner }) {
 const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
 // Helper: Get directions route (async, returns array of latlngs for polyline)
-const getRoute = async (origin, destination) => {
+const getRouteAndDistance = async (origin, destination) => {
   const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&key=${GOOGLE_MAPS_API_KEY}`;
   const res = await fetch(url);
   const data = await res.json();
-  if (data.routes && data.routes[0] && data.routes[0].overview_polyline) {
-    return decodePolyline(data.routes[0].overview_polyline.points);
+  let poly = [];
+  let distanceKm = null;
+
+  if (data.routes && data.routes[0]) {
+    // Decode the route for map polyline
+    if (data.routes[0].overview_polyline) {
+      poly = decodePolyline(data.routes[0].overview_polyline.points);
+    }
+    // Fetch the distance (in meters), then convert to km
+    if (data.routes[0].legs && data.routes[0].legs[0] && data.routes[0].legs[0].distance) {
+      distanceKm = data.routes[0].legs[0].distance.value / 1000;
+    }
   }
-  return [];
+  return { poly, distanceKm };
 };
 
 // Helper: Polyline decoding
@@ -252,22 +262,27 @@ export default function DeliveryDashboard() {
     setOrders(activeOrders);
     setPastOrders(resProfile.data.pastOrders || []);
     let newPolys = {};
-    for (const o of activeOrders) {
-      if (
-        o.pharmacy?.location?.lat &&
-        o.pharmacy?.location?.lng &&
-        o.address?.lat &&
-        o.address?.lng
-      ) {
-        if (!polylines[o._id]) {
-          const poly = await getRoute(o.pharmacy.location, o.address);
-          newPolys[o._id] = poly;
-        } else {
-          newPolys[o._id] = polylines[o._id];
-        }
-      }
+let newDistances = {};
+for (const o of activeOrders) {
+  if (
+    o.pharmacy?.location?.lat &&
+    o.pharmacy?.location?.lng &&
+    o.address?.lat &&
+    o.address?.lng
+  ) {
+    // Only fetch if not already available
+    if (!polylines[o._id] || orderDistances[o._id] == null) {
+      const { poly, distanceKm } = await getRouteAndDistance(o.pharmacy.location, o.address);
+      newPolys[o._id] = poly;
+      newDistances[o._id] = distanceKm;
+    } else {
+      newPolys[o._id] = polylines[o._id];
+      newDistances[o._id] = orderDistances[o._id];
     }
-    setPolylines(newPolys);
+  }
+}
+setPolylines(newPolys);
+setOrderDistances(newDistances);
   } catch (err) {
     setSnackbar({ open: true, message: "Failed to load profile/orders", severity: "error" });
     setLoggedIn(false);
@@ -552,6 +567,11 @@ if (
                   <Typography sx={{ mt: 1, color: "#555" }}>
                     Pharmacy Address: <b>{order.pharmacy?.address}</b>
                   </Typography>
+                  <Typography sx={{ color: "#555" }}>
+  {orderDistances[order._id] != null &&
+    `Distance: ${orderDistances[order._id].toFixed(2)} km`
+  }
+</Typography>
                   <Typography sx={{ color: "#555" }}>
                     Deliver to: <b>{order.address?.addressLine}</b>
                   </Typography>
