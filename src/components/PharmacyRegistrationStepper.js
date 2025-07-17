@@ -86,7 +86,7 @@ const getMsgSeverity = (msg) => {
 // ===== StepContent Component (EXTRACTED) =====
 const StepContent = React.memo(function StepContent({
   step, form, errors, handleChange, handleFile, handleTimingChange,
-  fileErrors, requiredDocs, optionalDocs, selectMenuProps, hours, minutes, safe, files
+  fileErrors, requiredDocs, optionalDocs, selectMenuProps, hours, minutes, safe, files, setForm
 }) {
   switch (step) {
     case 0:
@@ -674,6 +674,7 @@ export default function PharmacyRegistrationStepper() {
             minutes={minutes}
             safe={safe}
             files={files}
+            setForm={setForm}
           />
           {msg && (
             <Snackbar open={!!msg} autoHideDuration={3200} onClose={() => setMsg("")}>
