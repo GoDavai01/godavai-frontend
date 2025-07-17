@@ -518,6 +518,46 @@ export default function PharmacyDashboard() {
               color="success"
             />
           </Stack>
+          {/* === SET LOCATION BUTTON GOES HERE === */}
+<Button
+  variant={pharmacy.location && pharmacy.location.coordinates && pharmacy.location.coordinates[0] !== 0 ? "contained" : "outlined"}
+  color="primary"
+  sx={{ mt: 1, mb: 2 }}
+  onClick={async () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported on this device/browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          await axios.patch(`${API_BASE_URL}/api/pharmacy/set-location`, {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setMsg("Location updated!");
+          // Optionally refetch pharmacy info if needed
+        } catch {
+          setMsg("Failed to update location!");
+        }
+      },
+      (err) => {
+        alert("Could not fetch location: " + err.message);
+      }
+    );
+  }}
+>
+  {pharmacy.location && pharmacy.location.coordinates && pharmacy.location.coordinates[0] !== 0
+    ? "Location Set"
+    : "Set Current Location"}
+</Button>
+{pharmacy.location && pharmacy.location.coordinates && pharmacy.location.coordinates[0] !== 0 && (
+  <Typography fontSize={13} sx={{ color: "green", mb: 1 }}>
+    Location: Lat {pharmacy.location.coordinates[1]}, Lng {pharmacy.location.coordinates[0]}
+  </Typography>
+)}
 
           {/* Stats Row */}
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>

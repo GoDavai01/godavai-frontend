@@ -537,60 +537,70 @@ export default function DeliveryDashboard() {
                     ))}
                   </Typography>
                   {/* ===== LIVE MAP BELOW ===== */}
-                  {isLoaded && pharmacyLoc?.lat && userLoc?.lat ? (
-                    <Box sx={{ mt: 2, mb: 1 }}>
-                      <GoogleMap
-                        mapContainerStyle={{ width: "100%", height: "230px", borderRadius: "18px" }}
-                        center={mapCenter}
-                        zoom={13}
-                        options={{ streetViewControl: false, mapTypeControl: false }}
-                      >
-                        {/* Pharmacy marker */}
-                        <Marker
-                          position={{ lat: pharmacyLoc.lat, lng: pharmacyLoc.lng }}
-                          label="P"
-                          title="Pharmacy"
-                          icon={{
-                            url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
-                            scaledSize: { width: 40, height: 40 }
-                          }}
-                        />
-                        {/* User marker */}
-                        <Marker
-                          position={{ lat: userLoc.lat, lng: userLoc.lng }}
-                          label="U"
-                          title="Delivery Address"
-                          icon={{
-                            url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
-                            scaledSize: { width: 40, height: 40 }
-                          }}
-                        />
-                        {/* Polyline */}
-                        {poly.length > 0 && (
-                          <Polyline
-                            path={poly}
-                            options={{
-                              strokeColor: "#1976d2",
-                              strokeOpacity: 0.8,
-                              strokeWeight: 4,
-                            }}
-                          />
-                        )}
-                      </GoogleMap>
-                      <Button
-                        variant="outlined"
-                        sx={{ mt: 1 }}
-                        target="_blank"
-                        href={`https://www.google.com/maps/dir/?api=1&origin=${pharmacyLoc.lat},${pharmacyLoc.lng}&destination=${userLoc.lat},${userLoc.lng}`}
-                      >
-                        Get Directions in Google Maps
-                      </Button>
-                    </Box>
-                  ) : (
-                    <Typography sx={{ color: "#bbb", fontSize: 14, mt: 2 }}>
-                      Live map not available (location missing)
-                    </Typography>
-                  )}
+{isLoaded ? (
+  !pharmacyLoc?.lat
+    ? <Typography sx={{ color: "#bbb", fontSize: 14, mt: 2 }}>
+        Pharmacy location missing
+      </Typography>
+    : !userLoc?.lat
+      ? <Typography sx={{ color: "#bbb", fontSize: 14, mt: 2 }}>
+          Customer location missing
+        </Typography>
+      : (
+        <Box sx={{ mt: 2, mb: 1 }}>
+          <GoogleMap
+            mapContainerStyle={{ width: "100%", height: "230px", borderRadius: "18px" }}
+            center={mapCenter}
+            zoom={13}
+            options={{ streetViewControl: false, mapTypeControl: false }}
+          >
+            {/* Pharmacy marker */}
+            <Marker
+              position={{ lat: pharmacyLoc.lat, lng: pharmacyLoc.lng }}
+              label="P"
+              title="Pharmacy"
+              icon={{
+                url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+                scaledSize: { width: 40, height: 40 }
+              }}
+            />
+            {/* User marker */}
+            <Marker
+              position={{ lat: userLoc.lat, lng: userLoc.lng }}
+              label="U"
+              title="Delivery Address"
+              icon={{
+                url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
+                scaledSize: { width: 40, height: 40 }
+              }}
+            />
+            {/* Polyline */}
+            {poly.length > 0 && (
+              <Polyline
+                path={poly}
+                options={{
+                  strokeColor: "#1976d2",
+                  strokeOpacity: 0.8,
+                  strokeWeight: 4,
+                }}
+              />
+            )}
+          </GoogleMap>
+          <Button
+            variant="outlined"
+            sx={{ mt: 1 }}
+            target="_blank"
+            href={`https://www.google.com/maps/dir/?api=1&origin=${pharmacyLoc.lat},${pharmacyLoc.lng}&destination=${userLoc.lat},${userLoc.lng}`}
+          >
+            Get Directions in Google Maps
+          </Button>
+        </Box>
+      )
+) : (
+  <Typography sx={{ color: "#bbb", fontSize: 14, mt: 2 }}>
+    Loading map...
+  </Typography>
+)}
                   {/* Update Status Button */}
                   <Stack direction="row" spacing={2} mt={2}>
                     {order.status === "assigned" && (

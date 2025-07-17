@@ -16,6 +16,9 @@ const initialForm = {
   bankAccount: "", ifsc: "", bankName: "", accountHolder: "",
   declarationAccepted: false,
   businessContact: "", businessContactName: "", emergencyContact: "",
+  lat: "", // for latitude
+  lng: "", // for longitude
+  formattedLocation: "", // to display a user-friendly location (optional)
 };
 
 const hours = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
@@ -99,6 +102,38 @@ const StepContent = React.memo(function StepContent({
             onChange={handleChange} required error={!!errors.area} helperText={errors.area ? "Required" : ""} />
           <TextField label="Full Address" name="address" value={safe(form.address)}
             onChange={handleChange} required error={!!errors.address} helperText={errors.address ? "Required" : ""} multiline minRows={2} />
+            <Button
+  variant={form.lat && form.lng ? "contained" : "outlined"}
+  color="primary"
+  sx={{ mt: 1, mb: 1 }}
+  onClick={async () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported on this device/browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm(f => ({
+          ...f,
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          formattedLocation: `Lat: ${pos.coords.latitude.toFixed(5)}, Lng: ${pos.coords.longitude.toFixed(5)}`
+        }));
+      },
+      (err) => {
+        alert("Could not fetch location: " + err.message);
+      }
+    );
+  }}
+>
+  {form.lat && form.lng ? "Location Set" : "Set Current Location"}
+</Button>
+{form.lat && form.lng && (
+  <Typography fontSize={13} sx={{ color: "green", mb: 1 }}>
+    Location: {form.formattedLocation}
+  </Typography>
+)}
+
           <TextField label="Contact Number" name="contact" value={safe(form.contact)}
             onChange={handleChange} required error={!!errors.contact} helperText={errors.contact ? "10-digit number" : ""} />
           <TextField label="Login Email" name="email" value={safe(form.email)}
@@ -489,6 +524,11 @@ export default function PharmacyRegistrationStepper() {
       const fd = new FormData();
       Object.keys(form).forEach(k => fd.append(k, form[k] || ""));
       fd.set("pharmacyTimings", computeTimings(form)); // Required for backend!
+      if (form.lat && form.lng) {
+  fd.append("lat", form.lat);
+  fd.append("lng", form.lng);
+  fd.append("locationFormatted", form.formattedLocation || "");
+}
 
       // Append all file fields at once
       Object.keys(files).forEach(k => {
