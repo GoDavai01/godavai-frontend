@@ -287,19 +287,13 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
               </Box>
             </Box>
           )}
+
           <TextField
-            label="Flat/House No., Building (optional)"
-            fullWidth
-            value={addressLine}
-            onChange={e => setAddressLine(e.target.value)}
-            placeholder="E.g., Flat 2B, Sunrise Apartments"
-          />
-          <TextField
-  label="Floor (optional)"
+  label="Floor/House No."
   fullWidth
   value={floor}
   onChange={e => setFloor(e.target.value)}
-  placeholder="E.g., 1st, Ground, 3B, etc."
+  placeholder="E.g., Ground, House/Flat 2B, etc."
 />
           <Button
             variant="contained"
