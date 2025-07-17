@@ -41,6 +41,30 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const scriptLoadedRef = useRef(false);
+  const { currentAddress } = useLocation();
+  <Button
+  variant="outlined"
+  startIcon={<MyLocationIcon />}
+  onClick={() => {
+    if (currentAddress && currentAddress.lat && currentAddress.lng) {
+      setInput(currentAddress.formatted || "");
+      setSelectedPlace({
+        formatted: currentAddress.formatted,
+        lat: currentAddress.lat,
+        lng: currentAddress.lng,
+        place_id: currentAddress.place_id,
+      });
+      setPin({
+        lat: currentAddress.lat,
+        lng: currentAddress.lng,
+      });
+    }
+  }}
+  sx={{ fontWeight: 700, color: "#13C0A2", borderColor: "#13C0A2", mb: 2 }}
+>
+  Use My Current Location (Navbar)
+</Button>
+
 
   // Populate initial on open
   useEffect(() => {

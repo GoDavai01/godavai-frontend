@@ -6,11 +6,13 @@ import AddLocationAltIcon from "@mui/icons-material/AddLocationAlt";
 import EditIcon from "@mui/icons-material/Edit";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DeleteIcon from "@mui/icons-material/Delete";
+import MyLocationIcon from "@mui/icons-material/MyLocation";
 
 const ICONS = {
   Home: <HomeIcon sx={{ color: "#31c48d" }} />,
   Work: <WorkIcon sx={{ color: "#fea44d" }} />,
   Other: <AddLocationAltIcon sx={{ color: "#1976d2" }} />,
+  Current: <MyLocationIcon sx={{ color: "#FFD43B" }} />, // <-- ADD
 };
 
 export default function AddressSelector({
