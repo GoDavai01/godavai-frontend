@@ -48,10 +48,16 @@ const ColorConnector = (props) => (
 
 function formatAddress(address) {
   if (!address) return "";
-  if (typeof address === "object")
+  if (typeof address === "object") {
+    // Prefer Google formatted address
+    if (address.formatted) {
+      return `${address.name ? address.name + ", " : ""}${address.formatted}${address.floor ? ", Floor: " + address.floor : ""}${address.landmark ? ", " + address.landmark : ""}${address.phone ? ", " + address.phone : ""}`;
+    }
     return `${address.name || ""}, ${address.addressLine || ""}${address.floor ? ", Floor: " + address.floor : ""}${address.landmark ? ", " + address.landmark : ""}, ${address.phone || ""}`;
+  }
   return address;
 }
+
 
 function formatTimestamp(ts) {
   if (!ts) return "";
