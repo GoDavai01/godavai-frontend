@@ -22,6 +22,7 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
   const [loading, setLoading] = useState(false);
   const [scriptReady, setScriptReady] = useState(false);
   const { currentAddress } = useLocation();
+  const [floor, setFloor] = useState(initial.floor || "");
 
   // Pin/map stuff
   const [selectedPlace, setSelectedPlace] = useState(
@@ -195,6 +196,7 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
       name,
       phone,
       addressLine,
+      floor, // ADD THIS LINE
       ...selectedPlace,
       lat: pin.lat,
       lng: pin.lng,
@@ -292,6 +294,13 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
             onChange={e => setAddressLine(e.target.value)}
             placeholder="E.g., Flat 2B, Sunrise Apartments"
           />
+          <TextField
+  label="Floor (optional)"
+  fullWidth
+  value={floor}
+  onChange={e => setFloor(e.target.value)}
+  placeholder="E.g., 1st, Ground, 3B, etc."
+/>
           <Button
             variant="contained"
             onClick={handleSave}
