@@ -1,10 +1,19 @@
 import React from "react";
-import { Box, Typography, Button, Chip, Stack, List, ListItem, ListItemIcon, ListItemText, IconButton } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Button,
+  Chip,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  IconButton,
+} from "@mui/material";
 import HomeIcon from "@mui/icons-material/Home";
 import WorkIcon from "@mui/icons-material/Work";
 import AddLocationAltIcon from "@mui/icons-material/AddLocationAlt";
 import EditIcon from "@mui/icons-material/Edit";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DeleteIcon from "@mui/icons-material/Delete";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 
@@ -12,7 +21,7 @@ const ICONS = {
   Home: <HomeIcon sx={{ color: "#31c48d" }} />,
   Work: <WorkIcon sx={{ color: "#fea44d" }} />,
   Other: <AddLocationAltIcon sx={{ color: "#1976d2" }} />,
-  Current: <MyLocationIcon sx={{ color: "#FFD43B" }} />, // <-- ADD
+  Current: <MyLocationIcon sx={{ color: "#FFD43B" }} />,
 };
 
 export default function AddressSelector({
@@ -21,20 +30,21 @@ export default function AddressSelector({
   onSelect,
   onAddAddress,
   onEdit,
-  onDelete, // NEW
+  onDelete,
 }) {
   return (
     <Box sx={{ mb: 2 }}>
       <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
         Delivery Address
       </Typography>
-      <List sx={{ bgcolor: "#23242c", borderRadius: 2, mb: 1 }}>
+      <List sx={{ bgcolor: "#f6f8fa", borderRadius: 2, mb: 1 }}>
         {addresses.length === 0 && (
           <ListItem>
             <Button
               startIcon={<AddLocationAltIcon />}
               variant="contained"
               onClick={onAddAddress}
+              fullWidth
             >
               Add New Address
             </Button>
@@ -45,66 +55,63 @@ export default function AddressSelector({
             key={address.id}
             selected={selectedAddressId === address.id}
             sx={{
-              bgcolor: selectedAddressId === address.id ? "#272d38" : "inherit",
+              bgcolor: selectedAddressId === address.id ? "#13C0A2" : "#fff",
               borderRadius: 2,
               mb: 1,
               cursor: "pointer",
               transition: "0.2s",
+              minHeight: 56,
+              p: 1.2,
+              boxShadow: selectedAddressId === address.id ? 2 : 0,
             }}
             onClick={() => onSelect(address.id)}
             secondaryAction={
               <Box sx={{ display: "flex", alignItems: "center" }}>
-                {selectedAddressId === address.id && (
-                  <CheckCircleIcon sx={{ color: "#13C0A2", mr: 1 }} />
-                )}
-                <Button
-                  variant="text"
+                <IconButton
                   size="small"
-                  sx={{ color: "#31c48d", minWidth: 60 }}
-                  startIcon={<EditIcon />}
-                  onClick={e => {
+                  onClick={(e) => {
                     e.stopPropagation();
                     onEdit(address);
                   }}
+                  aria-label="Edit Address"
                 >
-                  Edit
-                </Button>
+                  <EditIcon fontSize="small" />
+                </IconButton>
                 <IconButton
-                  edge="end"
+                  size="small"
                   color="error"
-                  sx={{ ml: 1 }}
-                  onClick={e => {
+                  sx={{ ml: 0.5 }}
+                  onClick={(e) => {
                     e.stopPropagation();
                     if (onDelete) onDelete(address);
                   }}
                   aria-label="Delete Address"
                 >
-                  <DeleteIcon />
+                  <DeleteIcon fontSize="small" />
                 </IconButton>
               </Box>
             }
           >
-            <ListItemIcon>
+            <ListItemIcon sx={{ minWidth: 32 }}>
               <Chip
                 label={address.type}
                 icon={ICONS[address.type] || ICONS["Other"]}
-                sx={{ bgcolor: "#2d2f3a", color: "#fff", fontWeight: 600 }}
+                size="small"
+                sx={{ bgcolor: "#e0f2f1", color: "#17879c" }}
               />
             </ListItemIcon>
             <ListItemText
               primary={
-                <span style={{ color: "#fff", fontWeight: 700 }}>{address.name}</span>
+                <span style={{ fontWeight: 700, fontSize: 15 }}>
+                  {address.name}
+                </span>
               }
               secondary={
-                <>
-                  <span style={{ color: "#cfd8dc" }}>{address.phone}</span>
-                  <br />
-                  <span style={{ color: "#cfd8dc" }}>
-                    {address.addressLine}
-                    {address.floor && `, Floor: ${address.floor}`}
-                    {address.landmark && `, ${address.landmark}`}
-                  </span>
-                </>
+                <span style={{ fontSize: 13, color: "#555" }}>
+                  {address.addressLine.split(",")[0]}
+                  {address.floor ? `, Floor: ${address.floor}` : ""}
+                  {address.landmark ? `, ${address.landmark}` : ""}
+                </span>
               }
             />
           </ListItem>
@@ -116,6 +123,7 @@ export default function AddressSelector({
         color="primary"
         fullWidth
         onClick={onAddAddress}
+        sx={{ mt: 1 }}
       >
         Add New Address
       </Button>

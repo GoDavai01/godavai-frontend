@@ -38,6 +38,7 @@ import { useCart } from "../context/CartContext";
 import AddressSelector from "./AddressSelector";
 import { useAuth } from "../context/AuthContext";
 import { useLocation as useLocContext } from "../context/LocationContext"; // <--- Add this line
+import AddressForm from "./AddressForm"; // <-- use the advanced version!
 import axios from "axios";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
