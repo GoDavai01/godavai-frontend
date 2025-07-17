@@ -405,8 +405,12 @@ export default function ProfilePage() {
 >
   <Stack direction="row" alignItems="center" justifyContent="space-between">
     <Box>
-      <Typography sx={{ fontWeight: 700 }}>{addr.type}</Typography>
-      <Typography sx={{ color: "#888" }}>{addr.addressLine}</Typography>
+      <Typography sx={{ fontWeight: 700 }}>
+  {addr.type}{addr.addressLine ? ` - ${addr.addressLine}` : ""}
+</Typography>
+<Typography sx={{ color: "#888" }}>
+  {addr.formatted || addr.addressLine}
+</Typography>
       {addr.isDefault && <Chip label="Default" size="small" color="success" sx={{ mt: 1, fontWeight: 600 }} />}
     </Box>
     <Stack direction="row" alignItems="center" spacing={1}>

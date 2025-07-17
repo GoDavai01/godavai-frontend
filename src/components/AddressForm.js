@@ -148,8 +148,8 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
     let tries = 0;
     const maxTries = 25; // try for up to ~2 seconds
     const interval = setInterval(() => {
-      const mapDiv = document.getElementById("map-preview");
-      if (mapDiv && mapDiv.offsetHeight > 0 && window.google && window.google.maps) {
+  const mapDiv = document.getElementById("map-preview");
+  if (mapDiv && window.google && window.google.maps) {
         clearInterval(interval);
 
         let map = mapRef.current;

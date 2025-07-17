@@ -55,15 +55,18 @@ export default function AddressSelector({
             key={address.id}
             selected={selectedAddressId === address.id}
             sx={{
-              bgcolor: selectedAddressId === address.id ? "#13C0A2" : "#fff",
-              borderRadius: 2,
-              mb: 1,
-              cursor: "pointer",
-              transition: "0.2s",
-              minHeight: 56,
-              p: 1.2,
-              boxShadow: selectedAddressId === address.id ? 2 : 0,
-            }}
+  bgcolor: selectedAddressId === address.id ? "#fffde7" : "#fff",
+  border: selectedAddressId === address.id ? "2px solid #ffd43b" : "1px solid #eee",
+  borderRadius: 3,
+  mb: 1.5,
+  minHeight: 70,
+  boxShadow: selectedAddressId === address.id ? 3 : 0,
+  transition: "all 0.18s",
+  cursor: "pointer",
+  p: 2,
+  display: "flex",
+  alignItems: "flex-start"
+}}
             onClick={() => onSelect(address.id)}
             secondaryAction={
               <Box sx={{ display: "flex", alignItems: "center" }}>
@@ -101,19 +104,20 @@ export default function AddressSelector({
               />
             </ListItemIcon>
             <ListItemText
-              primary={
-                <span style={{ fontWeight: 700, fontSize: 15 }}>
-                  {address.name}
-                </span>
-              }
-              secondary={
-                <span style={{ fontSize: 13, color: "#555" }}>
-                  {address.addressLine.split(",")[0]}
-                  {address.floor ? `, Floor: ${address.floor}` : ""}
-                  {address.landmark ? `, ${address.landmark}` : ""}
-                </span>
-              }
-            />
+  primary={
+    <span style={{ fontWeight: 700, fontSize: 15 }}>
+      {address.name} {address.addressLine ? `, ${address.addressLine}` : ""}
+    </span>
+  }
+  secondary={
+    <span style={{ fontSize: 13, color: "#555" }}>
+      {address.formatted
+        ? address.formatted
+        : address.addressLine}
+      {/* Add floor, landmark if you use those */}
+    </span>
+  }
+/>
           </ListItem>
         ))}
       </List>
