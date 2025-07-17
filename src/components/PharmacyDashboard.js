@@ -558,10 +558,19 @@ export default function PharmacyDashboard() {
     ? "Location Set"
     : "Set Current Location"}
 </Button>
-{pharmacy.location && pharmacy.location.coordinates && pharmacy.location.coordinates[0] !== 0 && (
-  <Typography fontSize={13} sx={{ color: "green", mb: 1 }}>
-    Location: Lat {pharmacy.location.coordinates[1]}, Lng {pharmacy.location.coordinates[0]}
-  </Typography>
+{pharmacy.location && (
+  <>
+    {pharmacy.location.formatted && (
+      <Typography fontSize={13} sx={{ color: "green", mb: 1 }}>
+        {pharmacy.location.formatted}
+      </Typography>
+    )}
+    {pharmacy.location.coordinates && pharmacy.location.coordinates[0] !== 0 && (
+      <Typography fontSize={11} sx={{ color: "#888", mb: 1 }}>
+        (Lat {pharmacy.location.coordinates[1]}, Lng {pharmacy.location.coordinates[0]})
+      </Typography>
+    )}
+  </>
 )}
 
           {/* Stats Row */}
