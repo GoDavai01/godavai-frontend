@@ -529,20 +529,25 @@ export default function PharmacyDashboard() {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          await axios.patch(`${API_BASE_URL}/api/pharmacy/set-location`, {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          setMsg("Location updated!");
-          // Optionally refetch pharmacy info if needed
-        } catch {
-          setMsg("Failed to update location!");
-        }
-      },
+  async (pos) => {
+    try {
+      const { latitude, longitude } = pos.coords;
+      // Get human-readable address
+      const res = await axios.get(`${API_BASE_URL}/api/geocode?lat=${latitude}&lng=${longitude}`);
+      const formatted = res.data.results?.[0]?.formatted_address || "";
+      // Patch to backend (include formatted address)
+      await axios.patch(`${API_BASE_URL}/api/pharmacy/set-location`, {
+        lat: latitude,
+        lng: longitude,
+        formatted
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setMsg("Location updated!");
+    } catch {
+      setMsg("Failed to update location!");
+    }
+  },
       (err) => {
         alert("Could not fetch location: " + err.message);
       }

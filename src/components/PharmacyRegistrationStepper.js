@@ -112,14 +112,26 @@ const StepContent = React.memo(function StepContent({
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setForm(f => ({
-          ...f,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          formattedLocation: `Lat: ${pos.coords.latitude.toFixed(5)}, Lng: ${pos.coords.longitude.toFixed(5)}`
-        }));
-      },
+  async (pos) => {
+    try {
+      // Call your geocode API
+      const res = await axios.get(`${API_BASE_URL}/api/geocode?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}`);
+      const formatted = res.data.results?.[0]?.formatted_address || "";
+      setForm(f => ({
+        ...f,
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        formattedLocation: formatted
+      }));
+    } catch {
+      setForm(f => ({
+        ...f,
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        formattedLocation: `Lat: ${pos.coords.latitude.toFixed(5)}, Lng: ${pos.coords.longitude.toFixed(5)}`
+      }));
+    }
+  },
       (err) => {
         alert("Could not fetch location: " + err.message);
       }
