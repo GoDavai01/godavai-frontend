@@ -506,9 +506,36 @@ export default function DeliveryDashboard() {
           {orders.map((order) => {
             const pharmacyLoc = order.pharmacy?.location;
             const userLoc = order.address;
+            // Patch for GeoJSON -> lat/lng if missing
+let patchedPharmacyLoc = pharmacyLoc;
+if (
+  pharmacyLoc &&
+  Array.isArray(pharmacyLoc.coordinates) &&
+  pharmacyLoc.coordinates.length === 2
+) {
+  patchedPharmacyLoc = {
+    ...pharmacyLoc,
+    lat: pharmacyLoc.coordinates[1],
+    lng: pharmacyLoc.coordinates[0],
+  };
+}
+
+let patchedUserLoc = userLoc;
+if (
+  userLoc &&
+  Array.isArray(userLoc.coordinates) &&
+  userLoc.coordinates.length === 2
+) {
+  patchedUserLoc = {
+    ...userLoc,
+    lat: userLoc.coordinates[1],
+    lng: userLoc.coordinates[0],
+  };
+}
+
             const poly = polylines[order._id] || [];
-            const mapCenter = pharmacyLoc?.lat && pharmacyLoc?.lng
-              ? { lat: pharmacyLoc.lat, lng: pharmacyLoc.lng }
+            const mapCenter = patchedPharmacyLoc?.lat && patchedPharmacyLoc?.lng
+              ? { lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }
               : { lat: 19.076, lng: 72.877 };
             return (
               <Card key={order._id} sx={{ borderRadius: 5, bgcolor: "#f7fafc" }}>
@@ -538,11 +565,11 @@ export default function DeliveryDashboard() {
                   </Typography>
                   {/* ===== LIVE MAP BELOW ===== */}
 {isLoaded ? (
-  !pharmacyLoc?.lat
+  !patchedPharmacyLoc?.lat
     ? <Typography sx={{ color: "#bbb", fontSize: 14, mt: 2 }}>
         Pharmacy location missing
       </Typography>
-    : !userLoc?.lat
+    : !patchedUserLoc?.lat
       ? <Typography sx={{ color: "#bbb", fontSize: 14, mt: 2 }}>
           Customer location missing
         </Typography>
@@ -556,7 +583,7 @@ export default function DeliveryDashboard() {
           >
             {/* Pharmacy marker */}
             <Marker
-              position={{ lat: pharmacyLoc.lat, lng: pharmacyLoc.lng }}
+              position={{ lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }}
               label="P"
               title="Pharmacy"
               icon={{
@@ -566,7 +593,7 @@ export default function DeliveryDashboard() {
             />
             {/* User marker */}
             <Marker
-              position={{ lat: userLoc.lat, lng: userLoc.lng }}
+              position={{ lat: patchedUserLoc.lat, lng: patchedUserLoc.lng }}
               label="U"
               title="Delivery Address"
               icon={{
@@ -590,7 +617,7 @@ export default function DeliveryDashboard() {
             variant="outlined"
             sx={{ mt: 1 }}
             target="_blank"
-            href={`https://www.google.com/maps/dir/?api=1&origin=${pharmacyLoc.lat},${pharmacyLoc.lng}&destination=${userLoc.lat},${userLoc.lng}`}
+            href={`https://www.google.com/maps/dir/?api=1&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
           >
             Get Directions in Google Maps
           </Button>
