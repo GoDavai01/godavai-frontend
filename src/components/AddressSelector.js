@@ -106,7 +106,9 @@ export default function AddressSelector({
             <ListItemText
   primary={
     <span style={{ fontWeight: 700, fontSize: 15 }}>
-      {address.name} {address.addressLine ? `, ${address.addressLine}` : ""}
+      {address.name}
+      {address.addressLine ? `, ${address.addressLine}` : ""}
+      {address.floor ? `, Floor: ${address.floor}` : ""}
     </span>
   }
   secondary={
@@ -114,7 +116,8 @@ export default function AddressSelector({
       {address.formatted
         ? address.formatted
         : address.addressLine}
-      {/* Add floor, landmark if you use those */}
+      {address.landmark ? `, Landmark: ${address.landmark}` : ""}
+      {address.phone ? `, ${address.phone}` : ""}
     </span>
   }
 />
