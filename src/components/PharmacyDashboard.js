@@ -189,6 +189,8 @@ export default function PharmacyDashboard() {
     customType: ""
   });
   const [medImage, setMedImage] = useState(null);
+  const [editMedImage, setEditMedImage] = useState(null);
+  const editFileInputRef = useRef();
   const fileInputRef = useRef();
 
   // Stats
@@ -377,35 +379,72 @@ export default function PharmacyDashboard() {
 
   // Save edit
   const handleSaveMedicine = async () => {
-    if (!editMedForm.name || !editMedForm.price || !editMedForm.stock ||
-      !editMedForm.category || (editMedForm.category === "Other" && !editMedForm.customCategory)) {
-      setMedMsg("Fill all fields to edit.");
-      return;
+  if (!editMedForm.name || !editMedForm.price || !editMedForm.stock ||
+    !editMedForm.category || (editMedForm.category === "Other" && !editMedForm.customCategory)) {
+    setMedMsg("Fill all fields to edit.");
+    return;
+  }
+  setLoading(true);
+  try {
+    let data, headers;
+    if (editMedImage) {
+      data = new FormData();
+      data.append("name", editMedForm.name);
+      data.append("brand", editMedForm.brand);
+      data.append("price", editMedForm.price);
+      data.append("mrp", editMedForm.mrp);
+      data.append("stock", editMedForm.stock);
+      if (editMedForm.category === "Other") {
+        data.append("category", editMedForm.customCategory);
+      } else {
+        data.append("category", editMedForm.category);
+      }
+      data.append("type", editMedForm.type);
+      if (editMedForm.type === "Other") {
+        data.append("customType", editMedForm.customType);
+      }
+      data.append("image", editMedImage); // <-- image added
+      headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "multipart/form-data",
+      };
+    } else {
+      data = {
+        name: editMedForm.name,
+        brand: editMedForm.brand,
+        price: editMedForm.price,
+        mrp: editMedForm.mrp,
+        stock: editMedForm.stock,
+        category: editMedForm.category === "Other"
+          ? editMedForm.customCategory
+          : editMedForm.category,
+        type: editMedForm.type,
+        ...(editMedForm.type === "Other" && { customType: editMedForm.customType })
+      };
+      headers = { Authorization: `Bearer ${token}` };
     }
-    setLoading(true);
-    try {
-      await axios.patch(
-        `${API_BASE_URL}/api/pharmacy/medicines/${editMedId}`,
-        {
-          name: editMedForm.name,
-          brand: editMedForm.brand,
-          price: editMedForm.price,
-          mrp: editMedForm.mrp,
-          stock: editMedForm.stock,
-          category: editMedForm.category === "Other"
-            ? editMedForm.customCategory
-            : editMedForm.category
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
 
-      setMedMsg("Medicine updated!");
-      setEditMedId(null);
-    } catch {
-      setMedMsg("Failed to update medicine.");
-    }
-    setLoading(false);
-  };
+    await axios.patch(
+      `${API_BASE_URL}/api/pharmacy/medicines/${editMedId}`,
+      data,
+      { headers }
+    );
+
+    setMedMsg("Medicine updated!");
+    setEditMedId(null);
+    setEditMedImage(null); // Clear image
+    if (editFileInputRef.current) editFileInputRef.current.value = "";
+  } catch {
+    setMedMsg("Failed to update medicine.");
+  }
+  setLoading(false);
+};
+
+const closeEditDialog = () => {
+  setEditMedId(null);
+  setEditMedImage(null);
+  if (editFileInputRef.current) editFileInputRef.current.value = "";
+};
 
   // Delete medicine
   const handleDeleteMedicine = async (medId) => {
@@ -449,6 +488,12 @@ export default function PharmacyDashboard() {
       setMedImage(e.target.files[0]);
     }
   };
+  // Edit dialog image select
+const handleEditImageChange = (e) => {
+  if (e.target.files && e.target.files[0]) {
+    setEditMedImage(e.target.files[0]);
+  }
+};
 
   const sortedOrders = [...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
@@ -839,7 +884,7 @@ export default function PharmacyDashboard() {
       </Card>
     ))}
     {/* EDIT MEDICINE DIALOG */}
-    <Dialog open={!!editMedId} onClose={() => setEditMedId(null)} fullWidth maxWidth="xs">
+    <Dialog open={!!editMedId} onClose={closeEditDialog} fullWidth maxWidth="xs">
       <DialogTitle>Edit Medicine</DialogTitle>
       <DialogContent>
         <Stack spacing={2} mt={1}>
@@ -936,10 +981,28 @@ export default function PharmacyDashboard() {
               onBlur={() => setIsEditing(false)}
             />
           )}
+          <Stack direction="row" spacing={2} alignItems="center">
+  <input
+    type="file"
+    accept="image/*"
+    hidden
+    ref={editFileInputRef}
+    onChange={handleEditImageChange}
+  />
+  <Button
+    startIcon={<PhotoCamera />}
+    variant={editMedImage ? "contained" : "outlined"}
+    onClick={() => editFileInputRef.current && editFileInputRef.current.click()}
+    color={editMedImage ? "success" : "primary"}
+    sx={{ minWidth: 120 }}
+  >
+    {editMedImage ? "Image Ready" : "Upload Image"}
+  </Button>
+</Stack>
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={() => setEditMedId(null)} color="error">Cancel</Button>
+        <Button onClick={closeEditDialog} color="error">Cancel</Button>
         <Button variant="contained" onClick={handleSaveMedicine} color="success" disabled={loading}>
           Save
         </Button>
