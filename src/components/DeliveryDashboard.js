@@ -163,6 +163,7 @@ export default function DeliveryDashboard() {
   const [resetPhase, setResetPhase] = useState(0);
   const [forgotForm, setForgotForm] = useState({ mobile: "", otp: "", newPassword: "" });
   const [polylines, setPolylines] = useState({});
+  const [orderDistances, setOrderDistances] = useState({});  // <--- ADD THIS LINE!
   const [orderUnreadCounts, setOrderUnreadCounts] = useState({});
 
   const { isLoaded } = useJsApiLoader({
