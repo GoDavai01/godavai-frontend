@@ -131,6 +131,18 @@ function groupSplitOrders(orders) {
   return result;
 }
 
+function getDisplayAddress(address) {
+  if (!address) return "";
+  return (
+    address.formatted ||
+    [address.addressLine, address.floor, address.area, address.city]
+      .filter(Boolean).join(", ") ||
+    address.fullAddress ||
+    JSON.stringify(address)
+  );
+}
+
+
 export default function MyOrdersPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -581,11 +593,9 @@ useEffect(() => {
         </>
       )}
       <Typography fontSize={14} color="#232323">
-        <b>Address:</b>{" "}
-        {o.address?.addressLine ||
-          o.address?.fullAddress ||
-          (o.address ? JSON.stringify(o.address) : "")}
-      </Typography>
+  <b>Address:</b> {getDisplayAddress(o.address)}
+</Typography>
+
       <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
         {o.orderType !== "prescription" && (
           <Typography fontWeight={700} fontSize={15} sx={{ color: "#1976d2", mr: 2 }}>
