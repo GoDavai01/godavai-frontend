@@ -56,6 +56,14 @@ function normalizeMedicine(med) {
     name: med.name || med.medicineName,
     price: med.price,
     quantity: med.quantity,
+    img: medicine.img || "",
+    brand: medicine.brand || "",
+    mrp: medicine.mrp || "",
+    category: Array.isArray(medicine.category)
+      ? medicine.category
+      : medicine.category
+        ? [medicine.category]
+        : [],
   };
 }
 

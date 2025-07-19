@@ -22,7 +22,15 @@ function normalizeMedicine(medicine) {
     name: medicine.name,
     price: medicine.price,
     quantity: medicine.quantity || 1,
-    // Optionally: add _id for deduplication in cart UI, but orders API needs medicineId
+    img: medicine.img || "",
+    brand: medicine.brand || "",
+    mrp: medicine.mrp || "",
+    category: Array.isArray(medicine.category)
+      ? medicine.category
+      : medicine.category
+        ? [medicine.category]
+        : [],
+    // description: medicine.description || "",   // Keep if you want, optional!
     _id: medicine.medId || medicine.medicineId || medicine._id,
   };
 }
