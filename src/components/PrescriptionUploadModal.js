@@ -71,7 +71,7 @@ export default function PrescriptionUploadModal({
         try {
           const token = localStorage.getItem("token");
           const res = await axios.get(
-            `${API_BASE_URL}/prescriptions/order/${order._id}`,
+            `${API_BASE_URL}/api/prescriptions/order/${order._id}`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
           if (res.data.status === "quoted" || (res.data.quotes && res.data.quotes.length)) {
@@ -206,7 +206,7 @@ export default function PrescriptionUploadModal({
         prescriptionUrl = uploadRes.data.prescriptionUrl || uploadRes.data.url;
       }
       const orderRes = await axios.post(
-        `${API_BASE_URL}/prescriptions/order`,
+        `${API_BASE_URL}/api/prescriptions/order`,
         {
           prescriptionUrl,
           city: userCity,
