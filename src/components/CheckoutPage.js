@@ -52,17 +52,17 @@ const ICONS = {
 function normalizeMedicine(med) {
   return {
     medicineId: med._id || med.medicineId,
-    pharmacyId: med.pharmacy?._id || med.pharmacyId || med.pharmacy, // can be string or object
+    pharmacyId: med.pharmacy?._id || med.pharmacyId || med.pharmacy,
     name: med.name || med.medicineName,
     price: med.price,
     quantity: med.quantity,
-    img: medicine.img || "",
-    brand: medicine.brand || "",
-    mrp: medicine.mrp || "",
-    category: Array.isArray(medicine.category)
-      ? medicine.category
-      : medicine.category
-        ? [medicine.category]
+    img: med.img || "",
+    brand: med.brand || "",
+    mrp: med.mrp || "",
+    category: Array.isArray(med.category)
+      ? med.category
+      : med.category
+        ? [med.category]
         : [],
   };
 }
