@@ -638,37 +638,41 @@ const allAddresses = [
                 Medicines in your order
               </Typography>
               <Stack spacing={1}>
-                {cart.map((med) => (
-                  <Box
-                    key={med._id}
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 2,
-                      minHeight: 56,
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-                      
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                          {med.name}
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          sx={{ color: "#555", fontSize: 15 }}
-                        >
-                          ₹{med.price} × {med.quantity}
-                        </Typography>
-                      </Box>
-                    </Box>
-                    <Typography sx={{ color: "#17879c", fontWeight: 700, minWidth: 72, textAlign: "right" }}>
-                      = ₹{med.price * med.quantity}
-                    </Typography>
-                  </Box>
-                ))}
-              </Stack>
+  {cart.map((med) => (
+    <Box
+      key={med._id}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 2,
+        minHeight: 56,
+        justifyContent: "space-between",
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+            {med.name}
+          </Typography>
+          {med.brand && (
+            <Typography variant="body2" sx={{ color: "#17879c", fontSize: 14, fontWeight: 600 }}>
+              {med.brand}
+            </Typography>
+          )}
+          <Typography
+            variant="body2"
+            sx={{ color: "#555", fontSize: 15 }}
+          >
+            ₹{med.price} × {med.quantity}
+          </Typography>
+        </Box>
+      </Box>
+      <Typography sx={{ color: "#17879c", fontWeight: 700, minWidth: 72, textAlign: "right" }}>
+        = ₹{med.price * med.quantity}
+      </Typography>
+    </Box>
+  ))}
+</Stack>
             </>
           )}
         </CardContent>

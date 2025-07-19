@@ -125,78 +125,91 @@ export default function CartPage() {
         Cart
       </Typography>
       <Card sx={{
-        borderRadius: 5, boxShadow: 4, mb: 3, p: 1, background: "#fff"
-      }}>
-        <CardContent sx={{ p: 2 }}>
-          <Grid container spacing={2}>
-            {cart.map((med) => (
-              <Grid item xs={12} key={med._id}>
-                <Stack direction="row" alignItems="center" spacing={2}>
-
-                  <Box flex={1} sx={{ minWidth: 0 }}>
-                    <Typography variant="body1" sx={{ fontWeight: 800, fontSize: 18, color: "#222" }}>
-                      {med.name}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: "#666", fontSize: 15 }}>
-                      ₹{med.price} x {med.quantity}{" "}
-                      <span style={{ fontWeight: 700, color: "#23b98e", display: "block" }}>
-                        = ₹{med.price * med.quantity}
-                      </span>
-                    </Typography>
-                  </Box>
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <Tooltip title="Decrease">
-                      <span>
-                        <IconButton
-                          color="primary"
-                          sx={{
-                            border: "1.5px solid #FFD43B", bgcolor: "#fffde7",
-                            borderRadius: 99, width: 36, height: 36
-                          }}
-                          disabled={med.quantity === 1}
-                          onClick={() => removeOneFromCart(med)}
-                        >
-                          <RemoveIcon />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                    <Typography sx={{
-                      minWidth: 28, textAlign: "center", fontWeight: 700,
-                      color: "#17879c", fontSize: 18
-                    }}>{med.quantity}</Typography>
-                    <Tooltip title="Increase">
-                      <IconButton
-                        color="primary"
-                        sx={{
-                          border: "1.5px solid #FFD43B", bgcolor: "#fffde7",
-                          borderRadius: 99, width: 36, height: 36
-                        }}
-                        onClick={() => addToCart(med)}
-                      >
-                        <AddIcon />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                  <Tooltip title="Remove">
-                    <IconButton color="error" onClick={() => removeFromCart(med)} sx={{ ml: 1 }}>
-                      <DeleteIcon />
-                    </IconButton>
-                  </Tooltip>
-                </Stack>
-              </Grid>
-            ))}
-          </Grid>
-          <Divider sx={{ my: 3 }} />
-          <Typography variant="h6" sx={{
-            color: "#FFD43B", fontWeight: 800, textAlign: "right", fontSize: 22
-          }}>
-            Total: ₹{total}
+  borderRadius: 5, boxShadow: 4, mb: 3, p: 0, background: "#fff"
+}}>
+  <CardContent sx={{ p: 0 }}>
+    {cart.map((med) => (
+      <Box
+        key={med._id}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          px: 2,
+          py: 1.5,
+          borderBottom: "1px solid #f2f2f2",
+          gap: 1
+        }}
+      >
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body1" sx={{ fontWeight: 800, fontSize: 18, color: "#222" }}>
+            {med.name}
           </Typography>
-        </CardContent>
-      </Card>
+          {med.brand && (
+            <Typography variant="body2" sx={{ color: "#17879c", fontSize: 14, fontWeight: 600, mb: 0.5 }}>
+              {med.brand}
+            </Typography>
+          )}
+          <Typography variant="body2" sx={{ color: "#666", fontSize: 15 }}>
+            ₹{med.price} x {med.quantity}{" "}
+            <span style={{ fontWeight: 700, color: "#23b98e", display: "block" }}>
+              = ₹{med.price * med.quantity}
+            </span>
+          </Typography>
+        </Box>
+        <Stack direction="row" alignItems="center" spacing={0.5}>
+          <Tooltip title="Decrease">
+            <span>
+              <IconButton
+                color="primary"
+                sx={{
+                  border: "1.5px solid #FFD43B", bgcolor: "#fffde7",
+                  borderRadius: 99, width: 32, height: 32
+                }}
+                disabled={med.quantity === 1}
+                onClick={() => removeOneFromCart(med)}
+              >
+                <RemoveIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Typography sx={{
+            minWidth: 22, textAlign: "center", fontWeight: 700,
+            color: "#17879c", fontSize: 16
+          }}>{med.quantity}</Typography>
+          <Tooltip title="Increase">
+            <IconButton
+              color="primary"
+              sx={{
+                border: "1.5px solid #FFD43B", bgcolor: "#fffde7",
+                borderRadius: 99, width: 32, height: 32
+              }}
+              onClick={() => addToCart(med)}
+            >
+              <AddIcon />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+        <Tooltip title="Remove">
+          <IconButton color="error" onClick={() => removeFromCart(med)} sx={{ ml: 0.5 }}>
+            <DeleteIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
+    ))}
+    <Divider sx={{ my: 0 }} />
+    <Box sx={{ px: 2, py: 1.5 }}>
+      <Typography variant="h6" sx={{
+        color: "#FFD43B", fontWeight: 800, textAlign: "right", fontSize: 22
+      }}>
+        Total: ₹{total}
+      </Typography>
+    </Box>
+  </CardContent>
+</Card>
 
       {selectedPharmacy ? (
-        <Box sx={{ mb: 2, display: "flex", alignItems: "center" }}>
+        <Box sx={{ mb: 2, mt: 1, display: "flex", alignItems: "center" }}>
           <Typography sx={{ color: "#13c7ae", fontWeight: 700, fontSize: 17, mr: 1 }}>
             Selected Pharmacy:
           </Typography>
@@ -253,7 +266,7 @@ export default function CartPage() {
         </DialogActions>
       </Dialog>
 
-      <Stack direction="row" spacing={2} sx={{ mt: 3, justifyContent: "flex-end" }}>
+      <Stack direction="row" spacing={2} sx={{ mt: 2, justifyContent: "flex-end" }}>
         <Button
           color="error"
           variant="text"
