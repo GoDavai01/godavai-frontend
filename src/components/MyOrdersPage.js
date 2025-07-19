@@ -395,20 +395,20 @@ useEffect(() => {
       {o.orderType === "prescription" ? (
         <>
           <Typography fontSize={14} sx={{ mt: 1 }}>
-            <b>Prescription:</b>{" "}
-            {o.prescriptionUrl ? (
-              <a
-                href={o.prescriptionUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: "#1976d2", textDecoration: "underline" }}
-              >
-                View
-              </a>
-            ) : (
-              "Not Available"
-            )}
-          </Typography>
+  <b>Prescription:</b>{" "}
+  {o.prescriptionUrl || o.prescription ? (
+    <a
+      href={o.prescriptionUrl || o.prescription}
+      target="_blank"
+      rel="noreferrer"
+      style={{ color: "#1976d2", textDecoration: "underline" }}
+    >
+      View
+    </a>
+  ) : (
+    "Not Available"
+  )}
+</Typography>
           {(o.status === "quoted" || o.status === "pending_user_confirm") && (
             <Box
               sx={{
