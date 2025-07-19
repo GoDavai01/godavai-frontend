@@ -229,7 +229,7 @@ const SearchResults = () => {
                   onClick={() => addToCart({
   ...offer,
   _id: offer.medId || offer._id,
-  pharmacy: offer.pharmacy?._id || offer.pharmacyId || offer.pharmacy,
+  pharmacy: offer.pharmacy, // must be the whole object, not just id
   name: offer.name || query,
   price: offer.price,
 })}
