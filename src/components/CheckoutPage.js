@@ -39,6 +39,7 @@ import AddressSelector from "./AddressSelector";
 import { useAuth } from "../context/AuthContext";
 import { useLocation as useLocContext } from "../context/LocationContext"; // <--- Add this line
 import AddressForm from "./AddressForm"; // <-- use the advanced version!
+import { getImageUrl } from "../Utils/getImageUrl";
 import axios from "axios";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -156,15 +157,6 @@ const res = await axios.post(
     });
   }
   setLoading(false);
-};
-
-// Helper: universal image resolver (relative path, prod ready)
-const getImageUrl = (img) => {
-  if (!img)
-    return "https://img.freepik.com/free-vector/medicine-bottle-pills-isolated_1284-42391.jpg?w=400";
-  if (img.startsWith("/uploads/"))
-    return `${process.env.REACT_APP_API_URL || ""}${img}`;
-  return img;
 };
 
 export default function CheckoutPage() {
@@ -658,18 +650,7 @@ const allAddresses = [
                     }}
                   >
                     <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-                      <CardMedia
-                        component="img"
-                        sx={{
-                          width: 48,
-                          height: 48,
-                          objectFit: "contain",
-                          bgcolor: "#FFF9DB",
-                          borderRadius: 2,
-                        }}
-                        image={getImageUrl(med.img)}
-                        alt={med.name}
-                      />
+                      
                       <Box sx={{ minWidth: 0 }}>
                         <Typography variant="body1" sx={{ fontWeight: 600 }}>
                           {med.name}

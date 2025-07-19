@@ -10,14 +10,7 @@ import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import EditIcon from "@mui/icons-material/Edit";
 import { useCart } from "../context/CartContext";
 import { useNavigate } from "react-router-dom";
-
-// --- Make image URL production safe ---
-const getImageUrl = (img) => {
-  if (!img)
-    return "https://img.freepik.com/free-vector/medicine-bottle-pills-isolated_1284-42391.jpg?w=400";
-  if (img.startsWith("/uploads/")) return `${img}`; // Use relative URL in production!
-  return img;
-};
+import { getImageUrl } from "../Utils/getImageUrl";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
@@ -139,15 +132,7 @@ export default function CartPage() {
             {cart.map((med) => (
               <Grid item xs={12} key={med._id}>
                 <Stack direction="row" alignItems="center" spacing={2}>
-                  <CardMedia
-                    component="img"
-                    sx={{
-                      width: 64, height: 64, objectFit: "contain",
-                      bgcolor: "#FFF9DB", borderRadius: 3, boxShadow: 2, border: "1.5px solid #ffd43b"
-                    }}
-                    image={getImageUrl(med.img)}
-                    alt={med.name}
-                  />
+
                   <Box flex={1} sx={{ minWidth: 0 }}>
                     <Typography variant="body1" sx={{ fontWeight: 800, fontSize: 18, color: "#222" }}>
                       {med.name}
