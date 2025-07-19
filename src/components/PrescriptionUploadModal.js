@@ -98,7 +98,7 @@ export default function PrescriptionUploadModal({
     const addr = addresses.find(a => a.id === selectedAddressId);
     if (addr && addr.lat && addr.lng) {
       axios
-        .get(`${API_BASE_URL}/pharmacies/nearby?lat=${addr.lat}&lng=${addr.lng}&maxDistance=15000`)
+        .get(`${API_BASE_URL}/api/pharmacies/nearby?lat=${addr.lat}&lng=${addr.lng}&maxDistance=15000`)
         .then(res => setPharmacyList(res.data))
         .catch(() => setPharmacyList([]))
         .finally(() => setPharmacyLoading(false));
@@ -194,7 +194,7 @@ export default function PrescriptionUploadModal({
         const data = new FormData();
         data.append("prescription", file);
         const uploadRes = await axios.post(
-          `${API_BASE_URL}/prescriptions/upload`,
+          `${API_BASE_URL}/api/prescriptions/upload`,
           data,
           {
             headers: {
