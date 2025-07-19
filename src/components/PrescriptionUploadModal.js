@@ -93,14 +93,27 @@ export default function PrescriptionUploadModal({
 
   // Manual: Fetch pharmacy list if needed
   useEffect(() => {
-    if (open && uploadType === "manual") {
-      setPharmacyLoading(true);
-      axios.get(`${API_BASE_URL}/pharmacies?city=${encodeURIComponent(userCity)}${userArea ? `&area=${encodeURIComponent(userArea)}` : ""}`)
+  if (open && uploadType === "manual") {
+    setPharmacyLoading(true);
+    const addr = addresses.find(a => a.id === selectedAddressId);
+    if (addr && addr.lat && addr.lng) {
+      axios
+        .get(`${API_BASE_URL}/pharmacies/nearby?lat=${addr.lat}&lng=${addr.lng}&maxDistance=15000`)
         .then(res => setPharmacyList(res.data))
         .catch(() => setPharmacyList([]))
         .finally(() => setPharmacyLoading(false));
+    } else {
+      // fallback: no address lat/lng (empty list, force user to pick map location!)
+      setPharmacyList([]);
+      setPharmacyLoading(false);
     }
-  }, [uploadType, open, userCity, userArea]);
+  }
+  // else: clear list on close or change
+  if (!open || uploadType !== "manual") {
+    setPharmacyList([]);
+    setSelectedPharmacy("");
+  }
+}, [open, uploadType, addresses, selectedAddressId]);
 
   // File change
   const handleFileChange = (e) => {
@@ -155,6 +168,16 @@ export default function PrescriptionUploadModal({
       return setError("Select a pharmacy.");
     if (/\d{10,}/.test(notes))
       return setError("Mobile numbers not allowed in notes.");
+    // --- ADD THIS BLOCK FOR MANUAL MODE VALIDATION ---
+  if (uploadType === "manual") {
+    const addr = addresses.find(a => a.id === selectedAddressId);
+    if (!addr || !addr.lat || !addr.lng)
+      return setError("Please select a delivery address with location pin (use map).");
+    if (!selectedPharmacy)
+      return setError("Select a pharmacy.");
+  }
+
+  // --- AUTO MODE EXISTING CHECK ---
     if (uploadType === "auto") {
   const addr = addresses.find(a => a.id === selectedAddressId);
   if (!addr || !addr.lat || !addr.lng) {
@@ -385,27 +408,35 @@ export default function PrescriptionUploadModal({
               {/* PHARMACY DROPDOWN FOR MANUAL */}
               {uploadType === "manual" && (
                 <FormControl fullWidth size="small" sx={{ mt: 1 }}>
-                  <InputLabel id="select-pharmacy-label">Select a Pharmacy</InputLabel>
-                  <Select
-                    labelId="select-pharmacy-label"
-                    value={selectedPharmacy}
-                    label="Select a Pharmacy"
-                    onChange={e => setSelectedPharmacy(e.target.value)}
-                    disabled={pharmacyLoading || pharmacyList.length === 0}
-                  >
-                    {pharmacyLoading && (
-                      <MenuItem disabled>Loading pharmacies...</MenuItem>
-                    )}
-                    {pharmacyList.length === 0 && !pharmacyLoading && (
-                      <MenuItem disabled>No pharmacies found in this location.</MenuItem>
-                    )}
-                    {pharmacyList.map(ph => (
-                      <MenuItem key={ph._id} value={ph._id}>
-                        {ph.name} ({ph.area}, {ph.city})
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+  <InputLabel id="select-pharmacy-label">Select a Pharmacy</InputLabel>
+  <Select
+    labelId="select-pharmacy-label"
+    value={selectedPharmacy}
+    label="Select a Pharmacy"
+    onChange={e => setSelectedPharmacy(e.target.value)}
+    disabled={pharmacyLoading || pharmacyList.length === 0}
+  >
+    {pharmacyLoading && (
+      <MenuItem disabled>Loading pharmacies...</MenuItem>
+    )}
+    {!pharmacyLoading && pharmacyList.length === 0 && (
+      <MenuItem disabled>
+        {(() => {
+          const addr = addresses.find(a => a.id === selectedAddressId);
+          if (!addr || !addr.lat || !addr.lng) {
+            return "Select a delivery address with location pin.";
+          }
+          return "No pharmacies found within 15km.";
+        })()}
+      </MenuItem>
+    )}
+    {pharmacyList.map(ph => (
+      <MenuItem key={ph._id} value={ph._id}>
+        {ph.name} ({ph.area}, {ph.city})
+      </MenuItem>
+    ))}
+  </Select>
+</FormControl>
               )}
               <Typography variant="body2" color="text.secondary">
                 Upload a photo or PDF of your prescription to get a quote from pharmacy.
