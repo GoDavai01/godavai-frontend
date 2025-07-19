@@ -49,6 +49,16 @@ const ICONS = {
   Other: <AddLocationAltIcon sx={{ color: "#1976d2" }} />,
 };
 
+function normalizeMedicine(med) {
+  return {
+    medicineId: med._id || med.medicineId,
+    pharmacyId: med.pharmacy?._id || med.pharmacyId || med.pharmacy, // can be string or object
+    name: med.name || med.medicineName,
+    price: med.price,
+    quantity: med.quantity,
+  };
+}
+
 // Razorpay Loader
 function loadRazorpayScript(src) {
   return new Promise((resolve) => {
@@ -97,28 +107,29 @@ const handlePlaceOrder = async (
     if (prescription) {
       prescriptionUrl = prescriptionPreview;
     }
-    const res = await axios.post(
-      `${API_BASE_URL}/api/orders`,
-      {
-        items: cart,
-        address: allAddresses.find((a) => a.id === selectedAddressId),
-        dosage: wantChemistInstruction ? "Let chemist suggest" : dosage,
-        paymentMethod,
-        pharmacyId: selectedPharmacy._id,
-        total,
-        prescription: prescriptionUrl,
-        instructions,
-        coupon,
-        tip,
-        donate: donate ? 3 : 0,
-        deliveryInstructions,
-        paymentStatus,
-        paymentDetails,
-      },
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
+    const normalizedItems = cart.map(normalizeMedicine);
+const payload = {
+  items: normalizedItems,
+  pharmacyId: normalizedItems[0]?.pharmacyId, // or selectedPharmacy._id, if you're sure
+  address: allAddresses.find((a) => a.id === selectedAddressId),
+  dosage: wantChemistInstruction ? "Let chemist suggest" : dosage,
+  paymentMethod,
+  total,
+  prescription: prescriptionUrl,
+  instructions,
+  coupon,
+  tip,
+  donate: donate ? 3 : 0,
+  deliveryInstructions,
+  paymentStatus,
+  paymentDetails,
+};
+const res = await axios.post(
+  `${API_BASE_URL}/api/orders`,
+  payload,
+  { headers: { Authorization: `Bearer ${token}` } }
+);
+
     clearCart();
     setSnackbar({
       open: true,

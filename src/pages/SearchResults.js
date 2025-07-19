@@ -226,7 +226,14 @@ const SearchResults = () => {
                 justifyContent: "center"
               }}>
                 <button
-                  onClick={() => addToCart({ ...offer, name: query })}
+                  onClick={() => addToCart({
+  ...offer,
+  _id: offer.medId || offer._id,
+  pharmacy: offer.pharmacy?._id || offer.pharmacyId || offer.pharmacy,
+  name: offer.name || query,
+  price: offer.price,
+})}
+
                   style={{
                     background: "#fff",
                     color: "#13C0A2",

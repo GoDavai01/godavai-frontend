@@ -11,6 +11,22 @@ function safeParse(json, fallback) {
   }
 }
 
+function normalizeMedicine(medicine) {
+  return {
+    medicineId: medicine.medId || medicine.medicineId || medicine._id,
+    pharmacyId:
+      medicine.pharmacyId ||
+      (typeof medicine.pharmacy === "object"
+        ? medicine.pharmacy._id
+        : medicine.pharmacy),
+    name: medicine.name,
+    price: medicine.price,
+    quantity: medicine.quantity || 1,
+    // Optionally: add _id for deduplication in cart UI, but orders API needs medicineId
+    _id: medicine.medId || medicine.medicineId || medicine._id,
+  };
+}
+
 export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState(() => {
     if (typeof window === "undefined") return [];
@@ -53,14 +69,13 @@ export const CartProvider = ({ children }) => {
   // MAIN LOGIC: Only allow adding medicines from a single pharmacy
   const addToCart = (medicine) => {
     if (
-      !medicine ||
-      !medicine._id ||
-      !medicine.pharmacy ||
-      (typeof medicine.pharmacy === "object" && !medicine.pharmacy._id)
-    ) {
-      alert("Medicine or pharmacy not specified. Please select a valid medicine with pharmacy.");
-      return;
-    }
+  !medicine ||
+  !(medicine._id || medicine.medId || medicine.medicineId) ||
+  !(medicine.pharmacyId || (medicine.pharmacy && (typeof medicine.pharmacy === "string" || (typeof medicine.pharmacy === "object" && medicine.pharmacy._id))))
+) {
+  alert("Medicine or pharmacy not specified. Please select a valid medicine with pharmacy.");
+  return;
+}
     setCart((prev) => {
       const pharmacyId =
         typeof medicine.pharmacy === "object"
@@ -97,12 +112,12 @@ export const CartProvider = ({ children }) => {
       if (exists) {
         return prev.map((item) =>
           item._id === medicine._id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? { ...normalizeMedicine(item), quantity: item.quantity + 1 }
             : item
         );
       }
 
-      return [...prev, { ...medicine, quantity: 1 }];
+      return [...prev, normalizeMedicine(medicine)];
     });
   };
 
