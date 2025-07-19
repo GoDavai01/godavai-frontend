@@ -20,64 +20,39 @@ const SearchResults = () => {
   const navigate = useNavigate();
 
   // Always use latest city/area from localStorage
-  const selectedCity = localStorage.getItem("city") || "Mumbai";
-  const selectedArea = localStorage.getItem("area") || "";
+  const locationObj = JSON.parse(localStorage.getItem("currentAddress") || "{}");
+  const lat = locationObj.lat || null;
+  const lng = locationObj.lng || null;
 
   useEffect(() => {
-    if (!query) return;
-    setLoading(true);
+  if (!query || !lat || !lng) return;   // Only search if we have query and geolocation
+  setLoading(true);
 
-    // 1. Fetch active pharmacies for city/area
-    axios
-      .get(`${API_BASE_URL}/api/pharmacies`, {
-        params: {
-          city: selectedCity,
-          area: selectedArea,
-        }
-      })
-      .then(res => {
-        const activePharmacyIds = (res.data || [])
-          .filter(ph => ph.active)
-          .map(ph => ph._id);
-
-        // 2. Now fetch offers for this medicine
-        axios
-          .get(`${API_BASE_URL}/api/medicines/by-name`, {
-            params: {
-              name: query,
-              city: selectedCity,
-              area: selectedArea
-            }
-          })
-          .then((offersRes) => {
-            // 3. Filter offers for only active pharmacies
-            const filtered = (offersRes.data || []).filter(offer =>
-              offer.pharmacy && activePharmacyIds.includes(offer.pharmacy._id || offer.pharmacy)
-            );
-            setOffers(filtered);
-          })
-          .catch(() => setOffers([]))
-          .finally(() => setLoading(false));
-      })
-      .catch(() => {
-        setOffers([]);
-        setLoading(false);
-      });
-
-  }, [query, selectedCity, selectedArea]);
+  axios
+    .get(`${API_BASE_URL}/api/medicines/by-name`, {
+      params: {
+        name: query,
+        lat,
+        lng
+      }
+    })
+    .then(res => setOffers(res.data || []))
+    .catch(() => setOffers([]))
+    .finally(() => setLoading(false));
+}, [query, lat, lng]);
 
   useEffect(() => {
-    if (!query) return;
-    axios
-      .get(`${API_BASE_URL}/api/medicines/search`, {
-        params: { q: query, city: selectedCity, area: selectedArea }
-      })
-      .then((res) => {
-        const names = Array.from(new Set(res.data.map((m) => m.name)));
-        setAutoSuggestions(names);
-      })
-      .catch(() => setAutoSuggestions([]));
-  }, [query, selectedCity, selectedArea]);
+  if (!query) return;
+  axios
+    .get(`${API_BASE_URL}/api/medicines/search`, {
+      params: { q: query, lat, lng }
+    })
+    .then((res) => {
+      const names = Array.from(new Set(res.data.map((m) => m.name)));
+      setAutoSuggestions(names);
+    })
+    .catch(() => setAutoSuggestions([]));
+}, [query, lat, lng]);
 
   const handleSuggestionClick = (suggestion) => {
     navigate(`/search?q=${encodeURIComponent(suggestion)}`);
@@ -159,7 +134,7 @@ const SearchResults = () => {
       />
 
       <h3 style={{ fontWeight: 700, color: "#1188A3", margin: "22px 0 6px 0" }}>
-        Pharmacies in {highlight(selectedCity || "your city")}
+        Pharmacies near {highlight(locationObj.formatted || locationObj.city || "your location")}
         {" with "}{highlight(query)}
       </h3>
       {loading ? (
@@ -174,7 +149,7 @@ const SearchResults = () => {
           fontWeight: 600,
           marginTop: 18
         }}>
-          No pharmacies found in <b>{selectedCity}</b> for <b>{query}</b>.
+        No pharmacies found near <b>{locationObj.formatted || "your location"}</b> for <b>{query}</b>.
         </div>
       ) : (
         <div style={{ marginTop: 20 }}>
