@@ -155,6 +155,13 @@ export default function PrescriptionUploadModal({
       return setError("Select a pharmacy.");
     if (/\d{10,}/.test(notes))
       return setError("Mobile numbers not allowed in notes.");
+    if (uploadType === "auto") {
+  const addr = addresses.find(a => a.id === selectedAddressId);
+  if (!addr || !addr.lat || !addr.lng) {
+    setError("Please select a location using the map.");
+    return;
+  }
+}
     setError("");
     setStep(2);
     try {
