@@ -696,6 +696,7 @@ const handleEditImageChange = (e) => {
                       }}
                     />
                   </Stack>
+                  
                   <Typography sx={{ fontSize: 15, color: "#FFD43B" }}>
                     Items: {order.items && order.items.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ")}
                   </Typography>
