@@ -574,7 +574,21 @@ if (
   }
 </Typography>
                   <Typography sx={{ color: "#555" }}>
-                    Deliver to: <b>{order.address?.addressLine}</b>
+                    Deliver to: <b>
+  {[
+    order.address?.addressLine,
+    order.address?.floor,
+    order.address?.landmark,
+    order.address?.area,
+    order.address?.city,
+    order.address?.state,
+    order.address?.pin
+  ]
+    .filter(Boolean)
+    .join(', ')
+  }
+</b>
+
                   </Typography>
                   <Typography sx={{ color: "#555" }}>
                     Amount: ₹{order.total || order.amount || 0}
