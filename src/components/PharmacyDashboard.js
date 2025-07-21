@@ -305,57 +305,69 @@ export default function PharmacyDashboard() {
 
   // Add medicine - multipart if image
   const handleAddMedicine = async () => {
-    if (!medForm.name || !medForm.price || !medForm.mrp || !medForm.stock ||
-      !medForm.category || (medForm.category === "Other" && !medForm.customCategory)) {
-      setMedMsg("Fill all medicine fields.");
-      return;
-    }
-    setLoading(true);
+  if (!medForm.name || !medForm.price || !medForm.mrp || !medForm.stock ||
+    !medForm.category ||
+    (
+      (Array.isArray(medForm.category) && medForm.category.includes("Other") && !medForm.customCategory)
+      || (medForm.category === "Other" && !medForm.customCategory)
+    )
+  ) {
+    setMedMsg("Fill all medicine fields.");
+    return;
+  }
+  setLoading(true);
 
-    try {
-      let data, headers;
-      if (medImage) {
-        data = new FormData();
-        data.append("name", medForm.name);
-        data.append("brand", medForm.brand);
-        data.append("price", medForm.price);
-        data.append("mrp", medForm.mrp);
-        data.append("discount", medForm.discount);
-        data.append("stock", medForm.stock);
-        if (medForm.category === "Other") {
-          data.append("category", medForm.customCategory);
-        } else {
-          data.append("category", medForm.category);
-        }
-        data.append("image", medImage);
-        headers = { Authorization: `Bearer ${token}` };
-      } else {
-        data = {
-          name: medForm.name,
-          brand: medForm.brand,
-          price: medForm.price,
-          mrp: medForm.mrp,
-          discount: medForm.discount,
-          stock: medForm.stock,
-          category: medForm.category === "Other" ? medForm.customCategory : medForm.category
-        };
-        headers = { Authorization: `Bearer ${token}` };
-      }
+  // THIS IS THE MAIN LOGIC:
+  let finalCategories = Array.isArray(medForm.category)
+    ? [...medForm.category]
+    : medForm.category ? [medForm.category] : [];
+  if (finalCategories.includes("Other")) {
+    finalCategories = finalCategories.filter(c => c !== "Other");
+    if (medForm.customCategory) finalCategories.push(medForm.customCategory);
+  }
+  if (finalCategories.length === 0) finalCategories.push("Miscellaneous");
 
-      await axios.post(
-        `${API_BASE_URL}/api/pharmacy/medicines`,
-        data,
-        { headers }
-      );
-      setMedMsg("Medicine added!");
-      setMedForm({ name: "", brand: "", price: "", mrp: "", stock: "", category: "", discount: "", customCategory: "" });
-      setMedImage(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    } catch {
-      setMedMsg("Failed to add medicine.");
+  try {
+    let data, headers;
+    if (medImage) {
+      data = new FormData();
+      data.append("name", medForm.name);
+      data.append("brand", medForm.brand);
+      data.append("price", medForm.price);
+      data.append("mrp", medForm.mrp);
+      data.append("discount", medForm.discount);
+      data.append("stock", medForm.stock);
+      // CRUCIAL: category should be sent as JSON if array
+      data.append("category", JSON.stringify(finalCategories));
+      data.append("image", medImage);
+      headers = { Authorization: `Bearer ${token}` };
+    } else {
+      data = {
+        name: medForm.name,
+        brand: medForm.brand,
+        price: medForm.price,
+        mrp: medForm.mrp,
+        discount: medForm.discount,
+        stock: medForm.stock,
+        category: finalCategories
+      };
+      headers = { Authorization: `Bearer ${token}` };
     }
-    setLoading(false);
-  };
+
+    await axios.post(
+      `${API_BASE_URL}/api/pharmacy/medicines`,
+      data,
+      { headers }
+    );
+    setMedMsg("Medicine added!");
+    setMedForm({ name: "", brand: "", price: "", mrp: "", stock: "", category: "", discount: "", customCategory: "" });
+    setMedImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  } catch {
+    setMedMsg("Failed to add medicine.");
+  }
+  setLoading(false);
+};
 
   // Start editing a medicine
   const handleEditMedicine = (med) => {
@@ -380,11 +392,27 @@ export default function PharmacyDashboard() {
   // Save edit
   const handleSaveMedicine = async () => {
   if (!editMedForm.name || !editMedForm.price || !editMedForm.stock ||
-    !editMedForm.category || (editMedForm.category === "Other" && !editMedForm.customCategory)) {
+    !editMedForm.category ||
+    (
+      (Array.isArray(editMedForm.category) && editMedForm.category.includes("Other") && !editMedForm.customCategory)
+      || (editMedForm.category === "Other" && !editMedForm.customCategory)
+    )
+  ) {
     setMedMsg("Fill all fields to edit.");
     return;
   }
   setLoading(true);
+
+  // MAIN LOGIC FOR CATEGORY:
+  let finalCategories = Array.isArray(editMedForm.category)
+    ? [...editMedForm.category]
+    : editMedForm.category ? [editMedForm.category] : [];
+  if (finalCategories.includes("Other")) {
+    finalCategories = finalCategories.filter(c => c !== "Other");
+    if (editMedForm.customCategory) finalCategories.push(editMedForm.customCategory);
+  }
+  if (finalCategories.length === 0) finalCategories.push("Miscellaneous");
+
   try {
     let data, headers;
     if (editMedImage) {
@@ -394,16 +422,13 @@ export default function PharmacyDashboard() {
       data.append("price", editMedForm.price);
       data.append("mrp", editMedForm.mrp);
       data.append("stock", editMedForm.stock);
-      if (editMedForm.category === "Other") {
-        data.append("category", editMedForm.customCategory);
-      } else {
-        data.append("category", editMedForm.category);
-      }
+      // CRUCIAL: category should be sent as JSON if array
+      data.append("category", JSON.stringify(finalCategories));
       data.append("type", editMedForm.type);
       if (editMedForm.type === "Other") {
         data.append("customType", editMedForm.customType);
       }
-      data.append("image", editMedImage); // <-- image added
+      data.append("image", editMedImage);
       headers = {
         Authorization: `Bearer ${token}`,
         "Content-Type": "multipart/form-data",
@@ -415,9 +440,7 @@ export default function PharmacyDashboard() {
         price: editMedForm.price,
         mrp: editMedForm.mrp,
         stock: editMedForm.stock,
-        category: editMedForm.category === "Other"
-          ? editMedForm.customCategory
-          : editMedForm.category,
+        category: finalCategories,
         type: editMedForm.type,
         ...(editMedForm.type === "Other" && { customType: editMedForm.customType })
       };
@@ -432,7 +455,7 @@ export default function PharmacyDashboard() {
 
     setMedMsg("Medicine updated!");
     setEditMedId(null);
-    setEditMedImage(null); // Clear image
+    setEditMedImage(null);
     if (editFileInputRef.current) editFileInputRef.current.value = "";
   } catch {
     setMedMsg("Failed to update medicine.");
@@ -940,7 +963,7 @@ const handleEditImageChange = (e) => {
               ))}
             </Select>
           </FormControl>
-          {editMedForm.category === "Other" && (
+          {((Array.isArray(editMedForm.category) ? editMedForm.category.includes("Other") : editMedForm.category === "Other")) && (
             <TextField
               label="Custom Category"
               fullWidth
@@ -1074,15 +1097,16 @@ const handleEditImageChange = (e) => {
             ))}
           </Select>
         </FormControl>
-        {medForm.category === "Other" && (
-          <TextField
-            label="Custom Category"
-            value={medForm.customCategory}
-            onChange={e => setMedForm(f => ({ ...f, customCategory: e.target.value }))}
-            onFocus={() => setIsEditing(true)}
-            onBlur={() => setIsEditing(false)}
-          />
-        )}
+        {((Array.isArray(medForm.category) ? medForm.category.includes("Other") : medForm.category === "Other")) && (
+  <TextField
+    label="Custom Category"
+    value={medForm.customCategory}
+    onChange={e => setMedForm(f => ({ ...f, customCategory: e.target.value }))}
+    onFocus={() => setIsEditing(true)}
+    onBlur={() => setIsEditing(false)}
+  />
+)}
+
         {/* --- TYPE FIELD --- */}
         <FormControl fullWidth>
           <InputLabel>Type</InputLabel>
