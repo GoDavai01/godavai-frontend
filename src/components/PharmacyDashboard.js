@@ -96,6 +96,7 @@ const MED_CATEGORIES = [
   "Supplements",
   "Other"
 ];
+
 const TYPE_OPTIONS = [
   "Tablet",
   "Syrup",
@@ -163,6 +164,18 @@ export default function PharmacyDashboard() {
   // Medicines management
   const [showMeds, setShowMeds] = useState(false);
   const [medicines, setMedicines] = useState([]);
+  // This list will include all default + custom categories used in this pharmacy
+const allPharmacyCategories = React.useMemo(() => {
+  const allCats = medicines.flatMap(m =>
+    Array.isArray(m.category) ? m.category : (m.category ? [m.category] : [])
+  );
+  const unique = Array.from(new Set([
+    ...MED_CATEGORIES,
+    ...allCats.filter(c => !!c && !MED_CATEGORIES.includes(c))
+  ]));
+  return unique.filter(c => c !== "Other").concat("Other");
+}, [medicines]);
+
   const [medForm, setMedForm] = useState({
     name: "",
     brand: "",
@@ -371,23 +384,34 @@ export default function PharmacyDashboard() {
 
   // Start editing a medicine
   const handleEditMedicine = (med) => {
-    setEditMedId(med.id || med._id);
-    setEditMedForm({
-      name: med.name,
-      brand: med.brand || "",
-      price: med.price,
-      mrp: med.mrp,
-      stock: med.stock,
-      category: Array.isArray(med.category)
+  // Ensure category is always array
+  const medCats = Array.isArray(med.category)
     ? med.category
     : med.category
     ? [med.category]
-    : [],
-      customCategory: "",
-      type: TYPE_OPTIONS.includes(med.type) ? med.type : "Other",
-      customType: TYPE_OPTIONS.includes(med.type) ? "" : (med.type || "")
-    });
-  };
+    : [];
+  // Find any custom categories (not in default list)
+  const customCats = medCats.filter(c => !MED_CATEGORIES.includes(c));
+  let newCategory = [...medCats];
+  let customCategory = "";
+  if (customCats.length > 0) {
+    // Show custom field by including "Other"
+    newCategory = [...medCats.filter(c => MED_CATEGORIES.includes(c)), "Other"];
+    customCategory = customCats[0]; // If you ever want multi, use join(", ")
+  }
+  setEditMedId(med.id || med._id);
+  setEditMedForm({
+    name: med.name,
+    brand: med.brand || "",
+    price: med.price,
+    mrp: med.mrp,
+    stock: med.stock,
+    category: newCategory,
+    customCategory,
+    type: TYPE_OPTIONS.includes(med.type) ? med.type : "Other",
+    customType: TYPE_OPTIONS.includes(med.type) ? "" : (med.type || "")
+  });
+};
 
   // Save edit
   const handleSaveMedicine = async () => {
@@ -955,12 +979,13 @@ const handleEditImageChange = (e) => {
               onChange={e => setEditMedForm(f => ({ ...f, category: e.target.value }))}
               renderValue={(selected) => selected.join(', ')}
             >
-              {MED_CATEGORIES.map(opt => (
-                <MenuItem key={opt} value={opt}>
-                  <Checkbox checked={editMedForm.category.indexOf(opt) > -1} />
-                  <ListItemText primary={opt} />
-                </MenuItem>
-              ))}
+              {allPharmacyCategories.map(opt => (
+  <MenuItem key={opt} value={opt}>
+    <Checkbox checked={editMedForm.category.indexOf(opt) > -1} />
+    <ListItemText primary={opt} />
+  </MenuItem>
+))}
+
             </Select>
           </FormControl>
           {((Array.isArray(editMedForm.category) ? editMedForm.category.includes("Other") : editMedForm.category === "Other")) && (
@@ -1089,12 +1114,13 @@ const handleEditImageChange = (e) => {
               PaperProps: { style: { zIndex: 2000 } }
             }}
           >
-            {MED_CATEGORIES.map(opt => (
-              <MenuItem key={opt} value={opt}>
-                <Checkbox checked={medForm.category.indexOf(opt) > -1} />
-                <ListItemText primary={opt} />
-              </MenuItem>
-            ))}
+            {allPharmacyCategories.map(opt => (
+  <MenuItem key={opt} value={opt}>
+    <Checkbox checked={medForm.category.indexOf(opt) > -1} />
+    <ListItemText primary={opt} />
+  </MenuItem>
+))}
+
           </Select>
         </FormControl>
         {((Array.isArray(medForm.category) ? medForm.category.includes("Other") : medForm.category === "Other")) && (
