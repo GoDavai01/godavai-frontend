@@ -65,7 +65,16 @@ export default function RegisterDeliveryPartner() {
     if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(form.panNumber)) {
       setSnackbar({ open: true, message: "Enter valid PAN number", severity: "error" }); return;
     }
-    setLoading(true);
+      // === ADD THESE TWO CHECKS ===
+  if (!aadhaarFile) {
+    setSnackbar({ open: true, message: "Please upload Aadhaar card", severity: "error" });
+    return;
+  }
+  if (!panFile) {
+    setSnackbar({ open: true, message: "Please upload PAN card", severity: "error" });
+    return;
+  }
+  setLoading(true);
     const data = new FormData();
     Object.keys(form).forEach(key => data.append(key, form[key]));
     if (aadhaarFile) data.append("aadhaarDoc", aadhaarFile);
@@ -125,10 +134,22 @@ export default function RegisterDeliveryPartner() {
               helperText="12 digit Aadhaar"
               disabled={loading}
             />
-            <Button variant="outlined" component="label" disabled={loading}>
-              Upload Aadhaar Card
-              <input type="file" name="aadhaarDoc" hidden accept="image/*,.pdf" onChange={e => handleFileChange(e, setAadhaarFile)} />
-            </Button>
+            {/* Aadhaar Upload */}
+<Stack direction="row" alignItems="center" spacing={1}>
+  <Button variant="outlined" component="label" disabled={loading}>
+    Upload Aadhaar Card
+    <input
+      type="file"
+      name="aadhaarDoc"
+      hidden
+      accept="image/*,.pdf"
+      onChange={e => handleFileChange(e, setAadhaarFile)}
+    />
+  </Button>
+  {!aadhaarFile && <Typography variant="caption" color="error">*Required</Typography>}
+  {aadhaarFile && <Typography variant="caption" color="success.main">Selected: {aadhaarFile.name}</Typography>}
+</Stack>
+
             <TextField
               label="PAN Number"
               name="panNumber"
@@ -139,10 +160,21 @@ export default function RegisterDeliveryPartner() {
               helperText="Format: ABCDE1234F"
               disabled={loading}
             />
-            <Button variant="outlined" component="label" disabled={loading}>
-              Upload PAN Card
-              <input type="file" name="panDoc" hidden accept="image/*,.pdf" onChange={e => handleFileChange(e, setPanFile)} />
-            </Button>
+            {/* PAN Upload */}
+<Stack direction="row" alignItems="center" spacing={1}>
+  <Button variant="outlined" component="label" disabled={loading}>
+    Upload PAN Card
+    <input
+      type="file"
+      name="panDoc"
+      hidden
+      accept="image/*,.pdf"
+      onChange={e => handleFileChange(e, setPanFile)}
+    />
+  </Button>
+  {!panFile && <Typography variant="caption" color="error">*Required</Typography>}
+  {panFile && <Typography variant="caption" color="success.main">Selected: {panFile.name}</Typography>}
+</Stack>
             <TextField label="Bank Account Number" name="bankAccount" required value={form.bankAccount} onChange={handleChange} disabled={loading} />
             <TextField label="IFSC Code" name="ifsc" required value={form.ifsc} onChange={handleChange} disabled={loading} />
             <TextField label="Account Holder Name" name="accountHolder" required value={form.accountHolder} onChange={handleChange} disabled={loading} />
