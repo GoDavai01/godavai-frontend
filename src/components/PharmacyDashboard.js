@@ -334,7 +334,6 @@ const allPharmacyCategories = React.useMemo(() => {
   }
 };
 
-
   // Add medicine - multipart if image
   const handleAddMedicine = async () => {
   if (!medForm.name || !medForm.price || !medForm.mrp || !medForm.stock ||
