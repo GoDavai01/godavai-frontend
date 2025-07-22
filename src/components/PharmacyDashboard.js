@@ -14,6 +14,7 @@ import PrescriptionOrdersTab from "./PrescriptionOrdersTab";
 import PhotoCamera from "@mui/icons-material/PhotoCamera";
 import Checkbox from "@mui/material/Checkbox";
 import ListItemText from "@mui/material/ListItemText";
+import stringSimilarity from "string-similarity";
 import axios from "axios";
 import { Table, TableHead, TableRow, TableCell, TableBody } from "@mui/material";
 
@@ -315,6 +316,24 @@ const allPharmacyCategories = React.useMemo(() => {
     setToken("");
     setMsg("Logged out.");
   };
+
+  const handleCustomCategoryBlur = (customCategory) => {
+  if (!customCategory) return;
+  const match = stringSimilarity.findBestMatch(
+    customCategory.trim(),
+    allPharmacyCategories
+  );
+  if (match.bestMatch.rating > 0.75) {
+    setMedMsg(
+      `Category "${customCategory}" looks similar to existing category "${match.bestMatch.target}". Please check spelling or select from the list.`
+    );
+    // Optionally: block submit, or set flag so you only submit if user confirms.
+  } else {
+    // No issue, clear msg
+    if (medMsg.toLowerCase().includes('category')) setMedMsg('');
+  }
+};
+
 
   // Add medicine - multipart if image
   const handleAddMedicine = async () => {
@@ -989,15 +1008,22 @@ const handleEditImageChange = (e) => {
             </Select>
           </FormControl>
           {((Array.isArray(editMedForm.category) ? editMedForm.category.includes("Other") : editMedForm.category === "Other")) && (
-            <TextField
-              label="Custom Category"
-              fullWidth
-              value={editMedForm.customCategory}
-              onChange={e => setEditMedForm(f => ({ ...f, customCategory: e.target.value }))}
-              onFocus={() => setIsEditing(true)}
-              onBlur={() => setIsEditing(false)}
-            />
-          )}
+  <TextField
+    label="Custom Category"
+    fullWidth
+    value={editMedForm.customCategory}
+    onChange={e => setEditMedForm(f => ({ ...f, customCategory: e.target.value }))}
+    onFocus={() => setIsEditing(true)}
+    // 👇 ADD THIS onBlur handler:
+    onBlur={e => {
+      setIsEditing(false);
+      handleCustomCategoryBlur(e.target.value);
+    }}
+    error={!!medMsg && medMsg.toLowerCase().includes('category')}
+    helperText={!!medMsg && medMsg.toLowerCase().includes('category') ? medMsg : ''}
+  />
+)}
+
           {/* --- TYPE FIELD --- */}
           <FormControl fullWidth>
             <InputLabel>Type</InputLabel>
@@ -1129,9 +1155,16 @@ const handleEditImageChange = (e) => {
     value={medForm.customCategory}
     onChange={e => setMedForm(f => ({ ...f, customCategory: e.target.value }))}
     onFocus={() => setIsEditing(true)}
-    onBlur={() => setIsEditing(false)}
+    // 🚨 Add THIS onBlur handler:
+    onBlur={e => {
+      setIsEditing(false);
+      handleCustomCategoryBlur(e.target.value); // <-- New function (see below)
+    }}
+    error={!!medMsg && medMsg.toLowerCase().includes('category')}
+    helperText={!!medMsg && medMsg.toLowerCase().includes('category') ? medMsg : ''}
   />
 )}
+
 
         {/* --- TYPE FIELD --- */}
         <FormControl fullWidth>
