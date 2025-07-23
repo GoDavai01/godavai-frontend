@@ -1,423 +1,303 @@
 // src/components/Home.js
 import React, { useEffect, useState } from "react";
-import {
-  Box, Typography, Card, Button, Stack
-} from "@mui/material";
-import Carousel from "react-multi-carousel";
-import "react-multi-carousel/lib/styles.css";
-import axios from "axios";
-import LocalPharmacyIcon from "@mui/icons-material/LocalPharmacy";
+import { Card, CardContent } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
+import { Badge } from "../components/ui/badge";
+import { Input } from "../components/ui/input";
+import { Avatar } from "../components/ui/avatar";
+import { ScrollArea } from "../components/ui/scroll-area";
+import { ChevronRight, UploadCloud, MapPin, Bell, User, Search, X } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useNavigate } from "react-router-dom";
-import Navbar from "./Navbar";
+import BottomNavBar from "./BottomNavBar";
+import PrescriptionUploadModal from "./PrescriptionUploadModal";
 
+// --- Constants ---
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-
-const offerBanners = [
-  { img: "/images/offer1.png" },
-  { img: "/images/offer2.png" },
-  { img: "/images/offer3.png" }
+const categories = [
+  "Fever", "Diabetes", "Cold", "Heart", "Antibiotic", "Ayurveda", "Painkiller", "Cough"
 ];
-
-const mainTiles = [
-  { title: "Medicines in 13–29 min", subtitle: "Fastest delivery at your doorstep", path: "/pharmacies-near-you" },
-  { title: "Book Doctor Appointment", subtitle: "Clinic & hospital doctors nearby", path: "/doctors" },
-  { title: "Book Lab Test Near You", subtitle: "Accredited labs, home pickup", path: "/labs" },
-  { title: "Order Again", subtitle: "Repeat your last order", path: "/orders" },
-];
-
-const bottomNavItems = [
-  { label: "GoDavai", path: "/home" },
-  { label: "Medicines", path: "/pharmacies-near-you" },
-  { label: "Doctor", path: "/doctors" },
-  { label: "Lab Test", path: "/labs" }
-];
-
-// ADJUST THESE heights as per your real app if needed:
-const CART_BAR_HEIGHT = 68; // px, height of your View Cart bar
-const NAV_BAR_HEIGHT = 56;  // px, height of your bottom navbar
 
 export default function Home() {
+  // State
   const [mostOrdered, setMostOrdered] = useState([]);
+  const [pharmaciesNearby, setPharmaciesNearby] = useState([]);
   const [search, setSearch] = useState("");
-  const [activeNav, setActiveNav] = useState(0);
   const { user } = useAuth();
   const { cart, addToCart } = useCart();
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const navigate = useNavigate();
-  const [activeOrder, setActiveOrder] = useState(null);
+  const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
+  const [offerBannerVisible, setOfferBannerVisible] = useState(true);
 
-  // Track Order Bar State
-  const [activeOrderId, setActiveOrderId] = useState(() => localStorage.getItem("activeOrderId"));
-
-  // Always keep Track Order bar in sync with real ongoing orders (not just localStorage)
+  // Fetch Data
   useEffect(() => {
-  const checkOrder = async () => {
-    let id = localStorage.getItem("activeOrderId");
-    if (id) {
-      try {
-        const res = await axios.get(`${API_BASE_URL}/api/orders/${id}`);
-        const order = res.data;
-        // If delivered or cancelled, clear bar
-        if (order.status === "delivered" || order.status === "cancelled" || order.status === "rejected") {
-          localStorage.removeItem("activeOrderId");
-          setActiveOrderId(null);
-          setActiveOrder(null);
-        } else {
-          setActiveOrderId(id);
-          setActiveOrder(order);
-          return;
-        }
-      } catch {
-        setActiveOrderId(null);
-        setActiveOrder(null);
-      }
-    } else {
-      setActiveOrder(null);
-    }
-    // Fallback: Try to find any ongoing order from list
-    if (user && user._id) {
-      try {
-        const ordersRes = await axios.get(`${API_BASE_URL}/api/orders?user=${user._id}&limit=5`);
-        const ongoing = (ordersRes.data || []).find(
-          o => o.status !== "delivered" && o.status !== "cancelled" && o.status !== "rejected"
-        );
-        if (ongoing && ongoing._id) {
-          localStorage.setItem("activeOrderId", ongoing._id);
-          setActiveOrderId(ongoing._id);
-          setActiveOrder(ongoing);
-        } else {
-          setActiveOrderId(null);
-          setActiveOrder(null);
-        }
-      } catch {
-        setActiveOrderId(null);
-        setActiveOrder(null);
-      }
-    }
+    const city = localStorage.getItem("city") || "Mumbai";
+    const area = localStorage.getItem("area") || "";
+    fetch(`${API_BASE_URL}/api/pharmacies?city=${encodeURIComponent(city)}${area ? `&area=${encodeURIComponent(area)}` : ""}`)
+      .then(res => res.json())
+      .then(pharmacies => {
+        const active = pharmacies.filter(ph => ph.active);
+        setPharmaciesNearby(active.slice(0, 10));
+        fetch(`${API_BASE_URL}/api/medicines/most-ordered?city=${encodeURIComponent(city)}`)
+          .then(res => res.json())
+          .then(meds => {
+            const filtered = meds.filter(med => med.pharmacy && active.some(ph => ph._id === (med.pharmacy._id || med.pharmacy)));
+            setMostOrdered(filtered.slice(0, 10));
+          })
+          .catch(() => setMostOrdered([]));
+      })
+      .catch(() => {
+        setPharmaciesNearby([]);
+        setMostOrdered([]);
+      });
+  }, []);
+
+  // Greeting
+  const timeGreet = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
   };
 
-  checkOrder();
-  const interval = setInterval(checkOrder, 3000);
-  return () => clearInterval(interval);
-}, [user && user._id]);
+  // Last Order Summary
+  const lastOrderItemsSummary = cart.length
+    ? cart.map(i => `${i.name} x${i.quantity}`).join(", ")
+    : "No recent orders";
 
- useEffect(() => {
-  // 1. Get city & area from localStorage if needed
-  const city = localStorage.getItem("city") || "Mumbai";
-  const area = localStorage.getItem("area") || "";
-
-  // 2. Fetch active pharmacies for this city/area
-  fetch(`${API_BASE_URL}/api/pharmacies?city=${encodeURIComponent(city)}${area ? `&area=${encodeURIComponent(area)}` : ""}`)
-    .then(res => res.json())
-    .then(pharmacies => {
-      // Only active pharmacies
-      const activePharmacyIds = pharmacies
-        .filter(ph => ph.active) // <-- Defensive, but your backend filters this anyway
-        .map(ph => ph._id);
-
-      // 3. Fetch most-ordered medicines
-      fetch(`${API_BASE_URL}/api/medicines/most-ordered?city=${encodeURIComponent(city)}`)
-        .then(res => res.json())
-        .then(meds => {
-          // 4. Only show medicines from active pharmacies
-          const filtered = meds.filter(med => med.pharmacy && activePharmacyIds.includes(med.pharmacy._id || med.pharmacy));
-          setMostOrdered(filtered);
-        })
-        .catch(() => setMostOrdered([]));
-    })
-    .catch(() => setMostOrdered([]));
-}, []);
-
-  const handleNavClick = (idx, path) => {
-    setActiveNav(idx);
-    navigate(path);
-  };
-
-  const carouselResponsive = {
-    desktop: { breakpoint: { max: 3000, min: 1024 }, items: 1 },
-    tablet: { breakpoint: { max: 1024, min: 464 }, items: 1 },
-    mobile: { breakpoint: { max: 464, min: 0 }, items: 1 }
-  };
-
-  // -------- FIX: calculate cart bar visibility --------
-  const cartBarVisible = cartCount > 0;
-  // ----------------------------------------------------
-
-  const hideTrackBar =
-  !activeOrder ||
-  (
-    ["cancelled", "rejected"].includes(activeOrder.status) &&
-    localStorage.getItem(`order:${activeOrder._id}:cancelSeen`) === "true"
-  );
-
+  // --- UI ---
   return (
-    <Box sx={{ bgcolor: "#f9fafb", minHeight: "100vh", pb: 12 }}>
-      <Navbar
-        search={search}
-        onSearchChange={e => setSearch(e.target.value)}
-        onSearchEnter={query =>
-          window.location.href = `/search?q=${encodeURIComponent(query.trim())}`
-        }
-      />
-      {/* Banner Carousel */}
-      <Box sx={{ maxWidth: 480, mx: "auto", mt: 2, borderRadius: 4, boxShadow: 1, overflow: "hidden" }}>
-        <Carousel
-          responsive={carouselResponsive}
-          infinite
-          autoPlay
-          autoPlaySpeed={3200}
-          showDots
-          arrows={false}
-        >
-          {offerBanners.map((banner, i) => (
-            <Box
-              key={i}
-              sx={{
-                position: "relative",
-                width: "100%",
-                height: { xs: 110, sm: 140 },
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "#e9faf7"
-              }}
-            >
-              <img
-                src={banner.img}
-                alt=""
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  borderRadius: 20,
-                  filter: "brightness(0.93)"
-                }}
-              />
-            </Box>
-          ))}
-        </Carousel>
-      </Box>
+    <div className="relative min-h-screen max-w-md mx-auto bg-gradient-to-br from-slate-50 via-yellow-50 to-blue-100 pb-28">
+      {/* Sticky Top Bar */}
+      <div className="sticky top-0 z-30 bg-white/70 backdrop-blur-lg border-b border-gray-200 px-5 py-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => navigate("/set-location")}>
+          <MapPin className="text-primary w-6 h-6" />
+          <span className="font-bold text-lg text-gray-800 truncate max-w-[150px]">
+            {localStorage.getItem("area") || "Set delivery location"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/notifications")}>
+            <Bell className="w-5 h-5" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => navigate("/profile")}>
+            <Avatar className="w-8 h-8 bg-gradient-to-r from-yellow-300 via-pink-200 to-blue-200 border">
+              <User className="w-5 h-5 text-gray-700" />
+            </Avatar>
+          </Button>
+        </div>
+      </div>
 
-      {/* Main Tiles */}
-      <Stack spacing={2} sx={{ maxWidth: 480, mx: "auto", px: 2, mt: 3 }}>
-        {mainTiles.map((tile, i) => (
-          <Card
-            key={tile.title}
-            onClick={() => {
-              if (tile.title === "Order Again") {
-                navigate("/orders");
-              } else {
-                navigate(tile.path);
-              }
-            }}
-            sx={{
-              px: 2,
-              py: 1.6,
-              boxShadow: 1,
-              borderRadius: 99,
-              cursor: "pointer",
-              bgcolor: "#fff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              transition: "box-shadow 0.16s",
-              "&:hover": { boxShadow: 3 }
-            }}
+      {/* Greeting & Hero */}
+      <div className="px-5 pt-4 flex items-center gap-4">
+        <div>
+          <div className="text-xl font-extrabold text-gray-900">
+            {timeGreet()}, {user?.name?.split(" ")[0] || "Friend"}!
+          </div>
+          <div className="text-base text-gray-500 mt-0.5">What do you need today?</div>
+        </div>
+        {/* Modern SVG Hero */}
+        <img src="/img/hero-medicine-girl.svg" alt="" className="w-16 h-16 drop-shadow-xl ml-auto hidden sm:block" />
+      </div>
+
+      {/* Offer Banner (Dismissible, glassmorphic) */}
+      <AnimatePresence>
+        {offerBannerVisible && (
+          <motion.div
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -30, opacity: 0 }}
+            className="px-5 mt-4"
           >
-            <Box>
-              <Typography fontWeight={700} fontSize={17}>{tile.title}</Typography>
-              <Typography fontSize={14} color="text.secondary" fontWeight={500}>
-                {tile.subtitle}
-              </Typography>
-            </Box>
-            <Typography fontWeight={800} fontSize={26} color="#13C0A2">➔</Typography>
-          </Card>
-        ))}
-      </Stack>
-
-      {/* Most Ordered Medicines as Cards */}
-      <Box sx={{ maxWidth: 480, mx: "auto", mt: 4, mb: 2, px: 2 }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-          <Typography fontWeight={700} fontSize={17}>
-            Most Ordered Medicines
-          </Typography>
-          <Typography fontWeight={800} color="#13C0A2" fontSize={18}>➔</Typography>
-        </Stack>
-        <Box
-          sx={{
-            display: "flex",
-            overflowX: "auto",
-            pb: 1,
-            gap: 2
-          }}
-        >
-          {mostOrdered.map((med, idx) => (
-            <Card
-              key={med._id || med.name || idx}
-              sx={{
-                minWidth: 170,
-                maxWidth: 190,
-                bgcolor: "#e6f9f5",
-                color: "#138a72",
-                fontWeight: 600,
-                fontSize: 16,
-                borderRadius: 3,
-                px: 2,
-                py: 1.7,
-                mr: 1.5,
-                boxShadow: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "flex-start",
-                cursor: "pointer",
-              }}
-              onClick={() => navigate("/pharmacies-near-you")}
-            >
-              <Typography
-                fontWeight={700}
-                fontSize={16}
-                sx={{ mb: 0.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-              >
-                {med.name}
-              </Typography>
-              {med.price &&
-                <Typography fontWeight={500} fontSize={15} color="#13C0A2" sx={{ mb: 0.2 }}>
-                  ₹{med.price}
-                </Typography>
-              }
+            <Alert className="border border-yellow-200 bg-gradient-to-r from-yellow-50 via-white/90 to-orange-50 shadow-md backdrop-blur-md rounded-2xl flex items-center">
+              <div className="flex-1">
+                <AlertTitle className="font-bold text-yellow-700">🎉 Offer!</AlertTitle>
+                <AlertDescription>
+                  <span className="font-semibold">25% off your next order!</span> Use code <b>SUPER25</b>
+                </AlertDescription>
+              </div>
               <Button
-                onClick={e => {
-                  e.stopPropagation();
-                  addToCart(med);
-                }}
-                size="small"
-                sx={{
-                  bgcolor: "#13C0A2",
-                  color: "#fff",
-                  px: 2,
-                  py: 0.7,
-                  fontWeight: 700,
-                  borderRadius: 2,
-                  fontSize: 14,
-                  textTransform: "none",
-                  mt: 0.8,
-                  "&:hover": { bgcolor: "#139e84" }
-                }}
+                variant="ghost"
+                size="icon"
+                className="ml-2"
+                onClick={() => setOfferBannerVisible(false)}
               >
-                Add to Cart
+                <X className="w-5 h-5" />
               </Button>
-              <Typography fontSize={12} color="#888" mt={0.7}>
-                22-30 min delivery
-              </Typography>
-            </Card>
+            </Alert>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Search Bar */}
+      <div className="px-5 mt-5">
+        <div className="relative">
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && search.trim() && navigate(`/search?q=${encodeURIComponent(search.trim())}`)}
+            placeholder="Search for Medicines, Doctors, Labs"
+            className="rounded-2xl border border-gray-200 bg-white/80 shadow focus:ring-primary/40 text-base pl-12 py-3"
+          />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-primary w-6 h-6" />
+        </div>
+      </div>
+
+      {/* Action Cards */}
+      <div className="grid grid-cols-2 gap-5 mt-8 px-5">
+        <div
+          onClick={() => navigate("/pharmacies-near-you")}
+          className="group rounded-3xl bg-gradient-to-br from-blue-50 via-white to-yellow-100 shadow-xl border border-gray-100 cursor-pointer flex flex-col items-center py-8 transition hover:scale-105 hover:shadow-2xl"
+        >
+          <img src="/img/modern-medicine.svg" className="w-14 h-14 mb-3 group-hover:scale-110 transition" alt="" />
+          <div className="font-extrabold text-xl text-blue-700 mb-1">Medicines</div>
+          <div className="text-xs text-gray-500">Order Now</div>
+        </div>
+        <div
+          onClick={() => navigate("/doctors")}
+          className="group rounded-3xl bg-gradient-to-br from-pink-50 via-white to-purple-100 shadow-xl border border-gray-100 cursor-pointer flex flex-col items-center py-8 transition hover:scale-105 hover:shadow-2xl"
+        >
+          <img src="/img/modern-doctor.svg" className="w-14 h-14 mb-3 group-hover:scale-110 transition" alt="" />
+          <div className="font-extrabold text-xl text-pink-700 mb-1">Doctors</div>
+          <div className="text-xs text-gray-500">Book Now</div>
+        </div>
+      </div>
+
+      {/* Pharmacies Near You (Horizontal scroll) */}
+      <div className="mt-9 px-5">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-bold text-lg text-blue-800 flex items-center gap-1">
+            <span className="bg-blue-100 rounded-full p-1 mr-1">🏥</span> Pharmacies Near You
+          </span>
+          <Button size="sm" variant="link" className="font-bold text-primary"
+            onClick={() => navigate("/pharmacies-near-you")}
+          >
+            See all <ChevronRight className="inline w-4 h-4" />
+          </Button>
+        </div>
+        <ScrollArea className="w-full whitespace-nowrap">
+          <div className="flex gap-4 pb-2">
+            {pharmaciesNearby.map((ph, idx) => (
+              <div
+                key={ph._id || idx}
+                className="min-w-[110px] max-w-[120px] px-2 py-4 flex flex-col items-center rounded-2xl shadow-lg bg-white/90 border border-blue-50 hover:bg-blue-50 cursor-pointer transition hover:scale-105"
+                onClick={() => navigate(`/medicines/${ph._id}`)}
+              >
+                <img src="/img/pharmacy-modern.svg" className="w-8 h-8 mb-2" alt="" />
+                <div className="font-bold text-[16px] truncate text-center text-blue-800">{ph.name}</div>
+                <div className="text-xs text-gray-500">{ph.distanceKm ? ph.distanceKm.toFixed(1) : "1.2"} km</div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+
+      {/* Medicines Near You (Horizontal scroll) */}
+      <div className="mt-8 px-5">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-bold text-lg text-pink-700 flex items-center gap-1">
+            <span className="bg-pink-100 rounded-full p-1 mr-1">💊</span> Medicines Near You
+          </span>
+          <Button size="sm" variant="link" className="font-bold text-primary"
+            onClick={() => navigate("/pharmacies-near-you")}
+          >
+            View all <ChevronRight className="inline w-4 h-4" />
+          </Button>
+        </div>
+        <ScrollArea className="w-full whitespace-nowrap">
+          <div className="flex gap-4 pb-2">
+            {mostOrdered.map((med, idx) => (
+              <div
+                key={med._id || idx}
+                className="min-w-[120px] max-w-[130px] px-2 py-4 flex flex-col items-center rounded-2xl shadow-lg bg-white/90 border border-pink-50 hover:bg-pink-50 cursor-pointer transition hover:scale-105"
+                onClick={() => navigate("/pharmacies-near-you")}
+              >
+                <img src="/img/medicine-modern.svg" className="w-9 h-9 mb-2" alt="" />
+                <div className="font-bold text-[15px] truncate text-center text-pink-700">{med.name}</div>
+                <div className="text-xs text-primary font-bold">₹{med.price}</div>
+                <Button
+                  size="xs"
+                  className="mt-1 bg-gradient-to-r from-blue-300 to-yellow-200 text-xs text-gray-700 shadow rounded-full hover:scale-105"
+                  onClick={e => { e.stopPropagation(); addToCart(med); }}
+                >Add</Button>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+
+      {/* Categories Chips */}
+      <div className="mt-9 px-5">
+        <div className="font-bold text-base mb-3 text-gray-800">Categories</div>
+        <div className="flex gap-3 flex-wrap">
+          {categories.map((cat, i) => (
+            <button
+              key={cat}
+              onClick={() => navigate(`/search?q=${encodeURIComponent(cat)}`)}
+              className={`flex items-center gap-1 rounded-full px-5 py-2 font-semibold text-sm border shadow-md transition hover:scale-105
+                ${i % 2 === 0 ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-yellow-50 text-yellow-700 border-yellow-200"}
+                hover:bg-white`}
+            >
+              {/* You can add category icons here */}
+              {cat}
+            </button>
           ))}
-        </Box>
-      </Box>
+        </div>
+      </div>
 
-      {/* Cheer-up Message */}
-      <Box sx={{
-        width: "100vw",
-        display: "flex",
-        justifyContent: "center",
-        my: 2
-      }}>
-        <Box
-          sx={{
-            bgcolor: "#fff",
-            px: 3, py: 1.3,
-            borderRadius: 99,
-            boxShadow: 2,
-            fontWeight: 700,
-            color: "#13C0A2",
-            fontSize: 17,
-            letterSpacing: 0.5,
-            textAlign: "center"
-          }}
-        >
-          Fastest medicine, happiest you! Get well soon! 💊❤️
-        </Box>
-      </Box>
+      {/* Order Again */}
+      <div className="mt-10 px-5">
+        <div className="font-bold text-base mb-2 text-blue-800 flex items-center gap-1">
+          <span className="bg-blue-100 rounded-full p-1">🔁</span> Order Again
+        </div>
+        <Card className="rounded-2xl shadow-2xl px-5 py-5 flex flex-col gap-2 bg-white/90 border border-blue-100">
+          <div className="font-bold text-[16px] text-gray-900 mb-1">Your last order</div>
+          <div className="text-[14px] text-gray-500 truncate">
+            {lastOrderItemsSummary}
+          </div>
+          <div className="flex gap-2 mt-3">
+            <Button
+              size="sm"
+              className="bg-gradient-to-r from-blue-400 to-green-200 text-white font-bold shadow rounded-full px-4 py-2 hover:scale-105 transition"
+              onClick={() => navigate("/orders")}
+            >
+              Order Again
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="bg-yellow-400/90 text-primary font-bold shadow rounded-full px-4 py-2 flex gap-2 items-center hover:scale-105 transition"
+              onClick={() => setPrescriptionModalOpen(true)}
+            >
+              <UploadCloud className="w-5 h-5" />
+              Upload Prescription
+            </Button>
+          </div>
+        </Card>
+      </div>
 
-      {/* Track Order Bar (ALWAYS sits above the view cart bar if cart is visible) */}
-      {!hideTrackBar && activeOrderId && (
-        <Box
-          sx={{
-            position: "fixed",
-            left: 0,
-            right: 0,
-            // BOTTOM CALC LOGIC: sits above cart if cart is visible, otherwise above nav
-            bottom: cartBarVisible
-              ? `${CART_BAR_HEIGHT + NAV_BAR_HEIGHT + 8}px`
-              : `${NAV_BAR_HEIGHT + 8}px`,
-            zIndex: 1301,
-            px: 2, py: 1,
-            maxWidth: 480, mx: "auto",
-            bgcolor: "#fff",
-            borderRadius: 3,
-            boxShadow: "0 2px 10px #13C0A225",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            border: "1.5px solid #eaf4fb",
-            transition: "bottom 0.2s"
-          }}
-        >
-          <Stack direction="row" alignItems="center" spacing={1.2}>
-            <LocalPharmacyIcon sx={{ color: "#13C0A2", fontSize: 28 }} />
-            <Typography sx={{ fontWeight: 800, color: "#13C0A2", fontSize: 17 }}>
-              Track your order in real time!
-            </Typography>
-          </Stack>
-          <Button
-            variant="contained"
-            sx={{
-              bgcolor: "#FFD43B", color: "#222", borderRadius: 2,
-              fontWeight: 900, ml: 2, px: 3, boxShadow: "0 2px 12px #ffe999"
-            }}
-            onClick={() => navigate(`/order-tracking/${activeOrderId}`)}
-          >
-            Track Order
-          </Button>
-        </Box>
-      )}
-
-      {/* BottomNavbar */}
-      <Box
-        sx={{
-          position: "fixed",
-          left: 0, right: 0, bottom: 0,
-          width: "100vw",
-          bgcolor: "#13C0A2",
-          borderTop: "1.5px solid #e3e3e3",
-          display: "flex",
-          justifyContent: "space-around",
-          alignItems: "center",
-          py: 1.2,
-          zIndex: 1201,
-          boxShadow: "0px -1px 8px 0px #13C0A235"
-        }}
+      {/* Floating Upload Prescription Button (MOBILE FAB style) */}
+      <Button
+        variant="default"
+        size="lg"
+        className="fixed bottom-28 right-6 z-50 rounded-full shadow-2xl bg-gradient-to-r from-yellow-400 to-orange-300 text-primary font-bold flex gap-2 px-7 py-4 border-2 border-white/80 hover:scale-110 transition"
+        onClick={() => setPrescriptionModalOpen(true)}
       >
-        {bottomNavItems.map((item, idx) => (
-          <Button
-            key={item.label}
-            onClick={() => handleNavClick(idx, item.path)}
-            sx={{
-              fontWeight: idx === activeNav ? 800 : 600,
-              color: idx === activeNav ? "#FFD43B" : "#fff",
-              bgcolor: "transparent",
-              fontSize: 16,
-              borderRadius: 2,
-              minWidth: 0,
-              px: 0.7,
-              textTransform: "none"
-            }}
-          >
-            {item.label}
-          </Button>
-        ))}
-      </Box>
-    </Box>
+        <UploadCloud className="w-6 h-6" />
+        Upload Prescription
+      </Button>
+      <PrescriptionUploadModal
+        open={prescriptionModalOpen}
+        onClose={() => setPrescriptionModalOpen(false)}
+        userCity={localStorage.getItem("city") || "Mumbai"}
+      />
+
+      {/* Bottom Navbar */}
+      <BottomNavBar />
+    </div>
   );
 }

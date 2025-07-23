@@ -62,7 +62,9 @@
     ]
   },
   "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
     "shadcn-ui": "^0.9.5",
-    "tailwindcss": "^3.4.3"
+    "tailwindcss": "^3.4.17"
   }
 }
