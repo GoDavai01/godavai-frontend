@@ -417,9 +417,7 @@ export default function Home() {
   userCity={localStorage.getItem("city") || "Mumbai"}
 />
 
-{/* ALL FLOATING UI BELOW (add this new block!) */}
 <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col-reverse items-end gap-3 px-5 pb-4 pointer-events-none">
-  {/* Example: View Cart Bar (only if you have a cart bar, otherwise you can remove this block) */}
   {cart.length > 0 && (
     <div className="pointer-events-auto w-full">
       <div className="flex items-center justify-between bg-white shadow-xl rounded-2xl px-6 py-4 mb-2">
@@ -439,8 +437,6 @@ export default function Home() {
       </div>
     </div>
   )}
-
-  {/* Floating Upload Prescription Button */}
   <button
     className="pointer-events-auto flex items-center gap-2 rounded-full px-6 py-3 bg-[#13C0A2] text-white font-bold shadow-xl hover:bg-[#0e9c87] transition-all duration-150"
     onClick={() => setPrescriptionModalOpen(true)}
@@ -449,12 +445,9 @@ export default function Home() {
     <img src={ICONS.upload} alt="Upload" className="w-6 h-6" />
     Upload Prescription
   </button>
-
-  {/* Add any more floating bars/buttons here if you have others */}
 </div>
 
-<BottomNavBar />
-
+<BottomNavBar />  
     </div>
   );
 }
