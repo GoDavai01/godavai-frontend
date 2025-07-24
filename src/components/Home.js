@@ -249,14 +249,24 @@ export default function Home() {
       {/* Pharmacies Near You */}
       <div className="mt-5 px-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="font-extrabold text-lg text-[#13C0A2] flex items-center gap-1">Pharmacies Near You</span>
-          <button
-            className="text-[#13C0A2] text-[15px] font-bold hover:underline"
-            onClick={() => navigate("/pharmacies-near-you")}
-          >
-            See all &gt;
-          </button>
-        </div>
+  <span
+    className="font-extrabold text-lg text-[#13C0A2] flex items-center gap-1 cursor-pointer hover:underline"
+    onClick={() => navigate("/pharmacies-near-you")}
+    style={{ userSelect: "none" }}
+    tabIndex={0}
+    onKeyPress={e => { if (e.key === "Enter") navigate("/pharmacies-near-you"); }}
+    role="button"
+    aria-label="See all pharmacies near you"
+  >
+    Pharmacies Near You
+  </span>
+  <button
+    className="text-[#13C0A2] text-[15px] font-bold hover:underline"
+    onClick={() => navigate("/pharmacies-near-you")}
+  >
+    See all &gt;
+  </button>
+</div>
         <div className="flex gap-4 pb-2 snap-x overflow-x-auto">
           {pharmaciesNearby.slice(0, 10).map((ph, idx) => (
             <div
@@ -315,15 +325,23 @@ export default function Home() {
           ph.medicines.length > 0 ? (
             <div key={ph._id || idx} className="mt-10 px-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-extrabold text-lg text-[#187477] flex items-center gap-2">
-                  Medicines at {ph.name}
-                </span>
-                <button
-                  className="text-[#13C0A2] text-[15px] font-bold hover:underline"
-                  onClick={() => navigate(`/medicines/${ph._id}`)}
-                >
-                  View All &gt;
-                </button>
+                <span
+  className="font-extrabold text-lg text-[#187477] flex items-center gap-2 cursor-pointer hover:underline"
+  onClick={() => navigate(`/medicines/${ph._id}`)}
+  style={{ userSelect: "none" }}
+  tabIndex={0}
+  onKeyPress={e => { if (e.key === "Enter") navigate(`/medicines/${ph._id}`); }}
+  role="button"
+  aria-label={`View all medicines at ${ph.name}`}
+>
+  Medicines at {ph.name}
+</span>
+<button
+  className="text-[#13C0A2] text-[15px] font-bold hover:underline"
+  onClick={() => navigate(`/medicines/${ph._id}`)}
+>
+  View All &gt;
+</button>
               </div>
               <div className="flex gap-4 pb-2 snap-x overflow-x-auto">
                 {ph.medicines.map((med, mi) => (
