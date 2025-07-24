@@ -111,9 +111,11 @@ const filteredPharmacies = pharmaciesNearby.slice(0, 5)
   .map(ph => {
     const allMeds = mostOrderedByPharmacy[ph._id] || [];
     const filteredMeds = selectedCategory
-      ? allMeds.filter(med => 
-          (med.category && med.category.toLowerCase() === selectedCategory.toLowerCase()) ||
-          (med.categories && med.categories.map(c => c.toLowerCase()).includes(selectedCategory.toLowerCase()))
+      ? allMeds.filter(med =>
+          (typeof med.category === "string" && med.category.toLowerCase() === selectedCategory.toLowerCase()) ||
+          (Array.isArray(med.categories) && med.categories.some(
+            c => typeof c === "string" && c.toLowerCase() === selectedCategory.toLowerCase()
+          ))
         )
       : allMeds;
     return {
@@ -122,7 +124,6 @@ const filteredPharmacies = pharmaciesNearby.slice(0, 5)
       medCount: filteredMeds.length,
     };
   })
-  // 2. Sort descending by medCount
   .sort((a, b) => b.medCount - a.medCount);
 
   return (
