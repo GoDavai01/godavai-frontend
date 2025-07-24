@@ -8,6 +8,17 @@ import BottomNavBar from "./BottomNavBar";
 import PrescriptionUploadModal from "./PrescriptionUploadModal";
 import Navbar from "./Navbar";
 
+function isMedicineInCategory(med, selectedCategory) {
+  if (!med || !selectedCategory) return false;
+  const target = selectedCategory.trim().toLowerCase();
+  let cats = [];
+  if (typeof med.category === "string") cats.push(med.category);
+  if (Array.isArray(med.category)) cats = cats.concat(med.category);
+  if (Array.isArray(med.categories)) cats = cats.concat(med.categories);
+  cats = cats.filter(Boolean).map(x => String(x).toLowerCase());
+  return cats.some(c => c.includes(target) || target.includes(c));
+}
+
 // Point to your real SVG/PNG assets
 const ICONS = {
   pharmacy: "/images/pharmacy-modern.png",
@@ -138,27 +149,31 @@ export default function Home() {
 
   // Fallback: show "No medicines..." for 0.5s, then show all again
   useEffect(() => {
-    if (!selectedCategory) {
-      setShowFallbackMeds(false);
-      if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
-      return;
-    }
-    const noneHaveMeds = filteredPharmacies.every(ph => (ph.medicines.length === 0));
-    if (noneHaveMeds) {
-      setShowFallbackMeds(false);
-      if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
-      noMedicinesTimer.current = setTimeout(() => {
-        setShowFallbackMeds(true);
-      }, 500);
-    } else {
-      setShowFallbackMeds(false);
-      if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
-    }
-    return () => {
-      if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
-    };
-    // eslint-disable-next-line
-  }, [selectedCategory, pharmaciesNearby, allMedsByPharmacy, mostOrderedByPharmacy]);
+  if (!selectedCategory) {
+    setShowFallbackMeds(false);
+    if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
+    return;
+  }
+  // Use robust category check here!
+  const noneHaveMeds = pharmaciesNearby.slice(0, 5).every(ph => {
+    const meds = allMedsByPharmacy[ph._id] || [];
+    return !meds.some(med => isMedicineInCategory(med, selectedCategory));
+  });
+  if (noneHaveMeds) {
+    setShowFallbackMeds(false);
+    if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
+    noMedicinesTimer.current = setTimeout(() => {
+      setShowFallbackMeds(true);
+    }, 500);
+  } else {
+    setShowFallbackMeds(false);
+    if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
+  }
+  return () => {
+    if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
+  };
+  // eslint-disable-next-line
+}, [selectedCategory, pharmaciesNearby, allMedsByPharmacy, mostOrderedByPharmacy]);
 
   // GREET
   const greetUser = () => {
@@ -169,26 +184,25 @@ export default function Home() {
   };
 
   // MAIN filter: use allMedsByPharmacy for category, mostOrderedByPharmacy otherwise
-  const filteredPharmacies = pharmaciesNearby.slice(0, 5)
-    .map(ph => {
-      const allMeds = selectedCategory
-        ? allMedsByPharmacy[ph._id] || []
-        : mostOrderedByPharmacy[ph._id] || [];
-      const filteredMeds = selectedCategory
-        ? allMeds.filter(med =>
-            (typeof med.category === "string" && med.category.toLowerCase() === selectedCategory.toLowerCase()) ||
-            (Array.isArray(med.categories) && med.categories.some(
-              c => typeof c === "string" && c.toLowerCase() === selectedCategory.toLowerCase()
-            ))
-          )
-        : allMeds;
-      return {
-        ...ph,
-        medicines: filteredMeds,
-        medCount: filteredMeds.length,
-      };
-    })
-    .sort((a, b) => b.medCount - a.medCount);
+  const filteredPharmacies = pharmaciesNearby.slice(0, 5).map(ph => {
+  let allMeds = selectedCategory
+    ? allMedsByPharmacy[ph._id] || []
+    : mostOrderedByPharmacy[ph._id] || [];
+
+  let filteredMeds = selectedCategory
+    ? allMeds.filter(med => isMedicineInCategory(med, selectedCategory))
+    : allMeds;
+
+  if (selectedCategory && filteredMeds.length === 0 && showFallbackMeds) {
+    filteredMeds = allMeds.slice(0, 8);
+  }
+  return {
+    ...ph,
+    medicines: filteredMeds,
+    medCount: filteredMeds.length,
+  };
+})
+.sort((a, b) => b.medCount - a.medCount);
 
   return (
     <div className="min-h-screen max-w-md mx-auto bg-gradient-to-br from-[#f8fbfc] via-white to-[#f5f8fa] pb-32 relative">
@@ -289,10 +303,11 @@ export default function Home() {
 
       {/* Fallback: Show no medicines message */}
       {selectedCategory && !showFallbackMeds && filteredPharmacies.every(ph => ph.medicines.length === 0) && (
-        <div className="text-center text-gray-400 mt-8 text-lg font-semibold">
-          No medicines available in "{selectedCategory}" category.
-        </div>
-      )}
+  <div className="text-center text-gray-400 mt-8 text-lg font-semibold">
+    No medicines available in "{selectedCategory}" category.<br />
+    <span className="text-sm text-gray-400">Showing other available medicines...</span>
+  </div>
+)}
 
       {/* Medicines by pharmacy */}
       {(!selectedCategory || showFallbackMeds || filteredPharmacies.some(ph => ph.medicines.length > 0)) && (
