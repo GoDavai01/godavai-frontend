@@ -48,6 +48,7 @@ export default function Home() {
   const popupTimeout = useRef(null);
   const [showFallbackMeds, setShowFallbackMeds] = useState(false);
   const noMedicinesTimer = useRef(null);
+  const [lastOrder, setLastOrder] = useState(null);
 
   // ADDED: cache of all medicines for each pharmacy
   const [allMedsByPharmacy, setAllMedsByPharmacy] = useState({});
@@ -62,6 +63,19 @@ export default function Home() {
       );
     }
   }, [currentAddress]);
+
+  useEffect(() => {
+  async function fetchLastOrder() {
+    if (!user?._id && !user?.userId) return;
+    const userId = user._id || user.userId;
+    const res = await fetch(`${API_BASE_URL}/api/allorders/myorders-userid/${userId}`);
+    const orders = await res.json();
+    if (Array.isArray(orders) && orders.length > 0) {
+      setLastOrder(orders[0]); // most recent order first (should already be sorted)
+    }
+  }
+  fetchLastOrder();
+}, [user]);
 
   // Get nearby pharmacies (max 5, 8km radius)
   useEffect(() => {
@@ -379,10 +393,13 @@ export default function Home() {
   <div className="rounded-2xl shadow-3xl px-4 py-6 flex flex-col items-center gap-2 bg-white/90 backdrop-blur ring-1 ring-[#e1f0fa]/70">
     <div className="font-extrabold text-[17px] text-[#187477] mb-1 text-center">Your last order</div>
     <div className="text-[14px] text-neutral-400 text-center">
-      {cart.length
-        ? cart.map(i => `${i.name} x${i.quantity}`).join(", ")
-        : "No recent orders"}
-    </div>
+  {lastOrder && Array.isArray(lastOrder.items) && lastOrder.items.length
+    ? lastOrder.items
+        .map(i => `${i.name || i.medicineName} x${i.quantity || i.qty || 1}`)
+        .join(", ")
+    : "No recent orders"}
+</div>
+
     <div className="flex gap-2 mt-4 justify-center">
       <button
         className="bg-gradient-to-r from-[#13C0A2] to-[#6decb9] text-white font-bold shadow-lg rounded-full px-5 py-2 hover:scale-105 transition"
@@ -394,23 +411,50 @@ export default function Home() {
   </div>
 </div>
 
-      {/* Floating Upload Prescription FAB */}
-      <button
-        className="fixed bottom-24 right-5 z-50 flex items-center gap-2 rounded-full px-6 py-3 bg-[#13C0A2] text-white font-bold shadow-xl hover:bg-[#0e9c87] transition-all duration-150"
-        onClick={() => setPrescriptionModalOpen(true)}
-        style={{ fontSize: "16px" }}
-      >
-        <img src={ICONS.upload} alt="Upload" className="w-6 h-6" />
-        Upload Prescription
-      </button>
-
       <PrescriptionUploadModal
-        open={prescriptionModalOpen}
-        onClose={() => setPrescriptionModalOpen(false)}
-        userCity={localStorage.getItem("city") || "Mumbai"}
-      />
+  open={prescriptionModalOpen}
+  onClose={() => setPrescriptionModalOpen(false)}
+  userCity={localStorage.getItem("city") || "Mumbai"}
+/>
 
-      <BottomNavBar />
+{/* ALL FLOATING UI BELOW (add this new block!) */}
+<div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col-reverse items-end gap-3 px-5 pb-4 pointer-events-none">
+  {/* Example: View Cart Bar (only if you have a cart bar, otherwise you can remove this block) */}
+  {cart.length > 0 && (
+    <div className="pointer-events-auto w-full">
+      <div className="flex items-center justify-between bg-white shadow-xl rounded-2xl px-6 py-4 mb-2">
+        <span className="font-bold text-[#13C0A2]">
+          <i className="fa fa-shopping-cart mr-2"></i>
+          {cart.length} items
+        </span>
+        <span className="font-semibold text-lg">
+          ₹{cart.reduce((sum, i) => sum + (i.price * (i.quantity || 1)), 0)}
+        </span>
+        <button
+          className="bg-[#13C0A2] text-white font-bold px-5 py-2 rounded-full shadow hover:bg-[#0e9c87] transition ml-2"
+          onClick={() => navigate('/cart')}
+        >
+          VIEW CART
+        </button>
+      </div>
+    </div>
+  )}
+
+  {/* Floating Upload Prescription Button */}
+  <button
+    className="pointer-events-auto flex items-center gap-2 rounded-full px-6 py-3 bg-[#13C0A2] text-white font-bold shadow-xl hover:bg-[#0e9c87] transition-all duration-150"
+    onClick={() => setPrescriptionModalOpen(true)}
+    style={{ fontSize: "16px" }}
+  >
+    <img src={ICONS.upload} alt="Upload" className="w-6 h-6" />
+    Upload Prescription
+  </button>
+
+  {/* Add any more floating bars/buttons here if you have others */}
+</div>
+
+<BottomNavBar />
+
     </div>
   );
 }
