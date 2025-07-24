@@ -168,7 +168,7 @@ useEffect(() => {
                   : "bg-gradient-to-r from-[#fff8e1]/80 to-[#ffe9b3]/90 text-[#e8950c] ring-1 ring-[#FFD43B]/10"}
                 hover:bg-white/90`}
             >
-              <img src={ICONS.pill} className="w-4 h-4" alt="category" />
+             
               {cat}
             </button>
           ))}
@@ -233,13 +233,6 @@ useEffect(() => {
               onClick={() => navigate("/orders")}
             >
               Order Again
-            </button>
-            <button
-              className="bg-gradient-to-r from-[#FFD43B] to-[#ffe9b3] text-[#187477] font-bold shadow-lg rounded-full px-5 py-2 flex gap-2 items-center hover:scale-105 transition"
-              onClick={() => setPrescriptionModalOpen(true)}
-            >
-              <img src={ICONS.upload} className="w-5 h-5 mr-1" alt="Upload" />
-              Upload Prescription
             </button>
           </div>
         </div>

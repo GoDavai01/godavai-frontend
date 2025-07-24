@@ -148,7 +148,7 @@ export default function Navbar({
                 routerLocation.pathname.startsWith("/medicines") ? "Search Medicines"
                 : routerLocation.pathname.startsWith("/doctors") ? "Search Doctors"
                 : routerLocation.pathname.startsWith("/labs") ? "Search Labs"
-                : "Search for Medicines, Doctors, Labs"
+                : "Search for Medicines, Doctors"
               }
               InputProps={{
                 ...params.InputProps,
