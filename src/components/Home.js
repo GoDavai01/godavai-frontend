@@ -411,7 +411,7 @@ export default function Home() {
   </div>
 </div>
 
-      <PrescriptionUploadModal
+<PrescriptionUploadModal
   open={prescriptionModalOpen}
   onClose={() => setPrescriptionModalOpen(false)}
   userCity={localStorage.getItem("city") || "Mumbai"}
@@ -447,7 +447,7 @@ export default function Home() {
   </button>
 </div>
 
-<BottomNavBar />  
+<BottomNavBar />
     </div>
   );
 }
