@@ -6,7 +6,6 @@ const navs = [
   { label: "GoDavai", path: "/home" },
   { label: "Medicines", path: "/pharmacies-near-you" },
   { label: "Doctor", path: "/doctors" },
-  { label: "Lab Test", path: "/labs" }
 ];
 
 export default function BottomNavBar() {
