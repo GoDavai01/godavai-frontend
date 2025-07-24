@@ -417,26 +417,13 @@ export default function Home() {
   userCity={localStorage.getItem("city") || "Mumbai"}
 />
 
-<div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col-reverse items-end gap-3 px-5 pb-4 pointer-events-none">
-  {cart.length > 0 && (
-    <div className="pointer-events-auto w-full">
-      <div className="flex items-center justify-between bg-white shadow-xl rounded-2xl px-6 py-4 mb-2">
-        <span className="font-bold text-[#13C0A2]">
-          <i className="fa fa-shopping-cart mr-2"></i>
-          {cart.length} items
-        </span>
-        <span className="font-semibold text-lg">
-          ₹{cart.reduce((sum, i) => sum + (i.price * (i.quantity || 1)), 0)}
-        </span>
-        <button
-          className="bg-[#13C0A2] text-white font-bold px-5 py-2 rounded-full shadow hover:bg-[#0e9c87] transition ml-2"
-          onClick={() => navigate('/cart')}
-        >
-          VIEW CART
-        </button>
-      </div>
-    </div>
-  )}
+<div
+  className="fixed right-0 left-0 z-[1201] flex justify-end px-5 transition-all duration-300"
+  style={{
+    bottom: cart.length > 0 ? 144 : 72, // <- tweak these values as per your bars
+    pointerEvents: "none", // ensures children handle clicks but not this container
+  }}
+>
   <button
     className="pointer-events-auto flex items-center gap-2 rounded-full px-6 py-3 bg-[#13C0A2] text-white font-bold shadow-xl hover:bg-[#0e9c87] transition-all duration-150"
     onClick={() => setPrescriptionModalOpen(true)}
@@ -448,6 +435,7 @@ export default function Home() {
 </div>
 
 <BottomNavBar />
+
     </div>
   );
 }
