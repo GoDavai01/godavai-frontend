@@ -32,6 +32,8 @@ export default function Home() {
   const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
   const { currentAddress } = useLocation();
   const [userCoords, setUserCoords] = useState(null);
+  const [showCategoryNotification, setShowCategoryNotification] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(""); // e.g. "Fever", "Diabetes", etc.
 
   useEffect(() => {
     if (currentAddress?.lat && currentAddress?.lng) {
@@ -87,6 +89,15 @@ useEffect(() => {
     addToCart(med);
   };
 
+  // 1. Add this handler inside Home
+  const handleCategoryClick = (category) => {
+    setSelectedCategory(category);
+    setShowCategoryNotification(true);
+    setTimeout(() => {
+      setShowCategoryNotification(false);
+    }, 4000);
+  };
+
   // Get user first name or fallback
   const greetUser = () => {
     const hour = new Date().getHours();
@@ -94,6 +105,25 @@ useEffect(() => {
       hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
     return `${hello}, ${user?.name?.split(" ")[0] || "Friend"}!`;
   };
+
+    // 1. For each pharmacy, count matching category medicines
+const filteredPharmacies = pharmaciesNearby.slice(0, 5)
+  .map(ph => {
+    const allMeds = mostOrderedByPharmacy[ph._id] || [];
+    const filteredMeds = selectedCategory
+      ? allMeds.filter(med => 
+          (med.category && med.category.toLowerCase() === selectedCategory.toLowerCase()) ||
+          (med.categories && med.categories.map(c => c.toLowerCase()).includes(selectedCategory.toLowerCase()))
+        )
+      : allMeds;
+    return {
+      ...ph,
+      medicines: filteredMeds,
+      medCount: filteredMeds.length,
+    };
+  })
+  // 2. Sort descending by medCount
+  .sort((a, b) => b.medCount - a.medCount);
 
   return (
     <div className="min-h-screen max-w-md mx-auto bg-gradient-to-br from-[#f8fbfc] via-white to-[#f5f8fa] pb-32 relative">
@@ -118,6 +148,26 @@ useEffect(() => {
           </motion.div>
         </AnimatePresence>
       </div>
+      {showCategoryNotification && selectedCategory && (
+  <div className="rounded-2xl px-4 py-3 bg-[#fff8e1]/80 shadow-md border-0 mb-3 flex items-center justify-between mx-4 mt-3">
+    <span>
+      <b>Did you get your {selectedCategory.toLowerCase()} medicines?</b>
+      <br />
+      If not, browse more options from&nbsp;
+      <a className="text-[#13C0A2] font-semibold underline" href="/pharmacies-near-you">
+        pharmacies near you
+      </a>.
+    </span>
+    <button
+      onClick={() => setShowCategoryNotification(false)}
+      className="ml-3 text-[#13C0A2] font-bold text-xl"
+      style={{ lineHeight: 1 }}
+    >
+      ✕
+    </button>
+  </div>
+)}
+
 
       {/* 3. Nearby Pharmacies */}
       <div className="mt-5 px-4">
@@ -160,7 +210,7 @@ useEffect(() => {
           {categories.map((cat, i) => (
             <button
               key={cat}
-              onClick={() => navigate(`/search?q=${encodeURIComponent(cat)}`)}
+              onClick={() => handleCategoryClick(cat)}
               className={`
                 flex items-center gap-2 rounded-full px-5 py-2 font-bold text-sm border-0 shadow-lg transition hover:scale-105
                 ${i % 2 === 0
@@ -176,44 +226,46 @@ useEffect(() => {
       </div>
 
       {/* 5. Medicines at [Pharmacy]: Repeat for each nearby pharmacy */}
-      {pharmaciesNearby.slice(0, 5).map((ph, idx) => (
-        <div key={ph._id || idx} className="mt-10 px-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-extrabold text-lg text-[#187477] flex items-center gap-2">
-              Medicines at {ph.name}
+{filteredPharmacies.map((ph, idx) =>
+  ph.medicines.length > 0 ? ( // Only show if any medicine in this category
+    <div key={ph._id || idx} className="mt-10 px-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-extrabold text-lg text-[#187477] flex items-center gap-2">
+          Medicines at {ph.name}
+        </span>
+        <button
+          className="text-[#13C0A2] text-[15px] font-bold hover:underline"
+          onClick={() => navigate(`/medicines/${ph._id}`)}
+        >
+          View All &gt;
+        </button>
+      </div>
+      <div className="flex gap-4 pb-2 snap-x overflow-x-auto">
+        {ph.medicines.map((med, mi) => (
+          <div
+            key={med._id || mi}
+            className="min-w-[130px] max-w-[150px] px-2 py-6 flex flex-col items-center rounded-2xl shadow-xl bg-white/90 backdrop-blur ring-1 ring-[#e1f0fa]/60 hover:bg-[#e1f7fa]/70 cursor-pointer transition hover:scale-105 snap-center"
+            onClick={() => navigate(`/medicines/${ph._id}`)}
+          >
+            <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-tr from-[#e8f9f3] to-[#d1f2eb] mb-2 shadow">
+              <img src={med.img || ICONS.medicine} className="w-7 h-7" alt="Medicine" />
             </span>
+            <div className="font-semibold text-[15px] truncate text-center text-[#187477]">{med.name}</div>
+            <div className="text-xs text-[#13C0A2] font-semibold">
+              ₹{med.price}
+            </div>
             <button
-              className="text-[#13C0A2] text-[15px] font-bold hover:underline"
-              onClick={() => navigate(`/medicines/${ph._id}`)}
+              className="mt-1 px-4 py-1 text-xs bg-[#13C0A2] rounded-full text-white font-bold shadow hover:bg-[#0e9c87] transition"
+              onClick={e => { e.stopPropagation(); handleAddToCart(med); }}
             >
-              View All &gt;
+              Add
             </button>
           </div>
-          <div className="flex gap-4 pb-2 snap-x overflow-x-auto">
-            {(mostOrderedByPharmacy[ph._id] || []).map((med, mi) => (
-              <div
-                key={med._id || mi}
-                className="min-w-[130px] max-w-[150px] px-2 py-6 flex flex-col items-center rounded-2xl shadow-xl bg-white/90 backdrop-blur ring-1 ring-[#e1f0fa]/60 hover:bg-[#e1f7fa]/70 cursor-pointer transition hover:scale-105 snap-center"
-                onClick={() => navigate(`/medicines/${ph._id}`)}
-              >
-                <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-tr from-[#e8f9f3] to-[#d1f2eb] mb-2 shadow">
-                  <img src={med.img || ICONS.medicine} className="w-7 h-7" alt="Medicine" />
-                </span>
-                <div className="font-semibold text-[15px] truncate text-center text-[#187477]">{med.name}</div>
-                <div className="text-xs text-[#13C0A2] font-semibold">
-                  ₹{med.price}
-                </div>
-                <button
-                  className="mt-1 px-4 py-1 text-xs bg-[#13C0A2] rounded-full text-white font-bold shadow hover:bg-[#0e9c87] transition"
-                  onClick={e => { e.stopPropagation(); handleAddToCart(med); }}
-                >
-                  Add
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
+    </div>
+  ) : null // Don't render anything if no medicines
+)}
 
       {/* 6. Order Again */}
       <div className="mt-12 px-4">
