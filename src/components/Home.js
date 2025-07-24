@@ -340,26 +340,26 @@ export default function Home() {
 
       {/* Order Again */}
       <div className="mt-12 px-4">
-        <div className="font-extrabold text-base mb-2 text-[#187477] flex items-center gap-2">
-          Order Again
-        </div>
-        <div className="rounded-2xl shadow-3xl px-7 py-6 flex flex-col gap-2 bg-white/90 backdrop-blur ring-1 ring-[#e1f0fa]/70">
-          <div className="font-extrabold text-[17px] text-[#187477] mb-1">Your last order</div>
-          <div className="text-[14px] text-neutral-400 truncate">
-            {cart.length
-              ? cart.map(i => `${i.name} x${i.quantity}`).join(", ")
-              : "No recent orders"}
-          </div>
-          <div className="flex gap-2 mt-4">
-            <button
-              className="bg-gradient-to-r from-[#13C0A2] to-[#6decb9] text-white font-bold shadow-lg rounded-full px-5 py-2 hover:scale-105 transition"
-              onClick={() => navigate("/orders")}
-            >
-              Order Again
-            </button>
-          </div>
-        </div>
-      </div>
+  <div className="font-extrabold text-base mb-2 text-[#187477] flex items-center gap-2">
+    Order Again
+  </div>
+  <div className="rounded-2xl shadow-3xl px-4 py-6 flex flex-col items-center gap-2 bg-white/90 backdrop-blur ring-1 ring-[#e1f0fa]/70">
+    <div className="font-extrabold text-[17px] text-[#187477] mb-1 text-center">Your last order</div>
+    <div className="text-[14px] text-neutral-400 text-center">
+      {cart.length
+        ? cart.map(i => `${i.name} x${i.quantity}`).join(", ")
+        : "No recent orders"}
+    </div>
+    <div className="flex gap-2 mt-4 justify-center">
+      <button
+        className="bg-gradient-to-r from-[#13C0A2] to-[#6decb9] text-white font-bold shadow-lg rounded-full px-5 py-2 hover:scale-105 transition"
+        onClick={() => navigate("/orders")}
+      >
+        Order Again
+      </button>
+    </div>
+  </div>
+</div>
 
       {/* Floating Upload Prescription FAB */}
       <button
