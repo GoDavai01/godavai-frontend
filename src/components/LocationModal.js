@@ -19,10 +19,12 @@ export default function LocationModal({ open, onClose, onSelect }) {
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
   const inputTimer = useRef();
 
-  // Only reset input when modal opens
-  useEffect(() => {
-    if (open) setInput("");
-  }, [open]);
+ // This way, only reset when it goes from closed -> open
+const wasOpen = useRef(false);
+useEffect(() => {
+  if (open && !wasOpen.current) setInput("");
+  wasOpen.current = open;
+}, [open]);
 
   // Detect mobile: full screen dialog for mobile UX
   const isMobile = typeof window !== "undefined" && window.innerWidth < 600;
@@ -152,25 +154,48 @@ export default function LocationModal({ open, onClose, onSelect }) {
         </Box>
         {/* Option list */}
         <Box>
-          {options.map(option => (
-            <Button
-              key={option.place_id}
-              onClick={() => handleOptionSelect(option)}
-              fullWidth
-              sx={{
-                mt: 2,
-                bgcolor: "#eafcf4",
-                color: "#13C0A2",
-                fontWeight: 700,
-                justifyContent: "flex-start",
-                textAlign: "left"
-              }}
-              disabled={loading || detecting}
-            >
-              {option.description}
-            </Button>
-          ))}
-        </Box>
+  {options.map(option => (
+    <Button
+      key={option.place_id}
+      onClick={() => handleOptionSelect(option)}
+      fullWidth
+      sx={{
+        mt: 2,
+        bgcolor: "#eafcf4",
+        color: "#13C0A2",
+        fontWeight: 700,
+        justifyContent: "flex-start",
+        textAlign: "left"
+      }}
+      disabled={loading || detecting}
+    >
+      {option.description}
+    </Button>
+  ))}
+  {/* Add manual entry option */}
+  {input.length >= 3 && (
+    <Button
+      fullWidth
+      onClick={() => {
+        onSelect({ formatted: input, lat: null, lng: null, place_id: null, manual: true });
+      }}
+      sx={{
+        mt: 2,
+        bgcolor: "#fffbe6",
+        color: "#ff9800",
+        fontWeight: 700,
+        border: "2px dashed #ffd43b",
+        justifyContent: "flex-start",
+        textAlign: "left",
+        "&:hover": { bgcolor: "#fff3c4" }
+      }}
+      disabled={loading || detecting}
+    >
+      Didn’t find your place? <b>Add "<u>{input}</u>" manually</b>
+    </Button>
+  )}
+</Box>
+
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} color="primary" sx={{ fontWeight: 700 }}>
