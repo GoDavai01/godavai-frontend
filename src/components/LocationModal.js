@@ -156,7 +156,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
       if (!document.getElementById(scriptId)) {
         const script = document.createElement("script");
         script.id = scriptId;
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${window.GOOGLE_MAPS_API_KEY}`;
         script.async = true;
         script.onload = renderMap;
         document.body.appendChild(script);
