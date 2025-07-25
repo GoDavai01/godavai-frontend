@@ -56,7 +56,7 @@ export default function WelcomePage() {
           textAlign: "center",
         }}
       >
-        Your Trusted Medicine Delivery in 13-29 minutes.
+        Your Trusted Medicine Delivery under 30 minutes.
         <br />
         Fast. Reliable. Guaranteed. <span style={{ color: "#13C0A2" }}>Smiles Delivered 😊</span>
       </Typography>
