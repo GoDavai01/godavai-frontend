@@ -21,6 +21,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
   const [manualLatLng, setManualLatLng] = useState(null);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+  const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "AIzaSyCd9Jkk_kd0SwaDLKwehdTpowiHEAnuy8Y";
   const inputTimer = useRef();
 
   // This way, only reset when it goes from closed -> open

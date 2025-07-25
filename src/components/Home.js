@@ -420,7 +420,7 @@ export default function Home() {
 <div
   className="fixed right-0 left-0 z-[1201] flex justify-end px-5 transition-all duration-300"
   style={{
-    bottom: cart.length > 0 ? 144 : 70, // <- tweak these values as per your bars
+    bottom: cart.length > 0 ? 144 : 72, // <- tweak these values as per your bars
     pointerEvents: "none", // ensures children handle clicks but not this container
   }}
 >
