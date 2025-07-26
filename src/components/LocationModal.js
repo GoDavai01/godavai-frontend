@@ -7,6 +7,7 @@ import {
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import RoomIcon from "@mui/icons-material/Room";
 import { useLocation } from "../context/LocationContext";
+import Autocomplete from '@mui/material/Autocomplete';
 import axios from "axios";
 
 export default function LocationModal({ open, onClose, onSelect }) {
@@ -27,7 +28,10 @@ export default function LocationModal({ open, onClose, onSelect }) {
   // This way, only reset when it goes from closed -> open
   const wasOpen = useRef(false);
   useEffect(() => {
-    if (open && !wasOpen.current) setInput("");
+    if (open && !wasOpen.current) {
+      // Only clear on first open, not every time!
+      setInput("");
+    }
     wasOpen.current = open;
   }, [open]);
 
@@ -191,23 +195,53 @@ export default function LocationModal({ open, onClose, onSelect }) {
           Set Delivery Location
         </DialogTitle>
         <DialogContent>
-          <TextField
+          {/* ======= REPLACED FIELD/OPTIONS WITH AUTOCOMPLETE ======= */}
+          <Autocomplete
+            freeSolo
             fullWidth
-            variant="outlined"
-            label="Search for address"
-            value={input}
-            onChange={e => handleInput(e.target.value)}
-            autoFocus={open}
-            disabled={loading || detecting}
-            InputProps={{
-              endAdornment: loading
-                ? (
-                  <InputAdornment position="end">
-                    <CircularProgress size={18} />
-                  </InputAdornment>
-                ) : null
+            autoComplete={false}
+            disableClearable
+            inputValue={input}
+            options={options}
+            loading={loading}
+            filterOptions={x => x}
+            getOptionLabel={opt => opt.description || opt.formatted || ""}
+            onInputChange={(e, val) => {
+              if (e && e.type === "change") handleInput(val);
             }}
+            onChange={(e, value) => {
+              if (value && value.place_id) handleOptionSelect(value);
+              if (typeof value === "string" && value.length > 2) {
+                onSelect({ formatted: value, lat: null, lng: null, place_id: null, manual: true });
+              }
+            }}
+            renderInput={params => (
+              <TextField
+                {...params}
+                label="Search for address"
+                variant="outlined"
+                autoFocus={open}
+                disabled={detecting}
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <>
+                      {loading ? <CircularProgress size={18} /> : null}
+                      {params.InputProps.endAdornment}
+                    </>
+                  ),
+                }}
+              />
+            )}
+            renderOption={(props, option) => (
+              <li {...props} style={{ padding: 10 }}>
+                <RoomIcon sx={{ color: "#FFD43B", marginRight: 8 }} />
+                <span>{option.description}</span>
+              </li>
+            )}
           />
+          {/* ======= /REPLACED ======= */}
+
           <Box sx={{ mt: 2 }}>
             <Button
               variant="outlined"
@@ -220,27 +254,8 @@ export default function LocationModal({ open, onClose, onSelect }) {
               {detecting ? "Detecting..." : "Use My Current Location"}
             </Button>
           </Box>
-          {/* Option list */}
+          {/* Manual Entry / Drop Pin Options */}
           <Box>
-            {options.map(option => (
-              <Button
-                key={option.place_id}
-                onClick={() => handleOptionSelect(option)}
-                fullWidth
-                sx={{
-                  mt: 2,
-                  bgcolor: "#eafcf4",
-                  color: "#13C0A2",
-                  fontWeight: 700,
-                  justifyContent: "flex-start",
-                  textAlign: "left"
-                }}
-                disabled={loading || detecting}
-              >
-                {option.description}
-              </Button>
-            ))}
-            {/* Add manual entry option */}
             {input.length >= 3 && (
               <>
                 <Button
