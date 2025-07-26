@@ -21,7 +21,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
   const [manualLatLng, setManualLatLng] = useState(null);
 
   const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-  const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+  const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '';
   const inputTimer = useRef();
 
   // This way, only reset when it goes from closed -> open
@@ -157,7 +157,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
       if (!document.getElementById(scriptId)) {
         const script = document.createElement("script");
         script.id = scriptId;
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${window.GOOGLE_MAPS_API_KEY}`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}`;
         script.async = true;
         script.onload = renderMap;
         document.body.appendChild(script);
