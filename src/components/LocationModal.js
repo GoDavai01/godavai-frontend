@@ -211,9 +211,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
             }}
             onChange={(e, value) => {
               if (value && value.place_id) handleOptionSelect(value);
-              if (typeof value === "string" && value.length > 2) {
-                onSelect({ formatted: value, lat: null, lng: null, place_id: null, manual: true });
-              }
+              
             }}
             renderInput={params => (
               <TextField
@@ -275,25 +273,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
                 >
                   Didn’t find your place? <b>Drop Pin on Map</b>
                 </Button>
-                <Button
-                  fullWidth
-                  onClick={() => {
-                    onSelect({ formatted: input, lat: null, lng: null, place_id: null, manual: true });
-                  }}
-                  sx={{
-                    mt: 1,
-                    bgcolor: "#fffbe6",
-                    color: "#1976d2",
-                    fontWeight: 700,
-                    border: "2px dashed #dbeafe",
-                    justifyContent: "flex-start",
-                    textAlign: "left",
-                    "&:hover": { bgcolor: "#e3f0fd" }
-                  }}
-                  disabled={loading || detecting}
-                >
-                  Add "<u>{input}</u>" manually (without pin)
-                </Button>
+             
               </>
             )}
           </Box>
