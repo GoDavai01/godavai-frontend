@@ -643,6 +643,32 @@ useEffect(() => {
           Order Again
         </Button>
       </Box>
+      {/* --- INVOICE DOWNLOAD BUTTON --- */}
+{o.invoiceFile && (
+  <a
+    href={o.invoiceFile}
+    target="_blank"
+    rel="noopener noreferrer"
+    style={{ textDecoration: "none", marginTop: 8, display: "inline-block" }}
+  >
+    <Button
+      variant="outlined"
+      sx={{
+        ml: 0,
+        mt: 1.2,
+        borderRadius: 2,
+        color: "#1976d2",
+        borderColor: "#1976d2",
+        textTransform: "none",
+        fontWeight: 700,
+      }}
+      startIcon={<ReceiptLongIcon />}
+      size="small"
+    >
+      Download Invoice
+    </Button>
+  </a>
+)}
     </Card>
   );
 
