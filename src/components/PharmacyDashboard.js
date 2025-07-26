@@ -14,6 +14,7 @@ import PrescriptionOrdersTab from "./PrescriptionOrdersTab";
 import PhotoCamera from "@mui/icons-material/PhotoCamera";
 import Checkbox from "@mui/material/Checkbox";
 import ListItemText from "@mui/material/ListItemText";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import stringSimilarity from "string-similarity";
 import axios from "axios";
 import { Table, TableHead, TableRow, TableCell, TableBody } from "@mui/material";
