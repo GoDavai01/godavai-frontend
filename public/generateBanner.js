@@ -91,9 +91,9 @@ function generateBanner({
 
   // Ensure output directory exists
   const outDir = path.dirname(outFile);
-  if (!fs.existsSync(outDir)) {
-    fs.mkdirSync(outDir, { recursive: true });
-  }
+  if (!process.env.AWS_BUCKET_NAME && !fs.existsSync(outDir)) {
+  fs.mkdirSync(outDir, { recursive: true });
+}
 
   // Save to file (production: handle errors)
   const out = fs.createWriteStream(outFile);
