@@ -172,14 +172,13 @@ export default function DeliveryDashboard() {
 
   // Auto-refresh every 3 seconds
   useEffect(() => {
-    if (!loggedIn) return;
-    if (firstLoad.current) return;
-    const interval = setInterval(() => {
-      fetchProfileAndOrders();
-    }, 3000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line
-  }, [loggedIn]);
+  if (!loggedIn || loading) return;
+  const interval = setInterval(() => {
+    fetchProfileAndOrders();
+  }, 3000);
+  return () => clearInterval(interval);
+  // Optionally add [loggedIn, tab] as dependencies for more precise updates
+}, [loggedIn, tab, loading]);
 
   useEffect(() => {
     let watchId;
