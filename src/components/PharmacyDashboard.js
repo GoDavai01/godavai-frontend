@@ -192,6 +192,7 @@ const allPharmacyCategories = React.useMemo(() => {
   });
   const [medMsg, setMedMsg] = useState("");
   const [editMedId, setEditMedId] = useState(null);
+  const [editMedImages, setEditMedImages] = useState([]); // <-- ADD THIS
   const [editMedForm, setEditMedForm] = useState({
     name: "",
     brand: "",
@@ -203,8 +204,8 @@ const allPharmacyCategories = React.useMemo(() => {
     type: "Tablet",
     customType: ""
   });
-  const [medImage, setMedImage] = useState(null);
-  const [editMedImage, setEditMedImage] = useState(null);
+  const [medImages, setMedImages] = useState([]); // support multiple
+
   const editFileInputRef = useRef();
   const fileInputRef = useRef();
 
@@ -361,7 +362,7 @@ const allPharmacyCategories = React.useMemo(() => {
 
   try {
     let data, headers;
-    if (medImage) {
+    if (medImages && medImages.length) {
       data = new FormData();
       data.append("name", medForm.name);
       data.append("brand", medForm.brand);
@@ -371,7 +372,7 @@ const allPharmacyCategories = React.useMemo(() => {
       data.append("stock", medForm.stock);
       // CRUCIAL: category should be sent as JSON if array
       data.append("category", JSON.stringify(finalCategories));
-      data.append("image", medImage);
+      medImages.forEach(img => data.append("images", img));
       headers = { Authorization: `Bearer ${token}` };
     } else {
       data = {
@@ -393,7 +394,7 @@ const allPharmacyCategories = React.useMemo(() => {
     );
     setMedMsg("Medicine added!");
     setMedForm({ name: "", brand: "", price: "", mrp: "", stock: "", category: "", discount: "", customCategory: "" });
-    setMedImage(null);
+    setMedImages([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   } catch {
     setMedMsg("Failed to add medicine.");
@@ -458,7 +459,7 @@ const allPharmacyCategories = React.useMemo(() => {
 
   try {
     let data, headers;
-    if (editMedImage) {
+    if (editMedImages && editMedImages.length) {
       data = new FormData();
       data.append("name", editMedForm.name);
       data.append("brand", editMedForm.brand);
@@ -471,7 +472,7 @@ const allPharmacyCategories = React.useMemo(() => {
       if (editMedForm.type === "Other") {
         data.append("customType", editMedForm.customType);
       }
-      data.append("image", editMedImage);
+      editMedImages.forEach(img => data.append("images", img));
       headers = {
         Authorization: `Bearer ${token}`,
         "Content-Type": "multipart/form-data",
@@ -498,7 +499,7 @@ const allPharmacyCategories = React.useMemo(() => {
 
     setMedMsg("Medicine updated!");
     setEditMedId(null);
-    setEditMedImage(null);
+    setEditMedImages([]);
     if (editFileInputRef.current) editFileInputRef.current.value = "";
   } catch {
     setMedMsg("Failed to update medicine.");
@@ -508,7 +509,7 @@ const allPharmacyCategories = React.useMemo(() => {
 
 const closeEditDialog = () => {
   setEditMedId(null);
-  setEditMedImage(null);
+  setEditMedImages([]);
   if (editFileInputRef.current) editFileInputRef.current.value = "";
 };
 
@@ -549,15 +550,16 @@ const closeEditDialog = () => {
 
 
   // Handle file select
-  const handleImageChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setMedImage(e.target.files[0]);
-    }
-  };
+  const handleImagesChange = (e) => {
+  if (e.target.files && e.target.files.length) {
+    setMedImages(Array.from(e.target.files));
+  }
+};
+
   // Edit dialog image select
-const handleEditImageChange = (e) => {
-  if (e.target.files && e.target.files[0]) {
-    setEditMedImage(e.target.files[0]);
+const handleEditImagesChange = (e) => {
+  if (e.target.files && e.target.files.length) {
+    setEditMedImages(Array.from(e.target.files));
   }
 };
 
@@ -1077,20 +1079,79 @@ const handleEditImageChange = (e) => {
   <input
     type="file"
     accept="image/*"
+    multiple
     hidden
     ref={editFileInputRef}
-    onChange={handleEditImageChange}
+    onChange={handleEditImagesChange}
   />
   <Button
     startIcon={<PhotoCamera />}
-    variant={editMedImage ? "contained" : "outlined"}
+    variant={editMedImages && editMedImages.length ? "contained" : "outlined"}
     onClick={() => editFileInputRef.current && editFileInputRef.current.click()}
-    color={editMedImage ? "success" : "primary"}
+    color={editMedImages && editMedImages.length ? "success" : "primary"}
     sx={{ minWidth: 120 }}
   >
-    {editMedImage ? "Image Ready" : "Upload Image"}
+    {editMedImages && editMedImages.length ? `${editMedImages.length} Image${editMedImages.length > 1 ? "s" : ""} Ready` : "Upload Images"}
   </Button>
 </Stack>
+{/* Show existing (already saved) images, with delete button */}
+{editMedId && medicines.find(m => (m._id || m.id) === editMedId)?.images?.length > 0 && (
+  <Stack direction="row" spacing={1} sx={{ my: 1 }}>
+    {medicines.find(m => (m._id || m.id) === editMedId).images.map((imgUrl, i) => (
+      <Box key={imgUrl + i} sx={{ position: "relative", display: "inline-block" }}>
+        <img
+          src={imgUrl.startsWith("http") ? imgUrl : `${API_BASE_URL}${imgUrl}`}
+          alt=""
+          style={{ width: 56, height: 56, borderRadius: 2, objectFit: "cover", border: "1px solid #ccc" }}
+        />
+        <IconButton
+          size="small"
+          sx={{ position: "absolute", top: -8, right: -8, bgcolor: "#fff" }}
+          onClick={async () => {
+            try {
+              await axios.patch(
+                `${API_BASE_URL}/api/pharmacy/medicines/${editMedId}/remove-image`,
+                { image: imgUrl },
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              setMedMsg("Image deleted!");
+              // Refetch or update medicines list
+              // This will close dialog, but you can call setEditMedId again after fetch
+              const res = await axios.get(`${API_BASE_URL}/api/pharmacy/medicines`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              setMedicines(res.data);
+              // Optionally, keep dialog open:
+              setEditMedId(editMedId);
+            } catch {
+              setMedMsg("Failed to delete image.");
+            }
+          }}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </Box>
+    ))}
+  </Stack>
+)}
+
+{/* Show newly uploaded (not yet saved) images */}
+{editMedImages && editMedImages.length > 0 && (
+  <Stack direction="row" spacing={1} sx={{ my: 1 }}>
+    {editMedImages.map((img, i) => (
+      <Box
+        key={i}
+        component="img"
+        src={URL.createObjectURL(img)}
+        sx={{
+          width: 56, height: 56, borderRadius: 2,
+          objectFit: "cover", border: "1px solid #ccc"
+        }}
+      />
+    ))}
+  </Stack>
+)}
+
         </Stack>
       </DialogContent>
       <DialogActions>
@@ -1217,23 +1278,38 @@ const handleEditImageChange = (e) => {
         )}
         <Stack direction="row" spacing={2} alignItems="center">
           <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            hidden
-            ref={fileInputRef}
-            onChange={handleImageChange}
-          />
-          <Button
-            startIcon={<PhotoCamera />}
-            variant={medImage ? "contained" : "outlined"}
-            onClick={() => fileInputRef.current && fileInputRef.current.click()}
-            color={medImage ? "success" : "primary"}
-            sx={{ minWidth: 120 }}
-          >
-            {medImage ? "Image Ready" : "Upload Image"}
-          </Button>
+  type="file"
+  accept="image/*"
+  multiple
+  hidden
+  ref={fileInputRef}
+  onChange={handleImagesChange}
+/>
+<Button
+  startIcon={<PhotoCamera />}
+  variant={medImages && medImages.length ? "contained" : "outlined"}
+  onClick={() => fileInputRef.current && fileInputRef.current.click()}
+  color={medImages && medImages.length ? "success" : "primary"}
+  sx={{ minWidth: 120 }}
+>
+  {medImages && medImages.length ? `${medImages.length} Image${medImages.length > 1 ? "s" : ""} Ready` : "Upload Images"}
+</Button>
         </Stack>
+        {medImages && medImages.length > 0 && (
+  <Stack direction="row" spacing={1} sx={{ my: 1 }}>
+    {medImages.map((img, i) => (
+      <Box
+        key={i}
+        component="img"
+        src={URL.createObjectURL(img)}
+        sx={{
+          width: 56, height: 56, borderRadius: 2,
+          objectFit: "cover", border: "1px solid #ccc"
+        }}
+      />
+    ))}
+  </Stack>
+)}
         <Button
           variant="contained"
           onClick={handleAddMedicine}
