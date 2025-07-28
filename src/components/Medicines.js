@@ -9,6 +9,7 @@ import CategoryIcon from "@mui/icons-material/Category";
 import { useCart } from "../context/CartContext";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import SwipeableViews from 'react-swipeable-views';
 import axios from "axios";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -155,10 +156,11 @@ export default function Medicines() {
                       component="img"
                       src={getImageUrl(med.img)}
                       alt={med.name}
-                      sx={{ width: 72, height: 72, borderRadius: 3, bgcolor: "#f1fff7", objectFit: "contain" }}
+                      onClick={() => setSelectedMed(med)}
+                      sx={{ width: 72, height: 72, borderRadius: 3, bgcolor: "#f1fff7", objectFit: "contain", cursor: "pointer" }}
                     />
                     <Box>
-                      <Typography fontWeight={700} fontSize={16} color="#07908A" sx={{ mb: 0.2 }}>
+                      <Typography fontWeight={700} fontSize={16} color="#07908A" sx={{ mb: 0.2, cursor: "pointer" }} onClick={() => setSelectedMed(med)}>
                         {med.name}
                       </Typography>
                       {med.brand && med.brand.trim() && (
@@ -238,54 +240,107 @@ export default function Medicines() {
       </Box>
 
       {/* Know More Modal */}
-      <Dialog open={!!selectedMed} onClose={() => setSelectedMed(null)}>
-        {selectedMed && (
-          <>
-            <DialogTitle>
-              {selectedMed.name}
-              {selectedMed.brand && selectedMed.brand.trim() && (
-                <Typography
-                  component="div"
-                  fontWeight={500}
-                  fontSize={15}
-                  color="#1188A3"
-                  sx={{ mt: 0.5 }}
-                >
-                  {selectedMed.brand}
-                </Typography>
-              )}
-            </DialogTitle>
-            <DialogContent>
-              <Typography variant="body2" gutterBottom color="text.secondary">
-                {selectedMed.description || "No description available."}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Category: {Array.isArray(selectedMed.category) ? selectedMed.category.join(", ") : (selectedMed.category || "Miscellaneous")}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Type: {Array.isArray(selectedMed.type) ? selectedMed.type.join(", ") : (selectedMed.type || "—")}
-              </Typography>
-              <Typography variant="h6" mt={2}>
-                ₹{selectedMed.price} <Typography component="span" sx={{ textDecoration: "line-through", ml: 1, fontSize: 14, color: "gray" }}>₹{Math.round(selectedMed.price / (1 - (selectedMed.discount || 10) / 100))}</Typography>
-              </Typography>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setSelectedMed(null)}>Close</Button>
-              <Button
-                variant="contained"
-                sx={{ bgcolor: "#13C0A2", color: "white" }}
-                onClick={() => {
-                  addToCart(selectedMed);
-                  setSnackbar({ open: true, message: `${selectedMed.name} added to cart!`, severity: "success" });
-                  setSelectedMed(null);
-                }}
-              >
-                Add to Cart
-              </Button>
-            </DialogActions>
-          </>
+      <Dialog
+  open={!!selectedMed}
+  onClose={() => setSelectedMed(null)}
+  fullWidth
+  maxWidth="sm"
+  PaperProps={{
+    sx: { borderRadius: 3, height: "80vh" } // Control height
+  }}
+>
+  {selectedMed && (
+    <>
+      <DialogTitle sx={{ pb: 1.5 }}>
+        <Typography fontWeight={700} fontSize={18}>
+          {selectedMed.name}
+        </Typography>
+        {selectedMed.brand && (
+          <Typography fontSize={14} color="gray">
+            {selectedMed.brand}
+          </Typography>
         )}
-      </Dialog>
+      </DialogTitle>
+
+      <DialogContent dividers sx={{ textAlign: "center" }}>
+        {/* Medicine Image */}
+        <SwipeableViews enableMouseEvents style={{ maxWidth: "100%", marginBottom: 16 }}>
+  {(selectedMed.images?.length ? selectedMed.images : [selectedMed.img]).map((src, index) => (
+    <Box
+      key={index}
+      component="img"
+      src={getImageUrl(src)}
+      alt={`Image ${index + 1}`}
+      sx={{
+        width: "80%",
+        height: 180,
+        objectFit: "contain",
+        borderRadius: 2,
+        bgcolor: "#f5f5f5",
+        mx: "auto"
+      }}
+    />
+  ))}
+</SwipeableViews>
+
+        {/* Description */}
+        <Typography fontSize={14} mb={1.5}>
+          {selectedMed.description || "No description available."}
+        </Typography>
+
+        <Typography fontSize={14} color="text.secondary">
+          Category:{" "}
+          {Array.isArray(selectedMed.category)
+            ? selectedMed.category.join(", ")
+            : selectedMed.category || "—"}
+        </Typography>
+        <Typography fontSize={14} color="text.secondary" mb={2}>
+          Type:{" "}
+          {Array.isArray(selectedMed.type)
+            ? selectedMed.type.join(", ")
+            : selectedMed.type || "—"}
+        </Typography>
+
+        {/* Price */}
+        <Typography variant="h6" mt={2}>
+          ₹{selectedMed.price}
+          {selectedMed.mrp && (
+            <Typography
+              component="span"
+              sx={{
+                textDecoration: "line-through",
+                ml: 1,
+                fontSize: 14,
+                color: "gray"
+              }}
+            >
+              ₹{selectedMed.mrp}
+            </Typography>
+          )}
+        </Typography>
+      </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={() => setSelectedMed(null)}>Close</Button>
+        <Button
+          variant="contained"
+          sx={{ bgcolor: "#13C0A2", color: "white" }}
+          onClick={() => {
+            addToCart(selectedMed);
+            setSnackbar({
+              open: true,
+              message: `${selectedMed.name} added to cart!`,
+              severity: "success"
+            });
+            setSelectedMed(null);
+          }}
+        >
+          Add to Cart
+        </Button>
+      </DialogActions>
+    </>
+  )}
+</Dialog>
 
       {/* Floating Upload Prescription */}
       {!uploadOpen && (
