@@ -260,41 +260,53 @@ export default function Medicines() {
   {selectedMed && (
     <Box sx={{ bgcolor: "#fff" }}>
       {/* IMAGES */}
-      <Box sx={{ p: 0, bgcolor: "#f5f7fa" }}>
-        <SwipeableViews
-          enableMouseEvents
-          style={{ width: "100%", margin: 0 }}
-          containerStyle={{ width: "100%" }}
-        >
-          {(selectedMed.images?.length ? selectedMed.images : [selectedMed.img]).map((src, i) => (
-            <Box
-              key={i}
-              sx={{
-                width: "100%",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                minHeight: 200,
-                p: 2
-              }}
-            >
-              <img
-                src={getImageUrl(src)}
-                alt={`Medicine ${selectedMed.name} img${i + 1}`}
-                style={{
-                  width: "90%",
-                  height: 170,
-                  objectFit: "contain",
-                  borderRadius: 10,
-                  background: "#fff",
-                  border: "1px solid #e3e3e3",
-                  boxShadow: "0 1px 4px 0 #e6e6e6"
-                }}
-              />
-            </Box>
-          ))}
-        </SwipeableViews>
+      <Box sx={{
+  width: "100%",
+  bgcolor: "#f5f7fa",
+  pt: 0, // No top padding!
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  overflow: "hidden"
+}}>
+  <SwipeableViews
+    enableMouseEvents
+    style={{ width: "100%", margin: 0 }}
+    containerStyle={{ width: "100%" }}
+  >
+    {(selectedMed.images?.length ? selectedMed.images : [selectedMed.img]).map((src, i) => (
+      <Box
+        key={i}
+        sx={{
+          width: "100%",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "flex-start", // Top-align
+          minHeight: 0, // Remove forced height!
+          p: 0, // Remove padding
+          m: 0
+        }}
+      >
+        <img
+          src={getImageUrl(src)}
+          alt={`Medicine ${selectedMed.name} img${i + 1}`}
+          style={{
+            width: "100%",
+            maxWidth: 280,
+            height: "auto",
+            maxHeight: 180,
+            objectFit: "contain",
+            borderRadius: 10,
+            background: "#fff",
+            border: "1px solid #e3e3e3",
+            boxShadow: "0 1px 4px 0 #e6e6e6",
+            margin: "0 auto"
+          }}
+        />
       </Box>
+    ))}
+  </SwipeableViews>
+</Box>
 
       {/* NAME + BRAND */}
       <Box sx={{ p: 2, pt: 1 }}>
