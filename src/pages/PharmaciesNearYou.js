@@ -1,13 +1,15 @@
-// src/pages/PharmaciesNearYou.js
+"use client";
+
 import React, { useEffect, useState } from "react";
-import {
-  Box, Typography, Card, Button, Stack, Chip, Fab, Rating, Divider
-} from "@mui/material";
-import LocalPharmacyIcon from "@mui/icons-material/LocalPharmacy";
-import PrescriptionUploadModal from "../components/PrescriptionUploadModal";
+import { Card, CardContent } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { Dialog, DialogContent } from "../components/ui/dialog";
 import { useLocation } from "../context/LocationContext";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { useNavigate } from "react-router-dom";
+import { Pill, MapPin, UploadCloud, CheckCircle, Timer } from "lucide-react";
+import PrescriptionUploadModal from "../components/PrescriptionUploadModal";
+import { motion, AnimatePresence } from "framer-motion";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
@@ -17,11 +19,9 @@ export default function PharmaciesNearYou() {
   const [canDeliver, setCanDeliver] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
   const navigate = useNavigate();
-
-  // Use context for current address
   const { currentAddress } = useLocation();
 
-  // Refetch on address change (and on mount)
+  // Fetch pharmacies when address changes
   useEffect(() => {
     if (!currentAddress?.lat || !currentAddress?.lng) {
       setLoading(false);
@@ -36,7 +36,7 @@ export default function PharmaciesNearYou() {
       .finally(() => setLoading(false));
   }, [currentAddress]);
 
-  // Delivery partner check (now by lat/lng)
+  // Check if delivery is available
   useEffect(() => {
     if (!currentAddress?.lat || !currentAddress?.lng) {
       setCanDeliver(false);
@@ -49,242 +49,157 @@ export default function PharmaciesNearYou() {
   }, [currentAddress]);
 
   return (
-    <Box sx={{ bgcolor: "#f9fafb", minHeight: "100vh", pb: 12, pt: 2 }}>
-      <Box sx={{ maxWidth: 480, mx: "auto", px: 0 }}>
+    <div className="bg-gradient-to-br from-[#f9fafb] to-[#eafcf4] min-h-screen pb-24 pt-4">
+      <div className="max-w-md mx-auto px-2">
         {/* Offer banner */}
-        <Box
-          sx={{
-            bgcolor: "#eafcf4",
-            color: "#13C0A2",
-            fontWeight: 800,
-            fontSize: 18,
-            borderRadius: 6,
-            px: 2.5,
-            py: 1.6,
-            mb: 2,
-            display: "flex",
-            alignItems: "center",
-            boxShadow: 1,
-            gap: 1,
-            mx: 2
-          }}
+        <motion.div
+          initial={{ y: -30, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="flex items-center gap-2 bg-[#eafcf4] text-[#13C0A2] font-extrabold text-base rounded-xl px-4 py-3 mb-4 shadow-sm mx-2"
         >
-          <span role="img" aria-label="lightning" style={{ color: "#FFD43B", fontSize: 22, marginRight: 10 }}>⚡</span>
-          <span>Flat 15% OFF on health supplements! Use code <b>HEALTH15</b></span>
-        </Box>
+          <span className="text-[#FFD43B] text-2xl">⚡</span>
+          <span>
+            Flat 15% OFF on health supplements! Use code <b>HEALTH15</b>
+          </span>
+        </motion.div>
 
         {/* Heading */}
-        <Stack direction="row" alignItems="center" spacing={1} mb={1} mx={2}>
-          <LocalPharmacyIcon sx={{ color: "#FFD43B", fontSize: 28, mr: 1 }} />
-          <Typography fontWeight={900} fontSize={23} color="#1199a6" sx={{ letterSpacing: 0.5 }}>
+        <div className="flex items-center gap-2 mb-1 mx-2">
+          <Pill className="text-[#FFD43B] w-7 h-7" />
+          <span className="font-extrabold text-xl tracking-tight text-[#1199a6]">
             Pharmacies Near You
-          </Typography>
+          </span>
           {currentAddress?.formatted && (
-            <Chip
-              label={currentAddress.formatted.length > 23
+            <Badge
+              variant="secondary"
+              className="bg-[#13C0A2] text-white ml-2 font-bold text-xs rounded-lg px-2 pointer-events-none select-none"
+            >
+              {currentAddress.formatted.length > 23
                 ? currentAddress.formatted.slice(0, 23) + "..."
                 : currentAddress.formatted}
-              sx={{
-                bgcolor: "#13C0A2",
-                color: "#fff",
-                ml: 1,
-                fontWeight: 700,
-                fontSize: 13,
-                borderRadius: 2,
-                px: 1.2,
-                cursor: "default",
-                pointerEvents: "none"
-              }}
-              size="small"
-            />
+            </Badge>
           )}
-        </Stack>
+        </div>
 
-        <Divider sx={{ my: 1 }} />
+        <div className="border-b border-gray-100 my-2" />
 
-        {/* Delivery partner block */}
+        {/* Delivery warning */}
         {!canDeliver && (
-          <Box sx={{
-            bgcolor: "#ffebee",
-            color: "#b71c1c",
-            p: 2,
-            borderRadius: 2,
-            my: 2,
-            textAlign: "center",
-            fontWeight: 700,
-            fontSize: 16
-          }}>
-            <span role="img" aria-label="no-delivery" style={{ fontSize: 20, marginRight: 8 }}>⛔</span>
-            Sorry, no delivery partner is available at your location right now.<br />
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-red-50 text-red-700 p-3 rounded-lg my-3 text-center font-bold text-sm flex flex-col items-center"
+          >
+            <span className="text-2xl mb-1">⛔</span>
+            Sorry, no delivery partner is available at your location right now.
+            <br />
             Please try again soon.
-          </Box>
+          </motion.div>
         )}
 
-        {/* Pharmacies list */}
-        <Box sx={{ px: 2, pt: 0.5 }}>
+        {/* Pharmacy list */}
+        <div className="px-2 pt-1">
           {loading ? (
-            <Typography sx={{ mt: 6, color: "#888" }}>Loading pharmacies...</Typography>
+            <div className="text-gray-400 mt-10 text-center animate-pulse">
+              Loading pharmacies...
+            </div>
           ) : pharmacies.length === 0 ? (
-            <Typography sx={{ mt: 6, color: "#888" }}>
+            <div className="text-gray-400 mt-10 text-center">
               No pharmacies found near your location.
-            </Typography>
+            </div>
           ) : (
-            <Stack spacing={2}>
-              {pharmacies.map((pharmacy) => (
-                <Card
-                  key={pharmacy._id}
-                  sx={{
-                    opacity: canDeliver ? 1 : 0.55,
-                    pointerEvents: canDeliver ? "auto" : "none",
-                    borderRadius: 5,
-                    boxShadow: 3,
-                    px: 2,
-                    py: 1.7,
-                    bgcolor: "#fff",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1.6,
-                    cursor: canDeliver ? "pointer" : "not-allowed",
-                    transition: "box-shadow 0.13s",
-                    "&:hover": canDeliver ? { boxShadow: 7, bgcolor: "#fafbfa" } : {},
-                  }}
-                  onClick={() => canDeliver && navigate(`/medicines/${pharmacy._id}`)}
-                >
-                  {/* Pharmacy Icon */}
-                  <Box
-                    sx={{
-                      width: 52,
-                      height: 52,
-                      background: "#e8faf7",
-                      borderRadius: "14px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      mr: 1
-                    }}
+            <div className="flex flex-col gap-4">
+              <AnimatePresence>
+                {pharmacies.map((pharmacy) => (
+                  <motion.div
+                    key={pharmacy._id}
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 140, damping: 20 }}
                   >
-                    <img
-                      src="/pharmacy-icon.png"
-                      alt="Pharmacy"
-                      style={{
-                        width: 32,
-                        height: 32,
-                        objectFit: "contain",
-                        display: "block"
-                      }}
-                    />
-                  </Box>
-                  {/* Main info */}
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography
-                      fontWeight={800}
-                      fontSize={16}
-                      color="#138a72"
-                      sx={{
-                        overflowWrap: "break-word",
-                        wordBreak: "break-all",
-                        whiteSpace: "normal",
-                        maxWidth: 165,
-                        lineHeight: 1.2
-                      }}
-                      title={pharmacy.name}
+                    <Card
+                      className={`flex items-center gap-4 rounded-2xl shadow-md p-4 bg-white cursor-pointer transition hover:shadow-xl hover:bg-gray-50 ${
+                        canDeliver ? "opacity-100" : "opacity-60 pointer-events-none"
+                      }`}
+                      onClick={() => canDeliver && navigate(`/medicines/${pharmacy._id}`)}
                     >
-                      {pharmacy.name}
-                    </Typography>
-                    <Typography fontSize={14} color="#666" sx={{ mt: 0.1 }}>
-                      {pharmacy.address?.area || pharmacy.area}
-                    </Typography>
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.7 }}>
-                      <Chip
-                        size="small"
-                        label={`13–29 min`}
-                        sx={{
-                          bgcolor: "#13C0A225",
-                          color: "#13C0A2",
-                          fontWeight: 700,
-                          fontSize: 13
-                        }}
-                      />
-                      <Chip
-                        size="small"
-                        label="✅Verified"
-                        sx={{
-                          bgcolor: "#FFD43B22",
-                          color: "#f49f00",
-                          fontWeight: 700,
-                          fontSize: 13
-                        }}
-                      />
-                    </Stack>
-                  </Box>
-                  <Stack alignItems="flex-end" spacing={1}>
-                    <Rating
-                      value={pharmacy.rating || 4.5}
-                      precision={0.1}
-                      readOnly
-                      size="small"
-                      sx={{ fontSize: 18, mb: 0.3 }}
-                    />
-                    <Button
-                      size="small"
-                      variant="contained"
-                      sx={{
-                        bgcolor: "#328439",
-                        color: "#fff",
-                        borderRadius: 99,
-                        px: 2.3,
-                        py: 0.6,
-                        fontWeight: 700,
-                        textTransform: "none",
-                        fontSize: 15,
-                        boxShadow: "none",
-                        "&:hover": { bgcolor: "#146b2d" }
-                      }}
-                      disabled={!canDeliver}
-                      onClick={e => {
-                        e.stopPropagation();
-                        if (canDeliver) navigate(`/medicines/${pharmacy._id}`);
-                      }}
-                    >
-                      View
-                    </Button>
-                  </Stack>
-                </Card>
-              ))}
-            </Stack>
+                      {/* Pharmacy icon */}
+                      <div className="w-14 h-14 flex items-center justify-center rounded-xl bg-[#e8faf7] mr-2 shrink-0">
+                        <img
+                          src="/pharmacy-icon.png"
+                          alt="Pharmacy"
+                          className="w-8 h-8 object-contain"
+                        />
+                      </div>
+                      {/* Pharmacy details */}
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className="font-bold text-[#138a72] text-base truncate"
+                          title={pharmacy.name}
+                        >
+                          {pharmacy.name}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5 truncate">
+                          {pharmacy.address?.area || pharmacy.area}
+                        </div>
+                        <div className="flex gap-2 mt-1">
+                          <Badge className="bg-[#13C0A2]/10 text-[#13C0A2] font-bold text-xs">
+                            <Timer className="w-4 h-4 mr-1 inline-block" /> 13–29 min
+                          </Badge>
+                          <Badge className="bg-[#FFD43B]/10 text-[#f49f00] font-bold text-xs">
+                            <CheckCircle className="w-4 h-4 mr-1 inline-block" /> Verified
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1 items-end">
+                        <div className="flex items-center gap-1 text-xs text-yellow-500 font-bold">
+                          {/* Simple rating star, can be upgraded with real shadcn star rating */}
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                            viewBox="0 0 24 24" className="inline-block">
+                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                          </svg>
+                          {pharmacy.rating || 4.5}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="bg-[#328439] text-white rounded-full px-4 py-1 font-bold text-sm shadow-none hover:bg-[#146b2d]"
+                          disabled={!canDeliver}
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (canDeliver) navigate(`/medicines/${pharmacy._id}`);
+                          }}
+                        >
+                          View
+                        </Button>
+                      </div>
+                    </Card>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
           )}
-        </Box>
-      </Box>
+        </div>
+      </div>
 
-      {/* Floating: Upload Prescription */}
+      {/* Floating action button: Upload Prescription */}
       {!uploadOpen && (
-        <Fab
-          variant="extended"
-          sx={{
-            position: "fixed",
-            bottom: 140,
-            right: 18,
-            zIndex: 2001,
-            bgcolor: "#FFD43B",
-            color: "#1199a6",
-            fontWeight: 700,
-            boxShadow: 7,
-            pl: 2,
-            pr: 2.6,
-            "&:hover": { bgcolor: "#f2c200" }
-          }}
+        <Button
+          variant="outline"
+          size="lg"
+          className="fixed bottom-32 right-5 z-50 bg-[#FFD43B] text-[#1199a6] font-bold shadow-lg px-6 py-3 rounded-full flex items-center gap-2 hover:bg-yellow-400"
           onClick={() => setUploadOpen(true)}
-          title="Upload Prescription"
         >
-          <UploadFileIcon sx={{ fontSize: 23, mr: 1 }} />
+          <UploadCloud className="w-6 h-6" />
           Upload Prescription
-        </Fab>
+        </Button>
       )}
       <PrescriptionUploadModal
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
         userAddress={currentAddress}
       />
-    </Box>
+    </div>
   );
 }

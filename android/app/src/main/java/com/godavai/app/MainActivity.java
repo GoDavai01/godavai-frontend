@@ -1,4 +1,4 @@
-package com.godavai.app;
+package com.godavaii.app;
 
 import com.getcapacitor.BridgeActivity;
 

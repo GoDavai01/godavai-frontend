@@ -835,7 +835,7 @@ useEffect(() => {
                   setReuploadModalOpen(true);
                 }}
               >
-                Let GoDavai Handle It
+                Let GoDavaii Handle It
               </Button>
             </Stack>
           </DialogContent>

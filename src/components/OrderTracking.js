@@ -642,7 +642,7 @@ useEffect(() => {
                     Thank you for your feedback!
                   </Typography>
                   <Typography variant="body1" sx={{ color: "#7f9183", fontWeight: 500 }}>
-                    We're glad you chose GoDavai.<br />Wishing you a speedy recovery!
+                    We're glad you chose GoDavaii.<br />Wishing you a speedy recovery!
                   </Typography>
                 </Box>
               ) : (

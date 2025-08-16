@@ -292,7 +292,7 @@ export default function ProfilePage() {
   const [chatMsg, setChatMsg] = useState("");
 
   // --- Referral code
-  const referralCode = `GODAVAI-USER-${user?._id || "XXXX"}`;
+  const referralCode = `GODAVAII-USER-${user?._id || "XXXX"}`;
 
   // --- Logout (context)
   const handleLogout = () => {
@@ -449,10 +449,10 @@ export default function ProfilePage() {
         />
       </Section>
 
-      {/* --- Saved Cards & GoDavai Money --- */}
+      {/* --- Saved Cards & GoDavaii Money --- */}
       <Section
         icon={<WalletIcon sx={{ color: "#FFD43B" }} />}
-        title={t("Saved Cards & GoDavai Money")}
+        title={t("Saved Cards & GoDavaii Money")}
         expanded={openSections.wallet}
         onToggle={() => toggleSection("wallet")}
       >
@@ -490,7 +490,7 @@ export default function ProfilePage() {
           )}
           <ListItem sx={{ pl: 1.5 }}>
             <CurrencyRupeeIcon sx={{ mr: 1, color: "green" }} />
-            <ListItemText primary="GoDavai Money: ₹240" primaryTypographyProps={{ fontWeight: 700, color: "green" }} />
+            <ListItemText primary="GoDavaii Money: ₹240" primaryTypographyProps={{ fontWeight: 700, color: "green" }} />
           </ListItem>
           <ListItem button onClick={handleCardAdd}>
             <AddIcon sx={{ color: "#17879c" }} />
@@ -821,7 +821,7 @@ export default function ProfilePage() {
         onToggle={() => toggleSection("refer")}
       >
         <Typography sx={{ mb: 1, fontWeight: 700 }}>
-          Refer friends and earn ₹50 GoDavai Money on their first order!
+          Refer friends and earn ₹50 GoDavaii Money on their first order!
         </Typography>
         <Box sx={{ display: "flex", alignItems: "center" }}>
           <TextField value={referralCode} size="small" sx={{ mr: 2, width: 200 }} disabled />

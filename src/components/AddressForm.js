@@ -1,16 +1,93 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  Dialog, DialogTitle, DialogContent, TextField, Button, Stack, ToggleButtonGroup, ToggleButton, Box
-} from "@mui/material";
-import RoomIcon from "@mui/icons-material/Room";
-import CircularProgress from "@mui/material/CircularProgress";
+import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
-import MyLocationIcon from "@mui/icons-material/MyLocation";
+import { MapPin, LocateFixed, X } from "lucide-react";
 import { useLocation } from "../context/LocationContext";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-// Use .env for production, or hardcode temporarily if .env is not loading in build!
-const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "AIzaSyCd9Jkk_kd0SwaDLKwehdTpowiHEAnuy8Y"; 
+const GOOGLE_MAPS_API_KEY =
+  process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "AIzaSyCd9Jkk_kd0SwaDLKwehdTpowiHEAnuy8Y";
+
+// Headless modal (no backdrop). Includes close icon + Back-button-to-close.
+// IMPORTANT: uses inline style zIndex so it stacks above parent modals.
+function Modal({ open, onClose, children, maxWidth = "max-w-md", zIndex = 2600 }) {
+  const pushedRef = useRef(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onKey = (e) => e.key === "Escape" && safeClose();
+    const onPop = () => onClose?.();
+
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("popstate", onPop);
+
+    try {
+      window.history.pushState({ modal: "stack" }, "");
+      pushedRef.current = true;
+    } catch {}
+
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("popstate", onPop);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const safeClose = () => {
+    onClose?.();
+    if (pushedRef.current) {
+      try {
+        window.history.back();
+      } catch {}
+      pushedRef.current = false;
+    }
+  };
+
+  if (!open) return null;
+
+  return createPortal(
+    <div className="fixed inset-0" style={{ zIndex }}>
+      <div className="absolute inset-0 pointer-events-none" />
+      <div className="absolute inset-0 overflow-y-auto p-4 grid place-items-center">
+        <AnimatePresence initial>
+          <motion.div
+            key="address-modal"
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.98 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className={`relative w-full ${maxWidth}`}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200">
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={safeClose}
+                className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white/90 hover:bg-zinc-50 shadow-sm"
+              >
+                <X className="h-5 w-5 text-zinc-600" />
+              </button>
+              {children}
+              <div className="px-5 pb-4 -mt-2">
+                <button
+                  type="button"
+                  onClick={safeClose}
+                  className="w-full rounded-xl border border-zinc-200 bg-white py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 export default function AddressForm({ open, onClose, onSave, initial = {} }) {
   const [type, setType] = useState(initial.type || "Home");
@@ -24,7 +101,6 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
   const { currentAddress } = useLocation();
   const [floor, setFloor] = useState(initial.floor || "");
 
-  // Pin/map stuff
   const [selectedPlace, setSelectedPlace] = useState(
     initial.place_id
       ? {
@@ -36,9 +112,7 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
       : null
   );
   const [pin, setPin] = useState(
-    initial.lat && initial.lng
-      ? { lat: initial.lat, lng: initial.lng }
-      : null
+    initial.lat && initial.lng ? { lat: initial.lat, lng: initial.lng } : null
   );
 
   const inputTimer = useRef();
@@ -46,7 +120,6 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
   const markerRef = useRef(null);
   const scriptLoadedRef = useRef(false);
 
-  // Populate initial on open
   useEffect(() => {
     setType(initial.type || "Home");
     setName(initial.name || "");
@@ -66,13 +139,11 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
     setPin(initial.lat && initial.lng ? { lat: initial.lat, lng: initial.lng } : null);
   }, [open, initial]);
 
-  // --- Autocomplete search ---
   const handleInput = (val) => {
     setInput(val);
     setSelectedPlace(null);
     setPin(null);
     if (inputTimer.current) clearTimeout(inputTimer.current);
-
     if (!val || val.length < 3) {
       setOptions([]);
       return;
@@ -90,7 +161,6 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
     }, 350);
   };
 
-  // On option select: fetch full place details and set pin on map
   const handleOptionSelect = async (option) => {
     setLoading(true);
     try {
@@ -115,10 +185,8 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
     setOptions([]);
   };
 
-  // Load Google Maps script if not present
   function loadScript(src, onLoad) {
     if (document.querySelector(`script[src="${src}"]`)) {
-      // Already present, check if window.google is there
       if (window.google && window.google.maps) onLoad();
       return;
     }
@@ -129,7 +197,6 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
     document.body.appendChild(script);
   }
 
-  // Only load script once
   useEffect(() => {
     if (open && GOOGLE_MAPS_API_KEY && !scriptLoadedRef.current) {
       loadScript(
@@ -142,17 +209,14 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
     }
   }, [open]);
 
-  // Draw map and marker when pin changes (robust against modal animation/render delay)
   useEffect(() => {
     if (!open || !pin || !scriptReady) return;
-
     let tries = 0;
-    const maxTries = 25; // try for up to ~2 seconds
+    const maxTries = 25;
     const interval = setInterval(() => {
-  const mapDiv = document.getElementById("map-preview");
-  if (mapDiv && window.google && window.google.maps) {
+      const mapDiv = document.getElementById("map-preview");
+      if (mapDiv && window.google && window.google.maps) {
         clearInterval(interval);
-
         let map = mapRef.current;
         if (!map) {
           map = new window.google.maps.Map(mapDiv, {
@@ -165,7 +229,6 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
         } else {
           map.setCenter(pin);
         }
-
         if (!markerRef.current) {
           markerRef.current = new window.google.maps.Marker({
             position: pin,
@@ -184,11 +247,9 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
       tries++;
       if (tries > maxTries) clearInterval(interval);
     }, 80);
-
     return () => clearInterval(interval);
   }, [open, pin, scriptReady]);
 
-  // Save handler
   const handleSave = () => {
     if (!name || !phone || !addressLine || !selectedPlace || !pin) return;
     onSave({
@@ -196,7 +257,7 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
       name,
       phone,
       addressLine,
-      floor, // ADD THIS LINE
+      floor,
       ...selectedPlace,
       lat: pin.lat,
       lng: pin.lng,
@@ -205,105 +266,134 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Add/Edit Address</DialogTitle>
-      <DialogContent>
-          <Button
-    variant="outlined"
-    startIcon={<MyLocationIcon />}
-    onClick={() => {
-      if (currentAddress && currentAddress.lat && currentAddress.lng) {
-        setInput(currentAddress.formatted || "");
-        setSelectedPlace({
-          formatted: currentAddress.formatted,
-          lat: currentAddress.lat,
-          lng: currentAddress.lng,
-          place_id: currentAddress.place_id,
-        });
-        setPin({
-          lat: currentAddress.lat,
-          lng: currentAddress.lng,
-        });
-      }
-    }}
-    sx={{ fontWeight: 700, color: "#13C0A2", borderColor: "#13C0A2", mb: 2 }}
-  >
-    Use My Current Location
-  </Button>
-        <Stack spacing={2} mt={1}>
-          <ToggleButtonGroup value={type} exclusive onChange={(_, t) => t && setType(t)}>
-            <ToggleButton value="Home">Home</ToggleButton>
-            <ToggleButton value="Work">Work</ToggleButton>
-            <ToggleButton value="Other">Other</ToggleButton>
-          </ToggleButtonGroup>
-          <TextField label="Name" fullWidth value={name} onChange={e => setName(e.target.value)} />
-          <TextField
-            label="Phone"
-            fullWidth
+    <Modal open={open} onClose={onClose} zIndex={2600}>
+      <div className="px-5 pt-5 pb-3 border-b border-zinc-100">
+        <h3 className="text-lg font-bold tracking-tight">Add/Edit Address</h3>
+      </div>
+
+      <div className="px-5 pb-3 pt-3 space-y-3">
+        <button
+          type="button"
+          onClick={() => {
+            if (currentAddress && currentAddress.lat && currentAddress.lng) {
+              setInput(currentAddress.formatted || "");
+              setSelectedPlace({
+                formatted: currentAddress.formatted,
+                lat: currentAddress.lat,
+                lng: currentAddress.lng,
+                place_id: currentAddress.place_id,
+              });
+              setPin({ lat: currentAddress.lat, lng: currentAddress.lng });
+            }
+          }}
+          className="inline-flex items-center gap-2 rounded-xl border border-teal-500/30 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
+        >
+          <LocateFixed className="h-4 w-4" />
+          Use My Current Location
+        </button>
+
+        <div className="flex gap-2">
+          {["Home", "Work", "Other"].map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setType(t)}
+              className={`rounded-xl px-3 py-2 text-sm font-medium border transition ${
+                type === t
+                  ? "bg-amber-50 border-amber-300 text-amber-800"
+                  : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-zinc-600">Name</label>
+          <input
+            className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Your name"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-zinc-600">Phone</label>
+          <input
+            className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
             value={phone}
-            onChange={e => setPhone(e.target.value.replace(/[^\d+]/g, ""))}
-            inputProps={{ maxLength: 15, pattern: "[0-9+ ]*" }}
+            onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, ""))}
+            maxLength={15}
+            placeholder="+91…"
           />
-          <TextField
-            label="Address (Search Google Maps)"
-            fullWidth
+        </div>
+
+        <div className="space-y-1 relative">
+          <label className="text-xs font-semibold text-zinc-600 flex items-center gap-1">
+            <MapPin className="h-4 w-4 text-teal-600" />
+            <span>Address (Search Google Maps)</span>
+          </label>
+          <input
+            className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
             value={input}
-            onChange={e => handleInput(e.target.value)}
-            InputProps={{
-              startAdornment: <RoomIcon sx={{ mr: 1, color: "#31c48d" }} />,
-              endAdornment: loading ? <CircularProgress size={16} sx={{ ml: 1 }} /> : null
-            }}
+            onChange={(e) => handleInput(e.target.value)}
+            placeholder="Search address"
             autoFocus
-            helperText={selectedPlace ? "Selected: " + selectedPlace.formatted : ""}
           />
-          {options.length > 0 && (
-            <Box sx={{ mt: 1, bgcolor: "#f6f8fa", borderRadius: 2 }}>
-              {options.map(option => (
-                <Button
-                  key={option.place_id}
-                  onClick={() => handleOptionSelect(option)}
-                  fullWidth
-                  sx={{
-                    justifyContent: "flex-start",
-                    textAlign: "left",
-                    py: 1.2,
-                    color: "#17879c"
-                  }}
-                >
-                  {option.description}
-                </Button>
-              ))}
-            </Box>
-          )}
-          {/* Pin on map preview */}
-          {pin && (
-            <Box sx={{ mt: 2, mb: 1 }}>
-              <div
-                id="map-preview"
-                style={{ width: "100%", height: 260, borderRadius: 10, boxShadow: "0 1px 4px #ddd" }}
-              />
-              <Box sx={{ textAlign: "center", mt: 1, fontSize: 13, color: "#888" }}>
-                Drag the pin if needed to your exact entrance!
-              </Box>
-            </Box>
+          {loading && (
+            <div className="absolute right-3 top-9 h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600" />
           )}
 
-          <TextField
-  label="Floor/House No."
-  fullWidth
-  value={floor}
-  onChange={e => setFloor(e.target.value)}
-  placeholder="E.g., Ground, House/Flat 2B, etc."
-/>
-          <Button
-            variant="contained"
-            onClick={handleSave}
-            disabled={!name || !phone || !addressLine || !selectedPlace || !pin}
-          >
-            Save Address
-          </Button>
-        </Stack>
-      </DialogContent>
-    </Dialog>
+          {options.length > 0 && (
+            <div className="absolute z-10 mt-1 w-full rounded-xl border border-zinc-200 bg-white shadow-lg max-h-56 overflow-auto">
+              {options.map((o) => (
+                <button
+                  key={o.place_id}
+                  type="button"
+                  onClick={() => handleOptionSelect(o)}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50"
+                >
+                  {o.description}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {selectedPlace && (
+            <p className="text-[11px] text-zinc-500 pt-1">Selected: {selectedPlace.formatted}</p>
+          )}
+        </div>
+
+        {pin && (
+          <div className="space-y-2">
+            <div id="map-preview" className="w-full h-64 rounded-xl border border-zinc-200 shadow-sm" />
+            <p className="text-center text-xs text-zinc-500">
+              Drag the pin if needed to your exact entrance!
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-zinc-600">Floor/House No.</label>
+          <input
+            className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+            value={floor}
+            onChange={(e) => setFloor(e.target.value)}
+            placeholder="E.g., Ground, Flat 2B"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!name || !phone || !addressLine || !selectedPlace || !pin}
+          className="w-full rounded-xl bg-teal-600 text-white font-semibold py-2.5 shadow hover:bg-teal-700 disabled:opacity-50"
+        >
+          Save Address
+        </button>
+      </div>
+    </Modal>
   );
 }

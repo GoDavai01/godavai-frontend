@@ -1,37 +1,28 @@
-// src/components/PrescriptionUploadModal.js
+"use client";
+
 import React, { useRef, useState, useEffect } from "react";
-import {
-  Dialog, DialogTitle, DialogContent, DialogActions,
-  Button, Box, Typography, Stack, CircularProgress,
-  Alert, Snackbar, RadioGroup, FormControlLabel, Radio, TextField,
-  FormControl, InputLabel, Select, MenuItem, Chip
-} from "@mui/material";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { RadioGroup } from "../components/ui/radio-group";
+import { Input } from "../components/ui/input";
+import { AlertCircle, Home, Edit, Trash2, Plus, UploadCloud, Loader2, MapPin, CheckCircle } from "lucide-react";
+import AddressForm from "./AddressForm";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
-import HomeIcon from "@mui/icons-material/Home";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
-import AddLocationAltIcon from "@mui/icons-material/AddLocationAlt";
-import AddressForm from "./AddressForm";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 export default function PrescriptionUploadModal({
   open, onClose, userCity = "Delhi", userArea = "", afterOrder,
-  initialMode,        // NEW
-  initialNotes,       // NEW
-  initialFileUrl,     // NEW
-  initialAddress      // NEW
+  initialMode, initialNotes, initialFileUrl, initialAddress
 }) {
   const fileInputRef = useRef();
   const { addresses, updateAddresses } = useAuth();
 
-  // Address selection state
   const [selectedAddressId, setSelectedAddressId] = useState(addresses[0]?.id || null);
   const [addressFormOpen, setAddressFormOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState(null);
-
-  // File and prescription order
   const [step, setStep] = useState(1); // 1=choose, 2=wait, 3=quote ready
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
@@ -40,30 +31,41 @@ export default function PrescriptionUploadModal({
   const [quoteReady, setQuoteReady] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
 
-  // --- NEW FIELDS ---
-  const [uploadType, setUploadType] = useState("auto"); // "auto" | "manual"
+  const [uploadType, setUploadType] = useState("auto");
   const [notes, setNotes] = useState("");
   const [pharmacyList, setPharmacyList] = useState([]);
   const [pharmacyLoading, setPharmacyLoading] = useState(false);
   const [selectedPharmacy, setSelectedPharmacy] = useState("");
+  const [phOpen, setPhOpen] = useState(false);
 
-  // --- PREFILL SUPPORT ---
   useEffect(() => {
     if (open) {
       if (initialMode) setUploadType(initialMode);
       if (initialNotes !== undefined) setNotes(initialNotes);
       if (initialAddress && initialAddress.id) setSelectedAddressId(initialAddress.id);
-      if (initialFileUrl) setPreview(initialFileUrl); // Just for preview, won't set file object
+      if (initialFileUrl) setPreview(initialFileUrl);
     }
-    // eslint-disable-next-line
   }, [open, initialMode, initialNotes, initialFileUrl, initialAddress]);
 
-  // Sync selected address on context update
   useEffect(() => {
     if (!selectedAddressId && addresses.length > 0) setSelectedAddressId(addresses[0].id);
   }, [addresses, selectedAddressId]);
 
-  // Poll for quote status when waiting for quote
+  useEffect(() => {
+  if (!phOpen) return;
+  const onDown = (e) => {
+    if (!e.target.closest?.('[data-pharmacy-dropdown]')) {
+      setPhOpen(false);
+    }
+  };
+  document.addEventListener('mousedown', onDown);
+  document.addEventListener('touchstart', onDown);
+  return () => {
+    document.removeEventListener('mousedown', onDown);
+    document.removeEventListener('touchstart', onDown);
+  };
+}, [phOpen]);
+
   useEffect(() => {
     let interval;
     if (step === 2 && order?._id && !quoteReady) {
@@ -84,55 +86,46 @@ export default function PrescriptionUploadModal({
             });
             setTimeout(() => handleClose(), 1600);
           }
-        } catch {}
+        } catch { }
       }, 3500);
     }
     return () => interval && clearInterval(interval);
-    // eslint-disable-next-line
   }, [step, order, quoteReady]);
 
-  // Manual: Fetch pharmacy list if needed
   useEffect(() => {
-  if (open && uploadType === "manual") {
-    setPharmacyLoading(true);
-    const addr = addresses.find(a => a.id === selectedAddressId);
-    if (addr && addr.lat && addr.lng) {
-      axios
-        .get(`${API_BASE_URL}/api/pharmacies/nearby?lat=${addr.lat}&lng=${addr.lng}&maxDistance=15000`)
-        .then(res => setPharmacyList(res.data))
-        .catch(() => setPharmacyList([]))
-        .finally(() => setPharmacyLoading(false));
-    } else {
-      // fallback: no address lat/lng (empty list, force user to pick map location!)
-      setPharmacyList([]);
-      setPharmacyLoading(false);
+    if (open && uploadType === "manual") {
+      setPharmacyLoading(true);
+      const addr = addresses.find(a => a.id === selectedAddressId);
+      if (addr && addr.lat && addr.lng) {
+        axios
+          .get(`${API_BASE_URL}/api/pharmacies/nearby?lat=${addr.lat}&lng=${addr.lng}&maxDistance=15000`)
+          .then(res => setPharmacyList(res.data))
+          .catch(() => setPharmacyList([]))
+          .finally(() => setPharmacyLoading(false));
+      } else {
+        setPharmacyList([]);
+        setPharmacyLoading(false);
+      }
     }
-  }
-  // else: clear list on close or change
-  if (!open || uploadType !== "manual") {
-    setPharmacyList([]);
-    setSelectedPharmacy("");
-  }
-}, [open, uploadType, addresses, selectedAddressId]);
+    if (!open || uploadType !== "manual") {
+      setPharmacyList([]);
+      setSelectedPharmacy("");
+    }
+  }, [open, uploadType, addresses, selectedAddressId]);
 
-  // File change
   const handleFileChange = (e) => {
     const f = e.target.files[0];
     setFile(f);
     setPreview(f ? URL.createObjectURL(f) : "");
   };
-
-  // File picker open
   const handleUploadClick = () => {
     fileInputRef.current?.click();
   };
 
-  // Prevent mobile number in notes
   function sanitizeNotes(str) {
     return str.replace(/\d{10,}/g, "[blocked]");
   }
 
-  // Address save (add/edit)
   const handleSaveAddress = async (addr) => {
     let updated;
     if (addr.id && addresses.some(a => a.id === addr.id)) {
@@ -147,7 +140,6 @@ export default function PrescriptionUploadModal({
     setEditingAddress(null);
   };
 
-  // Confirm-before-delete handler
   const handleDeleteAddress = async (addr) => {
     if (!window.confirm("Are you sure you want to delete this address?")) return;
     const updated = addresses.filter(a => a.id !== addr.id);
@@ -160,7 +152,6 @@ export default function PrescriptionUploadModal({
     }
   };
 
-  // Submit prescription order
   const handleSubmit = async () => {
     if (!selectedAddressId) return setError("Please select or add a delivery address.");
     if (!file && !preview) return setError("Upload a prescription file first.");
@@ -168,23 +159,20 @@ export default function PrescriptionUploadModal({
       return setError("Select a pharmacy.");
     if (/\d{10,}/.test(notes))
       return setError("Mobile numbers not allowed in notes.");
-    // --- ADD THIS BLOCK FOR MANUAL MODE VALIDATION ---
-  if (uploadType === "manual") {
-    const addr = addresses.find(a => a.id === selectedAddressId);
-    if (!addr || !addr.lat || !addr.lng)
-      return setError("Please select a delivery address with location pin (use map).");
-    if (!selectedPharmacy)
-      return setError("Select a pharmacy.");
-  }
-
-  // --- AUTO MODE EXISTING CHECK ---
+    if (uploadType === "manual") {
+      const addr = addresses.find(a => a.id === selectedAddressId);
+      if (!addr || !addr.lat || !addr.lng)
+        return setError("Please select a delivery address with location pin (use map).");
+      if (!selectedPharmacy)
+        return setError("Select a pharmacy.");
+    }
     if (uploadType === "auto") {
-  const addr = addresses.find(a => a.id === selectedAddressId);
-  if (!addr || !addr.lat || !addr.lng) {
-    setError("Please select a location using the map.");
-    return;
-  }
-}
+      const addr = addresses.find(a => a.id === selectedAddressId);
+      if (!addr || !addr.lat || !addr.lng) {
+        setError("Please select a location using the map.");
+        return;
+      }
+    }
     setError("");
     setStep(2);
     try {
@@ -233,7 +221,6 @@ export default function PrescriptionUploadModal({
     }
   };
 
-  // Reset on close
   const handleClose = () => {
     setStep(1);
     setFile(null);
@@ -252,110 +239,101 @@ export default function PrescriptionUploadModal({
     onClose();
   };
 
+  // ----------- UI START -------------
   return (
-    <>
-      <Dialog open={open} onClose={handleClose} fullWidth maxWidth="xs">
-        <DialogTitle>
-          {step === 1 && "Upload Prescription"}
-          {step === 2 && (quoteReady ? "Quote Received!" : "Waiting for Quotes")}
-        </DialogTitle>
-        <DialogContent dividers>
+  <>
+    <Dialog open={open} onOpenChange={handleClose}>
+  <DialogContent
+  className="!p-0 !max-w-sm w-full rounded-2xl flex flex-col"
+  style={{
+    maxHeight: "100vh",   // full available safe area
+    background: "#fff",
+    boxShadow: "0 8px 32px rgba(40,80,120,0.16)",
+    display: "flex",
+    flexDirection: "column",
+    // No margin/marginTop/marginBottom here!
+  }}
+>
+  {/* HEADER */}
+  <DialogHeader className="p-5 pb-2 flex-shrink-0 bg-white z-10">
+    <DialogTitle className="text-xl font-bold tracking-tight">
+      {step === 1 && "Upload Prescription"}
+      {step === 2 && (quoteReady ? "Quote Received!" : "Waiting for Quotes")}
+    </DialogTitle>
+  </DialogHeader>
+  {/* CONTENT */}
+  <div
+    className="flex-1 px-4 pt-1 pb-1 overflow-y-auto"
+    style={{
+      minHeight: 180,
+      // If you want to be super safe, add paddingBottom: 72 for bottom nav, paddingTop: 72 for top nav
+    }}
+  >
           {step === 1 && (
-            <Stack spacing={2} alignItems="center">
-              {/* MOBILE-OPTIMIZED ADDRESS SELECTION */}
-              <Box sx={{ width: "100%", mb: 1 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-                  Delivery Address
-                </Typography>
+            <div className="flex flex-col gap-4">
+              {/* Delivery Address */}
+              <div>
+                <div className="font-semibold mb-1 text-zinc-600">Delivery Address</div>
                 {addresses.length === 0 ? (
                   <Button
-                    fullWidth
-                    variant="contained"
-                    color="primary"
-                    startIcon={<AddLocationAltIcon />}
+                    className="w-full"
+                    variant="default"
                     onClick={() => { setEditingAddress(null); setAddressFormOpen(true); }}
-                    sx={{ mb: 1 }}
                   >
-                    Add New Address
+                    <Plus className="w-5 h-5 mr-2" /> Add New Address
                   </Button>
                 ) : (
                   addresses
                     .filter(addr => !selectedAddressId || addr.id === selectedAddressId)
                     .map(addr => (
-                      <Box
+                      <div
                         key={addr.id}
-                        sx={{
-                          bgcolor: "#15171C",
-                          borderRadius: 2,
-                          p: 2,
-                          mb: 1,
-                          color: "#fff",
-                          boxShadow: 3,
-                          minWidth: 0,
-                          maxWidth: "100%",
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "flex-start",
-                          gap: 1,
-                        }}
+                        className="rounded-xl bg-white border border-zinc-200 shadow-sm p-3 mb-2 flex flex-col gap-2"
                       >
-                        <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
-                          <Chip
-                            size="small"
-                            icon={<HomeIcon sx={{ color: "#31c48d" }} />}
-                            label={addr.type}
-                            sx={{ bgcolor: "#232a36", color: "#fff", fontWeight: 600, height: 24 }}
-                          />
-                          <Typography fontWeight={700} fontSize={15} sx={{ ml: 1 }}>
-                            {addr.name}
-                          </Typography>
-                          <Typography fontSize={12} sx={{ ml: 2, opacity: 0.8 }}>
-                            {addr.phone}
-                          </Typography>
-                        </Stack>
-                        <Typography fontSize={14} sx={{ opacity: 0.92 }}>
-                          {addr.addressLine}
-                        </Typography>
-                        <Stack direction="row" spacing={1} mt={1}>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-zinc-800 text-teal-400 px-2 py-0.5">
+                            <Home className="w-4 h-4 mr-1" />
+                            {addr.type || "Current"}
+                          </Badge>
+                          <span className="font-bold text-base">{addr.name}</span>
+                          <span className="text-xs opacity-80">{addr.phone}</span>
+                        </div>
+                        <div className="text-xs text-zinc-400">{addr.addressLine}</div>
+                        <div className="flex gap-2 mt-2">
                           <Button
-                            size="small"
-                            variant="text"
-                            sx={{ color: "#FFD43B", fontWeight: 600, px: 1.5, minWidth: 0 }}
+                            size="sm"
+                            variant="ghost"
+                            className="text-yellow-400"
                             onClick={e => {
                               e.stopPropagation();
                               setEditingAddress(addr);
                               setAddressFormOpen(true);
                             }}
-                            startIcon={<EditIcon />}
                           >
-                            Edit
+                            <Edit className="w-4 h-4 mr-1" /> Edit
                           </Button>
                           <Button
-                            size="small"
-                            variant="text"
-                            sx={{ color: "#ff3333", fontWeight: 600, px: 1.5, minWidth: 0 }}
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-400"
                             onClick={e => {
                               e.stopPropagation();
                               handleDeleteAddress(addr);
                             }}
-                            startIcon={<DeleteIcon />}
                           >
-                            Delete
+                            <Trash2 className="w-4 h-4 mr-1" /> Delete
                           </Button>
-                        </Stack>
-                      </Box>
+                        </div>
+                      </div>
                     ))
                 )}
                 {addresses.length > 0 && (
                   <Button
-                    fullWidth
-                    variant="contained"
-                    color="primary"
-                    startIcon={<AddLocationAltIcon />}
+                    className="w-full mb-1"
+                    variant="secondary"
                     onClick={() => { setEditingAddress(null); setAddressFormOpen(true); }}
-                    sx={{ mb: 1 }}
                   >
-                    Add New Address
+                    <Plus className="w-5 h-5 mr-2" /> Add New Address
                   </Button>
                 )}
                 <AddressForm
@@ -364,145 +342,225 @@ export default function PrescriptionUploadModal({
                   onSave={handleSaveAddress}
                   initial={editingAddress || addresses.find(a => a.id === selectedAddressId) || {}}
                 />
-              </Box>
-              {/* END MOBILE ADDRESS */}
-
-              {/* CHOOSE TYPE */}
-              <RadioGroup
-                row
-                value={uploadType}
-                onChange={e => setUploadType(e.target.value)}
-                sx={{ width: "100%", mb: 1, justifyContent: "center" }}
-              >
-                <FormControlLabel value="auto" control={<Radio />} label="Let GoDavai Handle" />
-                <FormControlLabel value="manual" control={<Radio />} label="Choose Pharmacy Yourself" />
-              </RadioGroup>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,application/pdf"
-                hidden
-                onChange={handleFileChange}
-              />
-              <Button variant="outlined" color="primary" onClick={handleUploadClick}>
-                {file || preview ? "Change File" : "Choose File"}
-              </Button>
-              {(preview) && (
-                <Box sx={{
-                  mt: 1, mb: 1, maxWidth: 180, maxHeight: 180, borderRadius: 2,
-                  overflow: "hidden", border: "1px solid #ddd"
-                }}>
-                  <img src={preview} alt="Preview" style={{ width: "100%" }} />
-                </Box>
-              )}
-              <TextField
-                label="Add a note for pharmacy (no mobile numbers allowed)"
+              </div>
+              {/* Upload Mode */}
+              <div className="flex gap-2 justify-center mt-1 mb-1">
+                <button
+                  type="button"
+                  className={`
+                    flex-1 rounded-lg border px-2 py-2 font-semibold transition-all
+                    ${uploadType === "auto"
+                      ? "border-teal-400 bg-teal-50 shadow text-teal-700"
+                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}
+                  `}
+                  onClick={() => setUploadType("auto")}
+                >
+                  Let GoDavaii Handle
+                  <div className="block text-xs font-normal mt-1 text-gray-400">
+                    Fastest quote, best price!
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className={`
+                    flex-1 rounded-lg border px-2 py-2 font-semibold transition-all
+                    ${uploadType === "manual"
+                      ? "border-amber-300 bg-amber-50 shadow text-amber-700"
+                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}
+                  `}
+                  onClick={() => setUploadType("manual")}
+                >
+                  Choose Pharmacy Yourself
+                  <div className="block text-xs font-normal mt-1 text-gray-400">
+                    Select pharmacy from list
+                  </div>
+                </button>
+              </div>
+              {/* File Upload */}
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  hidden
+                  onChange={handleFileChange}
+                />
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={handleUploadClick}
+                >
+                  <UploadCloud className="w-5 h-5 mr-2" />
+                  {file || preview ? "Change File" : "Choose File"}
+                </Button>
+                {preview && (
+                  <div className="mt-2 flex items-center justify-center">
+                    <img
+                      src={preview}
+                      alt="Prescription Preview"
+                      className="max-h-36 max-w-[180px] rounded-lg border border-gray-200 shadow-sm"
+                    />
+                  </div>
+                )}
+              </div>
+              {/* Notes */}
+              <Input
+                placeholder="Add a note for pharmacy"
                 value={notes}
                 onChange={e => setNotes(e.target.value.replace(/\d{10,}/g, ""))}
-                fullWidth
-                size="small"
-                inputProps={{ maxLength: 120 }}
-                multiline
-                rows={2}
+                maxLength={120}
+                className="mt-1"
               />
-              {/* PHARMACY DROPDOWN FOR MANUAL */}
+              {/* Pharmacy Dropdown (manual) */}
               {uploadType === "manual" && (
-                <FormControl fullWidth size="small" sx={{ mt: 1 }}>
-  <InputLabel id="select-pharmacy-label">Select a Pharmacy</InputLabel>
-  <Select
-    labelId="select-pharmacy-label"
-    value={selectedPharmacy}
-    label="Select a Pharmacy"
-    onChange={e => setSelectedPharmacy(e.target.value)}
-    disabled={pharmacyLoading || pharmacyList.length === 0}
-  >
-    {pharmacyLoading && (
-      <MenuItem disabled>Loading pharmacies...</MenuItem>
+  <div data-pharmacy-dropdown style={{ position: "relative", zIndex: 50 }}>
+    <label className="block mb-1 text-sm font-semibold text-zinc-700">
+      Select a Pharmacy
+    </label>
+
+    {/* Trigger */}
+    <div
+      onClick={() => setPhOpen(v => !v)}
+      className="w-full border border-gray-300 rounded-lg bg-white px-3 py-2 text-sm cursor-pointer flex items-center justify-between"
+      style={{ userSelect: "none" }}
+    >
+      <span className="truncate">
+        {selectedPharmacy
+          ? (() => {
+              const ph = pharmacyList.find(p => p._id === selectedPharmacy);
+              return ph ? `${ph.name} (${ph.area}, ${ph.city})` : "Select pharmacy…";
+            })()
+          : "Select pharmacy…"}
+      </span>
+      <span style={{ opacity: 0.6 }}>▾</span>
+    </div>
+
+    {/* Menu */}
+    {phOpen && (
+      <div
+        className="absolute left-0 right-0 mt-1 border border-gray-200 rounded-lg bg-white shadow-lg"
+        style={{
+          maxHeight: 200,
+          overflowY: "auto",
+        }}
+      >
+        {pharmacyLoading && (
+          <div className="px-3 py-2 text-sm text-gray-500">Loading pharmacies…</div>
+        )}
+
+        {!pharmacyLoading && pharmacyList.length === 0 && (
+          <div className="px-3 py-2 text-sm text-gray-500">
+            {(() => {
+              const addr = addresses.find(a => a.id === selectedAddressId);
+              if (!addr || !addr.lat || !addr.lng) return "Select a delivery address with location pin.";
+              return "No pharmacies found within 15km.";
+            })()}
+          </div>
+        )}
+
+        {!pharmacyLoading &&
+          pharmacyList.map(ph => (
+            <button
+              key={ph._id}
+              type="button"
+              onClick={() => {
+                setSelectedPharmacy(ph._id);
+                setPhOpen(false);
+              }}
+              className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
+                selectedPharmacy === ph._id ? "bg-gray-100 font-medium" : ""
+              }`}
+              style={{ whiteSpace: "nowrap" }}
+              title={`${ph.name} (${ph.area}, ${ph.city})`}
+            >
+              <span className="truncate inline-block max-w-full">
+                {ph.name} ({ph.area}, {ph.city})
+              </span>
+            </button>
+          ))}
+      </div>
     )}
-    {!pharmacyLoading && pharmacyList.length === 0 && (
-      <MenuItem disabled>
-        {(() => {
-          const addr = addresses.find(a => a.id === selectedAddressId);
-          if (!addr || !addr.lat || !addr.lng) {
-            return "Select a delivery address with location pin.";
-          }
-          return "No pharmacies found within 15km.";
-        })()}
-      </MenuItem>
-    )}
-    {pharmacyList.map(ph => (
-      <MenuItem key={ph._id} value={ph._id}>
-        {ph.name} ({ph.area}, {ph.city})
-      </MenuItem>
-    ))}
-  </Select>
-</FormControl>
-              )}
-              <Typography variant="body2" color="text.secondary">
+  </div>
+)}
+
+              <div className="text-xs text-gray-400 mt-1">
                 Upload a photo or PDF of your prescription to get a quote from pharmacy.
-              </Typography>
-              {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
-            </Stack>
+              </div>
+              {error && (
+                <div className="flex items-center gap-2 bg-red-50 text-red-600 text-sm px-3 py-2 rounded-lg mt-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {error}
+                </div>
+              )}
+            </div>
           )}
           {step === 2 && (
-            <Stack alignItems="center" spacing={2} sx={{ minHeight: 120 }}>
+            <div className="flex flex-col items-center gap-3 min-h-[140px] py-8">
               {!quoteReady ? (
                 <>
-                  <CircularProgress color="warning" />
-                  <Typography color="primary">
-                    Prescription sent!<br />
-                    Waiting for quote from pharmacy…
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    We’ll notify you as soon as a pharmacy sends a quote.<br />
-                    You can close this window and continue using the app.
-                  </Typography>
+                  <Loader2 className="w-10 h-10 animate-spin text-teal-500" />
+                  <div className="font-semibold text-[#1199a6] text-center">
+                    Prescription sent!
+                    <br />Waiting for quote from pharmacy…
+                  </div>
+                  <div className="text-xs text-gray-400 text-center">
+                    We’ll notify you as soon as a pharmacy sends a quote.
+                    <br />You can close this window and continue using the app.
+                  </div>
                 </>
               ) : (
                 <>
-                  <Typography fontSize={48} color="success.main">✔️</Typography>
-                  <Typography color="success.main" fontWeight={700}>
+                  <CheckCircle className="w-14 h-14 text-green-500" />
+                  <div className="font-bold text-green-600 text-center">
                     Quote received! Check details on your orders page.
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  </div>
+                  <div className="text-xs text-gray-400 text-center">
                     Pharmacy has sent a quote for your prescription.
-                  </Typography>
+                  </div>
                 </>
               )}
-            </Stack>
+            </div>
           )}
-        </DialogContent>
-        <DialogActions>
-          {step === 1 && <Button onClick={handleClose}>Cancel</Button>}
-          {step === 1 && (
-            <Button
-              onClick={handleSubmit}
-              variant="contained"
-              color="primary"
-              sx={{
-                bgcolor: "#FFD43B",
-                color: "#1199a6",
-                fontWeight: 700,
-                "&:hover": { bgcolor: "#f2c200" }
-              }}
-              fullWidth
-            >
-              Upload Prescription
-            </Button>
-          )}
-          {step === 2 && <Button onClick={handleClose}>Close</Button>}
-        </DialogActions>
-      </Dialog>
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={3500}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+        </div>
+          {/* --- FOOTER, THEME MATCHED --- */}
+<DialogFooter className="bg-gray-50 p-4 pt-2 rounded-b-2xl flex gap-2 border-t border-zinc-100 mt-0 flex-shrink-0 z-10">
+  {step === 1 && (
+    <>
+      {/* Cancel → subtle teal outline (not gray) */}
+      <Button
+        variant="outline"
+        onClick={handleClose}
+        className="flex-1 border-teal-200 text-teal-700 hover:bg-teal-50"
       >
-        <Alert severity={snackbar.severity} sx={{ width: "100%" }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+        Cancel
+      </Button>
+
+      {/* Upload → gradient pill like navbar/bottom bar */}
+      <Button
+        onClick={handleSubmit}
+        className="flex-1 font-bold text-white rounded-full
+                   bg-[linear-gradient(90deg,#14b8a6_0%,#10b981_100%)]
+                   hover:brightness-105 shadow-lg shadow-emerald-200/50"
+      >
+        Upload Prescription
+      </Button>
     </>
-  );
+  )}
+
+  {step === 2 && (
+    <Button
+      onClick={handleClose}
+      className="w-full text-white rounded-full
+                 bg-[linear-gradient(90deg,#14b8a6_0%,#10b981_100%)]
+                 hover:brightness-105 shadow-lg shadow-emerald-200/50"
+    >
+      Close
+    </Button>
+  )}
+</DialogFooter>
+  </DialogContent>
+</Dialog>
+    {/* Snackbar not included, but easy to add using shadcn/ui Toast or your own. */}
+  </>
+);
 }

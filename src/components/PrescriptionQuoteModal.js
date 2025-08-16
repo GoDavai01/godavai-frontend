@@ -27,7 +27,7 @@ export default function PrescriptionQuoteModal({ open, onClose, quote, token, re
         key: "rzp_test_GAXFOxUCCrxVvr", // Your Razorpay Key
         amount: razorpayOrder.data.amount,
         currency: "INR",
-        name: "GoDavai - Medicine Delivery",
+        name: "GoDavaii - Medicine Delivery",
         description: "Prescription Quote Payment",
         order_id: razorpayOrder.data.id,
         handler: async function (response) {

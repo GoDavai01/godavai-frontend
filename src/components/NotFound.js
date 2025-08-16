@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Typography, Button } from "@mui/material";
-import GoDavaiLogo from "../assets/GoDavaiLogo";
+import GoDavaiiLogo from "../assets/GoDavaiiLogo";
 import { useNavigate } from "react-router-dom";
 
 export default function NotFound() {
@@ -17,7 +17,7 @@ export default function NotFound() {
         p: 2,
       }}
     >
-      <GoDavaiLogo size={66} />
+      <GoDavaiiLogo size={66} />
       <Typography variant="h2" sx={{ fontWeight: 900, color: "#13C0A2", mt: 2 }}>
         404
       </Typography>

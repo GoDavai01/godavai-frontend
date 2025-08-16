@@ -1,6 +1,6 @@
 {
-  "appId": "com.godavai.app",
-  "appName": "GoDavai",
+  "appId": "com.godavaii.app",
+  "appName": "GoDavaii",
   "webDir": "build",
   "bundledWebRuntime": false,
   "server": {

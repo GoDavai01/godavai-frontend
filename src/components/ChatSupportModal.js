@@ -64,7 +64,7 @@ useEffect(() => {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ fontWeight: 900, bgcolor: "#13C0A2", color: "#fff", pb: 2 }}>
-        <SupportAgentIcon sx={{ mr: 1, mb: "-4px" }} /> GoDavai Support
+        <SupportAgentIcon sx={{ mr: 1, mb: "-4px" }} /> GoDavaii Support
       </DialogTitle>
       <DialogContent sx={{ minHeight: 330, maxHeight: 430, p: 0, bgcolor: "#e9f9f6" }}>
         <Stack spacing={1} sx={{ px: 2, pt: 1.5, height: "360px", overflowY: "auto" }}>

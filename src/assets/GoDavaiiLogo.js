@@ -1,6 +1,6 @@
-// A simple, clean logo for GoDavai (teal/yellow combo, scalable)
+// A simple, clean logo for GoDavaii (teal/yellow combo, scalable)
 import React from "react";
-export default function GoDavaiLogo({ size = 40 }) {
+export default function GoDavaiiLogo({ size = 40 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
       <circle cx="32" cy="32" r="30" fill="#13C0A2" />

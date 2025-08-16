@@ -6,7 +6,7 @@ import LanguageDetector from "i18next-browser-languagedetector";
 const resources = {
   en: { translation: {
   "My Addresses": "My Addresses",
-      "Saved Cards & GoDavai Money": "Saved Cards & GoDavai Money",
+      "Saved Cards & GoDavaii Money": "Saved Cards & GoDavaii Money",
       "Order History": "Order History",
       "View All Orders": "View All Orders",
       "Badges & Loyalty": "Badges & Loyalty",
@@ -29,7 +29,7 @@ const resources = {
       "Welcome": "स्वागत है",
       "Home": "होम",
        "My Addresses": "मेरे पते",
-      "Saved Cards & GoDavai Money": "सहेजे गए कार्ड्स और गोदवई मनी",
+      "Saved Cards & GoDavaii Money": "सहेजे गए कार्ड्स और गोदवई मनी",
       "Order History": "आर्डर इतिहास",
       "View All Orders": "सभी ऑर्डर देखें",
       "Badges & Loyalty": "बैजेस और लॉयल्टी",
