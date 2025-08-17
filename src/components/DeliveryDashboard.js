@@ -180,33 +180,45 @@ export default function DeliveryDashboard() {
   // Optionally add [loggedIn, tab] as dependencies for more precise updates
 }, [loggedIn, tab, loading]);
 
-  useEffect(() => {
-    let watchId;
-    if (loggedIn && orders.length > 0 && partner?._id) {
-      if (navigator.geolocation) {
-        watchId = navigator.geolocation.watchPosition(
-          async (pos) => {
-            const { latitude, longitude } = pos.coords;
-            for (const o of orders) {
-              if (o.status !== "delivered") {
-                await axios.post(`${API_BASE_URL}/api/delivery/update-location`, {
-                  partnerId: partner._id,
-                  orderId: o._id,
-                  lat: latitude,
-                  lng: longitude,
-                });
-              }
-            }
-          },
-          (err) => {},
-          { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
-        );
-      }
+  // Always send driver location while logged in & ACTIVE (even with zero orders)
+useEffect(() => {
+  if (!loggedIn || !partner?._id || !active) return;
+
+  let watchId;
+
+  const send = async (coords) => {
+    const { latitude, longitude } = coords;
+    try {
+      await axios.post(`${API_BASE_URL}/api/delivery/update-location`, {
+        partnerId: partner._id,
+        lat: latitude,
+        lng: longitude,   // no orderId on idle
+      });
+    } catch (e) {
+      // ignore network bumps
     }
-    return () => {
-      if (navigator.geolocation && watchId) navigator.geolocation.clearWatch(watchId);
-    };
-  }, [loggedIn, orders, partner]);
+  };
+
+  if (navigator.geolocation) {
+    // seed once immediately
+    navigator.geolocation.getCurrentPosition(
+      (pos) => send(pos.coords),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+    );
+
+    // keep updating while app is open & active
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => send(pos.coords),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+    );
+  }
+
+  return () => {
+    if (navigator.geolocation && watchId) navigator.geolocation.clearWatch(watchId);
+  };
+}, [loggedIn, partner?._id, active]);
 
   useEffect(() => {
   if (loggedIn) {
@@ -463,19 +475,38 @@ setOrderDistances(newDistances);
           {/* Active Toggle */}
           <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
             <Switch
-              checked={active}
-              onChange={async (e) => {
-                setActive(e.target.checked);
-                const token = localStorage.getItem("deliveryToken");
-                await axios.patch(
-                  `${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
-                  { active: e.target.checked },
-                  { headers: { Authorization: `Bearer ${token}` } }
-                );
-              }}
-              inputProps={{ "aria-label": "Active Status" }}
-              color="success"
-            />
+  checked={active}
+  onChange={async (e) => {
+    const next = e.target.checked;
+    setActive(next);
+    const token = localStorage.getItem("deliveryToken");
+
+    // If going Online, try to include the current GPS once
+    if (navigator.geolocation && next) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        axios.patch(
+          `${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
+          {
+            active: next,
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      });
+    } else {
+      // Offline or no geolocation available
+      await axios.patch(
+        `${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
+        { active: next },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    }
+  }}
+  inputProps={{ "aria-label": "Active Status" }}
+  color="success"
+/>
+
             <Typography sx={{ color: active ? "#13C0A2" : "#f44336", fontWeight: 600, ml: 1 }}>
               {active ? "Active" : "Inactive"}
             </Typography>
