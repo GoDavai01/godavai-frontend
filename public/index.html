@@ -14,6 +14,31 @@
   <!-- OneSignal Web Push SDK -->
   <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async=""></script>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <!-- Force deep-green on "/" before the app hydrates -->
+<script>
+  (function () {
+    var p = location.pathname.replace(/\/+$/, "");
+    if (p === "" || p === "/") {
+      document.documentElement.classList.add("gd-welcome");
+    }
+  })();
+</script>
+<style>
+  /* Nuclear option: kill any gradient on the welcome route */
+  html.gd-welcome,
+  html.gd-welcome body,
+  html.gd-welcome #root,
+  html.gd-welcome #root > * {
+    background: #0E5E43 !important;
+    background-image: none !important;
+  }
+  /* If an old Tailwind gradient class sneaks in on any child, neutralize it */
+  html.gd-welcome [class*="bg-gradient"],
+  html.gd-welcome [style*="gradient"] {
+    background-image: none !important;
+  }
+</style>
+
 </head>
   <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async=""></script>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>

@@ -46,13 +46,10 @@ function AppContent() {
   const hideNavbar = location.pathname === "/" || location.pathname === "/home";
 
     // FORCE deep green when you're on "/"
-  useEffect(() => {
+  React.useEffect(() => {
     const isWelcome = location.pathname === "/";
     document.documentElement.classList.toggle("gd-welcome", isWelcome);
-    return () => {
-      // safety: remove if component unmounts
-      document.documentElement.classList.remove("gd-welcome");
-    };
+    return () => document.documentElement.classList.remove("gd-welcome");
   }, [location.pathname]);
 
   // --- Production-ready: Only set axios default once per token change ---
