@@ -16,7 +16,7 @@ function BottomNavBarImpl() {
   const shouldReduce = useReducedMotion();
 
   const activeIdx = Math.max(0, navs.findIndex((n) => location.pathname.startsWith(n.path)));
-  const [burstIdx, setBurstIdx] = useState(null); // for click pulse burst
+  const [burstIdx, setBurstIdx] = useState(null);
 
   const spring = { type: "spring", stiffness: 520, damping: 34, mass: 0.55 };
 
@@ -25,11 +25,11 @@ function BottomNavBarImpl() {
       className="fixed inset-x-0 bottom-0 z-[1201] mx-auto w-full max-w-[520px] select-none"
       style={{ WebkitTapHighlightColor: "transparent" }}
     >
-      {/* Lighter, medical gradient bar */}
-      <div className="relative overflow-hidden border-t border-emerald-100/40 bg-gradient-to-r from-sky-500 via-teal-500 to-emerald-500/95 shadow-[0_-10px_24px_-10px_rgba(0,0,0,0.28)] pb-[max(0.6rem,env(safe-area-inset-bottom))]">
+      {/* Solid dark-green bar with bold white labels */}
+      <div className="relative overflow-hidden border-t border-[color:rgba(255,255,255,0.20)] bg-[var(--brand-green)] shadow-[0_-10px_24px_-10px_rgba(0,0,0,0.28)] pb-[max(0.6rem,env(safe-area-inset-bottom))]">
         <div className="relative px-3 pt-2.5 pb-1">
           <div className="relative grid grid-cols-3 gap-2">
-            {/* Subtle frosted surface */}
+            {/* Frosted inner surface for subtle depth */}
             <div className="pointer-events-none absolute inset-0 -z-10">
               <div className="absolute inset-x-2 bottom-2 top-2 rounded-3xl border border-white/15 bg-white/10 backdrop-blur-[6px]" />
             </div>
@@ -40,55 +40,32 @@ function BottomNavBarImpl() {
               return (
                 <button
                   key={item.label}
-                  onClick={(e) => {
+                  onClick={() => {
                     if (window?.navigator?.vibrate) navigator.vibrate(8);
-                    setBurstIdx(idx); // trigger burst
+                    setBurstIdx(idx);
                     navigate(item.path);
                   }}
-                  className="relative isolate flex min-h-[54px] flex-col items-center justify-center rounded-2xl text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-200/70"
+                  className="relative isolate flex min-h-[56px] flex-col items-center justify-center rounded-2xl text-white font-extrabold focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:rgba(255,255,255,0.6)]"
                   aria-current={active ? "page" : undefined}
                   aria-label={item.label}
                 >
-                  {/* === NEO LIGHT (moves with active tab) === */}
+                  {/* Active pill */}
                   {active && (
                     <LazyMotion features={domAnimation}>
                       <m.span
                         layoutId="gd-neo-pill"
                         transition={spring}
-                        className="absolute inset-0 -z-10 rounded-2xl"
-                        style={{
-                          background:
-                            "radial-gradient(80px 40px at 50% 60%, rgba(255,255,255,0.26), rgba(255,255,255,0.12) 70%)",
-                          boxShadow:
-                            "0 10px 26px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.28)",
-                          border: "1px solid rgba(255,255,255,0.24)",
-                          backdropFilter: "blur(2px)",
-                        }}
+                        className="absolute inset-0 -z-10 rounded-2xl bg-white/15 border border-white/25"
+                        style={{ backdropFilter: "blur(2px)" }}
                       />
                     </LazyMotion>
                   )}
 
-                  {/* Gentle breathing halo while active */}
-                  {active && !shouldReduce && (
-                    <LazyMotion features={domAnimation}>
-                      <m.span
-                        aria-hidden
-                        className="pointer-events-none absolute inset-0 -z-10 rounded-2xl"
-                        animate={{ opacity: [0.2, 0.55, 0.2], scale: [0.98, 1.04, 0.98] }}
-                        transition={{ duration: 1.35, repeat: Infinity, ease: "easeInOut" }}
-                        style={{
-                          background:
-                            "radial-gradient(75px 38px at 50% 58%, rgba(255,255,255,0.16), transparent 72%)",
-                        }}
-                      />
-                    </LazyMotion>
-                  )}
-
-                  {/* === CLICK BURST (one-shot pulse on press) === */}
+                  {/* Click burst */}
                   {burstIdx === idx && !shouldReduce && (
                     <LazyMotion features={domAnimation}>
                       <m.span
-                        key={`burst-${idx}-${location.pathname}`} // reset on route change
+                        key={`burst-${idx}-${location.pathname}`}
                         initial={{ opacity: 0.45, scale: 0.2 }}
                         animate={{ opacity: 0, scale: 1.6 }}
                         transition={{ duration: 0.45, ease: "easeOut" }}
@@ -104,15 +81,10 @@ function BottomNavBarImpl() {
 
                   <Icon
                     className={`mb-0.5 h-[21px] w-[21px] transition-transform ${
-                      active ? "scale-[1.07] drop-shadow-[0_3px_12px_rgba(255,255,255,0.55)]" : ""
+                      active ? "scale-[1.08] drop-shadow-[0_3px_12px_rgba(255,255,255,0.55)]" : ""
                     }`}
-                    style={{ willChange: "transform" }}
                   />
-                  <span
-                    className={`text-[12.5px] font-semibold tracking-wide ${
-                      active ? "opacity-100" : "opacity-95"
-                    }`}
-                  >
+                  <span className={`text-[13px] ${active ? "opacity-100" : "opacity-95"}`}>
                     {item.label}
                   </span>
                 </button>

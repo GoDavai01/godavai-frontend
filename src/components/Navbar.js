@@ -9,16 +9,11 @@ import axios from "axios";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
-// Palette aligned with navbar (sky → teal → emerald)
-const PALETTE = {
-  gradientFrom: "from-sky-500",
-  gradientVia: "via-teal-500",
-  gradientTo: "to-emerald-500",
-  surfaceBorder: "border-emerald-100/60",
-  // Updated: profile chip now teal; location icon matches navbar vibe
-  chip: "bg-emerald-400 text-white",
-  iconAccent: "text-amber-300",
-  active: "text-emerald-700",
+/** Brand palette (solid dark green like your screenshot) */
+const BRAND = {
+  bg: "bg-[var(--brand-green)]",
+  border: "border-[color:rgba(255,255,255,0.20)]",
+  ring: "focus-visible:ring-[color:rgba(255,255,255,0.75)]",
 };
 
 export default function Navbar({
@@ -129,22 +124,20 @@ export default function Navbar({
 
   return (
     <div className="sticky top-0 z-[1200] w-full" style={{ WebkitTapHighlightColor: "transparent" }}>
-      {/* Header: glass + gradient like logo */}
+      {/* Solid dark-green bar with bold white text */}
       <div
         className={[
           "relative mx-auto max-w-[520px] rounded-b-3xl",
-          "bg-gradient-to-r",
-          PALETTE.gradientFrom,
-          PALETTE.gradientVia,
-          PALETTE.gradientTo,
-          "bg-opacity-90 backdrop-blur-xl",
+          BRAND.bg,
+          "backdrop-blur-xl",
           "shadow-[0_6px_24px_rgba(16,24,40,0.18)]",
           "border",
-          PALETTE.surfaceBorder,
+          BRAND.border,
+          "text-white",
         ].join(" ")}
       >
         {/* Subtle top sheen */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-10 rounded-b-[28px] bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0))]" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-10 rounded-b-[28px] bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(255,255,255,0))]" />
 
         {/* Top row: location + profile */}
         <div className="relative flex items-center justify-between px-4 pt-4 pb-3">
@@ -156,7 +149,7 @@ export default function Navbar({
               setLocationModalOpen(true);
             }}
           >
-            <MapPin className={`h-6 w-6 shrink-0 ${PALETTE.iconAccent}`} />
+            <MapPin className="h-6 w-6 shrink-0 text-white" />
             <div className="min-w-0">
               <div className="truncate text-[17px] font-extrabold tracking-tight text-white">
                 {currentAddress?.formatted
@@ -171,17 +164,25 @@ export default function Navbar({
           <button
             type="button"
             onClick={onProfile}
-            className={`ml-3 inline-flex h-10 w-10 items-center justify-center rounded-full ${PALETTE.chip} shadow-[0_6px_20px_rgba(16,185,129,0.35)] hover:brightness-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200/70`}
+            className={[
+              "ml-3 inline-flex h-10 w-10 items-center justify-center rounded-full",
+              "bg-white/15 text-white",
+              "border border-white/30",
+              "shadow-[0_6px_20px_rgba(0,0,0,0.25)]",
+              "hover:bg-white/20 focus:outline-none",
+              "focus-visible:ring-2",
+              BRAND.ring,
+            ].join(" ")}
             aria-label="Profile"
           >
             <CircleUserRound className="h-6 w-6" />
           </button>
         </div>
 
-        {/* Search bar */}
+        {/* Search bar (kept white for contrast) */}
         <div ref={boxRef} className="relative mx-4 mb-4">
-          <div className="flex h-12 items-center rounded-2xl border border-white/70 bg-white/90 px-3 shadow-sm backdrop-blur-md">
-            <Search className="mr-2 h-5 w-5 text-zinc-500" />
+          <div className="flex h-12 items-center rounded-2xl border border-white/60 bg-white/95 px-3 shadow-sm backdrop-blur-md">
+            <Search className="mr-2 h-5 w-5 text-zinc-600" />
             <input
               ref={inputRef}
               value={search}
@@ -191,10 +192,10 @@ export default function Navbar({
               placeholder={placeholder}
               className="h-full w-full rounded-2xl bg-transparent text-[16.5px] font-semibold tracking-tight text-zinc-800 outline-none placeholder:text-zinc-400"
             />
-            {loading && <Loader2 className="ml-1 h-4 w-4 animate-spin text-zinc-500" />}
+            {loading && <Loader2 className="ml-1 h-4 w-4 animate-spin text-zinc-600" />}
           </div>
 
-          {/* Autocomplete dropdown (kept simple animation) */}
+          {/* Autocomplete dropdown */}
           <AnimatePresence>
             {dropdownOpen && options.length > 0 && (
               <motion.div
@@ -206,9 +207,7 @@ export default function Navbar({
               >
                 {options.map((opt, idx) => {
                   const label =
-                    typeof opt === "string"
-                      ? opt
-                      : opt.label || opt.value || opt.name || "";
+                    typeof opt === "string" ? opt : opt.label || opt.value || opt.name || "";
                   return (
                     <button
                       key={`${label}-${idx}`}
@@ -227,7 +226,7 @@ export default function Navbar({
         </div>
       </div>
 
-      {/* Location modal (logic unchanged) */}
+      {/* Location modal */}
       <LocationModal
         open={locationModalOpen}
         onClose={() => setLocationModalOpen(false)}

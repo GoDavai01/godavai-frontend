@@ -1,0 +1,24 @@
+:root {
+  /* Bars stay deep green */
+  --brand-green: #0E5E43;
+
+  --pillo-grad-from: var(--brand-green);
+  --pillo-grad-via:  var(--brand-green);
+  --pillo-grad-to:   var(--brand-green);
+
+  /* Accents used across content (must be DARK so they show on white cards) */
+  --pillo-active-text: #0E5E43;   /* was #fff -> made text invisible */
+  --pillo-icon-accent: #0E5E43;   /* status-strip icons on white */
+
+  /* Buttons */
+  --pillo-primary:     var(--brand-green);
+  --pillo-primary-700: #0A4631;
+
+  /* Borders / rings */
+  --pillo-surface-border: rgba(14, 94, 67, 0.18);
+  --pillo-ring:           rgba(255, 255, 255, 0.70);
+
+  /* Chip on the navbar */
+  --pillo-chip-bg:   rgba(255,255,255,0.16);
+  --pillo-chip-text: #ffffff;
+}
