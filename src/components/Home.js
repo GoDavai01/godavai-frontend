@@ -1,6 +1,6 @@
 // src/components/Home.js
 import React, { useEffect, useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useNavigate } from "react-router-dom";
@@ -36,8 +36,77 @@ const ICONS = {
   pill: "/images/pill-modern.svg",
 };
 
-const categories = ["Fever","Diabetes","Cold","Heart","Antibiotic","Ayurveda","Painkiller","Cough"];
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+const categories = [
+  "Fever",
+  "Diabetes",
+  "Cold",
+  "Heart",
+  "Antibiotic",
+  "Ayurveda",
+  "Painkiller",
+  "Cough",
+];
+const API_BASE_URL =
+  process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+
+/* ---------- Horizontal medicine card (image left, details right) ---------- */
+function MedCard({ med, onAdd }) {
+  const [src, setSrc] = useState(
+    med.img || med.image || med.imageUrl || ICONS.medicine
+  );
+
+  const price =
+    med.price ?? med.mrp ?? med.sellingPrice ?? med.salePrice ?? "--";
+
+  return (
+    <div className="min-w-[260px] max-w-[260px] h-[106px] rounded-2xl bg-white/95 ring-1 ring-[var(--pillo-surface-border)] shadow-sm flex items-center p-3 gap-3 cursor-pointer active:scale-[0.99] transition">
+      {/* BIG thumbnail */}
+      <div className="h-[78px] w-[86px] rounded-xl bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm overflow-hidden grid place-items-center">
+        <img
+          src={src}
+          alt={med.name}
+          loading="lazy"
+          onError={() => setSrc(ICONS.medicine)}
+          className="h-full w-full object-contain"
+        />
+      </div>
+
+      {/* Details */}
+      <div className="flex-1 min-w-0">
+        <div
+          className="text-[14.5px] font-bold text-[var(--pillo-active-text)]"
+          style={{
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+          }}
+        >
+          {med.name || med.medicineName || "Medicine"}
+        </div>
+
+        <div className="mt-0.5 text-[13px] font-semibold text-[var(--pillo-active-text)]">
+          ₹{price}
+        </div>
+
+        <div className="mt-1 flex items-center justify-between">
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-[var(--pillo-active-text)] ring-1 ring-[var(--pillo-surface-border)]">
+            <Clock className="h-3 w-3" /> ≤ 30 min
+          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdd(med);
+            }}
+            className="rounded-full bg-[var(--pillo-active-text)] text-white text-[12px] font-bold px-3 py-1.5 shadow hover:brightness-105"
+          >
+            Add
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const [pharmaciesNearby, setPharmaciesNearby] = useState([]);
@@ -48,13 +117,14 @@ export default function Home() {
   const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
   const { currentAddress } = useLocation();
   const [userCoords, setUserCoords] = useState(null);
-  const [showCategoryNotification, setShowCategoryNotification] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("");
   const popupTimeout = useRef(null);
   const [showFallbackMeds, setShowFallbackMeds] = useState(false);
   const noMedicinesTimer = useRef(null);
   const [lastOrder, setLastOrder] = useState(null);
-  const dockBottom = `calc(${cart.length > 0 ? 144 : 72}px + env(safe-area-inset-bottom, 0px) + 12px)`;
+  const dockBottom = `calc(${
+    cart.length > 0 ? 144 : 72
+  }px + env(safe-area-inset-bottom, 0px) + 12px)`;
   const [allMedsByPharmacy, setAllMedsByPharmacy] = useState({});
 
   useEffect(() => {
@@ -62,7 +132,11 @@ export default function Home() {
       setUserCoords({ lat: currentAddress.lat, lng: currentAddress.lng });
     } else if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (pos) =>
+          setUserCoords({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          }),
         () => setUserCoords(null)
       );
     }
@@ -72,7 +146,9 @@ export default function Home() {
     async function fetchLastOrder() {
       if (!user?._id && !user?.userId) return;
       const userId = user._id || user.userId;
-      const res = await fetch(`${API_BASE_URL}/api/allorders/myorders-userid/${userId}`);
+      const res = await fetch(
+        `${API_BASE_URL}/api/allorders/myorders-userid/${userId}`
+      );
       const orders = await res.json();
       if (Array.isArray(orders) && orders.length > 0) setLastOrder(orders[0]);
     }
@@ -81,16 +157,23 @@ export default function Home() {
 
   useEffect(() => {
     if (!userCoords) return;
-    fetch(`${API_BASE_URL}/api/pharmacies/nearby?lat=${userCoords.lat}&lng=${userCoords.lng}&maxDistance=8000`)
+    fetch(
+      `${API_BASE_URL}/api/pharmacies/nearby?lat=${userCoords.lat}&lng=${userCoords.lng}&maxDistance=8000`
+    )
       .then((res) => res.json())
       .then((pharmacies) => {
-        const active = pharmacies.filter((ph) => ph.active !== false).slice(0, 10);
+        const active = pharmacies
+          .filter((ph) => ph.active !== false)
+          .slice(0, 10);
         setPharmaciesNearby(active);
         Promise.all(
           active.slice(0, 5).map((ph) =>
             fetch(`${API_BASE_URL}/api/medicines?pharmacyId=${ph._id}`)
               .then((res) => res.json())
-              .then((meds) => ({ pharmacyId: ph._id, medicines: meds.slice(0, 8) }))
+              .then((meds) => ({
+                pharmacyId: ph._id,
+                medicines: meds.slice(0, 8),
+              }))
               .catch(() => ({ pharmacyId: ph._id, medicines: [] }))
           )
         ).then((results) => {
@@ -105,7 +188,9 @@ export default function Home() {
 
   useEffect(() => {
     if (!selectedCategory || pharmaciesNearby.length === 0) return;
-    const pharmaciesToFetch = pharmaciesNearby.slice(0, 5).filter((ph) => !allMedsByPharmacy[ph._id]);
+    const pharmaciesToFetch = pharmaciesNearby
+      .slice(0, 5)
+      .filter((ph) => !allMedsByPharmacy[ph._id]);
     if (pharmaciesToFetch.length === 0) return;
 
     Promise.all(
@@ -140,10 +225,9 @@ export default function Home() {
 
   const handleCategoryClick = (category) => {
     setSelectedCategory(category);
-    setShowCategoryNotification(true);
     setShowFallbackMeds(false);
     if (popupTimeout.current) clearTimeout(popupTimeout.current);
-    popupTimeout.current = setTimeout(() => setShowCategoryNotification(false), 4000);
+    popupTimeout.current = setTimeout(() => {}, 3000);
   };
 
   useEffect(() => {
@@ -177,18 +261,17 @@ export default function Home() {
     // eslint-disable-next-line
   }, [selectedCategory, pharmaciesNearby, allMedsByPharmacy, mostOrderedByPharmacy]);
 
-  const greetUser = () => {
-    const hour = new Date().getHours();
-    const hello = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-    return `${hello}, ${user?.name?.split(" ")[0] || "Friend"}!`;
-  };
-
   const filteredPharmacies = pharmaciesNearby
     .slice(0, 5)
     .map((ph) => {
-      let allMeds = selectedCategory ? allMedsByPharmacy[ph._id] || [] : mostOrderedByPharmacy[ph._id] || [];
-      let filteredMeds = selectedCategory ? allMeds.filter((med) => isMedicineInCategory(med, selectedCategory)) : allMeds;
-      if (selectedCategory && filteredMeds.length === 0 && showFallbackMeds) filteredMeds = allMeds.slice(0, 8);
+      let allMeds = selectedCategory
+        ? allMedsByPharmacy[ph._id] || []
+        : mostOrderedByPharmacy[ph._id] || [];
+      let filteredMeds = selectedCategory
+        ? allMeds.filter((med) => isMedicineInCategory(med, selectedCategory))
+        : allMeds;
+      if (selectedCategory && filteredMeds.length === 0 && showFallbackMeds)
+        filteredMeds = allMeds.slice(0, 8);
       return { ...ph, medicines: filteredMeds, medCount: filteredMeds.length };
     })
     .sort((a, b) => b.medCount - a.medCount);
@@ -202,9 +285,21 @@ export default function Home() {
       <div className="px-4 mt-4">
         <div className="grid grid-cols-3 gap-3">
           {[
-            { label: "Upload Rx", icon: <UploadCloud className="h-5 w-5" />, onClick: () => setPrescriptionModalOpen(true) },
-            { label: "Medicines", icon: <Pill className="h-5 w-5" />, onClick: () => navigate("/pharmacies-near-you") },
-            { label: "Consult", icon: <Stethoscope className="h-5 w-5" />, onClick: () => navigate("/doctors") },
+            {
+              label: "Upload Rx",
+              icon: <UploadCloud className="h-5 w-5" />,
+              onClick: () => setPrescriptionModalOpen(true),
+            },
+            {
+              label: "Medicines",
+              icon: <Pill className="h-5 w-5" />,
+              onClick: () => navigate("/pharmacies-near-you"),
+            },
+            {
+              label: "Consult",
+              icon: <Stethoscope className="h-5 w-5" />,
+              onClick: () => navigate("/doctors"),
+            },
           ].map((act) => (
             <motion.button
               key={act.label}
@@ -216,13 +311,15 @@ export default function Home() {
               <div className="inline-flex items-center justify-center rounded-xl bg-white text-[var(--pillo-active-text)] ring-1 ring-[var(--pillo-surface-border)] p-2 mb-1">
                 {act.icon}
               </div>
-              <span className="text-[12.5px] font-semibold text-[var(--pillo-active-text)]">{act.label}</span>
+              <span className="text-[12.5px] font-semibold text-[var(--pillo-active-text)]">
+                {act.label}
+              </span>
             </motion.button>
           ))}
         </div>
       </div>
 
-      {/* STATUS STRIP */}
+      {/* STATUS STRIP (bold line) */}
       <div className="px-4 mt-3">
         <div className="flex items-center justify-between rounded-xl bg-white/90 backdrop-blur ring-1 ring-[var(--pillo-surface-border)] px-3 py-2 text-[12.5px] text-[var(--pillo-active-text)] shadow-sm font-bold">
           <div className="flex items-center gap-1.5">
@@ -236,16 +333,19 @@ export default function Home() {
         </div>
       </div>
 
-      {/* PHARMACIES NEAR YOU */}
+      {/* PHARMACIES NEAR YOU (no extra arrow) */}
       <div className="mt-6 px-4">
         <div className="flex items-center justify-between mb-2">
           <button
-  onClick={() => navigate("/pharmacies-near-you")}
-  className="font-extrabold text-[17px] text-[var(--pillo-active-text)]"
->
-  Pharmacies Near You
-</button>
-          <button className="text-[var(--pillo-active-text)] text-[14px] font-bold hover:underline" onClick={() => navigate("/pharmacies-near-you")}>
+            onClick={() => navigate("/pharmacies-near-you")}
+            className="font-extrabold text-[17px] text-[var(--pillo-active-text)]"
+          >
+            Pharmacies Near You
+          </button>
+          <button
+            className="text-[var(--pillo-active-text)] text-[14px] font-bold hover:underline"
+            onClick={() => navigate("/pharmacies-near-you")}
+          >
             See all &gt;
           </button>
         </div>
@@ -259,18 +359,26 @@ export default function Home() {
               <span className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-white ring-1 ring-[var(--pillo-surface-border)] mb-2 shadow">
                 <img src={ICONS.pharmacy} className="w-7 h-7" alt="Pharmacy" />
               </span>
-              <div className="font-semibold text-[15px] truncate text-center text-[var(--pillo-active-text)]">{ph.name}</div>
+              <div className="font-semibold text-[15px] truncate text-center text-[var(--pillo-active-text)]">
+                {ph.name}
+              </div>
               <div className="text-xs text-neutral-400 mt-0.5">
-                {ph.dist?.calculated ? (ph.dist.calculated > 1000 ? `${(ph.dist.calculated / 1000).toFixed(1)} km` : `<1 km`) : "--"}
+                {ph.dist?.calculated
+                  ? ph.dist.calculated > 1000
+                    ? `${(ph.dist.calculated / 1000).toFixed(1)} km`
+                    : `<1 km`
+                  : "--"}
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* CATEGORIES — soft two-tone chips */}
+      {/* CATEGORIES */}
       <div className="mt-7 px-4">
-        <div className="font-extrabold text-base mb-2 text-[var(--pillo-active-text)]">Categories</div>
+        <div className="font-extrabold text-base mb-2 text-[var(--pillo-active-text)]">
+          Categories
+        </div>
         <div className="flex gap-3 pb-1 overflow-x-auto">
           {categories.map((cat) => (
             <button
@@ -289,13 +397,18 @@ export default function Home() {
         !showFallbackMeds &&
         filteredPharmacies.every((ph) => ph.medicines.length === 0) && (
           <div className="text-center text-gray-400 mt-8 text-lg font-semibold">
-            No medicines available in "{selectedCategory}" category.<br />
-            <span className="text-sm text-gray-400">Showing other available medicines...</span>
+            No medicines available in "{selectedCategory}" category.
+            <br />
+            <span className="text-sm text-gray-400">
+              Showing other available medicines...
+            </span>
           </div>
         )}
 
-      {/* MEDICINES BY PHARMACY */}
-      {(!selectedCategory || showFallbackMeds || filteredPharmacies.some((ph) => ph.medicines.length > 0)) &&
+      {/* MEDICINES BY PHARMACY (horizontal image-first cards) */}
+      {(!selectedCategory ||
+        showFallbackMeds ||
+        filteredPharmacies.some((ph) => ph.medicines.length > 0)) &&
         filteredPharmacies.map((ph, idx) =>
           ph.medicines.length > 0 ? (
             <div key={ph._id || idx} className="mt-10 px-4">
@@ -314,33 +427,14 @@ export default function Home() {
                 </button>
               </div>
 
-              <div className="flex gap-4 pb-2 snap-x overflow-x-auto">
+              <div className="flex gap-3 pb-2 snap-x overflow-x-auto">
                 {ph.medicines.map((med, mi) => (
                   <div
                     key={med._id || mi}
-                    className="relative min-w-[130px] max-w-[150px] px-3 pt-5 pb-4 flex flex-col items-center rounded-2xl shadow-xl bg-white/90 backdrop-blur ring-1 ring-[var(--pillo-surface-border)] hover:bg-white cursor-pointer transition hover:scale-105 snap-center"
+                    className="snap-center"
                     onClick={() => navigate(`/medicines/${ph._id}`)}
                   >
-                    <span className="absolute top-2 right-2 inline-flex items-center gap-1 text-[10.5px] font-semibold text-[var(--pillo-active-text)] bg-white/90 px-2 py-0.5 rounded-full ring-1 ring-[var(--pillo-surface-border)] shadow">
-                      <Clock className="h-3 w-3" /> ≤ 30 min
-                    </span>
-
-                    <span className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-white ring-1 ring-[var(--pillo-surface-border)] mb-2 shadow">
-                      <img src={med.img || ICONS.medicine} className="w-7 h-7" alt="Medicine" />
-                    </span>
-                    <div className="font-semibold text-[15px] truncate text-center text-[var(--pillo-active-text)]">
-                      {med.name}
-                    </div>
-                    <div className="text-xs text-[var(--pillo-active-text)] font-semibold">₹{med.price}</div>
-                    <button
-                      className="mt-1 px-4 py-1 text-xs bg-[var(--pillo-active-text)] rounded-full text-white font-bold shadow hover:brightness-105 transition"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAddToCart(med);
-                      }}
-                    >
-                      Add
-                    </button>
+                    <MedCard med={med} onAdd={handleAddToCart} />
                   </div>
                 ))}
               </div>
@@ -351,7 +445,9 @@ export default function Home() {
       {/* DOCTORS */}
       <div className="mt-10 px-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="font-extrabold text-base text-[var(--pillo-active-text)]">Consult Nearby Doctors</span>
+          <span className="font-extrabold text-base text-[var(--pillo-active-text)]">
+            Consult Nearby Doctors
+          </span>
           <button
             className="text-[var(--pillo-active-text)] text-[15px] font-bold hover:underline inline-flex items-center gap-1"
             onClick={() => navigate("/doctors")}
@@ -360,7 +456,11 @@ export default function Home() {
           </button>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-2 snap-x">
-          {[{ name: "Dr. Sharma", spec: "General Physician" }, { name: "Dr. Gupta", spec: "Pediatrics" }, { name: "Dr. Iyer", spec: "Dermatology" }].map((d, i) => (
+          {[
+            { name: "Dr. Sharma", spec: "General Physician" },
+            { name: "Dr. Gupta", spec: "Pediatrics" },
+            { name: "Dr. Iyer", spec: "Dermatology" },
+          ].map((d, i) => (
             <motion.button
               key={i}
               whileTap={{ scale: 0.98 }}
@@ -372,7 +472,9 @@ export default function Home() {
                   <Stethoscope className="h-5 w-5 text-[var(--pillo-active-text)]" />
                 </div>
                 <div>
-                  <div className="font-semibold text-[var(--pillo-active-text)]">{d.name}</div>
+                  <div className="font-semibold text-[var(--pillo-active-text)]">
+                    {d.name}
+                  </div>
                   <div className="text-[12.5px] text-neutral-500">{d.spec}</div>
                 </div>
               </div>
@@ -388,12 +490,20 @@ export default function Home() {
 
       {/* ORDER AGAIN */}
       <div className="mt-12 px-4">
-        <div className="font-extrabold text-base mb-2 text-[var(--pillo-active-text)] flex items-center gap-2">Order Again</div>
+        <div className="font-extrabold text-base mb-2 text-[var(--pillo-active-text)] flex items-center gap-2">
+          Order Again
+        </div>
         <div className="rounded-2xl shadow-3xl px-4 py-6 flex flex-col items-center gap-2 bg-white/90 backdrop-blur ring-1 ring-[var(--pillo-surface-border)]">
-          <div className="font-extrabold text-[17px] text-[var(--pillo-active-text)] mb-1 text-center">Your last order</div>
+          <div className="font-extrabold text-[17px] text-[var(--pillo-active-text)] mb-1 text-center">
+            Your last order
+          </div>
           <div className="text-[14px] text-neutral-500 text-center">
             {lastOrder && Array.isArray(lastOrder.items) && lastOrder.items.length
-              ? lastOrder.items.map((i) => `${i.name || i.medicineName} x${i.quantity || i.qty || 1}`).join(", ")
+              ? lastOrder.items
+                  .map(
+                    (i) => `${i.name || i.medicineName} x${i.quantity || i.qty || 1}`
+                  )
+                  .join(", ")
               : "No recent orders"}
           </div>
           <div className="flex gap-2 mt-4 justify-center">
