@@ -53,3 +53,20 @@ html, body, #root {
 *, *::before, *::after {
   box-sizing: border-box;
 }
+
+/* Force a solid deep-green background on the Welcome page */
+.welcome-solid-bg,
+.welcome-solid-bg body,
+.welcome-solid-bg #root,
+.welcome-solid-bg html {
+  background: var(--gd-deep, #0E5E43) !important;
+  background-image: none !important; /* kills any Tailwind gradient */
+}
+
+/* Deep-green hard override for the welcome route */
+html.gd-welcome,
+html.gd-welcome body,
+html.gd-welcome #root {
+  background: #0E5E43 !important;
+  background-image: none !important; /* kill any gradient */
+}
