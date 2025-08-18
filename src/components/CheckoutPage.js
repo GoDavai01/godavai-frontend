@@ -1,6 +1,6 @@
 // src/components/CheckoutPage.jsx
 // Tech: React + TailwindCSS + shadcn/ui + Framer Motion + lucide-react
-// NOTE: Logic/flow preserved exactly. Pure UI/structure polish + your RadioGroup.
+// NOTE: Logic/flow preserved exactly. Pure UI polish to match deep-green theme.
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,7 +15,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Separator } from "../components/ui/separator";
-import { Badge } from "../components/ui/badge";
+
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   IndianRupee,
@@ -24,7 +24,9 @@ import {
   Loader2,
   Plus,
   Minus,
-  Sparkles, // ✅ added
+  Sparkles,
+  Check,
+  Trash2,
 } from "lucide-react";
 
 import { useCart } from "../context/CartContext";
@@ -37,9 +39,12 @@ import axios from "axios";
 const API_BASE_URL =
   process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
+// Deep green brand color
+const DEEP = "#0f6e51";
+
 // ---- fees / thresholds ----
 const DELIVERY_FEE = 25;
-const FREE_DELIVERY_MIN = 200; // ✅ Free delivery above ₹200
+const FREE_DELIVERY_MIN = 200;
 
 // ---------------- helpers (unchanged) ----------------
 function normalizeMedicine(med) {
@@ -142,8 +147,12 @@ async function handlePlaceOrder(
 
 // ---------------- Component ----------------
 export default function CheckoutPage() {
-  const { cart, clearCart, selectedPharmacy, addToCart, removeOneFromCart } =
+  const { cart, clearCart, selectedPharmacy, addToCart, removeOneFromCart, removeFromCart } =
     useCart();
+  const removeItemCompletely = (med) => {
+  if (typeof removeFromCart === "function") return removeFromCart(med);
+  for (let i = 0; i < (med.quantity || 1); i++) removeOneFromCart(med);
+};
   const { user, token, addresses, updateAddresses } = useAuth();
   const { currentAddress } = useLocContext();
   const navigate = useNavigate();
@@ -262,7 +271,7 @@ export default function CheckoutPage() {
   const [wantChemistInstruction, setWantChemistInstruction] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [addressFormOpen, setAddressFormOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("cod"); // "cod" | "upi" | "card"
+  const [paymentMethod, setPaymentMethod] = useState("cod");
   const [dosage, setDosage] = useState("");
   const [tip, setTip] = useState(0);
   const [donate, setDonate] = useState(false);
@@ -271,10 +280,10 @@ export default function CheckoutPage() {
   const [prescription, setPrescription] = useState(null);
   const [prescriptionPreview, setPrescriptionPreview] = useState(null);
 
-  // smart suggestions (same pharmacy)
+  // smart suggestions
   const [rawSuggestions, setRawSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const suggestionsDisabledRef = useRef(false); // ✅ stop further calls after a 404
+  const suggestionsDisabledRef = useRef(false);
 
   useEffect(() => {
     if (!selectedAddressId && allAddresses[0]?.id)
@@ -290,7 +299,7 @@ export default function CheckoutPage() {
     (sum, med) => sum + (med.price || 0) * (med.quantity || 1),
     0
   );
-  const deliveryFee = itemTotal >= FREE_DELIVERY_MIN ? 0 : DELIVERY_FEE; // ✅ updated rule
+  const deliveryFee = itemTotal >= FREE_DELIVERY_MIN ? 0 : DELIVERY_FEE;
   const gst = Math.round(itemTotal * 0.05 * 100) / 100;
   const discount = couponApplied ? Math.round(itemTotal * 0.1) : 0;
   const platformFee = 6;
@@ -309,33 +318,34 @@ export default function CheckoutPage() {
     { code: "SAVE30", desc: "Save ₹25 on your next order!" },
   ];
   const tipAmounts = [10, 15, 20, 30];
-  const toFree = Math.max(0, FREE_DELIVERY_MIN - itemTotal); // ✅ amount left to free delivery
+  const toFree = Math.max(0, FREE_DELIVERY_MIN - itemTotal);
+  const progressToFree = Math.min(100, (itemTotal / FREE_DELIVERY_MIN) * 100);
 
   // address save/delete (restored)
-const handleSaveAddress = async (address) => {
-  let updated;
-  if (address.id && addresses.some((a) => a.id === address.id)) {
-    updated = addresses.map((a) => (a.id === address.id ? address : a));
-  } else {
-    address.id = Date.now().toString();
-    updated = [...addresses, address];
-  }
-  await updateAddresses(updated);
-  setSelectedAddressId(address.id);
-  setAddressFormOpen(false);
-};
+  const handleSaveAddress = async (address) => {
+    let updated;
+    if (address.id && addresses.some((a) => a.id === address.id)) {
+      updated = addresses.map((a) => (a.id === address.id ? address : a));
+    } else {
+      address.id = Date.now().toString();
+      updated = [...addresses, address];
+    }
+    await updateAddresses(updated);
+    setSelectedAddressId(address.id);
+    setAddressFormOpen(false);
+  };
 
-const handleDeleteAddress = async (addr) => {
-  if (!window.confirm("Are you sure you want to delete this address?")) return;
-  const updated = addresses.filter((a) => a.id !== addr.id);
-  await updateAddresses(updated);
-  setToast({ type: "success", message: "Address deleted!" });
-  if (selectedAddressId === addr.id && updated.length) {
-    setSelectedAddressId(updated[0].id);
-  } else if (!updated.length) {
-    setSelectedAddressId(null);
-  }
-};
+  const handleDeleteAddress = async (addr) => {
+    if (!window.confirm("Are you sure you want to delete this address?")) return;
+    const updated = addresses.filter((a) => a.id !== addr.id);
+    await updateAddresses(updated);
+    setToast({ type: "success", message: "Address deleted!" });
+    if (selectedAddressId === addr.id && updated.length) {
+      setSelectedAddressId(updated[0].id);
+    } else if (!updated.length) {
+      setSelectedAddressId(null);
+    }
+  };
 
   // prescription file
   const handlePrescriptionChange = (e) => {
@@ -347,43 +357,41 @@ const handleDeleteAddress = async (addr) => {
     reader.readAsDataURL(file);
   };
 
-  // ✅ Fetch suggestions from backend route (with exclude + auth header)
-useEffect(() => {
-  if (
-    isPrescriptionFlow ||
-    !selectedPharmacy?._id ||
-    suggestionsDisabledRef.current
-  ) {
-    setRawSuggestions([]);
-    return;
-  }
-
-  setSuggestionsLoading(true);
-
-  const exclude = cart
-    .map(m => m._id || m.medicineId || m.medicine_id)
-    .filter(Boolean)
-    .join(",");
-
-  axios
-    .get(`${API_BASE_URL}/api/medicines/suggestions`, {
-      params: { pharmacyId: selectedPharmacy._id, limit: 20, exclude },
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    })
-    .then((res) => {
-      // Backend already filtered by pharmacyId, so just use it
-      setRawSuggestions(Array.isArray(res.data) ? res.data : []);
-    })
-    .catch((err) => {
-      if (err?.response?.status === 404) {
-        suggestionsDisabledRef.current = true;
-      }
+  // suggestions fetch
+  useEffect(() => {
+    if (
+      isPrescriptionFlow ||
+      !selectedPharmacy?._id ||
+      suggestionsDisabledRef.current
+    ) {
       setRawSuggestions([]);
-    })
-    .finally(() => setSuggestionsLoading(false));
-}, [selectedPharmacy?._id, isPrescriptionFlow, cart, token]);
+      return;
+    }
 
-  // Filter out items already in cart (client-side, no re-fetch spam)
+    setSuggestionsLoading(true);
+
+    const exclude = cart
+      .map((m) => m._id || m.medicineId || m.medicine_id)
+      .filter(Boolean)
+      .join(",");
+
+    axios
+      .get(`${API_BASE_URL}/api/medicines/suggestions`, {
+        params: { pharmacyId: selectedPharmacy._id, limit: 20, exclude },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
+      .then((res) => {
+        setRawSuggestions(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch((err) => {
+        if (err?.response?.status === 404) {
+          suggestionsDisabledRef.current = true;
+        }
+        setRawSuggestions([]);
+      })
+      .finally(() => setSuggestionsLoading(false));
+  }, [selectedPharmacy?._id, isPrescriptionFlow, cart, token]);
+
   const suggestions = useMemo(() => {
     const excludeIds = new Set(
       cart
@@ -550,7 +558,7 @@ useEffect(() => {
         email: user?.email,
         contact: addresses[0]?.phone || "",
       },
-      theme: { color: "#13c7ae" },
+      theme: { color: DEEP },
       modal: { ondismiss: () => setLoading(false) },
     };
     setLoading(false);
@@ -562,12 +570,13 @@ useEffect(() => {
   if (!cart.length && !isPrescriptionFlow) {
     return (
       <div className="min-h-screen bg-white max-w-md mx-auto pt-16 text-center">
-        <IndianRupee className="w-14 h-14 mx-auto text-amber-400 mb-3" />
-        <div className="text-xl font-extrabold text-emerald-600">
+        <IndianRupee className="w-14 h-14 mx-auto mb-3" style={{ color: DEEP }} />
+        <div className="text-xl font-extrabold" style={{ color: DEEP }}>
           No items in cart
         </div>
         <Button
-          className="mt-4 font-extrabold rounded-full bg-teal-500 hover:bg-teal-600"
+          className="mt-4 font-extrabold rounded-full hover:brightness-105 text-white"
+          style={{ backgroundColor: DEEP }}
           onClick={() => navigate("/medicines")}
         >
           Browse Medicines
@@ -579,9 +588,12 @@ useEffect(() => {
   return (
     <div className="min-h-screen bg-white max-w-md mx-auto mt-3 mb-24 px-3">
       {/* Medicines summary */}
-      <Card className="mb-3 shadow-lg ring-1 ring-emerald-50 rounded-2xl">
+      <Card
+        className="mb-3 shadow-lg rounded-2xl"
+        style={{ border: "1px solid rgba(15,110,81,0.12)" }}
+      >
         <CardHeader className="pb-2">
-          <CardTitle className="text-[15px] font-extrabold text-teal-700">
+          <CardTitle className="text-[15px] font-extrabold" style={{ color: DEEP }}>
             {isPrescriptionFlow ? "Prescription Quote" : "Medicines in your order"}
           </CardTitle>
         </CardHeader>
@@ -593,13 +605,14 @@ useEffect(() => {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="flex items-center justify-between gap-3 border-b last:border-b-0 pb-3"
+                style={{ borderColor: "rgba(15,110,81,0.10)" }}
               >
                 <div className="min-w-0 flex-1">
                   <div className="text-[15px] font-bold text-zinc-900 truncate">
                     {med.name || med.medicineName}
                   </div>
                   {med.brand && (
-                    <div className="text-[12px] font-semibold text-teal-700">
+                    <div className="text-[12px] font-semibold" style={{ color: DEEP }}>
                       {med.brand}
                     </div>
                   )}
@@ -610,30 +623,67 @@ useEffect(() => {
 
                 {!isPrescriptionFlow && (
                   <div className="flex items-center gap-1.5">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 rounded-full border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100"
-                      disabled={med.quantity === 1}
-                      onClick={() => removeOneFromCart(med)}
-                    >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <div className="w-6 text-center font-extrabold text-teal-700">
-                      {med.quantity}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 rounded-full border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100"
-                      onClick={() => addToCart(med)}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
+  {/* Minus: if qty==1, remove the item */}
+  <Button
+    variant="outline"
+    size="icon"
+    className="h-8 w-8 rounded-full hover:bg-gray-50"
+    style={{
+      borderColor: med.quantity === 1 ? "rgba(239,68,68,0.40)" : "rgba(15,110,81,0.40)",
+      background: med.quantity === 1 ? "rgba(239,68,68,0.06)" : "rgba(15,110,81,0.06)",
+      color: med.quantity === 1 ? "#dc2626" : DEEP,
+    }}
+    onClick={() => {
+      if (med.quantity === 1) {
+        if (window.confirm("Remove this item?")) removeItemCompletely(med);
+      } else {
+        removeOneFromCart(med);
+      }
+    }}
+    aria-label={med.quantity === 1 ? "Remove item" : "Decrease quantity"}
+    title={med.quantity === 1 ? "Remove item" : "Decrease quantity"}
+  >
+    <Minus className="h-4 w-4" />
+  </Button>
+
+  <div className="w-6 text-center font-extrabold" style={{ color: DEEP }}>
+    {med.quantity}
+  </div>
+
+  <Button
+    variant="outline"
+    size="icon"
+    className="h-8 w-8 rounded-full hover:bg-gray-50"
+    style={{
+      borderColor: "rgba(15,110,81,0.40)",
+      background: "rgba(15,110,81,0.06)",
+      color: DEEP,
+    }}
+    onClick={() => addToCart(med)}
+    aria-label="Increase quantity"
+    title="Increase quantity"
+  >
+    <Plus className="h-4 w-4" />
+  </Button>
+
+  {/* Explicit Remove button (optional but handy) */}
+  <Button
+    variant="ghost"
+    size="sm"
+    className="h-8 px-2 text-red-600 hover:text-red-700"
+    onClick={() => {
+      if (window.confirm("Remove this item?")) removeItemCompletely(med);
+    }}
+    aria-label="Remove item"
+    title="Remove item"
+  >
+    <Trash2 className="h-4 w-4" />
+  </Button>
+</div>
+
                 )}
 
-                <div className="text-[15px] font-extrabold text-emerald-600 min-w-[64px] text-right">
+                <div className="text-[15px] font-extrabold min-w-[64px] text-right" style={{ color: DEEP }}>
                   = ₹{(med.price || 0) * (med.quantity || 1)}
                 </div>
               </motion.div>
@@ -642,11 +692,11 @@ useEffect(() => {
 
           {isPrescriptionFlow && (
             <div className="mt-3">
-              <Separator className="bg-teal-50" />
-              <div className="mt-2 text-sm text-amber-600 font-medium">
+              <Separator style={{ background: "rgba(15,110,81,0.12)" }} />
+              <div className="mt-2 text-sm font-medium" style={{ color: DEEP }}>
                 {quoteMessage}
               </div>
-              <div className="mt-1 text-right font-black text-teal-700">
+              <div className="mt-1 text-right font-black" style={{ color: DEEP }}>
                 Quoted Total: ₹{quoteTotal}
               </div>
             </div>
@@ -656,9 +706,9 @@ useEffect(() => {
 
       {/* Smart Suggestions (same store) */}
       {!isPrescriptionFlow && suggestions.length > 0 && (
-        <Card className="mb-3 rounded-2xl">
+        <Card className="mb-3 rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-teal-700">
+            <CardTitle className="flex items-center gap-2" style={{ color: DEEP }}>
               <Sparkles className="h-4 w-4" />
               Smart Suggestions from this store
             </CardTitle>
@@ -669,6 +719,7 @@ useEffect(() => {
                 <div
                   key={sug._id}
                   className="min-w-[180px] rounded-xl border p-3 shrink-0 bg-white"
+                  style={{ borderColor: "rgba(15,110,81,0.20)" }}
                 >
                   <div className="text-[14px] font-semibold line-clamp-2">
                     {sug.name || sug.medicineName}
@@ -676,10 +727,13 @@ useEffect(() => {
                   {sug.brand && (
                     <div className="text-[12px] text-zinc-500">{sug.brand}</div>
                   )}
-                  <div className="mt-1 text-emerald-600 font-bold">₹{sug.price}</div>
+                  <div className="mt-1 font-bold" style={{ color: DEEP }}>
+                    ₹{sug.price}
+                  </div>
                   <Button
                     size="sm"
-                    className="mt-2 w-full rounded-full"
+                    className="mt-2 w-full rounded-full text-white hover:brightness-105"
+                    style={{ backgroundColor: DEEP }}
                     onClick={() =>
                       addToCart({
                         ...sug,
@@ -700,7 +754,7 @@ useEffect(() => {
       )}
 
       {suggestionsLoading && !isPrescriptionFlow && (
-        <Card className="mb-3 rounded-2xl">
+        <Card className="mb-3 rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
           <CardContent>
             <div className="text-sm text-zinc-500">Finding suggestions…</div>
           </CardContent>
@@ -711,7 +765,7 @@ useEffect(() => {
       {isPrescriptionFlow && lockedAddress ? (
         <Card className="mb-3 rounded-2xl bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800 text-zinc-100">
           <CardHeader className="pb-2">
-            <CardTitle className="text-amber-300">
+            <CardTitle className="" style={{ color: "#e3f3ed" }}>
               Delivery Address (locked)
             </CardTitle>
           </CardHeader>
@@ -750,12 +804,13 @@ useEffect(() => {
       )}
 
       {/* Dosage + prescription */}
-      <Card className="mb-3 rounded-2xl">
+      <Card className="mb-3 rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
         <CardContent>
           <label className="mt-2 flex items-center gap-3 text-[15px] leading-tight">
             <input
               type="checkbox"
-              className="accent-emerald-600 h-5 w-5 rounded"
+              className="h-5 w-5 rounded"
+              style={{ accentColor: DEEP }}
               checked={wantChemistInstruction}
               onChange={(e) => setWantChemistInstruction(e.target.checked)}
             />
@@ -774,23 +829,31 @@ useEffect(() => {
                 value={dosage}
                 onChange={(e) => setDosage(e.target.value)}
                 placeholder="E.g., 1 tablet after lunch, as prescribed, etc."
-                className="mt-1 h-[56px] min-h-[56px] resize-none rounded-lg px-3 py-2 text-[15px] leading-[1.35] placeholder:text-zinc-400 focus-visible:ring-emerald-500"
+                className="mt-1 h-[56px] min-h-[56px] resize-none rounded-lg px-3 py-2 text-[15px] leading-[1.35] placeholder:text-zinc-400"
+                style={{ outlineColor: DEEP }}
               />
             </div>
           )}
 
           <div className="mt-4">
-            <div className="text-sm font-bold mb-2">
-              Prescription (if needed)
-            </div>
+            <div className="text-sm font-bold mb-2">Prescription (if needed)</div>
             <Button
-              variant="outline"
-              onClick={() => prescriptionInput.current?.click()}
-              className="font-extrabold border-amber-400 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-full"
-            >
-              <Upload className="h-4 w-4 mr-2" />{" "}
-              {prescription ? "Change File" : "Upload Prescription"}
-            </Button>
+  variant="outline"
+  onClick={() => prescriptionInput.current?.click()}
+  className="rounded-full hover:brightness-105"
+  style={{
+    borderColor: "rgba(15,110,81,0.40)",
+    color: DEEP,
+    background: "rgba(15,110,81,0.06)",
+  }}
+>
+  <Upload className="h-4 w-4 mr-2" />
+  <span className="font-extrabold">
+    {prescription ? "Change File" : "Upload Prescription"}
+  </span>
+</Button>
+
+
             <input
               ref={prescriptionInput}
               type="file"
@@ -803,6 +866,7 @@ useEffect(() => {
                 src={prescriptionPreview}
                 alt="Prescription"
                 className="mt-3 max-w-[200px] rounded-xl border"
+                style={{ borderColor: "rgba(15,110,81,0.20)" }}
               />
             )}
           </div>
@@ -816,93 +880,114 @@ useEffect(() => {
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               placeholder="Any note for your order or delivery..."
-              className="mt-1 h-[56px] min-h-[56px] resize-none rounded-lg px-3 py-2 text-[15px] leading-[1.35] placeholder:text-zinc-400 focus-visible:ring-emerald-500"
+              className="mt-1 h-[56px] min-h-[56px] resize-none rounded-lg px-3 py-2 text-[15px] leading-[1.35] placeholder:text-zinc-400"
+              style={{ outlineColor: DEEP }}
             />
           </div>
         </CardContent>
       </Card>
 
       {/* Bill summary */}
-      <Card className="mb-3 rounded-2xl">
+      <Card className="mb-3 rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
         <CardHeader className="pb-2">
-          <CardTitle className="text-teal-700">Bill Summary</CardTitle>
+          <CardTitle style={{ color: DEEP }}>Bill Summary</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-sm space-y-2">
             {toFree > 0 && (
-              <div className="mb-2 rounded-xl border bg-emerald-50/60 p-2">
-                <div className="text-[13px] font-semibold text-teal-700">
-                  Add ₹{toFree} more to get <span className="text-emerald-700">FREE delivery</span>
-                </div>
-                <div className="mt-2 h-2 w-full rounded-full bg-emerald-100">
-                  <div
-                    className="h-2 rounded-full bg-gradient-to-r from-sky-500 via-teal-500 to-emerald-500"
-                    style={{
-                      width: `${Math.min(100, (itemTotal / FREE_DELIVERY_MIN) * 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
+  <div
+    className="mb-2 rounded-xl p-2"
+    style={{ background: "rgba(15,110,81,0.06)", border: "1px solid rgba(15,110,81,0.18)" }}
+  >
+    <div className="text-[13px] font-semibold mb-2" style={{ color: DEEP }}>
+      Add ₹{toFree} more to get <span>FREE delivery</span>
+    </div>
 
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Item total</span>
-              <span>₹{itemTotal}</span>
-            </div>
+    {/* Progress line */}
+    <div
+      className="relative h-2 w-full rounded-full overflow-hidden"
+      style={{ background: "rgba(15,110,81,0.15)" }}
+      role="progressbar"
+      aria-valuenow={Math.round(progressToFree)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <div
+        className="absolute inset-y-0 left-0 rounded-full"
+        style={{
+          width: `${progressToFree}%`,
+          background:
+            "linear-gradient(90deg, #3B82F6 0%, #10B981 60%, #A7F3D0 100%)",
+        }}
+      />
+    </div>
+  </div>
+)}
 
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Delivery Fee</span>
-              <span>
-                {deliveryFee === 0 ? (
-                  <span className="text-emerald-600">Free</span>
-                ) : (
-                  `₹${deliveryFee}`
-                )}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-zinc-500">Platform Fee</span>
-              <span>₹{platformFee}</span>
-            </div>
+
+            <div className="flex justify-between text-sm">
+  <span className="font-semibold text-zinc-800">Item total</span>
+  <span className="font-semibold text-zinc-800 tabular-nums">₹{itemTotal}</span>
+</div>
+
+<div className="flex justify-between text-sm">
+  <span className="font-semibold text-zinc-800">Delivery Fee</span>
+  <span className="font-semibold tabular-nums">
+    {deliveryFee === 0 ? <span className="text-emerald-700">Free</span> : `₹${deliveryFee}`}
+  </span>
+</div>
+
+<div className="flex justify-between text-sm">
+  <span className="font-semibold text-zinc-800">Platform Fee</span>
+  <span className="font-semibold text-zinc-800 tabular-nums">₹{platformFee}</span>
+</div>
+
             {tip > 0 && (
-              <div className="flex justify-between text-blue-600">
-                <span>Delivery Tip</span>
-                <span>+₹{tip}</span>
-              </div>
-            )}
-            {donate && (
-              <div className="flex justify-between text-green-600">
-                <span>Donation</span>
-                <span>+₹3</span>
-              </div>
-            )}
-            {discount > 0 && (
-              <div className="flex justify-between text-emerald-600">
-                <span>Coupon Discount</span>
-                <span>−₹{discount}</span>
-              </div>
-            )}
+  <div className="flex justify-between font-semibold" style={{ color: DEEP }}>
+    <span>Delivery Tip</span>
+    <span className="tabular-nums">+₹{tip}</span>
+  </div>
+)}
+{donate && (
+  <div className="flex justify-between font-semibold" style={{ color: DEEP }}>
+    <span>Donation</span>
+    <span className="tabular-nums">+₹3</span>
+  </div>
+)}
+{discount > 0 && (
+  <div className="flex justify-between font-semibold" style={{ color: DEEP }}>
+    <span>Coupon Discount</span>
+    <span className="tabular-nums">−₹{discount}</span>
+  </div>
+)}
+
             <Separator className="my-2" />
-            <div className="flex justify-between font-black text-teal-700 text-base">
+            <div className="flex justify-between font-black text-base" style={{ color: DEEP }}>
               <span>Grand Total</span>
               <span>₹{fullTotal}</span>
             </div>
           </div>
 
-          {/* Coupon: Flat 10% off with GODAVAII10 */}
+          {/* Coupon */}
           <div className="mt-3">
-            <div className="flex items-start gap-2 p-3 rounded-xl border bg-amber-50/70">
+            <div
+              className="flex items-start gap-2 p-3 rounded-xl"
+              style={{ border: "1px solid rgba(15,110,81,0.18)", background: "rgba(15,110,81,0.06)" }}
+            >
               <div className="shrink-0 mt-0.5">
-                <Tag className="w-4 h-4 text-amber-600" />
+                <Tag className="w-4 h-4" style={{ color: DEEP }} />
               </div>
               <div className="flex-1 text-[13px] leading-5">
-                <span className="font-semibold text-teal-700">Flat 10% off</span> on this order. Use code{" "}
-                <span className="font-bold">GODAVAII10</span>.
+                <span className="font-semibold" style={{ color: DEEP }}>
+                  Flat 10% off
+                </span>{" "}
+                on this order. Use code <span className="font-bold">GODAVAII10</span>.
               </div>
               {!couponApplied ? (
                 <Button
                   size="sm"
-                  className="rounded-full bg-amber-300 text-emerald-900 hover:bg-amber-200"
+                  className="rounded-full text-white hover:brightness-105"
+                  style={{ backgroundColor: DEEP }}
                   onClick={() => {
                     setCoupon("GODAVAII10");
                     setCouponApplied(true);
@@ -911,31 +996,34 @@ useEffect(() => {
                   Apply
                 </Button>
               ) : (
-                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span
+                  className="text-xs font-semibold px-2 py-1 rounded-full border"
+                  style={{ background: "rgba(15,110,81,0.08)", color: DEEP, borderColor: "rgba(15,110,81,0.25)" }}
+                >
                   Applied
                 </span>
               )}
             </div>
 
-            {/* optional: show the code in a disabled field for clarity */}
             {couponApplied && (
               <div className="mt-2 flex items-center gap-2">
                 <Input
-                  value="GODAVAII10"
-                  disabled
-                  className="text-emerald-700 font-semibold"
-                />
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setCoupon("");
-                    setCouponApplied(false);
-                  }}
-                  className="border-red-300 text-red-500 rounded-full"
-                  size="sm"
-                >
-                  Remove
-                </Button>
+  value="GODAVAII10"
+  disabled
+  className="font-extrabold tracking-wide disabled:opacity-100 disabled:bg-white disabled:text-emerald-700"
+  style={{ color: DEEP }}
+/>
+
+<Button
+  variant="outline"
+  onClick={() => { setCoupon(""); setCouponApplied(false); }}
+  className="rounded-full font-semibold"
+  size="sm"
+  style={{ borderColor: "rgba(15,110,81,0.40)", color: DEEP }}
+>
+  Remove
+</Button>
+
               </div>
             )}
           </div>
@@ -943,7 +1031,7 @@ useEffect(() => {
       </Card>
 
       {/* Delivery partner instructions */}
-      <Card className="mb-3 rounded-2xl">
+      <Card className="mb-3 rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
         <CardContent>
           <Label className="text-[13px] font-semibold text-zinc-700">
             Instructions for Delivery Partner (optional)
@@ -953,15 +1041,16 @@ useEffect(() => {
             value={deliveryInstructions}
             onChange={(e) => setDeliveryInstructions(e.target.value)}
             placeholder="Any note for your delivery partner..."
-            className="mt-1 h-[56px] min-h-[56px] resize-none rounded-lg px-3 py-2 text-[15px] leading-[1.35] placeholder:text-zinc-400 focus-visible:ring-emerald-500"
+            className="mt-1 h-[56px] min-h-[56px] resize-none rounded-lg px-3 py-2 text-[15px] leading-[1.35] placeholder:text-zinc-400"
+            style={{ outlineColor: DEEP }}
           />
         </CardContent>
       </Card>
 
       {/* Tip + donate */}
-      <Card className="mb-3 rounded-2xl">
+      <Card className="mb-3 rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
         <CardHeader className="pb-2">
-          <CardTitle className="text-teal-700">Add a Delivery Tip</CardTitle>
+          <CardTitle style={{ color: DEEP }}>Add a Delivery Tip</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-2 flex-wrap">
@@ -969,10 +1058,11 @@ useEffect(() => {
               <Button
                 key={amount}
                 variant={tip === amount ? "default" : "outline"}
-                className={
+                className="rounded-full"
+                style={
                   tip === amount
-                    ? "bg-sky-600 rounded-full"
-                    : "border-sky-600 text-sky-600 rounded-full"
+                    ? { backgroundColor: DEEP, color: "#fff" }
+                    : { borderColor: DEEP, color: DEEP }
                 }
                 onClick={() => setTip(amount)}
               >
@@ -981,10 +1071,11 @@ useEffect(() => {
             ))}
             <Button
               variant={tip && !tipAmounts.includes(tip) ? "default" : "outline"}
-              className={
+              className="rounded-full"
+              style={
                 tip && !tipAmounts.includes(tip)
-                  ? "bg-sky-600 rounded-full"
-                  : "border-sky-600 text-sky-600 rounded-full"
+                  ? { backgroundColor: DEEP, color: "#fff" }
+                  : { borderColor: DEEP, color: DEEP }
               }
               onClick={() => {
                 const amt = prompt("Enter custom tip amount:");
@@ -994,11 +1085,7 @@ useEffect(() => {
             >
               Other
             </Button>
-            <Button
-              variant="ghost"
-              className="text-red-500"
-              onClick={() => setTip(0)}
-            >
+            <Button variant="ghost" className="text-red-500" onClick={() => setTip(0)}>
               No Tip
             </Button>
           </div>
@@ -1006,64 +1093,91 @@ useEffect(() => {
       </Card>
 
       {/* Payment */}
-      <Card className="rounded-2xl">
+      <Card className="rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
         <CardHeader className="pb-2">
-          <CardTitle>Pay Using</CardTitle>
+          <CardTitle style={{ color: DEEP }}>Pay Using</CardTitle>
         </CardHeader>
         <CardContent>
           <fieldset>
             <legend className="sr-only">Payment method</legend>
             <div className="grid grid-cols-1 gap-2">
-              {paymentOptions.map((opt) => {
-                const selected = paymentMethod === opt.value;
-                return (
-                  <label
-                    key={opt.value}
-                    htmlFor={`pay-${opt.value}`}
-                    className={[
-                      "flex items-center justify-between rounded-xl border p-3 transition",
-                      "cursor-pointer select-none",
-                      selected
-                        ? "border-teal-500 ring-2 ring-teal-200 bg-teal-50"
-                        : "hover:bg-zinc-50",
-                    ].join(" ")}
-                  >
-                    <div className="flex items-center gap-3">
-                      <input
-                        id={`pay-${opt.value}`}
-                        type="radio"
-                        name="payment"
-                        value={opt.value}
-                        checked={selected}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        className="sr-only"
-                      />
-                      <span
-                        aria-hidden="true"
-                        className={[
-                          "h-4 w-4 rounded-full border",
-                          selected
-                            ? "border-teal-600 bg-teal-600"
-                            : "border-zinc-400",
-                        ].join(" ")}
-                      />
-                      <span className="text-sm">{opt.label}</span>
-                    </div>
-                    {selected && (
-                      <span className="text-[11px] font-semibold text-teal-700">
-                        Selected
-                      </span>
-                    )}
-                  </label>
-                );
-              })}
+  {paymentOptions.map((opt) => {
+    const selected = paymentMethod === opt.value;
+    return (
+      <label key={opt.value} htmlFor={`pay-${opt.value}`} className="block">
+        <input
+          id={`pay-${opt.value}`}
+          type="radio"
+          name="payment"
+          value={opt.value}
+          checked={selected}
+          onChange={(e) => setPaymentMethod(e.target.value)}
+          className="sr-only"
+        />
+
+        {/* Gradient border wrapper */}
+        <motion.div
+          layout
+          whileTap={{ scale: 0.98 }}
+          className={[
+            "rounded-2xl p-[2px] transition-all",
+            selected
+              ? "bg-[linear-gradient(120deg,#0f6e51,rgba(21,179,146,0.9))] shadow-[0_10px_24px_rgba(15,110,81,0.18)]"
+              : "bg-zinc-200/60 hover:bg-zinc-300/60"
+          ].join(" ")}
+        >
+          {/* Inner card */}
+          <div
+            className={[
+              "flex items-center justify-between rounded-[14px] p-3 transition-colors",
+              selected
+                ? "bg-white/80 backdrop-blur ring-1 ring-black/5"
+                : "bg-white"
+            ].join(" ")}
+          >
+            <div className="flex items-center gap-3">
+              {/* Custom radio */}
+              <span
+                className={[
+                  "relative grid place-items-center h-5 w-5 rounded-full border transition-all",
+                  selected ? "border-emerald-600" : "border-zinc-400"
+                ].join(" ")}
+              >
+                {selected && (
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
+                )}
+              </span>
+
+              <span
+                className={[
+                  "text-sm transition-colors",
+                  selected ? "font-semibold text-zinc-900" : "text-zinc-700"
+                ].join(" ")}
+              >
+                {opt.label}
+              </span>
             </div>
+
+            {/* “Selected” badge */}
+            {selected && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                <Check className="h-3.5 w-3.5" />
+                Selected
+              </span>
+            )}
+          </div>
+        </motion.div>
+      </label>
+    );
+  })}
+</div>
           </fieldset>
 
           <Button
             disabled={loading}
             onClick={handleOrder}
-            className="w-full mt-3 rounded-full !font-extrabold !text-white tracking-wide bg-gradient-to-r from-sky-500 via-teal-500 to-emerald-500 hover:opacity-95"
+            className="w-full mt-3 rounded-full !font-extrabold !text-white tracking-wide hover:brightness-105"
+            style={{ backgroundColor: DEEP }}
           >
             {loading ? (
               <>
@@ -1085,9 +1199,7 @@ useEffect(() => {
             initial={{ y: 60, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 60, opacity: 0 }}
-            className={`fixed left-1/2 -translate-x-1/2 bottom-24 z-[2000] px-3 py-2 rounded-full shadow-lg text-white ${
-              toast.type === "error" ? "bg-red-500" : "bg-emerald-600"
-            }`}
+            className="fixed left-1/2 -translate-x-1/2 bottom-24 z-[2000] px-3 py-2 rounded-full shadow-lg text-white bg-red-500"
           >
             {toast.message}
           </motion.div>

@@ -9,6 +9,9 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:500
 const GOOGLE_MAPS_API_KEY =
   process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "AIzaSyCd9Jkk_kd0SwaDLKwehdTpowiHEAnuy8Y";
 
+// Deep-green brand tone
+const DEEP = "#0f6e51";
+
 // Headless modal (no backdrop). Includes close icon + Back-button-to-close.
 // IMPORTANT: uses inline style zIndex so it stacks above parent modals.
 function Modal({ open, onClose, children, maxWidth = "max-w-md", zIndex = 2600 }) {
@@ -61,21 +64,23 @@ function Modal({ open, onClose, children, maxWidth = "max-w-md", zIndex = 2600 }
             className={`relative w-full ${maxWidth}`}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200">
+            <div className="bg-white rounded-2xl shadow-2xl border" style={{ borderColor: "#e5e7eb" }}>
               <button
                 type="button"
                 aria-label="Close"
                 onClick={safeClose}
-                className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200 bg-white/90 hover:bg-zinc-50 shadow-sm"
+                className="absolute right-2 top-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border bg-white/90 hover:bg-zinc-50 shadow-sm"
+                style={{ borderColor: "#e5e7eb" }}
               >
-                <X className="h-5 w-5 text-zinc-600" />
+                <X className="h-5 w-5" style={{ color: "#6b7280" }} />
               </button>
               {children}
               <div className="px-5 pb-4 -mt-2">
                 <button
                   type="button"
                   onClick={safeClose}
-                  className="w-full rounded-xl border border-zinc-200 bg-white py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+                  className="w-full rounded-xl bg-white py-2 text-sm font-bold hover:bg-gray-50"
+                  style={{ color: DEEP, border: `1px solid ${DEEP}66` }}
                 >
                   Cancel
                 </button>
@@ -89,8 +94,13 @@ function Modal({ open, onClose, children, maxWidth = "max-w-md", zIndex = 2600 }
   );
 }
 
-export default function AddressForm({ open, onClose, onSave, initial = {}, modalZIndex = 3300, // > Dialog overlay (3000) and content (3001) 
-  }) {
+export default function AddressForm({
+  open,
+  onClose,
+  onSave,
+  initial = {},
+  modalZIndex = 3300, // > Dialog overlay (3000) and content (3001)
+}) {
   const [type, setType] = useState(initial.type || "Home");
   const [name, setName] = useState(initial.name || "");
   const [phone, setPhone] = useState(initial.phone || "");
@@ -268,8 +278,10 @@ export default function AddressForm({ open, onClose, onSave, initial = {}, modal
 
   return (
     <Modal open={open} onClose={onClose} zIndex={modalZIndex}>
-      <div className="px-5 pt-5 pb-3 border-b border-zinc-100">
-        <h3 className="text-lg font-bold tracking-tight">Add/Edit Address</h3>
+      <div className="px-5 pt-5 pb-3 border-b" style={{ borderColor: "#f1f5f9" }}>
+        <h3 className="text-lg font-extrabold tracking-tight" style={{ color: DEEP }}>
+          Add/Edit Address
+        </h3>
       </div>
 
       <div className="px-5 pb-3 pt-3 space-y-3">
@@ -287,33 +299,48 @@ export default function AddressForm({ open, onClose, onSave, initial = {}, modal
               setPin({ lat: currentAddress.lat, lng: currentAddress.lng });
             }
           }}
-          className="inline-flex items-center gap-2 rounded-xl border border-teal-500/30 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50"
+          className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold bg-white"
+          style={{ color: DEEP, border: `1px solid ${DEEP}55` }}
         >
-          <LocateFixed className="h-4 w-4" />
+          <LocateFixed className="h-4 w-4" style={{ color: DEEP }} />
           Use My Current Location
         </button>
 
         <div className="flex gap-2">
-          {["Home", "Work", "Other"].map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setType(t)}
-              className={`rounded-xl px-3 py-2 text-sm font-medium border transition ${
-                type === t
-                  ? "bg-amber-50 border-amber-300 text-amber-800"
-                  : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+          {["Home", "Work", "Other"].map((t) => {
+            const selected = type === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setType(t)}
+                className="rounded-xl px-3 py-2 text-sm font-medium border transition bg-white"
+                style={
+                  selected
+                    ? {
+                        background: "rgba(15,110,81,.08)",
+                        borderColor: "rgba(15,110,81,.45)",
+                        color: DEEP,
+                        fontWeight: 700,
+                      }
+                    : { borderColor: "#e5e7eb", color: "#374151" }
+                }
+              >
+                {t}
+              </button>
+            );
+          })}
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-zinc-600">Name</label>
+          <label className="text-xs font-semibold" style={{ color: "#475569" }}>
+            Name
+          </label>
           <input
-            className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+            className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2"
+            style={{ borderColor: "#e5e7eb", boxShadow: "none" }}
+            onFocus={(e) => (e.currentTarget.style.boxShadow = "0 0 0 2px rgba(15,110,81,.25)")}
+            onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Your name"
@@ -321,9 +348,14 @@ export default function AddressForm({ open, onClose, onSave, initial = {}, modal
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-zinc-600">Phone</label>
+          <label className="text-xs font-semibold" style={{ color: "#475569" }}>
+            Phone
+          </label>
           <input
-            className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+            className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2"
+            style={{ borderColor: "#e5e7eb", boxShadow: "none" }}
+            onFocus={(e) => (e.currentTarget.style.boxShadow = "0 0 0 2px rgba(15,110,81,.25)")}
+            onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
             value={phone}
             onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, ""))}
             maxLength={15}
@@ -332,23 +364,30 @@ export default function AddressForm({ open, onClose, onSave, initial = {}, modal
         </div>
 
         <div className="space-y-1 relative">
-          <label className="text-xs font-semibold text-zinc-600 flex items-center gap-1">
-            <MapPin className="h-4 w-4 text-teal-600" />
+          <label className="text-xs font-semibold flex items-center gap-1" style={{ color: "#475569" }}>
+            <MapPin className="h-4 w-4" style={{ color: DEEP }} />
             <span>Address (Search Google Maps)</span>
           </label>
           <input
-            className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+            className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2"
+            style={{ borderColor: "#e5e7eb", boxShadow: "none" }}
+            onFocus={(e) => (e.currentTarget.style.boxShadow = "0 0 0 2px rgba(15,110,81,.25)")}
+            onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
             value={input}
             onChange={(e) => handleInput(e.target.value)}
             placeholder="Search address"
             autoFocus
           />
           {loading && (
-            <div className="absolute right-3 top-9 h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600" />
+            <div className="absolute right-3 top-9 h-4 w-4 animate-spin rounded-full border-2"
+                 style={{ borderColor: "#e5e7eb", borderTopColor: "#52525b" }} />
           )}
 
           {options.length > 0 && (
-            <div className="absolute z-10 mt-1 w-full rounded-xl border border-zinc-200 bg-white shadow-lg max-h-56 overflow-auto">
+            <div
+              className="absolute z-10 mt-1 w-full rounded-xl bg-white shadow-lg max-h-56 overflow-auto border"
+              style={{ borderColor: "#e5e7eb" }}
+            >
               {options.map((o) => (
                 <button
                   key={o.place_id}
@@ -363,23 +402,30 @@ export default function AddressForm({ open, onClose, onSave, initial = {}, modal
           )}
 
           {selectedPlace && (
-            <p className="text-[11px] text-zinc-500 pt-1">Selected: {selectedPlace.formatted}</p>
+            <p className="text-[11px] pt-1" style={{ color: "#6b7280" }}>
+              Selected: {selectedPlace.formatted}
+            </p>
           )}
         </div>
 
         {pin && (
           <div className="space-y-2">
-            <div id="map-preview" className="w-full h-64 rounded-xl border border-zinc-200 shadow-sm" />
-            <p className="text-center text-xs text-zinc-500">
+            <div id="map-preview" className="w-full h-64 rounded-xl border shadow-sm" style={{ borderColor: "#e5e7eb" }} />
+            <p className="text-center text-xs" style={{ color: "#6b7280" }}>
               Drag the pin if needed to your exact entrance!
             </p>
           </div>
         )}
 
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-zinc-600">Floor/House No.</label>
+          <label className="text-xs font-semibold" style={{ color: "#475569" }}>
+            Floor/House No.
+          </label>
           <input
-            className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+            className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2"
+            style={{ borderColor: "#e5e7eb", boxShadow: "none" }}
+            onFocus={(e) => (e.currentTarget.style.boxShadow = "0 0 0 2px rgba(15,110,81,.25)")}
+            onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
             value={floor}
             onChange={(e) => setFloor(e.target.value)}
             placeholder="E.g., Ground, Flat 2B"
@@ -390,7 +436,8 @@ export default function AddressForm({ open, onClose, onSave, initial = {}, modal
           type="button"
           onClick={handleSave}
           disabled={!name || !phone || !addressLine || !selectedPlace || !pin}
-          className="w-full rounded-xl bg-teal-600 text-white font-semibold py-2.5 shadow hover:bg-teal-700 disabled:opacity-50"
+          className="w-full rounded-xl text-white font-bold py-2.5 shadow hover:brightness-105 disabled:opacity-50"
+          style={{ backgroundColor: DEEP }}
         >
           Save Address
         </button>

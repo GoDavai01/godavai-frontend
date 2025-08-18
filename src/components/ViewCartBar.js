@@ -12,15 +12,13 @@ const BOTTOM_NAV_HEIGHT = 72;
 const GAP_ABOVE_NAV = 8;
 const BOTTOM_OFFSET = `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px) + ${GAP_ABOVE_NAV}px)`;
 
+// Deep-green brand tone
+const DEEP = "#0f6e51";
+
 export default function ViewCartBar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const {
-    cart,
-    clearCart,
-    selectedPharmacy,
-    setSelectedPharmacy,
-  } = useCart();
+  const { cart, clearCart, selectedPharmacy, setSelectedPharmacy } = useCart();
 
   const [open, setOpen] = useState(false);
 
@@ -38,7 +36,6 @@ export default function ViewCartBar() {
 
   // Handlers used by the sheet (NO flow change)
   const onChangePharmacy = () => {
-    // simplest: go to full cart where your select dialog exists
     navigate("/cart");
   };
   const onClearCart = () => {
@@ -48,7 +45,6 @@ export default function ViewCartBar() {
   };
   const onCheckout = () => {
     if (!selectedPharmacy || multiPharmacy) {
-      // keep the same flow: go to the Cart page so user can pick pharmacy
       navigate("/cart");
       return;
     }
@@ -68,28 +64,40 @@ export default function ViewCartBar() {
             style={{ bottom: BOTTOM_OFFSET }}
           >
             <div className="mx-auto w-full max-w-[520px] px-3">
-              <div className="flex items-center justify-between rounded-2xl px-3 py-3 backdrop-blur-xl bg-white/90 ring-1 ring-emerald-100/60 shadow-[0_-6px_24px_rgba(16,24,40,0.12)]">
+              <div
+                className="flex items-center justify-between rounded-2xl px-3 py-3 backdrop-blur-xl bg-white/90 shadow-[0_-6px_24px_rgba(16,24,40,0.12)]"
+                style={{ border: "1px solid rgba(15,110,81,0.14)" }}
+              >
                 <div className="flex items-center gap-3">
                   <div className="relative">
-                    <div className="rounded-2xl bg-gradient-to-br from-teal-100 to-emerald-100 p-2">
-                      <ShoppingCart className="h-6 w-6 text-teal-700" />
+                    <div
+                      className="rounded-2xl p-2"
+                      style={{ background: "rgba(15,110,81,0.10)" }}
+                    >
+                      <ShoppingCart className="h-6 w-6" style={{ color: DEEP }} />
                     </div>
-                    <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1 text-[11px] font-bold text-white">
+                    <span
+                      className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-bold text-white"
+                      style={{ background: DEEP }}
+                    >
                       {cart.length}
                     </span>
                   </div>
                   <div className="leading-tight">
-                    <div className="text-[15px] font-extrabold text-teal-800">
+                    <div className="text-[15px] font-extrabold" style={{ color: "#0b3f30" }}>
                       {cart.length} {cart.length === 1 ? "item" : "items"}
                     </div>
-                    <div className="text-sm font-semibold text-emerald-700">₹{total}</div>
+                    <div className="text-sm font-semibold" style={{ color: DEEP }}>
+                      ₹{total}
+                    </div>
                   </div>
                 </div>
 
                 <Button
                   size="lg"
                   onClick={() => setOpen(true)}
-                  className="rounded-full px-5 font-extrabold tracking-wide bg-gradient-to-r from-teal-500 to-emerald-500 text-white text-[15px] shadow-[0_6px_20px_rgba(16,185,129,0.35)] hover:brightness-105"
+                  className="rounded-full px-5 font-extrabold tracking-wide text-white text-[15px] hover:brightness-105 shadow-lg"
+                  style={{ backgroundColor: DEEP }}
                 >
                   VIEW CART
                 </Button>
@@ -109,7 +117,7 @@ export default function ViewCartBar() {
         selectedPharmacy={selectedPharmacy}
         multiPharmacy={multiPharmacy}
         loadingPharmacies={false}
-        pharmacies={[]}               // you can wire real list later if you want
+        pharmacies={[]}
         openSelectDialog={() => navigate("/cart")}
       />
     </>
