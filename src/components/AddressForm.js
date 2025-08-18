@@ -89,7 +89,8 @@ function Modal({ open, onClose, children, maxWidth = "max-w-md", zIndex = 2600 }
   );
 }
 
-export default function AddressForm({ open, onClose, onSave, initial = {} }) {
+export default function AddressForm({ open, onClose, onSave, initial = {}, modalZIndex = 3300, // > Dialog overlay (3000) and content (3001) 
+  }) {
   const [type, setType] = useState(initial.type || "Home");
   const [name, setName] = useState(initial.name || "");
   const [phone, setPhone] = useState(initial.phone || "");
@@ -266,7 +267,7 @@ export default function AddressForm({ open, onClose, onSave, initial = {} }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} zIndex={2600}>
+    <Modal open={open} onClose={onClose} zIndex={modalZIndex}>
       <div className="px-5 pt-5 pb-3 border-b border-zinc-100">
         <h3 className="text-lg font-bold tracking-tight">Add/Edit Address</h3>
       </div>

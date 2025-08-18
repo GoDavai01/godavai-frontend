@@ -341,6 +341,7 @@ export default function PrescriptionUploadModal({
                   onClose={() => { setAddressFormOpen(false); setEditingAddress(null); }}
                   onSave={handleSaveAddress}
                   initial={editingAddress || addresses.find(a => a.id === selectedAddressId) || {}}
+                  modalZIndex={3300}
                 />
               </div>
               {/* Upload Mode */}
