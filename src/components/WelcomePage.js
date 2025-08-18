@@ -8,7 +8,7 @@ function GoDavaiiWordmark({ className = "" }) {
                   "text-[56px] md:text-[88px]", className].join(" ")}
       style={{ fontFamily: "Inter, Montserrat, system-ui, sans-serif" }}
     >
-      godavaii
+      Godavaii
     </h1>
   );
 }

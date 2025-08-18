@@ -150,6 +150,7 @@ function isThisWeek(date) {
   lastDay.setHours(23,59,59,999);
   return d >= firstDay && d <= lastDay;
 }
+const linkBrandToName = (val) => val;
 
 export default function PharmacyDashboard() {
   const [token, setToken] = useState(localStorage.getItem("pharmacyToken") || "");
@@ -179,31 +180,41 @@ const allPharmacyCategories = React.useMemo(() => {
 }, [medicines]);
 
   const [medForm, setMedForm] = useState({
-    name: "",
-    brand: "",
-    price: "",
-    mrp: "",
-    stock: "",
-    category: "",
-    discount: "",
-    customCategory: "",
-    type: "Tablet",
-    customType: ""
-  });
+  name: "",
+  brand: "",
+
+  // NEW
+  composition: "",
+  company: "",
+
+  price: "",
+  mrp: "",
+  stock: "",
+  category: "",
+  discount: "",
+  customCategory: "",
+  type: "Tablet",
+  customType: ""
+});
   const [medMsg, setMedMsg] = useState("");
   const [editMedId, setEditMedId] = useState(null);
   const [editMedImages, setEditMedImages] = useState([]); // <-- ADD THIS
   const [editMedForm, setEditMedForm] = useState({
-    name: "",
-    brand: "",
-    price: "",
-    mrp: "",
-    stock: "",
-    category: "",
-    customCategory: "",
-    type: "Tablet",
-    customType: ""
-  });
+  name: "",
+  brand: "",
+
+  // NEW
+  composition: "",
+  company: "",
+
+  price: "",
+  mrp: "",
+  stock: "",
+  category: "",
+  customCategory: "",
+  type: "Tablet",
+  customType: ""
+});
   const [medImages, setMedImages] = useState([]); // support multiple
 
   const editFileInputRef = useRef();
@@ -366,6 +377,8 @@ const allPharmacyCategories = React.useMemo(() => {
       data = new FormData();
       data.append("name", medForm.name);
       data.append("brand", medForm.brand);
+      data.append("composition", medForm.composition || "");
+      data.append("company", medForm.company || "");
       data.append("price", medForm.price);
       data.append("mrp", medForm.mrp);
       data.append("discount", medForm.discount);
@@ -376,14 +389,17 @@ const allPharmacyCategories = React.useMemo(() => {
       headers = { Authorization: `Bearer ${token}` };
     } else {
       data = {
-        name: medForm.name,
-        brand: medForm.brand,
-        price: medForm.price,
-        mrp: medForm.mrp,
-        discount: medForm.discount,
-        stock: medForm.stock,
-        category: finalCategories
-      };
+  name: medForm.name,
+  brand: medForm.brand,
+  composition: medForm.composition || "",
+  company: medForm.company || "",
+  price: medForm.price,
+  mrp: medForm.mrp,
+  discount: medForm.discount,
+  stock: medForm.stock,
+  category: finalCategories
+};
+
       headers = { Authorization: `Bearer ${token}` };
     }
 
@@ -393,7 +409,11 @@ const allPharmacyCategories = React.useMemo(() => {
       { headers }
     );
     setMedMsg("Medicine added!");
-    setMedForm({ name: "", brand: "", price: "", mrp: "", stock: "", category: "", discount: "", customCategory: "" });
+    setMedForm({
+  name: "", brand: "", composition: "", company: "",
+  price: "", mrp: "", stock: "", category: "", discount: "",
+  customCategory: "", type: "Tablet", customType: ""
+});
     setMedImages([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   } catch {
@@ -421,16 +441,21 @@ const allPharmacyCategories = React.useMemo(() => {
   }
   setEditMedId(med.id || med._id);
   setEditMedForm({
-    name: med.name,
-    brand: med.brand || "",
-    price: med.price,
-    mrp: med.mrp,
-    stock: med.stock,
-    category: newCategory,
-    customCategory,
-    type: TYPE_OPTIONS.includes(med.type) ? med.type : "Other",
-    customType: TYPE_OPTIONS.includes(med.type) ? "" : (med.type || "")
-  });
+  name: med.name,
+  brand: med.brand || "",
+
+  // NEW
+  composition: med.composition || "",
+  company: med.company || "",
+
+  price: med.price,
+  mrp: med.mrp,
+  stock: med.stock,
+  category: newCategory,
+  customCategory,
+  type: TYPE_OPTIONS.includes(med.type) ? med.type : "Other",
+  customType: TYPE_OPTIONS.includes(med.type) ? "" : (med.type || "")
+});
 };
 
   // Save edit
@@ -463,6 +488,8 @@ const allPharmacyCategories = React.useMemo(() => {
       data = new FormData();
       data.append("name", editMedForm.name);
       data.append("brand", editMedForm.brand);
+      data.append("composition", editMedForm.composition || "");
+      data.append("company", editMedForm.company || "");
       data.append("price", editMedForm.price);
       data.append("mrp", editMedForm.mrp);
       data.append("stock", editMedForm.stock);
@@ -479,15 +506,18 @@ const allPharmacyCategories = React.useMemo(() => {
       };
     } else {
       data = {
-        name: editMedForm.name,
-        brand: editMedForm.brand,
-        price: editMedForm.price,
-        mrp: editMedForm.mrp,
-        stock: editMedForm.stock,
-        category: finalCategories,
-        type: editMedForm.type,
-        ...(editMedForm.type === "Other" && { customType: editMedForm.customType })
-      };
+  name: editMedForm.name,
+  brand: editMedForm.brand,
+  composition: editMedForm.composition || "",
+  company: editMedForm.company || "",
+  price: editMedForm.price,
+  mrp: editMedForm.mrp,
+  stock: editMedForm.stock,
+  category: finalCategories,
+  type: editMedForm.type,
+  ...(editMedForm.type === "Other" && { customType: editMedForm.customType })
+};
+
       headers = { Authorization: `Bearer ${token}` };
     }
 
@@ -946,6 +976,16 @@ const handleEditImagesChange = (e) => {
               {(Array.isArray(med.category) ? med.category.join(', ') : med.category) || "Miscellaneous"}
             </span>
             <br />
+            {med.composition && (
+  <span style={{ display: "block", color: "#9ad0c9" }}>
+    Composition: {med.composition}
+  </span>
+)}
+{med.company && (
+  <span style={{ display: "block", color: "#9ad0c9" }}>
+    Company: {med.company}
+  </span>
+)}
             <b>Selling Price:</b> ₹{med.price} | <b>MRP:</b> ₹{med.mrp} | <b>Stock:</b> {med.stock}
             <br />
             <b>Type:</b> {med.type || "Tablet"}
@@ -974,22 +1014,46 @@ const handleEditImagesChange = (e) => {
       <DialogTitle>Edit Medicine</DialogTitle>
       <DialogContent>
         <Stack spacing={2} mt={1}>
+          {false && (
+  <TextField
+    label="Name"
+    fullWidth
+    value={editMedForm.name}
+    onChange={e => setEditMedForm(f => ({ ...f, name: e.target.value }))}
+    onFocus={() => setIsEditing(true)}
+    onBlur={() => setIsEditing(false)}
+  />
+)}
+
           <TextField
-            label="Name"
-            fullWidth
-            value={editMedForm.name}
-            onChange={e => setEditMedForm(f => ({ ...f, name: e.target.value }))}
-            onFocus={() => setIsEditing(true)}
-            onBlur={() => setIsEditing(false)}
-          />
+  label="Brand"
+  fullWidth
+  value={editMedForm.brand}
+  onChange={e =>
+    setEditMedForm(f => ({
+      ...f,
+      brand: e.target.value,
+      // only fill name if it's empty, so we don't overwrite a manual edit
+      name: f.name || linkBrandToName(e.target.value)
+    }))
+  }
+  onFocus={() => setIsEditing(true)}
+  onBlur={() => setIsEditing(false)}
+/>
+
           <TextField
-            label="Brand"
-            fullWidth
-            value={editMedForm.brand}
-            onChange={e => setEditMedForm(f => ({ ...f, brand: e.target.value }))}
-            onFocus={() => setIsEditing(true)}
-            onBlur={() => setIsEditing(false)}
-          />
+  label="Composition"
+  fullWidth
+  value={editMedForm.composition}
+  onChange={e => setEditMedForm(f => ({ ...f, composition: e.target.value }))}
+/>
+<TextField
+  label="Company / Manufacturer"
+  fullWidth
+  value={editMedForm.company}
+  onChange={e => setEditMedForm(f => ({ ...f, company: e.target.value }))}
+/>
+
           <TextField
             label="Selling Price"
             type="number"
@@ -1168,20 +1232,40 @@ const handleEditImagesChange = (e) => {
       bgcolor: "#181d23", borderRadius: 2, p: 2, boxShadow: 1
     }}>
       <Stack spacing={2}>
+        {false && (
+  <TextField
+    label="Name"
+    value={medForm.name}
+    onChange={e => setMedForm(f => ({ ...f, name: e.target.value }))}
+    onFocus={() => setIsEditing(true)}
+    onBlur={() => setIsEditing(false)}
+  />
+)}
         <TextField
-          label="Name"
-          value={medForm.name}
-          onChange={e => setMedForm(f => ({ ...f, name: e.target.value }))}
-          onFocus={() => setIsEditing(true)}
-          onBlur={() => setIsEditing(false)}
-        />
+  label="Brand"
+  value={medForm.brand}
+  onChange={e =>
+    setMedForm(f => ({
+      ...f,
+      brand: e.target.value,
+      // keep DB `name` filled automatically
+      name: linkBrandToName(e.target.value)
+    }))
+  }
+  onFocus={() => setIsEditing(true)}
+  onBlur={() => setIsEditing(false)}
+/>
         <TextField
-          label="Brand"
-          value={medForm.brand}
-          onChange={e => setMedForm(f => ({ ...f, brand: e.target.value }))}
-          onFocus={() => setIsEditing(true)}
-          onBlur={() => setIsEditing(false)}
-        />
+  label="Composition (e.g., Paracetamol 650 mg)"
+  value={medForm.composition}
+  onChange={e => setMedForm(f => ({ ...f, composition: e.target.value }))}
+/>
+<TextField
+  label="Company / Manufacturer"
+  value={medForm.company}
+  onChange={e => setMedForm(f => ({ ...f, company: e.target.value }))}
+/>
+
         <TextField
           label="Selling Price"
           type="number"

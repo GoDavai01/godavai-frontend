@@ -79,8 +79,8 @@ export default function AllMedicines() {
                   }}
                 />
                 <Typography fontWeight={700} fontSize={17} color="#07908A" noWrap>
-                  {med.name}
-                </Typography>
+  {med.brand || med.name}
+</Typography>
                 <Typography fontWeight={700} color="#13C0A2" fontSize={16} mt={0.2}>
                   ₹{med.price}
                 </Typography>
@@ -110,7 +110,7 @@ export default function AllMedicines() {
                     addToCart(med);
                     setSnackbar({
                       open: true,
-                      message: `${med.name} added to cart!`,
+                      message: `${med.brand || med.name} added to cart!`,
                       severity: "success"
                     });
                   }}

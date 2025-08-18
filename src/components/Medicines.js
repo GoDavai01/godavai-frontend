@@ -161,8 +161,9 @@ export default function Medicines() {
                     />
                     <Box>
                       <Typography fontWeight={700} fontSize={16} color="#07908A" sx={{ mb: 0.2, cursor: "pointer" }} onClick={() => setSelectedMed(med)}>
-                        {med.name}
-                      </Typography>
+  {med.brand || med.name}
+</Typography>
+
                       {med.brand && med.brand.trim() && (
                         <Typography
                           fontWeight={600}
@@ -173,6 +174,16 @@ export default function Medicines() {
                           {med.brand}
                         </Typography>
                       )}
+                      {med.composition && (
+  <Typography fontSize={13} color="#4b5563" sx={{ mb: 0.2 }}>
+    {med.composition}
+  </Typography>
+)}
+{med.company && (
+  <Typography fontSize={12} color="#6b7280" sx={{ mb: 0.5 }}>
+    {med.company}
+  </Typography>
+)}
                       <Typography fontSize={13} color="#666" sx={{ mb: 0.5 }}>
                         {/* Show ALL categories, not just one */}
                         {Array.isArray(med.category) ? med.category.join(", ") : (med.category || "Miscellaneous")}
@@ -195,7 +206,7 @@ export default function Medicines() {
                           }}
                           onClick={() => {
                             addToCart(med);
-                            setSnackbar({ open: true, message: `${med.name} added to cart!`, severity: "success" });
+                            setSnackbar({ open: true, message: `${med.brand || med.name} added to cart!`, severity: "success" });
                           }}
                         >
                           Add to Cart
@@ -311,13 +322,24 @@ export default function Medicines() {
       {/* NAME + BRAND */}
       <Box sx={{ p: 2, pt: 1 }}>
         <Typography fontWeight={800} fontSize={20} color="#13807e">
-          {selectedMed.name}
-        </Typography>
+  {selectedMed.brand || selectedMed.name}
+</Typography>
         {selectedMed.brand && (
           <Typography fontSize={14} color="#888" mb={1}>
             {selectedMed.brand}
           </Typography>
         )}
+        {selectedMed.composition && (
+  <Typography fontSize={14} color="#666" mb={0.2}>
+    Composition: {selectedMed.composition}
+  </Typography>
+)}
+{selectedMed.company && (
+  <Typography fontSize={14} color="#666" mb={1}>
+    Company: {selectedMed.company}
+  </Typography>
+)}
+
 
         {/* PRICE + DISCOUNT */}
         <Stack direction="row" alignItems="center" spacing={1} mb={1}>
