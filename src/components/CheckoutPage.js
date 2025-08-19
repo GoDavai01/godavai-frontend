@@ -381,33 +381,49 @@ useEffect(() => {
 
   (async () => {
     try {
-      // try plural first
+      // 1) plural
       const r = await axios.get(`${API_BASE_URL}/api/medicines/suggestions`, {
         params,
         headers,
       });
       setRawSuggestions(Array.isArray(r.data) ? r.data : []);
+      return; // success, stop here
     } catch (err) {
-      // fallback to singular alias if 404
       if (err?.response?.status === 404) {
         try {
+          // 2) singular
           const r2 = await axios.get(`${API_BASE_URL}/api/medicine/suggestions`, {
             params,
             headers,
           });
           setRawSuggestions(Array.isArray(r2.data) ? r2.data : []);
-          return;
-        } catch {
-          // no-op, will fall through to empty
+          return; // success, stop here
+        } catch (e2) {
+          if (e2?.response?.status === 404) {
+            try {
+              // 3) plain alias
+              const r3 = await axios.get(`${API_BASE_URL}/api/suggestions`, {
+                params,
+                headers,
+              });
+              setRawSuggestions(Array.isArray(r3.data) ? r3.data : []);
+              return;
+            } catch {
+              // all three failed
+              setRawSuggestions([]);
+            }
+          } else {
+            setRawSuggestions([]);
+          }
         }
+      } else {
+        setRawSuggestions([]);
       }
-      setRawSuggestions([]);
     } finally {
       setSuggestionsLoading(false);
     }
   })();
 }, [selectedPharmacy?._id, isPrescriptionFlow, cart, token]);
-
 
   const suggestions = useMemo(() => {
     const excludeIds = new Set(

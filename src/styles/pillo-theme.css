@@ -1,25 +1,41 @@
 :root {
-  /* Bars stay deep green */
+  /* BRAND — deep green across bars and primary CTAs */
   --brand-green: #0E5E43;
-  --gd-deep: #0E5E43;
+  --gd-deep:     #0E5E43;
 
+  /* Gradients (kept solid deep green so app bars stay on-brand) */
   --pillo-grad-from: var(--brand-green);
   --pillo-grad-via:  var(--brand-green);
   --pillo-grad-to:   var(--brand-green);
 
-  /* Accents used across content (must be DARK so they show on white cards) */
-  --pillo-active-text: #0E5E43;   /* was #fff -> made text invisible */
-  --pillo-icon-accent: #0E5E43;   /* status-strip icons on white */
+  /* Content text on white (must be DARK, not white) */
+  --pillo-active-text: #0E5E43;
+  --pillo-icon-accent: #0E5E43;
 
-  /* Buttons */
+  /* Buttons / states */
   --pillo-primary:     var(--brand-green);
   --pillo-primary-700: #0A4631;
 
-  /* Borders / rings */
+  /* Surfaces / borders / rings */
+  --pillo-surface:        #ffffff;
   --pillo-surface-border: rgba(14, 94, 67, 0.18);
-  --pillo-ring:           rgba(255, 255, 255, 0.70);
+  --pillo-ring:           rgba(14, 94, 67, 0.22); /* used by focus ring helpers */
 
-  /* Chip on the navbar */
+  /* Text tokens (used by custom classes) */
+  --text-strong: #0B1720; /* slate-950-ish */
+  --text:        #1F2937; /* slate-800 */
+  --text-muted:  #6B7280; /* slate-500 */
+
+  /* Chip (e.g., in top nav) */
   --pillo-chip-bg:   rgba(255,255,255,0.16);
   --pillo-chip-text: #ffffff;
+
+  color-scheme: light;
+}
+
+/* Optional: shared focus ring for native elements */
+:where(button, [role="button"], input, select, textarea, a):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--pillo-ring);
+  border-radius: 12px;
 }

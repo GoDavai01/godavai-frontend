@@ -6,7 +6,16 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 3) Your custom styles (rename to avoid clobbering Tailwind's .container) */
+/* 3) Global foundations (safe resets) */
+html, body, #root {
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+*, *::before, *::after { box-sizing: border-box; }
+
+/* 4) App container (kept for desktop views) */
 .gd-container {
   max-width: 480px;
   margin: 40px auto;
@@ -14,56 +23,28 @@
   border-radius: 16px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.09);
   padding: 24px;
-  padding-bottom: 80px; /* Added for BottomNavBar */
+  padding-bottom: 80px; /* for BottomNavBar */
 }
 
-.medicine-list, .pharmacy-list {
-  margin-top: 16px;
-}
-
+/* Lists (legacy) */
+.medicine-list, .pharmacy-list { margin-top: 16px; }
 .medicine-item, .pharmacy-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
 }
-
 .qty-btns button {
-  padding: 4px 10px;
-  font-size: 18px;
-  background: #0a1128;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
+  padding: 4px 10px; font-size: 18px; background: #0a1128; color: #fff;
+  border: 0; border-radius: 8px; cursor: pointer;
 }
-.qty-btns span {
-  font-size: 18px;
-}
+.qty-btns span { font-size: 18px; }
 
-/* Helpful globals */
-html, body, #root {
-  height: 100%;
-  min-height: 100%;
-  margin: 0;
-  padding: 0;
-}
-
-/* Make box-sizing consistent everywhere */
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-
-/* Force a solid deep-green background on the Welcome page */
+/* 5) Welcome route hard overrides (keep deep green) */
 .welcome-solid-bg,
 .welcome-solid-bg body,
 .welcome-solid-bg #root,
 .welcome-solid-bg html {
   background: var(--gd-deep, #0E5E43) !important;
-  background-image: none !important; /* kills any Tailwind gradient */
+  background-image: none !important;
 }
-
-/* Deep-green hard override for the welcome route */
 html.gd-welcome,
 html.gd-welcome body,
 html.gd-welcome #root,
@@ -72,6 +53,47 @@ html.gd-welcome #root > * {
   background-image: none !important;
 }
 html.gd-welcome [class*="bg-gradient"],
-html.gd-welcome [style*="gradient"] {
-  background-image: none !important;
+html.gd-welcome [style*="gradient"] { background-image: none !important; }
+
+/* ──────────────────────────────────────────────────────────
+   MODERN UI HELPERS (use in className on your components)
+   ────────────────────────────────────────────────────────── */
+
+/* Typography — strong, legible, mobile-first */
+.h1-strong   { @apply text-2xl font-black text-slate-900 tracking-tight; }
+.h2-strong   { @apply text-[17px] font-extrabold text-slate-900; }
+.body-strong { @apply text-[15px] font-semibold text-slate-900; }
+.body        { @apply text-sm text-slate-700; }
+.muted       { @apply text-sm text-slate-500; }
+
+/* Section rhythm (fixes “hugging” between header and sections) */
+.section      { @apply mb-6; }                   /* wrapper spacing */
+.section-head { @apply flex items-center gap-3 py-2; }
+.section-card { @apply mt-3 rounded-2xl border border-slate-200 bg-white; }
+
+/* Cards */
+.card-soft    { @apply rounded-2xl border border-slate-200 bg-white p-3 shadow-sm; }
+
+/* Icon tile in section headers (deep-green accent on white) */
+.icon-tile { @apply h-9 w-9 grid place-items-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100; }
+
+/* Buttons (attach to shadcn <Button className="…">) */
+.btn-primary-emerald { @apply bg-emerald-600 hover:bg-emerald-700 active:scale-[.98] text-white font-bold transition; }
+.btn-outline-soft    { @apply border border-slate-200 text-slate-900 hover:bg-slate-50 active:scale-[.98]; }
+.btn-danger-outline  { @apply border border-red-200 text-red-600 hover:bg-red-50 active:scale-[.98]; }
+.btn-ghost-soft      { @apply text-slate-900 hover:bg-slate-50 active:scale-[.98]; }
+
+/* Inputs — subtle, modern outline */
+.gd-input { @apply bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[var(--pillo-ring)] focus:border-slate-300; }
+
+/* Chips / badges (fallback if not using shadcn Badge) */
+.gd-chip       { @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold; }
+.gd-chip-brand { @apply bg-emerald-600 text-white; }
+.gd-chip-soft  { @apply bg-emerald-50 text-emerald-700 border border-emerald-100; }
+
+/* Mobile tweaks */
+@media (max-width: 600px) {
+  .gd-container { margin: 0 auto; border-radius: 0; box-shadow: none; max-width: 100vw; padding: 16px 12px 88px; }
+  button { font-size: 16px; font-weight: 700; }
+  * { -webkit-tap-highlight-color: rgba(0,0,0,0); }
 }

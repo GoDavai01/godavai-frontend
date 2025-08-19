@@ -278,41 +278,46 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="max-w-[860px] mx-auto px-4 pb-28 pt-3 bg-white">
-      {/* Top: Profile Summary (flat, bold) */}
-      <div className="flex items-center gap-4 py-3">
-        <div className="relative">
-          <Avatar className="h-16 w-16 ring-2 ring-emerald-100">
-            <AvatarImage
-              src={
-                user?.avatar ||
-                (user?.name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` : "")
-              }
-            />
-            <AvatarFallback className="bg-emerald-600 text-white font-bold">
-              {(user?.name || "NU").slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <Button
-            size="icon"
-            variant="secondary"
-            className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full border bg-white text-emerald-700 hover:bg-emerald-50 active:scale-[.97]"
-            onClick={handleEditProfileOpen}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-black text-slate-900 leading-tight truncate">
-            {user?.name || "New User"}
-          </h1>
-          <div className="mt-0.5 flex items-center gap-2 text-slate-700">
-            <Mail className="h-4 w-4 shrink-0" />
-            <span className="truncate text-sm">{user?.email}</span>
-          </div>
-          {user?.mobile && <div className="text-sm text-slate-700 truncate">{user.mobile}</div>}
-        </div>
+  <div className="max-w-[860px] mx-auto px-4 pb-28 pt-3 bg-white">
+    {/* Top: Profile Summary (flat, bold) */}
+    <div className="flex items-center gap-4 py-4">
+      <div className="relative">
+        <Avatar className="h-16 w-16 ring-2 ring-emerald-100">
+          <AvatarImage
+            src={
+              user?.avatar ||
+              (user?.name
+                ? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`
+                : "")
+            }
+          />
+          <AvatarFallback className="bg-emerald-600 text-white font-bold">
+            {(user?.name || "NU").slice(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+
+        <Button
+          size="icon"
+          variant="secondary"
+          className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full border bg-white text-emerald-700 hover:bg-emerald-50 active:scale-[.97]"
+          onClick={handleEditProfileOpen}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
       </div>
+
+      {/* Text column */}
+      <div className="min-w-0 flex-1">
+        <h1 className="h1-strong truncate">{user?.name || "New User"}</h1>
+        <div className="body mt-0.5 flex items-center gap-2 text-slate-700">
+          <Mail className="h-4 w-4 shrink-0" />
+          <span className="truncate">{user?.email}</span>
+        </div>
+        {user?.mobile && (
+          <div className="body text-slate-700 truncate">{user.mobile}</div>
+        )}
+      </div>
+    </div>
 
       {/* ---- Sections (white background, minimal borders) ---- */}
 
@@ -697,8 +702,7 @@ export default function ProfilePage() {
         onToggle={() => toggleSection("pharmacist")}
       >
         <div className="mt-1 flex flex-col sm:flex-row gap-2">
-          <Button
-            className="min-w-[220px] bg-emerald-600 hover:bg-emerald-700 active:scale-[.98]"
+          <Button className="min-w-[220px] btn-primary-emerald"
             onClick={() => {
               if (localStorage.getItem("pharmacyToken")) {
                 navigate("/pharmacy/dashboard");
@@ -709,13 +713,9 @@ export default function ProfilePage() {
           >
             {t("Go to Pharmacist Dashboard")}
           </Button>
-          <Button
-            variant="outline"
-            className="min-w-[220px] hover:bg-slate-50"
-            onClick={() => navigate("/pharmacy/register")}
-          >
-            {t("Register as Pharmacist")}
-          </Button>
+          <Button variant="outline" className="min-w-[220px] btn-outline-soft font-bold" onClick={() => navigate("/pharmacy/register")}>
+  {t("Register as Pharmacist")}
+</Button>
         </div>
       </Section>
 
@@ -910,26 +910,20 @@ export default function ProfilePage() {
 
 function Section({ icon, title, expanded, onToggle, action, children }) {
   return (
-    <div className="mb-6">
-      {/* Header strip (outside, minimal) */}
-      <button
-        onClick={onToggle}
-        className="w-full group flex items-center gap-3"
-      >
-        <div className="h-9 w-9 grid place-items-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100">
-          {icon}
-        </div>
+    <div className="section">
+      {/* HEADER outside the card */}
+      <button onClick={onToggle} className="w-full group section-head">
+        <div className="icon-tile">{icon}</div>
         <div className="flex-1 text-left">
-          <h3 className="text-[15px] md:text-base font-extrabold text-slate-900 tracking-tight">
-            {title}
-          </h3>
+          <div className="h2-strong">{title}</div>
         </div>
-        {action && <div className="mr-2">{action}</div>}
+        {action}
         <ChevronDown
-          className={`h-5 w-5 text-slate-500 transition-transform duration-200 group-hover:translate-y-[1px] ${expanded ? "rotate-180" : ""}`}
+          className={`h-5 w-5 text-slate-500 transition-transform ${expanded ? "rotate-180" : ""}`}
         />
       </button>
 
+      {/* CONTENT inside a clean white card */}
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
@@ -938,11 +932,8 @@ function Section({ icon, title, expanded, onToggle, action, children }) {
             exit={{ height: 0, opacity: 0 }}
             transition={{ type: "tween", duration: 0.18 }}
           >
-            <div className="mt-3 rounded-2xl border border-slate-200 bg-white">
-              <Card>
-                <Separator />
-                <CardContent className="pt-4">{children}</CardContent>
-              </Card>
+            <div className="section-card">
+              <CardContent className="pt-4">{children}</CardContent>
             </div>
           </motion.div>
         )}
