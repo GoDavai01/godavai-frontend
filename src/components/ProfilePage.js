@@ -12,7 +12,7 @@ import AddressForm from "./AddressForm";
 
 // shadcn/ui
 import { Button } from "../components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -25,7 +25,7 @@ import { Separator } from "../components/ui/separator";
 // framer-motion
 import { motion, AnimatePresence } from "framer-motion";
 
-// lucide-react (icon replacements for old MUI icons)
+// lucide-react
 import {
   Pencil, Plus, ChevronDown, Mail, Home, History, BadgeCheck, Wallet, Settings,
   Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera
@@ -57,12 +57,11 @@ export default function ProfilePage() {
     support: false,
     refer: false,
   });
-  const toggleSection = (key) =>
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  const toggleSection = (key) => setOpenSections((p) => ({ ...p, [key]: !p[key] }));
 
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
 
-  // --- MANDATORY PROFILE FIELDS DIALOG ---
+  // --- Edit profile dialog (unchanged logic) ---
   const [editDialog, setEditDialog] = useState(false);
   const [editData, setEditData] = useState({
     name: user?.name || "",
@@ -82,7 +81,7 @@ export default function ProfilePage() {
         email: user.email || "",
         mobile: user.mobile || "",
         dob: user.dob || "",
-        avatar: user.avatar || ""
+        avatar: user.avatar || "",
       });
       setAvatarPreview(user.avatar || "");
     }
@@ -94,7 +93,7 @@ export default function ProfilePage() {
       email: user?.email || "",
       mobile: user?.mobile || "",
       dob: user?.dob || "",
-      avatar: user?.avatar || ""
+      avatar: user?.avatar || "",
     });
     setAvatarPreview(user?.avatar || "");
     setEditDialog(true);
@@ -115,7 +114,6 @@ export default function ProfilePage() {
     try {
       await axios.put(`${API_BASE_URL}/api/users/${user._id}`, editData);
       setSnackbar({ open: true, message: "Profile updated!", severity: "success" });
-
       const updatedProfile = await axios.get(`${API_BASE_URL}/api/profile`, {
         headers: { Authorization: "Bearer " + token },
       });
@@ -126,12 +124,12 @@ export default function ProfilePage() {
     }
   };
 
-  // --- Settings Dialog toggles (logic preserved, UI stays inline switches) ---
+  // --- Settings modals states (logic unchanged) ---
   const [changePassOpen, setChangePassOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  // --- Addresses ---
+  // --- Addresses (logic unchanged) ---
   const [editingAddress, setEditingAddress] = useState(null);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const handleAddressSave = async (newAddr) => {
@@ -162,7 +160,7 @@ export default function ProfilePage() {
     setSnackbar({ open: true, message: "Address deleted!", severity: "success" });
   };
 
-  // --- Cards (local only) ---
+  // --- Cards (logic unchanged) ---
   const [cards, setCards] = useState([]);
   const [cardDialog, setCardDialog] = useState(false);
   const [editingCard, setEditingCard] = useState(null);
@@ -191,9 +189,7 @@ export default function ProfilePage() {
     }
     const last4 = cardForm.number.replace(/\s/g, "").slice(-4);
     if (editingCard) {
-      setCards((prev) =>
-        prev.map((c) => (c.id === editingCard.id ? { ...cardForm, id: c.id, last4 } : c))
-      );
+      setCards((prev) => prev.map((c) => (c.id === editingCard.id ? { ...cardForm, id: c.id, last4 } : c)));
     } else {
       setCards((prev) => [...prev, { ...cardForm, id: Date.now(), last4 }]);
     }
@@ -216,7 +212,7 @@ export default function ProfilePage() {
     setCardDialog(true);
   }
 
-  // --- Orders (fetch from backend) ---
+  // --- Orders (logic unchanged) ---
   const [orders, setOrders] = useState([]);
   const [orderDetail, setOrderDetail] = useState(null);
 
@@ -225,9 +221,7 @@ export default function ProfilePage() {
       axios
         .get(`${API_BASE_URL}/api/orders/myorders-userid/${user._id}`)
         .then((res) => {
-          const sorted = [...res.data].sort(
-            (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-          );
+          const sorted = [...res.data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
           setOrders(sorted);
         })
         .catch(() => setOrders([]));
@@ -236,9 +230,7 @@ export default function ProfilePage() {
 
   const handleOrderAgain = (order) => {
     const pharmacyId =
-      (order.pharmacy && order.pharmacy._id) ||
-      order.pharmacyId ||
-      order.pharmacy;
+      (order.pharmacy && order.pharmacy._id) || order.pharmacyId || order.pharmacy;
     if (pharmacyId) {
       navigate(`/medicines/${pharmacyId}`);
     } else {
@@ -250,11 +242,11 @@ export default function ProfilePage() {
     }
   };
 
-  // --- Loyalty
-  const totalSpent = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+  // Loyalty
+  const totalSpent = orders.reduce((s, o) => s + (o.total || 0), 0);
   const loyaltyPoints = Math.floor(totalSpent);
 
-  // --- Personalization
+  // Personalization
   const { t, i18n } = useTranslation();
   const { mode, setMode } = useThemeMode();
   const [language, setLanguage] = useState(i18n.language || "en");
@@ -265,20 +257,20 @@ export default function ProfilePage() {
   };
   const handleThemeChange = (theme) => setMode(theme);
 
-  // --- Settings toggles
+  // Settings toggles
   const [orderUpdates, setOrderUpdates] = useState(true);
   const [offerPromos, setOfferPromos] = useState(true);
   const [dataSharing, setDataSharing] = useState(true);
   const [twoFA, setTwoFA] = useState(false);
 
-  // --- Support/Feedback ---
+  // Support
   const [supportDialog, setSupportDialog] = useState(false);
   const [supportMsg, setSupportMsg] = useState("");
 
-  // --- Referral code
+  // Referral
   const referralCode = `GODAVAII-USER-${user?._id || "XXXX"}`;
 
-  // --- Logout
+  // Logout
   const handleLogout = () => {
     logout();
     setSnackbar({ open: true, message: "Logged out!", severity: "info" });
@@ -286,50 +278,44 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="max-w-[760px] mx-auto px-3 pb-24 pt-4">
-      {/* Profile header card */}
-      <Card className="mb-4 border-emerald-200 shadow-sm">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <Avatar className="h-20 w-20 ring-2 ring-white shadow">
-                <AvatarImage
-                  src={
-                    user?.avatar ||
-                    (user?.name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` : "")
-                  }
-                />
-                <AvatarFallback className="bg-emerald-600 text-white font-bold">
-                  {(user?.name || "NU").slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <Button
-                size="icon"
-                variant="secondary"
-                className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full border bg-white text-emerald-700 hover:bg-emerald-50"
-                onClick={handleEditProfileOpen}
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <h2 className="text-xl font-extrabold text-emerald-900 truncate">
-                {user?.name || "New User"}
-              </h2>
-              <div className="flex items-center gap-2 text-emerald-700">
-                <Mail className="h-4 w-4 shrink-0" />
-                <span className="truncate text-sm">{user?.email}</span>
-              </div>
-              {user?.mobile && (
-                <div className="text-sm text-emerald-700 truncate">{user.mobile}</div>
-              )}
-            </div>
+    <div className="max-w-[860px] mx-auto px-4 pb-28 pt-3 bg-white">
+      {/* Top: Profile Summary (flat, bold) */}
+      <div className="flex items-center gap-4 py-3">
+        <div className="relative">
+          <Avatar className="h-16 w-16 ring-2 ring-emerald-100">
+            <AvatarImage
+              src={
+                user?.avatar ||
+                (user?.name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` : "")
+              }
+            />
+            <AvatarFallback className="bg-emerald-600 text-white font-bold">
+              {(user?.name || "NU").slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <Button
+            size="icon"
+            variant="secondary"
+            className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full border bg-white text-emerald-700 hover:bg-emerald-50 active:scale-[.97]"
+            onClick={handleEditProfileOpen}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-black text-slate-900 leading-tight truncate">
+            {user?.name || "New User"}
+          </h1>
+          <div className="mt-0.5 flex items-center gap-2 text-slate-700">
+            <Mail className="h-4 w-4 shrink-0" />
+            <span className="truncate text-sm">{user?.email}</span>
           </div>
-        </CardContent>
-      </Card>
+          {user?.mobile && <div className="text-sm text-slate-700 truncate">{user.mobile}</div>}
+        </div>
+      </div>
 
-      {/* Addresses */}
+      {/* ---- Sections (white background, minimal borders) ---- */}
+
       <Section
         icon={<Home className="h-5 w-5 text-emerald-700" />}
         title={t("My Addresses")}
@@ -338,8 +324,7 @@ export default function ProfilePage() {
         action={
           <Button
             size="sm"
-            variant="outline"
-            className="border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+            className="bg-emerald-600 hover:bg-emerald-700 active:scale-[.98]"
             onClick={(e) => {
               e.stopPropagation();
               setEditingAddress(null);
@@ -350,18 +335,17 @@ export default function ProfilePage() {
           </Button>
         }
       >
-        <div className="mt-3 space-y-3">
+        <div className="mt-2 space-y-3">
           {addresses.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No addresses yet. Add one!</p>
+            <p className="text-sm text-slate-500">No addresses yet. Add one!</p>
           ) : (
             addresses.map((addr) => (
-              <div
-                key={addr.id}
-                className={`rounded-xl border p-3 transition shadow-sm cursor-pointer ${
-                  addr.isDefault
-                    ? "bg-emerald-50 border-emerald-200"
-                    : "bg-white border-slate-200"
+              <motion.button
+                whileHover={{ y: -1 }}
+                className={`w-full text-left rounded-xl border p-3 shadow-sm transition ${
+                  addr.isDefault ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white"
                 }`}
+                key={addr.id}
                 onClick={() => {
                   setEditingAddress(addr);
                   setShowAddressForm(true);
@@ -369,23 +353,20 @@ export default function ProfilePage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="font-bold">
+                    <div className="font-semibold text-slate-900">
                       {addr.type}
-                      {addr.addressLine ? ` - ${addr.addressLine}` : ""}
+                      {addr.addressLine ? ` — ${addr.addressLine}` : ""}
                     </div>
-                    <div className="text-sm text-slate-600">
-                      {addr.formatted || addr.addressLine}
-                    </div>
+                    <div className="text-sm text-slate-600">{addr.formatted || addr.addressLine}</div>
                     {addr.isDefault && (
-                      <Badge className="mt-2 bg-emerald-600 hover:bg-emerald-700">
-                        Default
-                      </Badge>
+                      <Badge className="mt-2 bg-emerald-600 hover:bg-emerald-700">Default</Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
                       size="icon"
                       variant="ghost"
+                      className="hover:bg-slate-100"
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditingAddress(addr);
@@ -397,7 +378,7 @@ export default function ProfilePage() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="text-red-600"
+                      className="text-red-600 hover:bg-red-50"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteAddress(addr);
@@ -407,7 +388,7 @@ export default function ProfilePage() {
                     </Button>
                   </div>
                 </div>
-              </div>
+              </motion.button>
             ))
           )}
         </div>
@@ -422,37 +403,34 @@ export default function ProfilePage() {
         />
       </Section>
 
-      {/* Saved Cards & GoDavaii Money */}
       <Section
         icon={<Wallet className="h-5 w-5 text-amber-500" />}
         title={t("Saved Cards & GoDavaii Money")}
         expanded={openSections.wallet}
         onToggle={() => toggleSection("wallet")}
       >
-        <div className="mt-3 space-y-2">
+        <div className="mt-1 space-y-2">
           {cards.length === 0 ? (
-            <div className="rounded-lg border bg-amber-50 px-3 py-2 text-slate-800">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700">
               No cards saved yet. Add one!
             </div>
           ) : (
             cards.map((card) => (
               <div
                 key={card.id}
-                className="flex items-center justify-between rounded-lg border bg-amber-50 px-3 py-2"
+                className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
               >
                 <div className="flex items-center gap-3">
-                  {cardIcons[card.brand] && (
-                    <img src={cardIcons[card.brand]} alt={card.brand} className="w-8" />
-                  )}
+                  {cardIcons[card.brand] && <img src={cardIcons[card.brand]} alt={card.brand} className="w-8" />}
                   <div className="text-sm">
-                    <div className="font-semibold">
+                    <div className="font-semibold text-slate-900">
                       {card.brand} •••• {card.last4}
                       <span className="ml-2 font-normal text-slate-600">{card.name}</span>
                       <span className="ml-3 text-slate-500">Exp: {card.expiry}</span>
                     </div>
                   </div>
                 </div>
-                <Button size="icon" variant="ghost" onClick={() => handleCardEdit(card)}>
+                <Button size="icon" variant="ghost" className="hover:bg-slate-100" onClick={() => handleCardEdit(card)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
               </div>
@@ -464,17 +442,13 @@ export default function ProfilePage() {
             <div className="font-bold text-emerald-700">GoDavaii Money: ₹240</div>
           </div>
 
-          <Button
-            variant="ghost"
-            className="text-emerald-800 hover:bg-emerald-50 w-fit"
-            onClick={handleCardAdd}
-          >
+          <Button variant="outline" className="w-fit hover:bg-slate-50" onClick={handleCardAdd}>
             <Plus className="h-4 w-4 mr-1" />
             {t("Add New Card")}
           </Button>
         </div>
 
-        {/* Card Form Dialog */}
+        {/* Card Dialog */}
         <Dialog open={cardDialog} onOpenChange={setCardDialog}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -497,10 +471,7 @@ export default function ProfilePage() {
               </div>
               <div className="grid gap-1.5">
                 <Label>Name on Card</Label>
-                <Input
-                  value={cardForm.name}
-                  onChange={(e) => handleCardFormChange("name", e.target.value)}
-                />
+                <Input value={cardForm.name} onChange={(e) => handleCardFormChange("name", e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>Expiry (MM/YY)</Label>
@@ -516,16 +487,13 @@ export default function ProfilePage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setCardDialog(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleCardSave}>Save</Button>
+              <Button variant="ghost" onClick={() => setCardDialog(false)}>Cancel</Button>
+              <Button onClick={handleCardSave} className="bg-emerald-600 hover:bg-emerald-700">Save</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </Section>
 
-      {/* Orders */}
       <Section
         icon={<History className="h-5 w-5 text-emerald-700" />}
         title={t("Order History")}
@@ -535,7 +503,7 @@ export default function ProfilePage() {
           <Button
             size="sm"
             variant="outline"
-            className="border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+            className="hover:bg-slate-50"
             onClick={(e) => {
               e.stopPropagation();
               navigate("/orders");
@@ -545,28 +513,29 @@ export default function ProfilePage() {
           </Button>
         }
       >
-        <div className="mt-3 space-y-3">
+        <div className="mt-1 space-y-3">
           {orders.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No orders yet.</p>
+            <p className="text-sm text-slate-500">No orders yet.</p>
           ) : (
             orders.slice(0, 2).map((order) => (
-              <div
+              <motion.div
+                whileHover={{ y: -1 }}
                 key={order._id || order.id}
                 className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm cursor-pointer"
                 onClick={() => setOrderDetail(order)}
               >
-                <div className="font-bold">
+                <div className="font-semibold text-slate-900">
                   Order #{order._id ? order._id.slice(-6).toUpperCase() : order.id}
                 </div>
-                <div className="text-sm">₹{order.total} for {order.items?.length || order.items} items</div>
-                <div className="text-xs text-slate-600">
-                  {(order.status || "Placed").charAt(0).toUpperCase() + (order.status || "Placed").slice(1)}{" "}
-                  | {order.createdAt && order.createdAt.substring(0, 10)}
+                <div className="text-sm text-slate-700">₹{order.total} for {order.items?.length || order.items} items</div>
+                <div className="text-xs text-slate-500">
+                  {(order.status || "Placed").charAt(0).toUpperCase() + (order.status || "Placed").slice(1)} •{" "}
+                  {order.createdAt && order.createdAt.substring(0, 10)}
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="mt-2"
+                  className="mt-2 hover:bg-slate-50"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleOrderAgain(order);
@@ -574,7 +543,7 @@ export default function ProfilePage() {
                 >
                   Order Again
                 </Button>
-              </div>
+              </motion.div>
             ))
           )}
         </div>
@@ -603,7 +572,7 @@ export default function ProfilePage() {
                 {typeof orderDetail.details === "string" && <div>Details: {orderDetail.details}</div>}
                 <div>Status: {orderDetail.status}</div>
                 <div>Date: {orderDetail.createdAt}</div>
-                <Button className="mt-2 bg-emerald-600" onClick={() => handleOrderAgain(orderDetail)}>
+                <Button className="mt-2 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleOrderAgain(orderDetail)}>
                   Order Again
                 </Button>
               </div>
@@ -612,43 +581,38 @@ export default function ProfilePage() {
         </Dialog>
       </Section>
 
-      {/* Badges & Loyalty */}
       <Section
         icon={<BadgeCheck className="h-5 w-5 text-emerald-600" />}
         title={t("Badges & Loyalty")}
         expanded={openSections.badges}
         onToggle={() => toggleSection("badges")}
       >
-        <div className="mt-3">
-          <div className="flex items-center gap-2">
+        <div className="mt-1">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge className="bg-amber-400 text-emerald-900 hover:bg-amber-400/90">
               <Star className="h-3.5 w-3.5 mr-1" /> Super Saver
             </Badge>
-            <Badge className="bg-emerald-600 hover:bg-emerald-700">
-              Loyal Customer
-            </Badge>
+            <Badge className="bg-emerald-600 hover:bg-emerald-700">Loyal Customer</Badge>
           </div>
-          <div className="mt-2">
+          <div className="mt-2 text-slate-900">
             Loyalty Points: <span className="font-bold">{loyaltyPoints}</span>
           </div>
-          <div className="mt-1 text-xs text-slate-600">
+          <div className="mt-1 text-xs text-slate-500">
             1 point per ₹1 spent. Earn badges for frequent orders and savings!
           </div>
         </div>
       </Section>
 
-      {/* Personalization */}
       <Section
         icon={<Settings className="h-5 w-5 text-amber-500" />}
         title={t("Personalization")}
         expanded={openSections.personalization}
         onToggle={() => toggleSection("personalization")}
       >
-        <div className="mt-3 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="font-semibold">{t("Language")}</div>
+        <div className="mt-1 space-y-4">
+          <Row label={t("Language")}>
             <Select value={language} onValueChange={handleLanguageChange}>
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="Choose" />
               </SelectTrigger>
               <SelectContent>
@@ -656,12 +620,11 @@ export default function ProfilePage() {
                 <SelectItem value="hi">Hindi</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </Row>
 
-          <div className="flex items-center justify-between">
-            <div className="font-semibold">{t("Theme")}</div>
+          <Row label={t("Theme")}>
             <Select value={mode} onValueChange={handleThemeChange}>
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="Choose" />
               </SelectTrigger>
               <SelectContent>
@@ -670,35 +633,38 @@ export default function ProfilePage() {
                 <SelectItem value="System">{t("System")}</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </Row>
         </div>
       </Section>
 
-      {/* Settings */}
       <Section
         icon={<Settings className="h-5 w-5 text-slate-500" />}
         title={t("Settings")}
         expanded={openSections.settings}
         onToggle={() => toggleSection("settings")}
       >
-        <div className="mt-3 space-y-5">
+        <div className="mt-1 space-y-6">
           <div>
-            <div className="mb-2 font-bold text-emerald-800">Account Settings</div>
+            <div className="mb-2 text-sm font-bold text-slate-900">Account Settings</div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => setChangePassOpen(true)}>
+              <Button variant="outline" className="hover:bg-slate-50" onClick={() => setChangePassOpen(true)}>
                 <Lock className="h-4 w-4 mr-2" /> Change Password
               </Button>
-              <Button variant="outline" onClick={() => setChangeEmailOpen(true)}>
+              <Button variant="outline" className="hover:bg-slate-50" onClick={() => setChangeEmailOpen(true)}>
                 <Mail className="h-4 w-4 mr-2" /> Change Email
               </Button>
-              <Button variant="outline" className="text-red-600 border-red-200" onClick={() => setDeleteOpen(true)}>
+              <Button
+                variant="outline"
+                className="text-red-600 border-red-200 hover:bg-red-50"
+                onClick={() => setDeleteOpen(true)}
+              >
                 <Trash className="h-4 w-4 mr-2" /> Delete Account
               </Button>
             </div>
           </div>
 
           <div>
-            <div className="mb-2 font-bold text-emerald-800">Notifications</div>
+            <div className="mb-2 text-sm font-bold text-slate-900">Notifications</div>
             <div className="flex flex-wrap items-center gap-6">
               <ToggleRow label="Order Updates" checked={orderUpdates} onChange={setOrderUpdates} />
               <ToggleRow label="Offers & Promotions" checked={offerPromos} onChange={setOfferPromos} />
@@ -706,7 +672,7 @@ export default function ProfilePage() {
           </div>
 
           <div>
-            <div className="mb-2 font-bold text-emerald-800">Privacy</div>
+            <div className="mb-2 text-sm font-bold text-slate-900">Privacy</div>
             <ToggleRow
               label={`Data Sharing: ${dataSharing ? "Allowed" : "Not Allowed"}`}
               checked={dataSharing}
@@ -715,7 +681,7 @@ export default function ProfilePage() {
           </div>
 
           <div>
-            <div className="mb-2 font-bold text-emerald-800">Security</div>
+            <div className="mb-2 text-sm font-bold text-slate-900">Security</div>
             <div className="flex flex-wrap items-center gap-4">
               <ToggleRow label={`2FA: ${twoFA ? "On" : "Off"}`} checked={twoFA} onChange={setTwoFA} />
               <Badge variant="secondary">Device Activity: Last login 1 hr ago</Badge>
@@ -724,16 +690,15 @@ export default function ProfilePage() {
         </div>
       </Section>
 
-      {/* Pharmacist Portal */}
       <Section
         icon={<Pill className="h-5 w-5 text-emerald-600" />}
         title={t("Pharmacist Portal")}
         expanded={openSections.pharmacist}
         onToggle={() => toggleSection("pharmacist")}
       >
-        <div className="mt-3 flex flex-col sm:flex-row gap-2">
+        <div className="mt-1 flex flex-col sm:flex-row gap-2">
           <Button
-            className="min-w-[220px]"
+            className="min-w-[220px] bg-emerald-600 hover:bg-emerald-700 active:scale-[.98]"
             onClick={() => {
               if (localStorage.getItem("pharmacyToken")) {
                 navigate("/pharmacy/dashboard");
@@ -746,7 +711,7 @@ export default function ProfilePage() {
           </Button>
           <Button
             variant="outline"
-            className="min-w-[220px]"
+            className="min-w-[220px] hover:bg-slate-50"
             onClick={() => navigate("/pharmacy/register")}
           >
             {t("Register as Pharmacist")}
@@ -754,16 +719,15 @@ export default function ProfilePage() {
         </div>
       </Section>
 
-      {/* Delivery Partner Portal */}
       <Section
         icon={<Bike className="h-5 w-5 text-emerald-700" />}
         title="Delivery Partner Portal"
         expanded={openSections.delivery}
         onToggle={() => toggleSection("delivery")}
       >
-        <div className="mt-3 flex flex-col sm:flex-row gap-2">
+        <div className="mt-1 flex flex-col sm:flex-row gap-2">
           <Button
-            className="min-w-[220px]"
+            className="min-w-[220px] bg-emerald-600 hover:bg-emerald-700 active:scale-[.98]"
             onClick={() => {
               if (localStorage.getItem("deliveryToken")) {
                 navigate("/delivery/dashboard");
@@ -774,43 +738,42 @@ export default function ProfilePage() {
           >
             Go to Delivery Dashboard
           </Button>
-          <Button variant="outline" className="min-w-[220px]" onClick={() => navigate("/delivery/register")}>
+          <Button variant="outline" className="min-w-[220px] hover:bg-slate-50" onClick={() => navigate("/delivery/register")}>
             Register as Delivery Partner
           </Button>
         </div>
       </Section>
 
-      {/* Support & Feedback */}
       <Section
         icon={<Headset className="h-5 w-5 text-emerald-700" />}
         title="Support & Feedback"
         expanded={openSections.support}
         onToggle={() => toggleSection("support")}
       >
-        <div className="mt-3 flex items-center gap-2">
-          <Button variant="outline" onClick={() => setSupportDialog(true)}>
+        <div className="mt-1 flex items-center gap-2">
+          <Button variant="outline" className="hover:bg-slate-50" onClick={() => setSupportDialog(true)}>
             Raise Ticket
           </Button>
-          <Button variant="ghost" onClick={() => setChatSupportOpen(true)}>
+          <Button variant="ghost" className="hover:bg-slate-50" onClick={() => setChatSupportOpen(true)}>
             Contact Support
           </Button>
         </div>
       </Section>
 
-      {/* Refer & Earn */}
       <Section
         icon={<Users className="h-5 w-5 text-amber-500" />}
         title="Refer & Earn"
         expanded={openSections.refer}
         onToggle={() => toggleSection("refer")}
       >
-        <div className="mt-3">
-          <div className="font-semibold mb-2">
+        <div className="mt-1">
+          <div className="mb-2 font-semibold text-slate-900">
             Refer friends and earn ₹50 GoDavaii Money on their first order!
           </div>
           <div className="flex items-center gap-2">
-            <Input value={referralCode} readOnly className="w-[220px]" />
+            <Input value={referralCode} readOnly className="w-[260px]" />
             <Button
+              className="bg-emerald-600 hover:bg-emerald-700 active:scale-[.98]"
               onClick={() => {
                 navigator.clipboard.writeText(referralCode);
                 setSnackbar({ open: true, message: "Referral link copied!", severity: "success" });
@@ -822,11 +785,10 @@ export default function ProfilePage() {
         </div>
       </Section>
 
-      {/* Logout */}
-      <div className="flex justify-center mt-4">
+      <div className="flex justify-center mt-6">
         <Button
           variant="outline"
-          className="border-red-300 text-red-600 hover:bg-red-50 px-6 text-base"
+          className="border-red-300 text-red-600 hover:bg-red-50 px-6 text-base active:scale-[.98]"
           onClick={handleLogout}
         >
           <LogOut className="h-4 w-4 mr-2" />
@@ -834,7 +796,7 @@ export default function ProfilePage() {
         </Button>
       </div>
 
-      {/* Lightweight Snackbar */}
+      {/* Snackbar */}
       <AnimatePresence>
         {snackbar.open && (
           <motion.div
@@ -852,7 +814,7 @@ export default function ProfilePage() {
         )}
       </AnimatePresence>
 
-      {/* Profile Edit Dialog */}
+      {/* Edit Profile */}
       <Dialog
         open={editDialog}
         onOpenChange={(open) => {
@@ -874,82 +836,55 @@ export default function ProfilePage() {
               <Button
                 variant="secondary"
                 onClick={() => fileInputRef.current?.click()}
-                className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                className="bg-slate-100 text-slate-900 hover:bg-slate-200"
               >
                 <Camera className="h-4 w-4 mr-2" />
                 Change Avatar
               </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={handleAvatarChange}
-              />
+              <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleAvatarChange} />
             </div>
 
-            <div className="grid gap-1.5">
-              <Label>Name</Label>
+            <Field label="Name">
               <Input value={editData.name} onChange={(e) => setEditData({ ...editData, name: e.target.value })} required />
-            </div>
+            </Field>
 
-            <div className="grid gap-1.5">
-              <Label>Email</Label>
-              <Input
-                value={editData.email}
-                onChange={(e) => setEditData({ ...editData, email: e.target.value })}
-                required
-              />
-            </div>
+            <Field label="Email">
+              <Input value={editData.email} onChange={(e) => setEditData({ ...editData, email: e.target.value })} required />
+            </Field>
 
-            <div className="grid gap-1.5">
-              <Label>Mobile</Label>
+            <Field label="Mobile">
               <Input value={editData.mobile} disabled />
-            </div>
+            </Field>
 
-            <div className="grid gap-1.5">
-              <Label>DOB</Label>
-              <Input
-                type="date"
-                value={editData.dob}
-                onChange={(e) => setEditData({ ...editData, dob: e.target.value })}
-                required
-              />
-            </div>
+            <Field label="DOB">
+              <Input type="date" value={editData.dob} onChange={(e) => setEditData({ ...editData, dob: e.target.value })} required />
+            </Field>
           </div>
 
           <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => setEditDialog(false)}
-              disabled={!editData.name || !editData.email || !editData.dob}
-            >
+            <Button variant="ghost" onClick={() => setEditDialog(false)} disabled={!editData.name || !editData.email || !editData.dob}>
               Cancel
             </Button>
-            <Button onClick={handleProfileSave} disabled={!editData.name || !editData.email || !editData.dob}>
+            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleProfileSave} disabled={!editData.name || !editData.email || !editData.dob}>
               Save
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Support ticket (simple message capture; logic unchanged) */}
+      {/* Support ticket */}
       <Dialog open={supportDialog} onOpenChange={setSupportDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Raise Ticket</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-1.5">
-            <Label>Message</Label>
-            <Input
-              value={supportMsg}
-              onChange={(e) => setSupportMsg(e.target.value)}
-              placeholder="Type your issue..."
-            />
-          </div>
+          <Field label="Message">
+            <Input value={supportMsg} onChange={(e) => setSupportMsg(e.target.value)} placeholder="Type your issue..." />
+          </Field>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setSupportDialog(false)}>Cancel</Button>
             <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
               onClick={() => {
                 if (!supportMsg.trim()) {
                   setSnackbar({ open: true, message: "Please enter a message.", severity: "error" });
@@ -971,47 +906,74 @@ export default function ProfilePage() {
   );
 }
 
-/** ---------- Reusable Section ---------- */
+/* ---------- Reusable UI helpers (visual only) ---------- */
+
 function Section({ icon, title, expanded, onToggle, action, children }) {
   return (
-    <Card className="mb-3 border-slate-200 overflow-hidden">
+    <div className="mb-6">
+      {/* Header strip (outside, minimal) */}
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-emerald-50/40 transition"
+        className="w-full group flex items-center gap-3"
       >
-        <div className="shrink-0">{icon}</div>
-        <CardTitle className="text-base font-extrabold text-emerald-900 flex-1 text-left">
-          {title}
-        </CardTitle>
-        {action}
+        <div className="h-9 w-9 grid place-items-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100">
+          {icon}
+        </div>
+        <div className="flex-1 text-left">
+          <h3 className="text-[15px] md:text-base font-extrabold text-slate-900 tracking-tight">
+            {title}
+          </h3>
+        </div>
+        {action && <div className="mr-2">{action}</div>}
         <ChevronDown
-          className={`h-5 w-5 text-slate-500 transition-transform ${expanded ? "rotate-180" : ""}`}
+          className={`h-5 w-5 text-slate-500 transition-transform duration-200 group-hover:translate-y-[1px] ${expanded ? "rotate-180" : ""}`}
         />
       </button>
+
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
-            key="content"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ type: "tween", duration: 0.18 }}
           >
-            <Separator />
-            <CardContent className="pt-4">{children}</CardContent>
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-white">
+              <Card>
+                <Separator />
+                <CardContent className="pt-4">{children}</CardContent>
+              </Card>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </Card>
+    </div>
   );
 }
 
-/** Small toggle row helper (keeps logic unchanged) */
 function ToggleRow({ label, checked, onChange }) {
   return (
     <div className="flex items-center gap-3">
       <Switch checked={checked} onCheckedChange={onChange} />
-      <span className="text-sm">{label}</span>
+      <span className="text-sm text-slate-900">{label}</span>
+    </div>
+  );
+}
+
+function Row({ label, children }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="text-sm font-semibold text-slate-900">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div className="grid gap-1.5">
+      <Label className="text-slate-700">{label}</Label>
+      {children}
     </div>
   );
 }

@@ -358,39 +358,56 @@ export default function CheckoutPage() {
   };
 
   // suggestions fetch
-  useEffect(() => {
-    if (
-      isPrescriptionFlow ||
-      !selectedPharmacy?._id ||
-      suggestionsDisabledRef.current
-    ) {
-      setRawSuggestions([]);
-      return;
-    }
+  // suggestions fetch
+useEffect(() => {
+  if (
+    isPrescriptionFlow ||
+    !selectedPharmacy?._id ||
+    suggestionsDisabledRef.current
+  ) {
+    setRawSuggestions([]);
+    return;
+  }
 
-    setSuggestionsLoading(true);
+  setSuggestionsLoading(true);
 
-    const exclude = cart
-      .map((m) => m._id || m.medicineId || m.medicine_id)
-      .filter(Boolean)
-      .join(",");
+  const exclude = cart
+    .map((m) => m._id || m.medicineId || m.medicine_id)
+    .filter(Boolean)
+    .join(",");
 
-    axios
-      .get(`${API_BASE_URL}/api/medicines/suggestions`, {
-        params: { pharmacyId: selectedPharmacy._id, limit: 20, exclude },
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      })
-      .then((res) => {
-        setRawSuggestions(Array.isArray(res.data) ? res.data : []);
-      })
-      .catch((err) => {
-        if (err?.response?.status === 404) {
-          suggestionsDisabledRef.current = true;
+  const params = { pharmacyId: selectedPharmacy._id, limit: 20, exclude };
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+  (async () => {
+    try {
+      // try plural first
+      const r = await axios.get(`${API_BASE_URL}/api/medicines/suggestions`, {
+        params,
+        headers,
+      });
+      setRawSuggestions(Array.isArray(r.data) ? r.data : []);
+    } catch (err) {
+      // fallback to singular alias if 404
+      if (err?.response?.status === 404) {
+        try {
+          const r2 = await axios.get(`${API_BASE_URL}/api/medicine/suggestions`, {
+            params,
+            headers,
+          });
+          setRawSuggestions(Array.isArray(r2.data) ? r2.data : []);
+          return;
+        } catch {
+          // no-op, will fall through to empty
         }
-        setRawSuggestions([]);
-      })
-      .finally(() => setSuggestionsLoading(false));
-  }, [selectedPharmacy?._id, isPrescriptionFlow, cart, token]);
+      }
+      setRawSuggestions([]);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  })();
+}, [selectedPharmacy?._id, isPrescriptionFlow, cart, token]);
+
 
   const suggestions = useMemo(() => {
     const excludeIds = new Set(
