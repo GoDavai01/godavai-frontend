@@ -1,39 +1,35 @@
 // src/components/ProfilePage.js
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useThemeMode } from "../context/ThemeContext";
-import { useTheme } from "@mui/material/styles";
 import { useAuth } from "../context/AuthContext";
-import axios from "axios";
-import {
-  Box, Typography, Avatar, IconButton, Button, Stack, Collapse, Paper,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField, Chip, Snackbar, Alert, MenuItem,
-  List, ListItem, ListItemText, Switch, FormControlLabel
-} from "@mui/material";
-import EditIcon from "@mui/icons-material/Edit";
-import AddIcon from "@mui/icons-material/Add";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import EmailIcon from "@mui/icons-material/Email";
-import HomeIcon from "@mui/icons-material/Home";
-import HistoryIcon from "@mui/icons-material/History";
-import LoyaltyIcon from "@mui/icons-material/Loyalty";
-import WalletIcon from "@mui/icons-material/AccountBalanceWallet";
-import SettingsIcon from "@mui/icons-material/Settings";
-import SupportAgentIcon from "@mui/icons-material/SupportAgent";
-import GroupAddIcon from "@mui/icons-material/GroupAdd";
-import LocalPharmacyIcon from "@mui/icons-material/LocalPharmacy";
-import LogoutIcon from "@mui/icons-material/Logout";
-import creditCardType from "credit-card-type";
-import StarsIcon from "@mui/icons-material/Stars";
-import TwoWheelerIcon from "@mui/icons-material/TwoWheeler";
-import CurrencyRupeeIcon from "@mui/icons-material/CurrencyRupee";
-import DeleteIcon from "@mui/icons-material/Delete";
-import LockIcon from "@mui/icons-material/Lock";
-import ChatSupportModal from "./ChatSupportModal";
-import CameraAltIcon from "@mui/icons-material/CameraAlt";
 import { useNavigate } from "react-router-dom";
-import AddressForm from "./AddressForm"; // Make sure you have this!
+import axios from "axios";
+import creditCardType from "credit-card-type";
+import ChatSupportModal from "./ChatSupportModal";
+import AddressForm from "./AddressForm";
+
+// shadcn/ui
+import { Button } from "../components/ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Switch } from "../components/ui/switch";
+import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Badge } from "../components/ui/badge";
+import { Separator } from "../components/ui/separator";
+
+// framer-motion
+import { motion, AnimatePresence } from "framer-motion";
+
+// lucide-react (icon replacements for old MUI icons)
+import {
+  Pencil, Plus, ChevronDown, Mail, Home, History, BadgeCheck, Wallet, Settings,
+  Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera
+} from "lucide-react";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
@@ -78,7 +74,6 @@ export default function ProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar || "");
   const fileInputRef = useRef();
 
-  // Open the dialog if any required field is missing
   useEffect(() => {
     if (user && (!user.name || !user.email || !user.dob)) {
       setEditDialog(true);
@@ -93,77 +88,76 @@ export default function ProfilePage() {
     }
   }, [user]);
 
-  // Handler to manually open the dialog for editing
   const handleEditProfileOpen = () => {
     setEditData({
-      name: user.name || "",
-      email: user.email || "",
-      mobile: user.mobile || "",
-      dob: user.dob || "",
-      avatar: user.avatar || ""
+      name: user?.name || "",
+      email: user?.email || "",
+      mobile: user?.mobile || "",
+      dob: user?.dob || "",
+      avatar: user?.avatar || ""
     });
-    setAvatarPreview(user.avatar || "");
+    setAvatarPreview(user?.avatar || "");
     setEditDialog(true);
   };
 
   const handleAvatarChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       setAvatarPreview(reader.result);
-      setEditData(d => ({ ...d, avatar: reader.result }));
+      setEditData((d) => ({ ...d, avatar: reader.result }));
     };
     reader.readAsDataURL(file);
   };
 
   const handleProfileSave = async () => {
     try {
-      // --- API BASE URL ---
-      const res = await axios.put(`${API_BASE_URL}/api/users/${user._id}`, editData);
+      await axios.put(`${API_BASE_URL}/api/users/${user._id}`, editData);
       setSnackbar({ open: true, message: "Profile updated!", severity: "success" });
 
-      // Fetch latest from backend!
       const updatedProfile = await axios.get(`${API_BASE_URL}/api/profile`, {
-        headers: { Authorization: "Bearer " + token }
+        headers: { Authorization: "Bearer " + token },
       });
       setUser(updatedProfile.data);
       setEditDialog(false);
-    } catch (e) {
+    } catch {
       setSnackbar({ open: true, message: "Failed to update!", severity: "error" });
     }
   };
 
-  // --- Settings Dialogs ---
+  // --- Settings Dialog toggles (logic preserved, UI stays inline switches) ---
   const [changePassOpen, setChangePassOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  // --- Addresses (static, no backend here) ---
+  // --- Addresses ---
   const [editingAddress, setEditingAddress] = useState(null);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const handleAddressSave = async (newAddr) => {
     let updated;
     if (newAddr.id && addresses.some((a) => a.id === newAddr.id)) {
-      // Edit
       updated = addresses.map((a) => (a.id === newAddr.id ? newAddr : a));
     } else {
       newAddr.id = Date.now().toString();
       updated = [...addresses, newAddr];
     }
-    // Set as default, mark only this one as default
     if (newAddr.isDefault) {
-      updated = updated.map(a => ({ ...a, isDefault: a.id === newAddr.id }));
+      updated = updated.map((a) => ({ ...a, isDefault: a.id === newAddr.id }));
     }
     await updateAddresses(updated);
-    setSnackbar({ open: true, message: editingAddress ? "Address updated!" : "Address added!", severity: "success" });
+    setSnackbar({
+      open: true,
+      message: editingAddress ? "Address updated!" : "Address added!",
+      severity: "success",
+    });
     setShowAddressForm(false);
     setEditingAddress(null);
   };
 
   const handleDeleteAddress = async (addr) => {
     if (!window.confirm("Are you sure you want to delete this address?")) return;
-    const updated = addresses.filter(a => a.id !== addr.id);
+    const updated = addresses.filter((a) => a.id !== addr.id);
     await updateAddresses(updated);
     setSnackbar({ open: true, message: "Address deleted!", severity: "success" });
   };
@@ -172,17 +166,12 @@ export default function ProfilePage() {
   const [cards, setCards] = useState([]);
   const [cardDialog, setCardDialog] = useState(false);
   const [editingCard, setEditingCard] = useState(null);
-  const [cardForm, setCardForm] = useState({
-    number: "",
-    name: "",
-    expiry: "",
-    brand: "",
-  });
+  const [cardForm, setCardForm] = useState({ number: "", name: "", expiry: "", brand: "" });
   const [cardTypeIcon, setCardTypeIcon] = useState(null);
 
   function detectCardType(number) {
     if (!number) return "";
-    const result = creditCardType(number.replace(/\s/g, ''));
+    const result = creditCardType(number.replace(/\s/g, ""));
     return result.length ? result[0].niceType : "";
   }
   function handleCardNumberChange(e) {
@@ -190,14 +179,10 @@ export default function ProfilePage() {
     num = num.replace(/(.{4})/g, "$1 ").trim();
     const type = detectCardType(num);
     setCardTypeIcon(cardIcons[type] || null);
-    setCardForm(f => ({
-      ...f,
-      number: num,
-      brand: type || ""
-    }));
+    setCardForm((f) => ({ ...f, number: num, brand: type || "" }));
   }
   function handleCardFormChange(field, value) {
-    setCardForm(f => ({ ...f, [field]: value }));
+    setCardForm((f) => ({ ...f, [field]: value }));
   }
   function handleCardSave() {
     if (cardForm.number.length < 19 || !cardForm.name || !/^\d{2}\/\d{2}$/.test(cardForm.expiry)) {
@@ -206,11 +191,11 @@ export default function ProfilePage() {
     }
     const last4 = cardForm.number.replace(/\s/g, "").slice(-4);
     if (editingCard) {
-      setCards(prev => prev.map(c =>
-        c.id === editingCard.id ? { ...cardForm, id: c.id, last4 } : c
-      ));
+      setCards((prev) =>
+        prev.map((c) => (c.id === editingCard.id ? { ...cardForm, id: c.id, last4 } : c))
+      );
     } else {
-      setCards(prev => [...prev, { ...cardForm, id: Date.now(), last4 }]);
+      setCards((prev) => [...prev, { ...cardForm, id: Date.now(), last4 }]);
     }
     setSnackbar({ open: true, message: editingCard ? "Card updated!" : "Card added!", severity: "success" });
     setCardDialog(false);
@@ -237,16 +222,17 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (user?._id) {
-      axios.get(`${API_BASE_URL}/api/orders/myorders-userid/${user._id}`)
-        .then(res => {
-          const sortedOrders = [...res.data].sort(
+      axios
+        .get(`${API_BASE_URL}/api/orders/myorders-userid/${user._id}`)
+        .then((res) => {
+          const sorted = [...res.data].sort(
             (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
           );
-          setOrders(sortedOrders);
+          setOrders(sorted);
         })
         .catch(() => setOrders([]));
     }
-  }, [user]);
+  }, [user?._id]);
 
   const handleOrderAgain = (order) => {
     const pharmacyId =
@@ -288,685 +274,744 @@ export default function ProfilePage() {
   // --- Support/Feedback ---
   const [supportDialog, setSupportDialog] = useState(false);
   const [supportMsg, setSupportMsg] = useState("");
-  const [chatDialog, setChatDialog] = useState(false);
-  const [chatMsg, setChatMsg] = useState("");
 
   // --- Referral code
   const referralCode = `GODAVAII-USER-${user?._id || "XXXX"}`;
 
-  // --- Logout (context)
+  // --- Logout
   const handleLogout = () => {
     logout();
     setSnackbar({ open: true, message: "Logged out!", severity: "info" });
     setTimeout(() => navigate("/login"), 1000);
   };
 
-  // --- UI ---
   return (
-    <Box sx={{ maxWidth: 700, mx: "auto", mt: 4, p: 2, pb: 10 }}>
-      {/* Profile Card */}
-      <Paper elevation={6}
-        sx={{
-          borderRadius: 12, mb: 4, background: "linear-gradient(90deg,#FFD43B 30%,#FFF 100%)",
-          boxShadow: "0 8px 32px 0 rgba(31,38,135,0.13)",
-          px: 3, py: 2, display: "flex", alignItems: "center",
-          position: "relative", width: { xs: "100%", sm: 470 },
-          mx: { xs: "auto", sm: "inherit" }
-        }}>
-        <Box sx={{ position: "relative" }}>
-          <Avatar
-            src={user.avatar || "https://ui-avatars.com/api/?name=" + encodeURIComponent(user.name || "")}
-            sx={{
-              width: 90, height: 90, fontSize: 40, border: "3px solid #fff", boxShadow: 3, bgcolor: "#bcbcbc"
-            }}
-          />
-          <IconButton
-            sx={{
-              position: "absolute", bottom: -8, right: -8, bgcolor: "#fff", border: "2px solid #1976d2", zIndex: 2,
-              boxShadow: 2, "&:hover": { bgcolor: "#e3f2fd" }
-            }}
-            onClick={handleEditProfileOpen}
-          >
-            <EditIcon sx={{ color: "#1976d2" }} />
-          </IconButton>
-        </Box>
-        <Stack spacing={0.3} ml={3} flex={1} minWidth={0}>
-  <Typography variant="h5" sx={{ fontWeight: 700, color: "#232323", wordBreak: "break-word" }}>
-    {user.name}
-  </Typography>
-  <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
-    <EmailIcon sx={{ fontSize: 19, color: "#1976d2" }} />
-    <Typography
-      sx={{
-        color: "#1976d2",
-        fontSize: 17,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: { xs: "normal", sm: "nowrap" },
-        maxWidth: { xs: "170px", sm: "270px" },
-        display: "block",
-        wordBreak: "break-all",
-      }}
-      title={user.email}
-    >
-      {user.email}
-    </Typography>
-  </Stack>
-  <Typography
-    sx={{
-      color: "#1976d2",
-      fontSize: 16,
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap",
-      maxWidth: { xs: "150px", sm: "200px" },
-      display: "block",
-    }}
-    title={user.mobile}
-  >
-    {user.mobile}
-  </Typography>
-</Stack>
-      </Paper>
+    <div className="max-w-[760px] mx-auto px-3 pb-24 pt-4">
+      {/* Profile header card */}
+      <Card className="mb-4 border-emerald-200 shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <Avatar className="h-20 w-20 ring-2 ring-white shadow">
+                <AvatarImage
+                  src={
+                    user?.avatar ||
+                    (user?.name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` : "")
+                  }
+                />
+                <AvatarFallback className="bg-emerald-600 text-white font-bold">
+                  {(user?.name || "NU").slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full border bg-white text-emerald-700 hover:bg-emerald-50"
+                onClick={handleEditProfileOpen}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </div>
 
-      {/* --- Addresses Section --- */}
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xl font-extrabold text-emerald-900 truncate">
+                {user?.name || "New User"}
+              </h2>
+              <div className="flex items-center gap-2 text-emerald-700">
+                <Mail className="h-4 w-4 shrink-0" />
+                <span className="truncate text-sm">{user?.email}</span>
+              </div>
+              {user?.mobile && (
+                <div className="text-sm text-emerald-700 truncate">{user.mobile}</div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Addresses */}
       <Section
-        icon={<HomeIcon sx={{ color: "#17879c" }} />}
+        icon={<Home className="h-5 w-5 text-emerald-700" />}
         title={t("My Addresses")}
         expanded={openSections.addresses}
         onToggle={() => toggleSection("addresses")}
         action={
           <Button
-            startIcon={<AddIcon />}
-            size="small"
-            variant="outlined"
-            sx={{ ml: 2 }}
-            onClick={e => { e.stopPropagation(); setEditingAddress(null); setShowAddressForm(true); }}
+            size="sm"
+            variant="outline"
+            className="border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingAddress(null);
+              setShowAddressForm(true);
+            }}
           >
-            {t("Add New")}
+            <Plus className="h-4 w-4 mr-1" /> {t("Add New")}
           </Button>
         }
       >
-        <Stack spacing={2} mt={2}>
+        <div className="mt-3 space-y-3">
           {addresses.length === 0 ? (
-            <Typography color="text.secondary">No addresses yet. Add one!</Typography>
+            <p className="text-sm text-muted-foreground">No addresses yet. Add one!</p>
           ) : (
             addresses.map((addr) => (
-              <Paper
-  key={addr.id}
-  sx={{
-    p: 2, borderRadius: 3,
-    bgcolor: addr.isDefault ? "#e3fcec" : "#f7fafc",
-    cursor: "pointer",
-    transition: "box-shadow 0.2s",
-    '&:hover': { boxShadow: 6 },
-  }}
-  onClick={() => { setEditingAddress(addr); setShowAddressForm(true); }}
->
-  <Stack direction="row" alignItems="center" justifyContent="space-between">
-    <Box>
-      <Typography sx={{ fontWeight: 700 }}>
-  {addr.type}{addr.addressLine ? ` - ${addr.addressLine}` : ""}
-</Typography>
-<Typography sx={{ color: "#888" }}>
-  {addr.formatted || addr.addressLine}
-</Typography>
-      {addr.isDefault && <Chip label="Default" size="small" color="success" sx={{ mt: 1, fontWeight: 600 }} />}
-    </Box>
-    <Stack direction="row" alignItems="center" spacing={1}>
-      <IconButton
-        onClick={e => {
-          e.stopPropagation();
-          setEditingAddress(addr);
-          setShowAddressForm(true);
-        }}
-        aria-label="Edit"
-        sx={{ mr: 1 }}
-      >
-        <EditIcon />
-      </IconButton>
-      <IconButton
-        color="error"
-        onClick={e => {
-          e.stopPropagation();
-          handleDeleteAddress(addr);
-        }}
-        aria-label="Delete"
-      >
-        <DeleteIcon />
-      </IconButton>
-    </Stack>
-  </Stack>
-</Paper>
+              <div
+                key={addr.id}
+                className={`rounded-xl border p-3 transition shadow-sm cursor-pointer ${
+                  addr.isDefault
+                    ? "bg-emerald-50 border-emerald-200"
+                    : "bg-white border-slate-200"
+                }`}
+                onClick={() => {
+                  setEditingAddress(addr);
+                  setShowAddressForm(true);
+                }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold">
+                      {addr.type}
+                      {addr.addressLine ? ` - ${addr.addressLine}` : ""}
+                    </div>
+                    <div className="text-sm text-slate-600">
+                      {addr.formatted || addr.addressLine}
+                    </div>
+                    {addr.isDefault && (
+                      <Badge className="mt-2 bg-emerald-600 hover:bg-emerald-700">
+                        Default
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingAddress(addr);
+                        setShowAddressForm(true);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="text-red-600"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteAddress(addr);
+                      }}
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
             ))
           )}
-        </Stack>
+        </div>
         <AddressForm
           open={showAddressForm}
-          onClose={() => { setShowAddressForm(false); setEditingAddress(null); }}
+          onClose={() => {
+            setShowAddressForm(false);
+            setEditingAddress(null);
+          }}
           onSave={handleAddressSave}
           initial={editingAddress || {}}
         />
       </Section>
 
-      {/* --- Saved Cards & GoDavaii Money --- */}
+      {/* Saved Cards & GoDavaii Money */}
       <Section
-        icon={<WalletIcon sx={{ color: "#FFD43B" }} />}
+        icon={<Wallet className="h-5 w-5 text-amber-500" />}
         title={t("Saved Cards & GoDavaii Money")}
         expanded={openSections.wallet}
         onToggle={() => toggleSection("wallet")}
       >
-        <List dense sx={{ width: "100%", bgcolor: "transparent" }}>
+        <div className="mt-3 space-y-2">
           {cards.length === 0 ? (
-            <ListItem>
-              <ListItemText primary="No cards saved yet. Add one!" />
-            </ListItem>
+            <div className="rounded-lg border bg-amber-50 px-3 py-2 text-slate-800">
+              No cards saved yet. Add one!
+            </div>
           ) : (
             cards.map((card) => (
-              <ListItem
+              <div
                 key={card.id}
-                sx={{
-                  bgcolor: "#fffde7", mb: 1, borderRadius: 2, pl: 1.5, pr: 0.5,
-                  display: "flex", alignItems: "center"
-                }}
-                secondaryAction={
-                  <IconButton edge="end" aria-label="edit" onClick={() => handleCardEdit(card)}>
-                    <EditIcon sx={{ color: "#222" }} />
-                  </IconButton>
-                }
+                className="flex items-center justify-between rounded-lg border bg-amber-50 px-3 py-2"
               >
-                {cardIcons[card.brand] && <img src={cardIcons[card.brand]} alt={card.brand} style={{ width: 34, marginRight: 10 }} />}
-                <ListItemText
-                  primary={
-                    <>
+                <div className="flex items-center gap-3">
+                  {cardIcons[card.brand] && (
+                    <img src={cardIcons[card.brand]} alt={card.brand} className="w-8" />
+                  )}
+                  <div className="text-sm">
+                    <div className="font-semibold">
                       {card.brand} •••• {card.last4}
-                      <span style={{ marginLeft: 12, fontWeight: 500, color: "#444" }}>{card.name}</span>
-                      <span style={{ marginLeft: 18, color: "#888" }}>Exp: {card.expiry}</span>
-                    </>
-                  }
-                />
-              </ListItem>
+                      <span className="ml-2 font-normal text-slate-600">{card.name}</span>
+                      <span className="ml-3 text-slate-500">Exp: {card.expiry}</span>
+                    </div>
+                  </div>
+                </div>
+                <Button size="icon" variant="ghost" onClick={() => handleCardEdit(card)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </div>
             ))
           )}
-          <ListItem sx={{ pl: 1.5 }}>
-            <CurrencyRupeeIcon sx={{ mr: 1, color: "green" }} />
-            <ListItemText primary="GoDavaii Money: ₹240" primaryTypographyProps={{ fontWeight: 700, color: "green" }} />
-          </ListItem>
-          <ListItem button onClick={handleCardAdd}>
-            <AddIcon sx={{ color: "#17879c" }} />
-            <ListItemText primary={t("Add New Card")} primaryTypographyProps={{ color: "#17879c", fontWeight: 600 }} />
-          </ListItem>
-        </List>
+
+          <div className="flex items-center gap-2">
+            <IndianRupee className="h-5 w-5 text-emerald-700" />
+            <div className="font-bold text-emerald-700">GoDavaii Money: ₹240</div>
+          </div>
+
+          <Button
+            variant="ghost"
+            className="text-emerald-800 hover:bg-emerald-50 w-fit"
+            onClick={handleCardAdd}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            {t("Add New Card")}
+          </Button>
+        </div>
+
         {/* Card Form Dialog */}
-        <Dialog open={cardDialog} onClose={() => setCardDialog(false)} fullWidth maxWidth="xs">
-          <DialogTitle>{editingCard ? "Edit Card" : "Add Card"}</DialogTitle>
-          <DialogContent>
-            <Stack spacing={2} mt={1}>
-              <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-                {cardTypeIcon && <img src={cardTypeIcon} alt="brand" style={{ width: 38, marginRight: 10 }} />}
-                <TextField
-                  label="Card Number"
-                  value={cardForm.number}
-                  onChange={handleCardNumberChange}
-                  fullWidth
-                  inputProps={{
-                    maxLength: 19,
-                    pattern: "[0-9 ]*",
-                    readOnly: editingCard !== null
-                  }}
-                  disabled={editingCard !== null}
-                  sx={{ flex: 1 }}
-                  placeholder="1234 5678 9012 3456"
+        <Dialog open={cardDialog} onOpenChange={setCardDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{editingCard ? "Edit Card" : "Add Card"}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                {cardTypeIcon && <img src={cardTypeIcon} alt="brand" className="w-10" />}
+                <div className="grid w-full gap-1.5">
+                  <Label>Card Number</Label>
+                  <Input
+                    value={cardForm.number}
+                    onChange={handleCardNumberChange}
+                    inputMode="numeric"
+                    maxLength={19}
+                    placeholder="1234 5678 9012 3456"
+                    disabled={editingCard !== null}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Name on Card</Label>
+                <Input
+                  value={cardForm.name}
+                  onChange={(e) => handleCardFormChange("name", e.target.value)}
                 />
-              </Box>
-              <TextField
-                label="Name on Card"
-                value={cardForm.name}
-                onChange={e => handleCardFormChange("name", e.target.value)}
-                fullWidth
-              />
-              <TextField
-                label="Expiry (MM/YY)"
-                value={cardForm.expiry}
-                onChange={e => {
-                  let v = e.target.value.replace(/[^\d/]/g, "").slice(0, 5);
-                  if (v.length === 2 && !v.includes("/")) v += "/";
-                  setCardForm(f => ({ ...f, expiry: v }));
-                }}
-                placeholder="MM/YY"
-                fullWidth
-              />
-            </Stack>
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Expiry (MM/YY)</Label>
+                <Input
+                  value={cardForm.expiry}
+                  onChange={(e) => {
+                    let v = e.target.value.replace(/[^\d/]/g, "").slice(0, 5);
+                    if (v.length === 2 && !v.includes("/")) v += "/";
+                    setCardForm((f) => ({ ...f, expiry: v }));
+                  }}
+                  placeholder="MM/YY"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setCardDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCardSave}>Save</Button>
+            </DialogFooter>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setCardDialog(false)}>Cancel</Button>
-            <Button variant="contained" onClick={handleCardSave}>Save</Button>
-          </DialogActions>
         </Dialog>
       </Section>
 
-      {/* --- Order History --- */}
+      {/* Orders */}
       <Section
-        icon={<HistoryIcon sx={{ color: "#1976d2" }} />}
+        icon={<History className="h-5 w-5 text-emerald-700" />}
         title={t("Order History")}
         expanded={openSections.orders}
         onToggle={() => toggleSection("orders")}
         action={
           <Button
-            size="small"
-            variant="outlined"
-            sx={{ ml: 2 }}
-            onClick={e => { e.stopPropagation(); navigate('/orders'); }}
+            size="sm"
+            variant="outline"
+            className="border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate("/orders");
+            }}
           >
             {t("View All Orders")}
           </Button>
         }
       >
-        <Stack spacing={2} mt={2}>
+        <div className="mt-3 space-y-3">
           {orders.length === 0 ? (
-            <Typography color="text.secondary">No orders yet.</Typography>
+            <p className="text-sm text-muted-foreground">No orders yet.</p>
           ) : (
-            orders.slice(0, 2).map(order => (
-              <Paper
+            orders.slice(0, 2).map((order) => (
+              <div
                 key={order._id || order.id}
-                sx={{ p: 2, borderRadius: 3, bgcolor: "#f7fafc", cursor: "pointer" }}
+                className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm cursor-pointer"
                 onClick={() => setOrderDetail(order)}
               >
-                <Typography sx={{ fontWeight: 700 }}>
+                <div className="font-bold">
                   Order #{order._id ? order._id.slice(-6).toUpperCase() : order.id}
-                </Typography>
-                <Typography>
-                  ₹{order.total} for {order.items?.length || order.items} items
-                </Typography>
-                <Typography sx={{ color: "#666" }}>
-                  {(order.status || "Placed").charAt(0).toUpperCase() + (order.status || "Placed").slice(1)} | {order.createdAt && order.createdAt.substring(0, 10)}
-                </Typography>
+                </div>
+                <div className="text-sm">₹{order.total} for {order.items?.length || order.items} items</div>
+                <div className="text-xs text-slate-600">
+                  {(order.status || "Placed").charAt(0).toUpperCase() + (order.status || "Placed").slice(1)}{" "}
+                  | {order.createdAt && order.createdAt.substring(0, 10)}
+                </div>
                 <Button
-                  size="small"
-                  variant="outlined"
-                  sx={{ mt: 1 }}
-                  onClick={e => {
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={(e) => {
                     e.stopPropagation();
                     handleOrderAgain(order);
                   }}
                 >
                   Order Again
                 </Button>
-              </Paper>
+              </div>
             ))
           )}
-        </Stack>
-        {/* Order Detail Dialog */}
-        <Dialog open={!!orderDetail} onClose={() => setOrderDetail(null)}>
-          <DialogTitle>Order Details</DialogTitle>
+        </div>
+
+        <Dialog open={!!orderDetail} onOpenChange={(v) => !v && setOrderDetail(null)}>
           <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Order Details</DialogTitle>
+            </DialogHeader>
             {orderDetail && (
-              <>
-                <Typography sx={{ mb: 1 }}>
-                  <b>Order #{orderDetail._id ? orderDetail._id.slice(-6).toUpperCase() : orderDetail.id}</b>
-                </Typography>
-                <Typography>
-                  ₹{orderDetail.total} for {orderDetail.items?.length || orderDetail.items} items
-                </Typography>
+              <div className="space-y-2">
+                <div className="font-semibold">
+                  Order #{orderDetail._id ? orderDetail._id.slice(-6).toUpperCase() : orderDetail.id}
+                </div>
+                <div>₹{orderDetail.total} for {orderDetail.items?.length || orderDetail.items} items</div>
                 {Array.isArray(orderDetail.items) && (
-                  <Box sx={{ mt: 1 }}>
-                    <Typography sx={{ fontWeight: 600 }}>Items:</Typography>
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  <div>
+                    <div className="font-semibold">Items:</div>
+                    <ul className="list-disc pl-5">
                       {orderDetail.items.map((item, idx) => (
-                        <li key={idx}>
-                          {item.name} × {item.quantity} – ₹{item.price}
-                        </li>
+                        <li key={idx}>{item.name} × {item.quantity} – ₹{item.price}</li>
                       ))}
                     </ul>
-                  </Box>
+                  </div>
                 )}
-                {typeof orderDetail.details === "string" && (
-                  <Typography>Details: {orderDetail.details}</Typography>
-                )}
-                <Typography>Status: {orderDetail.status}</Typography>
-                <Typography>Date: {orderDetail.createdAt}</Typography>
-                <Button
-                  variant="contained"
-                  sx={{ mt: 2, bgcolor: "#13C0A2", color: "#fff" }}
-                  onClick={() => handleOrderAgain(orderDetail)}
-                >
+                {typeof orderDetail.details === "string" && <div>Details: {orderDetail.details}</div>}
+                <div>Status: {orderDetail.status}</div>
+                <div>Date: {orderDetail.createdAt}</div>
+                <Button className="mt-2 bg-emerald-600" onClick={() => handleOrderAgain(orderDetail)}>
                   Order Again
                 </Button>
-              </>
+              </div>
             )}
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOrderDetail(null)}>Close</Button>
-          </DialogActions>
         </Dialog>
       </Section>
 
-      {/* --- Badges & Loyalty --- */}
+      {/* Badges & Loyalty */}
       <Section
-        icon={<LoyaltyIcon sx={{ color: "#31C48D" }} />}
+        icon={<BadgeCheck className="h-5 w-5 text-emerald-600" />}
         title={t("Badges & Loyalty")}
         expanded={openSections.badges}
         onToggle={() => toggleSection("badges")}
       >
-        <Stack direction="row" spacing={2} mt={2}>
-          <Chip icon={<StarsIcon sx={{ color: "#FFD43B" }} />} label="Super Saver" sx={{ fontWeight: 700, bgcolor: "#e3f2fd" }} />
-          <Chip icon={<LoyaltyIcon sx={{ color: "#31C48D" }} />} label="Loyal Customer" sx={{ fontWeight: 700, bgcolor: "#e3f2fd" }} />
-        </Stack>
-        <Typography sx={{ mt: 2 }}>Loyalty Points: <b>{loyaltyPoints}</b></Typography>
-        <Typography sx={{ mt: 1, fontSize: 13, color: "#888" }}>
-          1 point per ₹1 spent. Earn badges for frequent orders and savings!
-        </Typography>
+        <div className="mt-3">
+          <div className="flex items-center gap-2">
+            <Badge className="bg-amber-400 text-emerald-900 hover:bg-amber-400/90">
+              <Star className="h-3.5 w-3.5 mr-1" /> Super Saver
+            </Badge>
+            <Badge className="bg-emerald-600 hover:bg-emerald-700">
+              Loyal Customer
+            </Badge>
+          </div>
+          <div className="mt-2">
+            Loyalty Points: <span className="font-bold">{loyaltyPoints}</span>
+          </div>
+          <div className="mt-1 text-xs text-slate-600">
+            1 point per ₹1 spent. Earn badges for frequent orders and savings!
+          </div>
+        </div>
       </Section>
 
-      {/* --- Personalization --- */}
+      {/* Personalization */}
       <Section
-        icon={<SettingsIcon sx={{ color: "#FFD43B" }} />}
+        icon={<Settings className="h-5 w-5 text-amber-500" />}
         title={t("Personalization")}
         expanded={openSections.personalization}
         onToggle={() => toggleSection("personalization")}
       >
-        <List dense>
-          <ListItem>
-            <ListItemText
-              primary={<Typography sx={{ fontWeight: 700, fontSize: 17 }}>{t("Language")}</Typography>}
-            />
-            <TextField
-              select
-              value={language}
-              onChange={e => handleLanguageChange(e.target.value)}
-              sx={{ minWidth: 120, fontWeight: 700 }}
-              size="small"
-            >
-              <MenuItem value="en">English</MenuItem>
-              <MenuItem value="hi">Hindi</MenuItem>
-            </TextField>
-          </ListItem>
-          <ListItem>
-            <ListItemText
-              primary={<Typography sx={{ fontWeight: 700, fontSize: 17 }}>{t("Theme")}</Typography>}
-            />
-            <TextField
-              select
-              value={mode}
-              onChange={e => handleThemeChange(e.target.value)}
-              sx={{ minWidth: 120, fontWeight: 700 }}
-              size="small"
-            >
-              <MenuItem value="Light">{t("Light")}</MenuItem>
-              <MenuItem value="Dark">{t("Dark")}</MenuItem>
-              <MenuItem value="System">{t("System")}</MenuItem>
-            </TextField>
-          </ListItem>
-        </List>
+        <div className="mt-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="font-semibold">{t("Language")}</div>
+            <Select value={language} onValueChange={handleLanguageChange}>
+              <SelectTrigger className="w-36">
+                <SelectValue placeholder="Choose" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="hi">Hindi</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="font-semibold">{t("Theme")}</div>
+            <Select value={mode} onValueChange={handleThemeChange}>
+              <SelectTrigger className="w-36">
+                <SelectValue placeholder="Choose" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Light">{t("Light")}</SelectItem>
+                <SelectItem value="Dark">{t("Dark")}</SelectItem>
+                <SelectItem value="System">{t("System")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </Section>
 
-      {/* --- Settings --- */}
+      {/* Settings */}
       <Section
-        icon={<SettingsIcon sx={{ color: "#888" }} />}
+        icon={<Settings className="h-5 w-5 text-slate-500" />}
         title={t("Settings")}
         expanded={openSections.settings}
         onToggle={() => toggleSection("settings")}
       >
-        <Box sx={{ mt: 2 }}>
-          <Typography sx={{ fontWeight: 700, color: "#1976d2", mb: 1 }}>Account Settings</Typography>
-          <Stack direction="row" spacing={2} mb={2}>
-            <Button startIcon={<LockIcon />} variant="outlined" sx={{ mb: 2 }} onClick={() => setChangePassOpen(true)}>Change Password</Button>
-            <Button startIcon={<EmailIcon />} variant="outlined" onClick={() => setChangeEmailOpen(true)}>Change Email</Button>
-            <Button startIcon={<DeleteIcon />} variant="outlined" color="error" onClick={() => setDeleteOpen(true)}>Delete Account</Button>
-          </Stack>
-          <Typography sx={{ fontWeight: 700, color: "#1976d2", mb: 1 }}>Notifications</Typography>
-          <Stack direction="row" spacing={2} mb={2}>
-            <FormControlLabel
-              control={<Switch checked={orderUpdates} onChange={e => setOrderUpdates(e.target.checked)} />}
-              label="Order Updates"
+        <div className="mt-3 space-y-5">
+          <div>
+            <div className="mb-2 font-bold text-emerald-800">Account Settings</div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => setChangePassOpen(true)}>
+                <Lock className="h-4 w-4 mr-2" /> Change Password
+              </Button>
+              <Button variant="outline" onClick={() => setChangeEmailOpen(true)}>
+                <Mail className="h-4 w-4 mr-2" /> Change Email
+              </Button>
+              <Button variant="outline" className="text-red-600 border-red-200" onClick={() => setDeleteOpen(true)}>
+                <Trash className="h-4 w-4 mr-2" /> Delete Account
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-2 font-bold text-emerald-800">Notifications</div>
+            <div className="flex flex-wrap items-center gap-6">
+              <ToggleRow label="Order Updates" checked={orderUpdates} onChange={setOrderUpdates} />
+              <ToggleRow label="Offers & Promotions" checked={offerPromos} onChange={setOfferPromos} />
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-2 font-bold text-emerald-800">Privacy</div>
+            <ToggleRow
+              label={`Data Sharing: ${dataSharing ? "Allowed" : "Not Allowed"}`}
+              checked={dataSharing}
+              onChange={setDataSharing}
             />
-            <FormControlLabel
-              control={<Switch checked={offerPromos} onChange={e => setOfferPromos(e.target.checked)} />}
-              label="Offers & Promotions"
-            />
-          </Stack>
-          <Typography sx={{ fontWeight: 700, color: "#1976d2", mb: 1 }}>Privacy</Typography>
-          <FormControlLabel
-            control={<Switch checked={dataSharing} onChange={e => setDataSharing(e.target.checked)} />}
-            label={`Data Sharing: ${dataSharing ? "Allowed" : "Not Allowed"}`}
-            sx={{ mb: 2 }}
-          />
-          <Typography sx={{ fontWeight: 700, color: "#1976d2", mb: 1 }}>Security</Typography>
-          <Stack direction="row" spacing={2} mb={2}>
-            <FormControlLabel
-              control={<Switch checked={twoFA} onChange={e => setTwoFA(e.target.checked)} />}
-              label={`2FA: ${twoFA ? "On" : "Off"}`}
-            />
-            <Chip label="Device Activity: Last login 1 hr ago" sx={{ fontWeight: 700 }} />
-          </Stack>
-        </Box>
+          </div>
+
+          <div>
+            <div className="mb-2 font-bold text-emerald-800">Security</div>
+            <div className="flex flex-wrap items-center gap-4">
+              <ToggleRow label={`2FA: ${twoFA ? "On" : "Off"}`} checked={twoFA} onChange={setTwoFA} />
+              <Badge variant="secondary">Device Activity: Last login 1 hr ago</Badge>
+            </div>
+          </div>
+        </div>
       </Section>
 
-      {/* --- Pharmacist Portal --- */}
+      {/* Pharmacist Portal */}
       <Section
-        icon={<LocalPharmacyIcon sx={{ color: "#13C0A2" }} />}
+        icon={<Pill className="h-5 w-5 text-emerald-600" />}
         title={t("Pharmacist Portal")}
         expanded={openSections.pharmacist}
         onToggle={() => toggleSection("pharmacist")}
       >
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} mt={2}>
+        <div className="mt-3 flex flex-col sm:flex-row gap-2">
           <Button
-  variant="contained"
-  sx={{ minWidth: 220 }}
-  onClick={() => {
-    if (localStorage.getItem("pharmacyToken")) {
-      navigate("/pharmacy/dashboard");
-    } else {
-      navigate("/pharmacy/login");
-    }
-  }}
->
-  {t("Go to Pharmacist Dashboard")}
-</Button>
-          <Button variant="outlined" sx={{ minWidth: 220 }} onClick={() => navigate("/pharmacy/register")}>
+            className="min-w-[220px]"
+            onClick={() => {
+              if (localStorage.getItem("pharmacyToken")) {
+                navigate("/pharmacy/dashboard");
+              } else {
+                navigate("/pharmacy/login");
+              }
+            }}
+          >
+            {t("Go to Pharmacist Dashboard")}
+          </Button>
+          <Button
+            variant="outline"
+            className="min-w-[220px]"
+            onClick={() => navigate("/pharmacy/register")}
+          >
             {t("Register as Pharmacist")}
           </Button>
-        </Stack>
+        </div>
       </Section>
 
-      {/* --- Delivery Partner Portal --- */}
+      {/* Delivery Partner Portal */}
       <Section
-        icon={<TwoWheelerIcon sx={{ color: "#1976d2" }} />}
+        icon={<Bike className="h-5 w-5 text-emerald-700" />}
         title="Delivery Partner Portal"
         expanded={openSections.delivery}
         onToggle={() => toggleSection("delivery")}
       >
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} mt={2}>
+        <div className="mt-3 flex flex-col sm:flex-row gap-2">
           <Button
-  variant="contained"
-  sx={{ minWidth: 220 }}
-  onClick={() => {
-    if (localStorage.getItem("deliveryToken")) {
-      navigate("/delivery/dashboard");
-    } else {
-      navigate("/delivery/dashboard");
-    }
-  }}
->
-  Go to Delivery Dashboard
-</Button>
-          <Button
-            variant="outlined"
-            sx={{ minWidth: 220 }}
-            onClick={() => navigate("/delivery/register")}
+            className="min-w-[220px]"
+            onClick={() => {
+              if (localStorage.getItem("deliveryToken")) {
+                navigate("/delivery/dashboard");
+              } else {
+                navigate("/delivery/dashboard");
+              }
+            }}
           >
+            Go to Delivery Dashboard
+          </Button>
+          <Button variant="outline" className="min-w-[220px]" onClick={() => navigate("/delivery/register")}>
             Register as Delivery Partner
           </Button>
-        </Stack>
+        </div>
       </Section>
 
-      {/* --- Support/Feedback --- */}
+      {/* Support & Feedback */}
       <Section
-        icon={<SupportAgentIcon sx={{ color: "#1976d2" }} />}
+        icon={<Headset className="h-5 w-5 text-emerald-700" />}
         title="Support & Feedback"
         expanded={openSections.support}
         onToggle={() => toggleSection("support")}
       >
-        <Stack direction="row" spacing={2} mt={2}>
-          <Button variant="outlined" sx={{ mr: 2 }} onClick={() => setSupportDialog(true)}>Raise Ticket</Button>
-          <Button variant="text" onClick={() => setChatSupportOpen(true)}>Contact Support</Button>
-        </Stack>
+        <div className="mt-3 flex items-center gap-2">
+          <Button variant="outline" onClick={() => setSupportDialog(true)}>
+            Raise Ticket
+          </Button>
+          <Button variant="ghost" onClick={() => setChatSupportOpen(true)}>
+            Contact Support
+          </Button>
+        </div>
       </Section>
 
-      {/* --- Refer & Earn --- */}
+      {/* Refer & Earn */}
       <Section
-        icon={<GroupAddIcon sx={{ color: "#FFD43B" }} />}
+        icon={<Users className="h-5 w-5 text-amber-500" />}
         title="Refer & Earn"
         expanded={openSections.refer}
         onToggle={() => toggleSection("refer")}
       >
-        <Typography sx={{ mb: 1, fontWeight: 700 }}>
-          Refer friends and earn ₹50 GoDavaii Money on their first order!
-        </Typography>
-        <Box sx={{ display: "flex", alignItems: "center" }}>
-          <TextField value={referralCode} size="small" sx={{ mr: 2, width: 200 }} disabled />
-          <Button variant="contained" onClick={() => {
-            navigator.clipboard.writeText(referralCode);
-            setSnackbar({ open: true, message: "Referral link copied!", severity: "success" });
-          }}>
-            Copy Link
-          </Button>
-        </Box>
+        <div className="mt-3">
+          <div className="font-semibold mb-2">
+            Refer friends and earn ₹50 GoDavaii Money on their first order!
+          </div>
+          <div className="flex items-center gap-2">
+            <Input value={referralCode} readOnly className="w-[220px]" />
+            <Button
+              onClick={() => {
+                navigator.clipboard.writeText(referralCode);
+                setSnackbar({ open: true, message: "Referral link copied!", severity: "success" });
+              }}
+            >
+              Copy Link
+            </Button>
+          </div>
+        </div>
       </Section>
 
-      {/* --- Logout Button at Bottom --- */}
-      <Box sx={{ display: "flex", justifyContent: "center", mt: 3, mb: 2 }}>
+      {/* Logout */}
+      <div className="flex justify-center mt-4">
         <Button
-          variant="outlined"
-          color="error"
-          startIcon={<LogoutIcon />}
-          sx={{
-            borderRadius: 6,
-            px: 5,
-            fontWeight: 700,
-            fontSize: 18,
-            bgcolor: "#fff",
-            border: "2px solid #f44336",
-            color: "#f44336",
-            boxShadow: "0 2px 8px 0 rgba(244,67,54,0.12)",
-            '&:hover': {
-              bgcolor: "#fff5f5",
-              border: "2.5px solid #f44336"
-            }
-          }}
-          onClick={logout}
+          variant="outline"
+          className="border-red-300 text-red-600 hover:bg-red-50 px-6 text-base"
+          onClick={handleLogout}
         >
+          <LogOut className="h-4 w-4 mr-2" />
           Logout
         </Button>
-      </Box>
+      </div>
 
-      {/* --- Snackbars and Dialogs --- */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={2200}
-        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert severity={snackbar.severity}>{snackbar.message}</Alert>
-      </Snackbar>
-      
+      {/* Lightweight Snackbar */}
+      <AnimatePresence>
+        {snackbar.open && (
+          <motion.div
+            initial={{ y: 40, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 40, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 320, damping: 22 }}
+            className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-[2000] rounded-full px-4 py-2 shadow-lg
+            ${snackbar.severity === "error" ? "bg-red-600" :
+              snackbar.severity === "info" ? "bg-slate-800" : "bg-emerald-600"} text-white`}
+            onAnimationComplete={() => setTimeout(() => setSnackbar((s) => ({ ...s, open: false })), 2200)}
+          >
+            {snackbar.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Profile Edit Dialog */}
-      <Dialog open={editDialog} onClose={() => {
-        // Only allow closing if all required fields are filled
-        if (editData.name && editData.email && editData.dob) setEditDialog(false);
-      }}>
-        <DialogTitle>Edit Profile</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} mt={1}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <Avatar src={avatarPreview} sx={{ width: 80, height: 80, mr: 2 }} />
-              <Button component="label" startIcon={<CameraAltIcon />}>
+      <Dialog
+        open={editDialog}
+        onOpenChange={(open) => {
+          if (!open && editData.name && editData.email && editData.dob) setEditDialog(false);
+          else if (open) setEditDialog(true);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Profile</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-20 w-20">
+                <AvatarImage src={avatarPreview} />
+                <AvatarFallback>{(user?.name || "NU").slice(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <Button
+                variant="secondary"
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              >
+                <Camera className="h-4 w-4 mr-2" />
                 Change Avatar
-                <input type="file" accept="image/*" hidden ref={fileInputRef} onChange={handleAvatarChange} />
               </Button>
-            </Box>
-            <TextField
-              label="Name"
-              required
-              fullWidth
-              value={editData.name}
-              onChange={e => setEditData({ ...editData, name: e.target.value })}
-            />
-            <TextField
-              label="Email"
-              required
-              fullWidth
-              value={editData.email}
-              onChange={e => setEditData({ ...editData, email: e.target.value })}
-            />
-            <TextField
-              label="Mobile"
-              fullWidth
-              value={editData.mobile}
-              disabled
-            />
-            <TextField
-              label="DOB"
-              required
-              fullWidth
-              type="date"
-              InputLabelProps={{ shrink: true }}
-              value={editData.dob}
-              onChange={e => setEditData({ ...editData, dob: e.target.value })}
-            />
-          </Stack>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={handleAvatarChange}
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label>Name</Label>
+              <Input value={editData.name} onChange={(e) => setEditData({ ...editData, name: e.target.value })} required />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label>Email</Label>
+              <Input
+                value={editData.email}
+                onChange={(e) => setEditData({ ...editData, email: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label>Mobile</Label>
+              <Input value={editData.mobile} disabled />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label>DOB</Label>
+              <Input
+                type="date"
+                value={editData.dob}
+                onChange={(e) => setEditData({ ...editData, dob: e.target.value })}
+                required
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setEditDialog(false)}
+              disabled={!editData.name || !editData.email || !editData.dob}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleProfileSave} disabled={!editData.name || !editData.email || !editData.dob}>
+              Save
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => setEditDialog(false)}
-            disabled={!editData.name || !editData.email || !editData.dob}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleProfileSave}
-            disabled={!editData.name || !editData.email || !editData.dob}
-          >
-            Save
-          </Button>
-        </DialogActions>
       </Dialog>
 
-      {/* Snackbar */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={2200}
-        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert severity={snackbar.severity}>{snackbar.message}</Alert>
-      </Snackbar>
+      {/* Support ticket (simple message capture; logic unchanged) */}
+      <Dialog open={supportDialog} onOpenChange={setSupportDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Raise Ticket</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-1.5">
+            <Label>Message</Label>
+            <Input
+              value={supportMsg}
+              onChange={(e) => setSupportMsg(e.target.value)}
+              placeholder="Type your issue..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSupportDialog(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (!supportMsg.trim()) {
+                  setSnackbar({ open: true, message: "Please enter a message.", severity: "error" });
+                  return;
+                }
+                setSupportDialog(false);
+                setSupportMsg("");
+                setSnackbar({ open: true, message: "Ticket submitted!", severity: "success" });
+              }}
+            >
+              Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ChatSupportModal open={chatSupportOpen} onClose={() => setChatSupportOpen(false)} />
-    </Box>
+    </div>
   );
 }
 
-// Reusable Section Component
+/** ---------- Reusable Section ---------- */
 function Section({ icon, title, expanded, onToggle, action, children }) {
-  const theme = useTheme();
   return (
-    <Paper sx={{
-      mb: 3,
-      borderRadius: 4,
-      boxShadow: 2,
-      px: 2,
-      py: 1.5,
-      bgcolor: theme.palette.background.paper
-    }}>
-      <Stack direction="row" alignItems="center" spacing={2} onClick={onToggle} sx={{ cursor: "pointer" }}>
-        {icon}
-        <Typography sx={{ fontWeight: 700, flex: 1, fontSize: 18 }}>{title}</Typography>
+    <Card className="mb-3 border-slate-200 overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-emerald-50/40 transition"
+      >
+        <div className="shrink-0">{icon}</div>
+        <CardTitle className="text-base font-extrabold text-emerald-900 flex-1 text-left">
+          {title}
+        </CardTitle>
         {action}
-        {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-      </Stack>
-      <Collapse in={expanded}>{children}</Collapse>
-    </Paper>
+        <ChevronDown
+          className={`h-5 w-5 text-slate-500 transition-transform ${expanded ? "rotate-180" : ""}`}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="content"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ type: "tween", duration: 0.18 }}
+          >
+            <Separator />
+            <CardContent className="pt-4">{children}</CardContent>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Card>
   );
 }
 
+/** Small toggle row helper (keeps logic unchanged) */
+function ToggleRow({ label, checked, onChange }) {
+  return (
+    <div className="flex items-center gap-3">
+      <Switch checked={checked} onCheckedChange={onChange} />
+      <span className="text-sm">{label}</span>
+    </div>
+  );
+}
