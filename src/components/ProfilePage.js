@@ -12,7 +12,7 @@ import AddressForm from "./AddressForm";
 
 // shadcn/ui
 import { Button } from "../components/ui/button";
-import { Card, CardContent } from "../components/ui/card";
+import { CardContent } from "../components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -20,7 +20,6 @@ import { Switch } from "../components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Badge } from "../components/ui/badge";
-import { Separator } from "../components/ui/separator";
 
 // framer-motion
 import { motion, AnimatePresence } from "framer-motion";
@@ -32,6 +31,9 @@ import {
 } from "lucide-react";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+
+// flip this to "true" in env when you launch phone-login
+const MOBILE_LOGIN_ENABLED = String(process.env.REACT_APP_MOBILE_LOGIN_ENABLED) === "true";
 
 const cardIcons = {
   Visa: "https://img.icons8.com/color/48/000000/visa.png",
@@ -61,7 +63,7 @@ export default function ProfilePage() {
 
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
 
-  // --- Edit profile dialog (unchanged logic) ---
+  // --- Edit profile dialog ---
   const [editDialog, setEditDialog] = useState(false);
   const [editData, setEditData] = useState({
     name: user?.name || "",
@@ -124,7 +126,7 @@ export default function ProfilePage() {
     }
   };
 
-  // --- Settings modals states (logic unchanged) ---
+  // --- Settings modals (logic unchanged) ---
   const [changePassOpen, setChangePassOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -277,50 +279,49 @@ export default function ProfilePage() {
     setTimeout(() => navigate("/login"), 1000);
   };
 
+  // When phone login is ON + user already verified phone, lock the field
+  const mobileLocked = MOBILE_LOGIN_ENABLED && Boolean(user?.mobileVerified);
+  const canEditMobile = !mobileLocked;
+
   return (
-  <div className="max-w-[860px] mx-auto px-4 pb-28 pt-3 bg-white">
-    {/* Top: Profile Summary (flat, bold) */}
-    <div className="flex items-center gap-4 py-4">
-      <div className="relative">
-        <Avatar className="h-16 w-16 ring-2 ring-emerald-100">
-          <AvatarImage
-            src={
-              user?.avatar ||
-              (user?.name
-                ? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`
-                : "")
-            }
-          />
-          <AvatarFallback className="bg-emerald-600 text-white font-bold">
-            {(user?.name || "NU").slice(0, 2).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
+    <div className="profile-page mx-auto w-full max-w-[520px] md:max-w-[680px] px-4 md:px-6 pb-28 pt-4 bg-white">
+      {/* Top: Profile Summary */}
+      <div className="flex items-center gap-4 py-3 md:py-4 border-b border-slate-100 mb-4">
+        <div className="relative">
+          <Avatar className="h-16 w-16 ring-2 ring-emerald-100">
+            <AvatarImage
+              src={
+                user?.avatar ||
+                (user?.name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` : "")
+              }
+            />
+            <AvatarFallback className="bg-emerald-600 text-white font-bold">
+              {(user?.name || "NU").slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
 
-        <Button
-          size="icon"
-          variant="secondary"
-          className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full border bg-white text-emerald-700 hover:bg-emerald-50 active:scale-[.97]"
-          onClick={handleEditProfileOpen}
-        >
-          <Pencil className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {/* Text column */}
-      <div className="min-w-0 flex-1">
-        <h1 className="h1-strong truncate">{user?.name || "New User"}</h1>
-        <div className="body mt-0.5 flex items-center gap-2 text-slate-700">
-          <Mail className="h-4 w-4 shrink-0" />
-          <span className="truncate">{user?.email}</span>
+          <Button
+            size="icon"
+            variant="secondary"
+            className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full border bg-white text-emerald-700 hover:bg-emerald-50 active:scale-[.97]"
+            onClick={handleEditProfileOpen}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
         </div>
-        {user?.mobile && (
-          <div className="body text-slate-700 truncate">{user.mobile}</div>
-        )}
+
+        {/* Text column */}
+        <div className="min-w-0 flex-1">
+          <h1 className="h1-strong truncate">{user?.name || "New User"}</h1>
+          <div className="body mt-0.5 flex items-center gap-2 text-slate-700">
+            <Mail className="h-4 w-4 shrink-0" />
+            <span className="truncate">{user?.email}</span>
+          </div>
+          {user?.mobile && <div className="body text-slate-700 truncate">{user.mobile}</div>}
+        </div>
       </div>
-    </div>
 
-      {/* ---- Sections (white background, minimal borders) ---- */}
-
+      {/* ---- Sections ---- */}
       <Section
         icon={<Home className="h-5 w-5 text-emerald-700" />}
         title={t("My Addresses")}
@@ -329,7 +330,7 @@ export default function ProfilePage() {
         action={
           <Button
             size="sm"
-            className="bg-emerald-600 hover:bg-emerald-700 active:scale-[.98]"
+            className="btn-primary-emerald !font-bold"
             onClick={(e) => {
               e.stopPropagation();
               setEditingAddress(null);
@@ -347,7 +348,7 @@ export default function ProfilePage() {
             addresses.map((addr) => (
               <motion.button
                 whileHover={{ y: -1 }}
-                className={`w-full text-left rounded-xl border p-3 shadow-sm transition ${
+                className={`w-full text-left rounded-xl border p-3.5 shadow-sm transition ${
                   addr.isDefault ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white"
                 }`}
                 key={addr.id}
@@ -371,7 +372,7 @@ export default function ProfilePage() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="hover:bg-slate-100"
+                      className="btn-ghost-soft"
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditingAddress(addr);
@@ -435,7 +436,7 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 </div>
-                <Button size="icon" variant="ghost" className="hover:bg-slate-100" onClick={() => handleCardEdit(card)}>
+                <Button size="icon" variant="ghost" className="btn-ghost-soft" onClick={() => handleCardEdit(card)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
               </div>
@@ -447,7 +448,7 @@ export default function ProfilePage() {
             <div className="font-bold text-emerald-700">GoDavaii Money: ₹240</div>
           </div>
 
-          <Button variant="outline" className="w-fit hover:bg-slate-50" onClick={handleCardAdd}>
+          <Button variant="outline" className="btn-outline-soft !font-bold w-fit" onClick={handleCardAdd}>
             <Plus className="h-4 w-4 mr-1" />
             {t("Add New Card")}
           </Button>
@@ -457,7 +458,7 @@ export default function ProfilePage() {
         <Dialog open={cardDialog} onOpenChange={setCardDialog}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>{editingCard ? "Edit Card" : "Add Card"}</DialogTitle>
+              <DialogTitle> {editingCard ? "Edit Card" : "Add Card"} </DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               <div className="flex items-center gap-3">
@@ -471,16 +472,18 @@ export default function ProfilePage() {
                     maxLength={19}
                     placeholder="1234 5678 9012 3456"
                     disabled={editingCard !== null}
+                    className="gd-input"
                   />
                 </div>
               </div>
               <div className="grid gap-1.5">
                 <Label>Name on Card</Label>
-                <Input value={cardForm.name} onChange={(e) => handleCardFormChange("name", e.target.value)} />
+                <Input className="gd-input" value={cardForm.name} onChange={(e) => handleCardFormChange("name", e.target.value)} />
               </div>
               <div className="grid gap-1.5">
                 <Label>Expiry (MM/YY)</Label>
                 <Input
+                  className="gd-input"
                   value={cardForm.expiry}
                   onChange={(e) => {
                     let v = e.target.value.replace(/[^\d/]/g, "").slice(0, 5);
@@ -492,8 +495,8 @@ export default function ProfilePage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setCardDialog(false)}>Cancel</Button>
-              <Button onClick={handleCardSave} className="bg-emerald-600 hover:bg-emerald-700">Save</Button>
+              <Button variant="ghost" className="btn-ghost-soft !font-bold" onClick={() => setCardDialog(false)}>Cancel</Button>
+              <Button onClick={handleCardSave} className="btn-primary-emerald !font-bold">Save</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -508,7 +511,7 @@ export default function ProfilePage() {
           <Button
             size="sm"
             variant="outline"
-            className="hover:bg-slate-50"
+            className="btn-outline-soft !font-bold"
             onClick={(e) => {
               e.stopPropagation();
               navigate("/orders");
@@ -526,7 +529,7 @@ export default function ProfilePage() {
               <motion.div
                 whileHover={{ y: -1 }}
                 key={order._id || order.id}
-                className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm cursor-pointer"
+                className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm cursor-pointer"
                 onClick={() => setOrderDetail(order)}
               >
                 <div className="font-semibold text-slate-900">
@@ -540,7 +543,7 @@ export default function ProfilePage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="mt-2 hover:bg-slate-50"
+                  className="mt-2 btn-outline-soft !font-bold"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleOrderAgain(order);
@@ -577,7 +580,7 @@ export default function ProfilePage() {
                 {typeof orderDetail.details === "string" && <div>Details: {orderDetail.details}</div>}
                 <div>Status: {orderDetail.status}</div>
                 <div>Date: {orderDetail.createdAt}</div>
-                <Button className="mt-2 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleOrderAgain(orderDetail)}>
+                <Button className="mt-2 btn-primary-emerald !font-bold" onClick={() => handleOrderAgain(orderDetail)}>
                   Order Again
                 </Button>
               </div>
@@ -617,7 +620,7 @@ export default function ProfilePage() {
         <div className="mt-1 space-y-4">
           <Row label={t("Language")}>
             <Select value={language} onValueChange={handleLanguageChange}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="gd-input h-10 w-full rounded-xl !font-bold">
                 <SelectValue placeholder="Choose" />
               </SelectTrigger>
               <SelectContent>
@@ -629,7 +632,7 @@ export default function ProfilePage() {
 
           <Row label={t("Theme")}>
             <Select value={mode} onValueChange={handleThemeChange}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="gd-input h-10 w-full rounded-xl !font-bold">
                 <SelectValue placeholder="Choose" />
               </SelectTrigger>
               <SelectContent>
@@ -652,15 +655,15 @@ export default function ProfilePage() {
           <div>
             <div className="mb-2 text-sm font-bold text-slate-900">Account Settings</div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" className="hover:bg-slate-50" onClick={() => setChangePassOpen(true)}>
+              <Button variant="outline" className="btn-outline-soft !font-bold" onClick={() => setChangePassOpen(true)}>
                 <Lock className="h-4 w-4 mr-2" /> Change Password
               </Button>
-              <Button variant="outline" className="hover:bg-slate-50" onClick={() => setChangeEmailOpen(true)}>
+              <Button variant="outline" className="btn-outline-soft !font-bold" onClick={() => setChangeEmailOpen(true)}>
                 <Mail className="h-4 w-4 mr-2" /> Change Email
               </Button>
               <Button
                 variant="outline"
-                className="text-red-600 border-red-200 hover:bg-red-50"
+                className="btn-danger-outline !font-bold"
                 onClick={() => setDeleteOpen(true)}
               >
                 <Trash className="h-4 w-4 mr-2" /> Delete Account
@@ -702,7 +705,8 @@ export default function ProfilePage() {
         onToggle={() => toggleSection("pharmacist")}
       >
         <div className="mt-1 flex flex-col sm:flex-row gap-2">
-          <Button className="min-w-[220px] btn-primary-emerald"
+          <Button
+            className="min-w-[220px] btn-primary-emerald !font-bold"
             onClick={() => {
               if (localStorage.getItem("pharmacyToken")) {
                 navigate("/pharmacy/dashboard");
@@ -713,9 +717,13 @@ export default function ProfilePage() {
           >
             {t("Go to Pharmacist Dashboard")}
           </Button>
-          <Button variant="outline" className="min-w-[220px] btn-outline-soft font-bold" onClick={() => navigate("/pharmacy/register")}>
-  {t("Register as Pharmacist")}
-</Button>
+          <Button
+            variant="outline"
+            className="min-w-[220px] btn-outline-soft !font-bold"
+            onClick={() => navigate("/pharmacy/register")}
+          >
+            {t("Register as Pharmacist")}
+          </Button>
         </div>
       </Section>
 
@@ -727,7 +735,7 @@ export default function ProfilePage() {
       >
         <div className="mt-1 flex flex-col sm:flex-row gap-2">
           <Button
-            className="min-w-[220px] bg-emerald-600 hover:bg-emerald-700 active:scale-[.98]"
+            className="min-w-[220px] btn-primary-emerald !font-bold"
             onClick={() => {
               if (localStorage.getItem("deliveryToken")) {
                 navigate("/delivery/dashboard");
@@ -738,7 +746,11 @@ export default function ProfilePage() {
           >
             Go to Delivery Dashboard
           </Button>
-          <Button variant="outline" className="min-w-[220px] hover:bg-slate-50" onClick={() => navigate("/delivery/register")}>
+          <Button
+            variant="outline"
+            className="min-w-[220px] btn-outline-soft !font-bold"
+            onClick={() => navigate("/delivery/register")}
+          >
             Register as Delivery Partner
           </Button>
         </div>
@@ -751,10 +763,10 @@ export default function ProfilePage() {
         onToggle={() => toggleSection("support")}
       >
         <div className="mt-1 flex items-center gap-2">
-          <Button variant="outline" className="hover:bg-slate-50" onClick={() => setSupportDialog(true)}>
+          <Button variant="outline" className="btn-outline-soft !font-bold" onClick={() => setSupportDialog(true)}>
             Raise Ticket
           </Button>
-          <Button variant="ghost" className="hover:bg-slate-50" onClick={() => setChatSupportOpen(true)}>
+          <Button variant="ghost" className="btn-ghost-soft !font-bold" onClick={() => setChatSupportOpen(true)}>
             Contact Support
           </Button>
         </div>
@@ -771,9 +783,9 @@ export default function ProfilePage() {
             Refer friends and earn ₹50 GoDavaii Money on their first order!
           </div>
           <div className="flex items-center gap-2">
-            <Input value={referralCode} readOnly className="w-[260px]" />
+            <Input className="w-[260px] gd-input" value={referralCode} readOnly />
             <Button
-              className="bg-emerald-600 hover:bg-emerald-700 active:scale-[.98]"
+              className="btn-primary-emerald !font-bold"
               onClick={() => {
                 navigator.clipboard.writeText(referralCode);
                 setSnackbar({ open: true, message: "Referral link copied!", severity: "success" });
@@ -788,7 +800,7 @@ export default function ProfilePage() {
       <div className="flex justify-center mt-6">
         <Button
           variant="outline"
-          className="border-red-300 text-red-600 hover:bg-red-50 px-6 text-base active:scale-[.98]"
+          className="btn-danger-outline !font-bold px-6 text-base"
           onClick={handleLogout}
         >
           <LogOut className="h-4 w-4 mr-2" />
@@ -836,7 +848,7 @@ export default function ProfilePage() {
               <Button
                 variant="secondary"
                 onClick={() => fileInputRef.current?.click()}
-                className="bg-slate-100 text-slate-900 hover:bg-slate-200"
+                className="bg-slate-100 text-slate-900 hover:bg-slate-200 !font-bold"
               >
                 <Camera className="h-4 w-4 mr-2" />
                 Change Avatar
@@ -845,27 +857,45 @@ export default function ProfilePage() {
             </div>
 
             <Field label="Name">
-              <Input value={editData.name} onChange={(e) => setEditData({ ...editData, name: e.target.value })} required />
+              <Input className="gd-input" value={editData.name} onChange={(e) => setEditData({ ...editData, name: e.target.value })} required />
             </Field>
 
             <Field label="Email">
-              <Input value={editData.email} onChange={(e) => setEditData({ ...editData, email: e.target.value })} required />
+              <Input className="gd-input" value={editData.email} onChange={(e) => setEditData({ ...editData, email: e.target.value })} required />
             </Field>
 
             <Field label="Mobile">
-              <Input value={editData.mobile} disabled />
+              <div className="flex gap-2">
+                <Input
+                  className="gd-input flex-1"
+                  value={editData.mobile}
+                  onChange={(e) => setEditData({ ...editData, mobile: e.target.value })}
+                  disabled={!canEditMobile}
+                  placeholder="Add your mobile number"
+                />
+                {mobileLocked && (
+                  <Button type="button" variant="outline" className="btn-outline-soft !font-bold">
+                    Change
+                  </Button>
+                )}
+              </div>
+              {!mobileLocked && (
+                <div className="mt-1 text-xs text-slate-500">
+                  You can add or edit your mobile now. When phone login launches, we’ll ask you to verify it.
+                </div>
+              )}
             </Field>
 
             <Field label="DOB">
-              <Input type="date" value={editData.dob} onChange={(e) => setEditData({ ...editData, dob: e.target.value })} required />
+              <Input className="gd-input" type="date" value={editData.dob} onChange={(e) => setEditData({ ...editData, dob: e.target.value })} required />
             </Field>
           </div>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditDialog(false)} disabled={!editData.name || !editData.email || !editData.dob}>
+            <Button variant="ghost" className="btn-ghost-soft !font-bold" onClick={() => setEditDialog(false)} disabled={!editData.name || !editData.email || !editData.dob}>
               Cancel
             </Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleProfileSave} disabled={!editData.name || !editData.email || !editData.dob}>
+            <Button className="btn-primary-emerald !font-bold" onClick={handleProfileSave} disabled={!editData.name || !editData.email || !editData.dob}>
               Save
             </Button>
           </DialogFooter>
@@ -879,12 +909,12 @@ export default function ProfilePage() {
             <DialogTitle>Raise Ticket</DialogTitle>
           </DialogHeader>
           <Field label="Message">
-            <Input value={supportMsg} onChange={(e) => setSupportMsg(e.target.value)} placeholder="Type your issue..." />
+            <Input className="gd-input" value={supportMsg} onChange={(e) => setSupportMsg(e.target.value)} placeholder="Type your issue..." />
           </Field>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setSupportDialog(false)}>Cancel</Button>
+            <Button variant="ghost" className="btn-ghost-soft !font-bold" onClick={() => setSupportDialog(false)}>Cancel</Button>
             <Button
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="btn-primary-emerald !font-bold"
               onClick={() => {
                 if (!supportMsg.trim()) {
                   setSnackbar({ open: true, message: "Please enter a message.", severity: "error" });
@@ -911,19 +941,17 @@ export default function ProfilePage() {
 function Section({ icon, title, expanded, onToggle, action, children }) {
   return (
     <div className="section">
-      {/* HEADER outside the card */}
+      {/* Header (outside card) */}
       <button onClick={onToggle} className="w-full group section-head">
         <div className="icon-tile">{icon}</div>
         <div className="flex-1 text-left">
           <div className="h2-strong">{title}</div>
         </div>
         {action}
-        <ChevronDown
-          className={`h-5 w-5 text-slate-500 transition-transform ${expanded ? "rotate-180" : ""}`}
-        />
+        <ChevronDown className={`h-5 w-5 text-slate-500 transition-transform ${expanded ? "rotate-180" : ""}`} />
       </button>
 
-      {/* CONTENT inside a clean white card */}
+      {/* Content (inside card) */}
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
@@ -951,11 +979,12 @@ function ToggleRow({ label, checked, onChange }) {
   );
 }
 
+/** Grid row so labels and controls align perfectly */
 function Row({ label, children }) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="grid grid-cols-[120px_1fr] items-center gap-3">
       <div className="text-sm font-semibold text-slate-900">{label}</div>
-      {children}
+      <div className="w-full">{children}</div>
     </div>
   );
 }
