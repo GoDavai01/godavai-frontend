@@ -1,27 +1,47 @@
-"use client";
+// src/pages/PharmaciesNearYou.js
+// "use client";
 
-import React, { useEffect, useState } from "react";
-import { Card, CardContent } from "../components/ui/card";
+import React, { useEffect, useRef, useState } from "react";
+import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
-import { Dialog, DialogContent } from "../components/ui/dialog";
 import { useLocation } from "../context/LocationContext";
 import { useNavigate } from "react-router-dom";
-import { Pill, MapPin, UploadCloud, CheckCircle, Timer } from "lucide-react";
+import { CheckCircle, Timer, UploadCloud, ChevronUp, X } from "lucide-react";
 import PrescriptionUploadModal from "../components/PrescriptionUploadModal";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
+// Render Home behind as the background (non-interactive)
+import Home from "../components/Home";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+const DEEP = "#0f6e51";
 
 export default function PharmaciesNearYou() {
   const [pharmacies, setPharmacies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [canDeliver, setCanDeliver] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
+
+  // ----- SNAP SYSTEM (translateY, not height) -----
+  const [vh, setVh] = useState(typeof window !== "undefined" ? window.innerHeight : 800);
+  const y = useMotionValue(0);
+  const HALF = Math.round(vh * 0.44); // how far down the full-height sheet is translated
+  const FULL = Math.round(vh * 0.08); // small top gutter when expanded
+
+  // start at HALF sheet
+  useEffect(() => {
+    y.set(HALF);
+    // keep constraints updated on resize
+    const onResize = () => setVh(window.innerHeight);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+    // eslint-disable-next-line
+  }, []);
+
+  // ----- DATA (UNCHANGED LOGIC) -----
   const navigate = useNavigate();
   const { currentAddress } = useLocation();
 
-  // Fetch pharmacies when address changes
   useEffect(() => {
     if (!currentAddress?.lat || !currentAddress?.lng) {
       setLoading(false);
@@ -30,176 +50,220 @@ export default function PharmaciesNearYou() {
     }
     setLoading(true);
     fetch(`${API_BASE_URL}/api/pharmacies/nearby?lat=${currentAddress.lat}&lng=${currentAddress.lng}`)
-      .then(res => res.json())
-      .then(data => setPharmacies(data))
+      .then((r) => r.json())
+      .then((d) => setPharmacies(Array.isArray(d) ? d : []))
       .catch(() => setPharmacies([]))
       .finally(() => setLoading(false));
   }, [currentAddress]);
 
-  // Check if delivery is available
   useEffect(() => {
     if (!currentAddress?.lat || !currentAddress?.lng) {
       setCanDeliver(false);
       return;
     }
     fetch(`${API_BASE_URL}/api/delivery/active-partner-nearby?lat=${currentAddress.lat}&lng=${currentAddress.lng}`)
-      .then(res => res.json())
-      .then(data => setCanDeliver(!!data.activePartnerExists))
+      .then((r) => r.json())
+      .then((d) => setCanDeliver(!!d.activePartnerExists))
       .catch(() => setCanDeliver(false));
   }, [currentAddress]);
 
+  // Optional: auto-open to FULL when many pharmacies
+  useEffect(() => {
+    if (!loading && pharmacies.length > 4) {
+      animate(y, FULL, { type: "spring", stiffness: 380, damping: 34 });
+    }
+  }, [loading, pharmacies.length, FULL, y]);
+
+  // Snap helper
+  const snapTo = (target) => animate(y, target, { type: "spring", stiffness: 380, damping: 34 });
+
+  // Drag end => snap to closest (FULL or HALF)
+  const onDragEnd = (_, info) => {
+    const current = y.get() + info.offset.y;
+    const toFullDist = Math.abs(current - FULL);
+    const toHalfDist = Math.abs(current - HALF);
+    snapTo(toFullDist < toHalfDist ? FULL : HALF);
+  };
+
   return (
-    <div className="bg-gradient-to-br from-[#f9fafb] to-[#eafcf4] min-h-screen pb-24 pt-4">
-      <div className="max-w-md mx-auto px-2">
-        {/* Offer banner */}
-        <motion.div
-          initial={{ y: -30, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="flex items-center gap-2 bg-[#eafcf4] text-[#13C0A2] font-extrabold text-base rounded-xl px-4 py-3 mb-4 shadow-sm mx-2"
-        >
-          <span className="text-[#FFD43B] text-2xl">⚡</span>
-          <span>
-            Flat 15% OFF on health supplements! Use code <b>HEALTH15</b>
-          </span>
-        </motion.div>
-
-        {/* Heading */}
-        <div className="flex items-center gap-2 mb-1 mx-2">
-          <Pill className="text-[#FFD43B] w-7 h-7" />
-          <span className="font-extrabold text-xl tracking-tight text-[#1199a6]">
-            Pharmacies Near You
-          </span>
-          {currentAddress?.formatted && (
-            <Badge
-              variant="secondary"
-              className="bg-[#13C0A2] text-white ml-2 font-bold text-xs rounded-lg px-2 pointer-events-none select-none"
-            >
-              {currentAddress.formatted.length > 23
-                ? currentAddress.formatted.slice(0, 23) + "..."
-                : currentAddress.formatted}
-            </Badge>
-          )}
-        </div>
-
-        <div className="border-b border-gray-100 my-2" />
-
-        {/* Delivery warning */}
-        {!canDeliver && (
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-red-50 text-red-700 p-3 rounded-lg my-3 text-center font-bold text-sm flex flex-col items-center"
-          >
-            <span className="text-2xl mb-1">⛔</span>
-            Sorry, no delivery partner is available at your location right now.
-            <br />
-            Please try again soon.
-          </motion.div>
-        )}
-
-        {/* Pharmacy list */}
-        <div className="px-2 pt-1">
-          {loading ? (
-            <div className="text-gray-400 mt-10 text-center animate-pulse">
-              Loading pharmacies...
-            </div>
-          ) : pharmacies.length === 0 ? (
-            <div className="text-gray-400 mt-10 text-center">
-              No pharmacies found near your location.
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4">
-              <AnimatePresence>
-                {pharmacies.map((pharmacy) => (
-                  <motion.div
-                    key={pharmacy._id}
-                    initial={{ y: 20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ type: "spring", stiffness: 140, damping: 20 }}
-                  >
-                    <Card
-                      className={`flex items-center gap-4 rounded-2xl shadow-md p-4 bg-white cursor-pointer transition hover:shadow-xl hover:bg-gray-50 ${
-                        canDeliver ? "opacity-100" : "opacity-60 pointer-events-none"
-                      }`}
-                      onClick={() => canDeliver && navigate(`/medicines/${pharmacy._id}`)}
-                    >
-                      {/* Pharmacy icon */}
-                      <div className="w-14 h-14 flex items-center justify-center rounded-xl bg-[#e8faf7] mr-2 shrink-0">
-                        <img
-                          src="/pharmacy-icon.png"
-                          alt="Pharmacy"
-                          className="w-8 h-8 object-contain"
-                        />
-                      </div>
-                      {/* Pharmacy details */}
-                      <div className="flex-1 min-w-0">
-                        <div
-                          className="font-bold text-[#138a72] text-base truncate"
-                          title={pharmacy.name}
-                        >
-                          {pharmacy.name}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-0.5 truncate">
-                          {pharmacy.address?.area || pharmacy.area}
-                        </div>
-                        <div className="flex gap-2 mt-1">
-                          <Badge className="bg-[#13C0A2]/10 text-[#13C0A2] font-bold text-xs">
-                            <Timer className="w-4 h-4 mr-1 inline-block" /> 13–29 min
-                          </Badge>
-                          <Badge className="bg-[#FFD43B]/10 text-[#f49f00] font-bold text-xs">
-                            <CheckCircle className="w-4 h-4 mr-1 inline-block" /> Verified
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-1 items-end">
-                        <div className="flex items-center gap-1 text-xs text-yellow-500 font-bold">
-                          {/* Simple rating star, can be upgraded with real shadcn star rating */}
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                            viewBox="0 0 24 24" className="inline-block">
-                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-                          </svg>
-                          {pharmacy.rating || 4.5}
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="default"
-                          className="bg-[#328439] text-white rounded-full px-4 py-1 font-bold text-sm shadow-none hover:bg-[#146b2d]"
-                          disabled={!canDeliver}
-                          onClick={e => {
-                            e.stopPropagation();
-                            if (canDeliver) navigate(`/medicines/${pharmacy._id}`);
-                          }}
-                        >
-                          View
-                        </Button>
-                      </div>
-                    </Card>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
-        </div>
+    <div className="relative min-h-screen">
+      {/* BACKGROUND = Home (non-interactive) */}
+      <div className="fixed inset-0 -z-10 pointer-events-none overflow-hidden bg-home-preview">
+        <Home />
+        {/* Hide Home’s floating CTA by aria-label so it never shows behind the sheet */}
+        <style>{`
+          .bg-home-preview [aria-label="Upload Prescription"] { display: none !important; }
+        `}</style>
+        {/* Strong bottom mask so Home's bottom nav never leaks through */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[220px] bg-gradient-to-t from-white via-white/95 to-white/0" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-white to-transparent" />
       </div>
 
-      {/* Floating action button: Upload Prescription */}
-      {!uploadOpen && (
-        <Button
-          variant="outline"
-          size="lg"
-          className="fixed bottom-32 right-5 z-50 bg-[#FFD43B] text-[#1199a6] font-bold shadow-lg px-6 py-3 rounded-full flex items-center gap-2 hover:bg-yellow-400"
-          onClick={() => setUploadOpen(true)}
-        >
-          <UploadCloud className="w-6 h-6" />
-          Upload Prescription
-        </Button>
-      )}
-      <PrescriptionUploadModal
-        open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        userAddress={currentAddress}
-      />
+      {/* BOTTOM SHEET – full height, moved by translateY only */}
+      <AnimatePresence initial={false}>
+        <motion.div
+          key="pharmacy-sheet"
+          drag="y"
+          dragConstraints={{ top: FULL, bottom: HALF }}
+          dragElastic={0.06}
+          dragMomentum={false} // no overshoot jitter
+          style={{
+            y, // <- smooth snap between HALF and FULL
+            height: "100vh",
+          }}
+          onDragEnd={onDragEnd}
+          className="fixed left-0 right-0 bottom-0 mx-auto max-w-md z-[1200] bg-white"
+          // tall sheet with rounded top and shadow
+          >
+          <div
+            className="absolute inset-x-0 top-0"
+            style={{
+              borderTopLeftRadius: 28,
+              borderTopRightRadius: 28,
+              boxShadow: "0 -18px 48px rgba(0,0,0,.18)",
+              height: 28,
+              background: "#fff",
+            }}
+          />
+          <div className="relative h-full flex flex-col">
+            {/* Handle + top row */}
+            <div className="pt-3 px-4">
+              <div className="mx-auto h-1.5 w-12 rounded-full bg-neutral-200" />
+              <div className="mt-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11.5px] font-bold"
+                    style={{ color: DEEP }}
+                  >
+                    {pharmacies.length} pharmacies
+                  </span>
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11.5px] font-bold"
+                    style={{ color: DEEP }}
+                  >
+                    <Timer className="h-3.5 w-3.5" /> ≤ 30 min
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    onClick={() => snapTo(y.get() <= (FULL + HALF) / 2 ? HALF : FULL)}
+                  >
+                    <ChevronUp className={`h-5 w-5 transition ${y.get() <= (FULL + HALF) / 2 ? "rotate-180" : ""}`} />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => window.history.back()}>
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t mt-2" />
+
+            {/* SCROLLER (flex-1) */}
+            <div className="flex-1 overflow-y-auto px-4 pt-3 pb-24">
+              {!canDeliver && (
+                <div className="bg-red-50 text-red-700 font-bold text-[13.5px] px-3 py-2 rounded-xl mb-3 text-center">
+                  ⛔ Sorry, no delivery partner is available at your location right now. Please try again soon.
+                </div>
+              )}
+
+              {loading ? (
+                <div className="mt-10 text-center text-neutral-400 animate-pulse">Loading pharmacies…</div>
+              ) : pharmacies.length === 0 ? (
+                <div className="mt-10 text-center text-neutral-400">No pharmacies found near your location.</div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {pharmacies.map((pharmacy) => (
+                    <Card
+                      key={pharmacy._id}
+                      className={`p-4 rounded-2xl bg-white shadow-md hover:shadow-xl transition cursor-pointer ${
+                        canDeliver ? "" : "opacity-60 pointer-events-none"
+                      }`}
+                      style={{ borderColor: `${DEEP}14` }}
+                      onClick={() => canDeliver && navigate(`/medicines/${pharmacy._id}`)}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div
+                          className="h-14 w-14 grid place-items-center rounded-xl shrink-0"
+                          style={{ background: `${DEEP}0F`, border: `1px solid ${DEEP}22` }}
+                        >
+                          <img src="/pharmacy-icon.png" alt="Pharmacy" className="h-8 w-8 object-contain" />
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="font-extrabold text-[15.5px] truncate" style={{ color: DEEP }} title={pharmacy.name}>
+                            {pharmacy.name}
+                          </div>
+                          <div className="text-xs text-neutral-500 truncate">
+                            {pharmacy.address?.area || pharmacy.area || "--"}
+                          </div>
+                          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                            <Badge className="font-bold text-[11px]" style={{ background: `${DEEP}10`, color: DEEP, borderColor: `${DEEP}30` }}>
+                              <Timer className="w-4 h-4 mr-1 inline-block" />
+                              13–29 min
+                            </Badge>
+                            <Badge className="font-bold text-[11px]" style={{ background: "#fff7e6", color: "#b7791f", borderColor: "#facc15" }}>
+                              <CheckCircle className="w-4 h-4 mr-1 inline-block" />
+                              Verified
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1">
+                          <div className="flex items-center gap-1 text-xs font-bold text-yellow-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                            </svg>
+                            {pharmacy.rating || 4.5}
+                          </div>
+                          <Button
+                            size="sm"
+                            className="rounded-full font-bold shadow-none"
+                            style={{ backgroundColor: DEEP, color: "white" }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (canDeliver) navigate(`/medicines/${pharmacy._id}`);
+                            }}
+                          >
+                            View
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* STICKY SHEET FOOTER (CTA is always at bottom inside the sheet) */}
+            <div className="absolute inset-x-0 bottom-0">
+              <div className="pointer-events-none h-20 bg-gradient-to-t from-white via-white/90 to-transparent" />
+              <div className="px-5 pb-[max(12px,env(safe-area-inset-bottom))] flex justify-end">
+                {!uploadOpen && (
+                  <button
+                    type="button"
+                    aria-label="Upload Prescription"
+                    onClick={() => setUploadOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-full pl-3 pr-4 py-2.5 shadow-[0_10px_24px_rgba(16,185,129,0.35)]"
+                    style={{ background: DEEP, color: "white" }}
+                  >
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-[color:var(--pillo-active-text)] ring-1 ring-white/70">
+                      <UploadCloud className="h-4.5 w-4.5" />
+                    </span>
+                    <span className="text-[15px] font-bold">Upload Prescription</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Modal (unchanged) */}
+      <PrescriptionUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} userAddress={currentAddress} />
     </div>
   );
 }

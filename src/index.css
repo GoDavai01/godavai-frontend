@@ -97,3 +97,7 @@ html.gd-welcome [style*="gradient"] { background-image: none !important; }
   button { font-size: 16px; font-weight: 700; }
   * { -webkit-tap-highlight-color: rgba(0,0,0,0); }
 }
+
+/* hide scrollbars for horizontal chip scrollers / rails */
+.no-scrollbar::-webkit-scrollbar{ display:none; }
+.no-scrollbar{ -ms-overflow-style:none; scrollbar-width:none; }

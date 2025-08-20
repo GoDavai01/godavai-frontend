@@ -1,11 +1,14 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 function GoDavaiiWordmark({ className = "" }) {
   return (
     <h1
-      className={["text-white font-black leading-none tracking-tight",
-                  "text-[56px] md:text-[88px]", className].join(" ")}
+      className={[
+        "text-white font-black leading-none tracking-tight",
+        "text-[56px] md:text-[88px]",
+        className,
+      ].join(" ")}
       style={{ fontFamily: "Inter, Montserrat, system-ui, sans-serif" }}
     >
       Godavaii
@@ -15,6 +18,17 @@ function GoDavaiiWordmark({ className = "" }) {
 
 export default function WelcomePage() {
   const navigate = useNavigate();
+
+  // Mark the document so global components (e.g., ViewCartBar) can hide here.
+  useEffect(() => {
+    document.documentElement.classList.add("gd-welcome");
+    document.body.classList.add("welcome-solid-bg");
+    return () => {
+      document.documentElement.classList.remove("gd-welcome");
+      document.body.classList.remove("welcome-solid-bg");
+    };
+  }, []);
+
   const handleGetStarted = () => {
     const token = localStorage.getItem("token");
     navigate(token ? "/home" : "/otp-login");
@@ -23,7 +37,7 @@ export default function WelcomePage() {
   return (
     <div
       className="min-h-screen w-full flex flex-col items-center justify-between text-white"
-      style={{ background: "#0E5E43" }}  
+      style={{ background: "#0E5E43" }}
     >
       <div className="flex flex-col flex-1 items-center justify-center w-full px-6">
         <GoDavaiiWordmark className="mt-32 mb-6" />

@@ -1,4 +1,3 @@
-// src/components/ViewCartBar.js
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
@@ -8,6 +7,12 @@ import { Button } from "../components/ui/button";
 import CartSheet from "./cart/CartSheet";
 
 const HIDDEN_ROUTES = ["/profile", "/checkout", "/cart"];
+
+// Also hide on welcome & auth entry points.
+// If your welcome route is "/", this covers it. If you use "/welcome", that’s covered too.
+const HIDE_EXACT = ["/", "/otp-login", "/login", "/register"];
+const HIDE_PREFIXES = ["/welcome"]; // add more prefixes if needed, e.g., "/onboarding"
+
 const BOTTOM_NAV_HEIGHT = 72;
 const GAP_ABOVE_NAV = 8;
 const BOTTOM_OFFSET = `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px) + ${GAP_ABOVE_NAV}px)`;
@@ -22,22 +27,37 @@ export default function ViewCartBar() {
 
   const [open, setOpen] = useState(false);
 
-  const total = cart.reduce((sum, m) => sum + m.price * m.quantity, 0);
+  const total = cart.reduce((sum, m) => {
+    const price =
+      Number(m?.price ?? m?.mrp ?? m?.sellingPrice ?? m?.salePrice ?? 0) || 0;
+    const qty = Number(m?.quantity ?? m?.qty ?? 1) || 1;
+    return sum + price * qty;
+  }, 0);
 
-  // same multi-pharmacy check as CartPage
   const cartPharmacyId =
     typeof selectedPharmacy === "object" ? selectedPharmacy?._id : selectedPharmacy;
   const multiPharmacy = cart.some((item) => {
-    const id = typeof item.pharmacy === "object" ? item.pharmacy?._id : item.pharmacy;
+    const id =
+      typeof item.pharmacy === "object" ? item.pharmacy?._id : item.pharmacy;
     return item.pharmacy && id !== cartPharmacyId;
   });
 
-  if (HIDDEN_ROUTES.includes(location.pathname) || !cart.length) return null;
+  // Route-based hiding
+  const onHiddenRoute =
+    HIDDEN_ROUTES.includes(location.pathname) ||
+    HIDE_EXACT.includes(location.pathname) ||
+    HIDE_PREFIXES.some((p) => location.pathname.startsWith(p));
+
+  // Skin-based hiding (defensive: hide if welcome skin is applied)
+  const onWelcomeSkin =
+    typeof document !== "undefined" &&
+    (document.documentElement.classList.contains("gd-welcome") ||
+      document.body.classList.contains("welcome-solid-bg"));
+
+  if (onHiddenRoute || onWelcomeSkin || !cart.length) return null;
 
   // Handlers used by the sheet (NO flow change)
-  const onChangePharmacy = () => {
-    navigate("/cart");
-  };
+  const onChangePharmacy = () => navigate("/cart");
   const onClearCart = () => {
     clearCart();
     setSelectedPharmacy?.(null);
@@ -107,7 +127,7 @@ export default function ViewCartBar() {
         )}
       </AnimatePresence>
 
-      {/* Bottom sheet — now with handlers passed through */}
+      {/* Bottom sheet */}
       <CartSheet
         open={open}
         onOpenChange={setOpen}

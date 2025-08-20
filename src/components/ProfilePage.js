@@ -618,30 +618,33 @@ export default function ProfilePage() {
         onToggle={() => toggleSection("personalization")}
       >
         <div className="mt-1 space-y-4">
-          <Row label={t("Language")}>
-            <Select value={language} onValueChange={handleLanguageChange}>
-              <SelectTrigger className="gd-input h-10 w-full rounded-xl !font-bold">
-                <SelectValue placeholder="Choose" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="hi">Hindi</SelectItem>
-              </SelectContent>
-            </Select>
-          </Row>
+          {/* Language */}
+<Row label={t("Language")}>
+  <Select value={language} onValueChange={handleLanguageChange}>
+  <SelectTrigger center className="gd-input h-10 w-full rounded-xl !font-bold">
+    <SelectValue placeholder="Choose" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="en">English</SelectItem>
+    <SelectItem value="hi">Hindi</SelectItem>
+  </SelectContent>
+</Select>
+</Row>
 
-          <Row label={t("Theme")}>
-            <Select value={mode} onValueChange={handleThemeChange}>
-              <SelectTrigger className="gd-input h-10 w-full rounded-xl !font-bold">
-                <SelectValue placeholder="Choose" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Light">{t("Light")}</SelectItem>
-                <SelectItem value="Dark">{t("Dark")}</SelectItem>
-                <SelectItem value="System">{t("System")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </Row>
+{/* Theme */}
+<Row label={t("Theme")}>
+  <Select value={mode} onValueChange={handleThemeChange}>
+  <SelectTrigger center className="gd-input h-10 w-full rounded-xl !font-bold">
+    <SelectValue placeholder="Choose" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="Light">Light</SelectItem>
+    <SelectItem value="Dark">Dark</SelectItem>
+    <SelectItem value="System">System</SelectItem>
+  </SelectContent>
+</Select>
+</Row>
+
         </div>
       </Section>
 
