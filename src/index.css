@@ -98,6 +98,49 @@ html.gd-welcome [style*="gradient"] { background-image: none !important; }
   * { -webkit-tap-highlight-color: rgba(0,0,0,0); }
 }
 
-/* hide scrollbars for horizontal chip scrollers / rails */
+/* Hide scrollbars for horizontal chip scrollers / rails */
 .no-scrollbar::-webkit-scrollbar{ display:none; }
 .no-scrollbar{ -ms-overflow-style:none; scrollbar-width:none; }
+
+/* Center the text inside shadcn Select while keeping the chevron at the right */
+.select-center { position: relative; }
+/* The built-in chevron icon gets absolutely positioned to the right */
+.select-center svg {
+  position: absolute !important;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  opacity: .6;
+}
+/* Make the selected value span fill and center */
+.select-center [data-placeholder],
+.select-center span {
+  width: 100%;
+  text-align: center;
+}
+
+/* ===== iOS Safari: stop auto-darkening of form controls in modals ===== */
+.force-light, .force-light * { color-scheme: light !important; }
+
+/* Stronger overrides for iOS (WebKit) */
+@supports (-webkit-touch-callout: none) {
+  .force-light input,
+  .force-light select,
+  .force-light textarea,
+  .force-light [role="textbox"] {
+    background-color: #fff !important;
+    color: #0B1720 !important;
+    -webkit-text-fill-color: #0B1720 !important; /* iOS autofill text */
+  }
+  .force-light input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+    -webkit-text-fill-color: #0B1720 !important;
+  }
+}
+
+/* Optional: make the base input explicitly light everywhere */
+.gd-input {
+  color: #0B1720;
+  background-color: #fff;
+}

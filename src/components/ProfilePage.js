@@ -456,7 +456,7 @@ export default function ProfilePage() {
 
         {/* Card Dialog */}
         <Dialog open={cardDialog} onOpenChange={setCardDialog}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md force-light">
             <DialogHeader>
               <DialogTitle> {editingCard ? "Edit Card" : "Add Card"} </DialogTitle>
             </DialogHeader>
@@ -557,7 +557,7 @@ export default function ProfilePage() {
         </div>
 
         <Dialog open={!!orderDetail} onOpenChange={(v) => !v && setOrderDetail(null)}>
-          <DialogContent>
+           <DialogContent className="force-light">
             <DialogHeader>
               <DialogTitle>Order Details</DialogTitle>
             </DialogHeader>
@@ -837,7 +837,7 @@ export default function ProfilePage() {
           else if (open) setEditDialog(true);
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md force-light">
           <DialogHeader>
             <DialogTitle>Edit Profile</DialogTitle>
           </DialogHeader>
@@ -907,7 +907,7 @@ export default function ProfilePage() {
 
       {/* Support ticket */}
       <Dialog open={supportDialog} onOpenChange={setSupportDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md force-light">
           <DialogHeader>
             <DialogTitle>Raise Ticket</DialogTitle>
           </DialogHeader>

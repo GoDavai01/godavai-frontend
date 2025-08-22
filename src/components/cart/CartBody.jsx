@@ -1,3 +1,4 @@
+// src/components/cart/CartBody.js
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "../../components/ui/button";
@@ -139,9 +140,15 @@ export default function CartBody({
 
       {/* CTAs */}
       <div className="flex items-center justify-end gap-3 pb-1">
-        <Button variant="ghost" onClick={onClearCart} className="text-red-500 font-extrabold">
-          CLEAR CART
+        {/* >>> BOLDER CLEAR CART <<< */}
+        <Button
+          variant="ghost"
+          onClick={onClearCart}
+          className="text-red-600 hover:text-red-700 !font-black"
+        >
+          <span className="font-black tracking-wide">CLEAR CART</span>
         </Button>
+
         <Button
           onClick={onCheckout}
           disabled={multiPharmacy}

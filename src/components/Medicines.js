@@ -3,12 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "../components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { UploadCloud, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { useCart } from "../context/CartContext";
@@ -16,11 +11,16 @@ import { useParams } from "react-router-dom";
 import PrescriptionUploadModal from "../components/PrescriptionUploadModal";
 import axios from "axios";
 
-const API_BASE_URL =
-  process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0f6e51";
 
-// image util (unchanged behaviour)
+/** Distance under the header where the two-pane section starts. */
+const TOP_OFFSET_PX = 70;
+/** Lift the upload FAB when the cart bar appears. */
+const bottomDock = (hasCart) =>
+  `calc(${hasCart ? 144 : 72}px + env(safe-area-inset-bottom,0px) + 12px)`;
+
+/** Image util */
 const getImageUrl = (img) => {
   if (!img)
     return "https://img.freepik.com/free-vector/medicine-bottle-pills-isolated_1284-42391.jpg?w=400";
@@ -29,34 +29,12 @@ const getImageUrl = (img) => {
   return img;
 };
 
-const allCategories = [
-  "All",
-  "Painkiller",
-  "Fever",
-  "Cough & Cold",
-  "Diabetes",
-  "Heart",
-  "Antibiotic",
-  "Ayurveda",
-];
-const medTypes = [
-  "All",
-  "Tablet",
-  "Syrup",
-  "Injection",
-  "Cream",
-  "Ointment",
-  "Drop",
-  "Spray",
-  "Inhaler",
-];
+const allCategories = ["All","Painkiller","Fever","Cough & Cold","Diabetes","Heart","Antibiotic","Ayurveda"];
+const medTypes      = ["All","Tablet","Syrup","Injection","Cream","Ointment","Drop","Spray","Inhaler"];
 
 export default function Medicines() {
   const { pharmacyId } = useParams();
-  const { cart, addToCart } = useCart(); // <-- use cart so we can lift the FAB
-  const dockBottom = `calc(${
-    (cart?.length || 0) > 0 ? 144 : 72
-  }px + env(safe-area-inset-bottom,0px) + 12px)`; // 72 bottom-nav; +72 when cart bar shows
+  const { cart, addToCart } = useCart();
 
   const [pharmacy, setPharmacy] = useState(null);
   const [medicines, setMedicines] = useState([]);
@@ -68,17 +46,12 @@ export default function Medicines() {
   const [selectedMed, setSelectedMed] = useState(null);
   const [uploadOpen, setUploadOpen] = useState(false);
 
-  // ---- fetch data (unchanged flow)
   useEffect(() => {
     (async () => {
       try {
-        const r = await axios.get(
-          `${API_BASE_URL}/api/pharmacies?id=${pharmacyId}`
-        );
+        const r = await axios.get(`${API_BASE_URL}/api/pharmacies?id=${pharmacyId}`);
         if (Array.isArray(r.data)) setPharmacy(r.data[0]);
-      } catch {
-        setPharmacy(null);
-      }
+      } catch { setPharmacy(null); }
     })();
   }, [pharmacyId]);
 
@@ -91,7 +64,6 @@ export default function Medicines() {
       .finally(() => setLoading(false));
   }, [pharmacyId]);
 
-  // ---- filters (unchanged logic)
   const matchCategory = (med, selected) => {
     if (selected === "All") return true;
     if (!med.category) return false;
@@ -106,22 +78,17 @@ export default function Medicines() {
   };
 
   const filteredMeds = useMemo(
-    () =>
-      medicines.filter(
-        (m) => matchCategory(m, selectedCategory) && matchType(m, selectedType)
-      ),
+    () => medicines.filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType)),
     [medicines, selectedCategory, selectedType]
   );
 
+  // Right column height; the page itself does not scroll.
+  const columnHeight = `calc(100vh - ${TOP_OFFSET_PX}px)`;
+  const rightPaddingBottom = 120;
+
   return (
-    <div
-      className="
-        min-h-screen w-full max-w-[420px] mx-auto
-        bg-[var(--pillo-page-bg,linear-gradient(180deg,#f9fbff,white))]
-        overflow-x-hidden pb-[120px] relative
-      "
-    >
-      {/* Pharmacy header */}
+    <div className="relative h-screen w-full max-w-[420px] mx-auto bg-[var(--pillo-page-bg,linear-gradient(180deg,#f9fbff,white))] overflow-hidden">
+      {/* Header */}
       <div className="px-4 pt-4">
         {pharmacy ? (
           <div className="mb-2">
@@ -137,45 +104,45 @@ export default function Medicines() {
         )}
       </div>
 
-      {/* Two-pane (Zepto/Blinkit style) */}
+      {/* Two columns */}
       <div className="px-3">
-        <div className="grid grid-cols-[90px,1fr] gap-3">
-          {/* LEFT rail — categories */}
-          <aside className="relative">
-            <div className="sticky top-2">
-              <div className="rounded-2xl bg-white/95 ring-1 ring-[var(--pillo-surface-border)] shadow-sm p-2">
-                <div
-                  className="text-[11px] font-bold mb-1"
-                  style={{ color: DEEP }}
-                >
-                  Categories
-                </div>
-                <div className="flex flex-col gap-1 max-h-[68vh] overflow-y-auto pr-1 no-scrollbar">
-                  {allCategories.map((c) => {
-                    const active = c === selectedCategory;
-                    return (
-                      <button
-                        key={c}
-                        onClick={() => setSelectedCategory(c)}
-                        className={`text-left rounded-xl px-3 py-2 text-[12px] font-bold transition ${
-                          active
-                            ? "bg-emerald-50 ring-1 ring-emerald-200"
-                            : "hover:bg-neutral-50"
-                        }`}
-                        style={{ color: active ? DEEP : "#0b3f30" }}
-                      >
-                        {c}
-                      </button>
-                    );
-                  })}
-                </div>
+        <div className="grid grid-cols-[94px,1fr] gap-3 items-start">
+          {/* LEFT rail — fills to bottom (no gap) and scrolls only when long */}
+          <aside className="sticky self-start" style={{ top: TOP_OFFSET_PX, height: columnHeight }}>
+            <div className="h-full rounded-2xl bg-white/95 ring-1 ring-[var(--pillo-surface-border)] shadow-sm p-2 flex flex-col">
+              <div className="text-[11px] font-bold mb-1" style={{ color: DEEP }}>
+                Categories
+              </div>
+              {/* Take remaining height; scroll when overflow. */}
+              <div
+                className="flex-1 flex flex-col gap-1 overflow-y-auto pr-1 no-scrollbar"
+                /* header (≈20–24px) is accounted for by flex-1 on this list */
+              >
+                {allCategories.map((c) => {
+                  const active = c === selectedCategory;
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => setSelectedCategory(c)}
+                      className={`text-left rounded-xl px-3 py-2 text-[12px] font-bold transition ${
+                        active ? "bg-emerald-50 ring-1 ring-emerald-200" : "hover:bg-neutral-50"
+                      }`}
+                      style={{ color: active ? DEEP : "#0b3f30" }}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </aside>
 
-          {/* RIGHT pane — types chips + grid */}
-          <section className="min-w-0">
-            {/* Types (sticky chips) */}
+          {/* RIGHT rail — the only vertical scroller */}
+          <section
+            className="min-w-0 overflow-y-auto no-scrollbar"
+            style={{ height: columnHeight, paddingBottom: rightPaddingBottom }}
+          >
+            {/* Type chips */}
             <div className="sticky top-0 z-10 pb-2 bg-[var(--pillo-page-bg,white)]">
               <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 pr-1">
                 {medTypes.map((t) => {
@@ -197,92 +164,51 @@ export default function Medicines() {
               </div>
             </div>
 
-            {/* Medicines grid */}
+            {/* Products */}
             {loading ? (
-              <div className="mt-8 text-center text-neutral-400 animate-pulse">
-                Loading medicines…
-              </div>
+              <div className="mt-8 text-center text-neutral-400 animate-pulse">Loading medicines…</div>
             ) : filteredMeds.length === 0 ? (
-              <div className="mt-8 text-center text-neutral-400">
-                No medicines found.
-              </div>
+              <div className="mt-8 text-center text-neutral-400">No medicines found.</div>
             ) : (
-              <div className="grid grid-cols-2 gap-3 pb-4">
+              <div className="grid grid-cols-2 gap-3">
                 {filteredMeds.map((med) => {
-                  const hasDiscount =
-                    med.mrp && Number(med.price) < Number(med.mrp);
-                  const discountPct = hasDiscount
-                    ? Math.round(((med.mrp - med.price) / med.mrp) * 100)
-                    : null;
+                  const hasDiscount = med.mrp && Number(med.price) < Number(med.mrp);
+                  const discountPct = hasDiscount ? Math.round(((med.mrp - med.price) / med.mrp) * 100) : null;
 
                   return (
-                    <Card
-                      key={med._id}
-                      className="p-2 rounded-2xl bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm"
-                    >
-                      {/* Image — tap to Know More */}
+                    <Card key={med._id} className="p-2 rounded-2xl bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm">
                       <button
                         className="w-full aspect-square grid place-items-center rounded-xl bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm overflow-hidden"
                         onClick={() => setSelectedMed(med)}
                         title="Know more"
                       >
-                        <img
-                          src={getImageUrl(med.img)}
-                          alt={med.name}
-                          className="h-full w-full object-contain"
-                        />
+                        <img src={getImageUrl(med.img)} alt={med.name} className="h-full w-full object-contain" />
                       </button>
 
-                      {/* Text */}
                       <div className="mt-2">
                         <div
                           className="text-[13px] font-extrabold text-emerald-800 leading-snug cursor-pointer"
                           onClick={() => setSelectedMed(med)}
-                          style={{
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden",
-                          }}
+                          style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
                           title={med.brand || med.name}
                         >
                           {med.brand || med.name}
                         </div>
 
-                        {med.company && (
-                          <div className="text-[11px] text-neutral-500 truncate mt-0.5">
-                            {med.company}
-                          </div>
-                        )}
+                        {med.company && <div className="text-[11px] text-neutral-500 truncate mt-0.5">{med.company}</div>}
 
-                        {/* Price row */}
                         <div className="mt-1 flex items-baseline gap-1">
-                          <div
-                            className="text-[15px] font-extrabold"
-                            style={{ color: DEEP }}
-                          >
-                            ₹{med.price}
-                          </div>
-                          {med.mrp && (
-                            <div className="text-[11px] text-neutral-400 line-through">
-                              ₹{med.mrp}
-                            </div>
-                          )}
-                          {hasDiscount && (
-                            <span className="ml-auto text-[10px] font-bold text-emerald-700">
-                              {discountPct}% OFF
-                            </span>
-                          )}
+                          <div className="text-[15px] font-extrabold" style={{ color: DEEP }}>₹{med.price}</div>
+                          {med.mrp && <div className="text-[11px] text-neutral-400 line-through">₹{med.mrp}</div>}
+                          {hasDiscount && <span className="ml-auto text-[10px] font-bold text-emerald-700">{discountPct}% OFF</span>}
                         </div>
 
-                        {/* Category badge + Add */}
                         <div className="mt-2 flex items-center justify-between">
                           {Array.isArray(med.category) && med.category[0] && (
                             <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold text-[10px] px-2 py-0.5">
                               {med.category[0]}
                             </Badge>
                           )}
-
                           <Button
                             size="sm"
                             className="h-8 rounded-full px-3 text-[12px] font-bold"
@@ -302,103 +228,61 @@ export default function Medicines() {
         </div>
       </div>
 
-      {/* Know More dialog (full info) */}
+      {/* Dialog */}
       <Dialog open={!!selectedMed} onOpenChange={() => setSelectedMed(null)}>
         <DialogContent className="max-w-sm p-0 overflow-hidden rounded-2xl">
           {selectedMed && (
             <>
               <DialogHeader className="px-4 pt-4 pb-1">
-                <DialogTitle
-                  className="text-xl font-extrabold"
-                  style={{ color: DEEP }}
-                >
+                <DialogTitle className="text-xl font-extrabold" style={{ color: DEEP }}>
                   {selectedMed.brand || selectedMed.name}
                 </DialogTitle>
               </DialogHeader>
 
               <div className="px-4">
-                {/* Image */}
                 <div className="w-full grid place-items-center rounded-xl ring-1 ring-[var(--pillo-surface-border)] bg-white mb-3">
-                  <img
-                    src={getImageUrl(selectedMed.img)}
-                    alt={selectedMed.name}
-                    className="max-h-40 object-contain p-3"
-                  />
+                  <img src={getImageUrl(selectedMed.img)} alt={selectedMed.name} className="max-h-40 object-contain p-3" />
                 </div>
 
-                {/* Meta chips */}
                 <div className="flex flex-wrap gap-2 mb-2">
-                  {Array.isArray(selectedMed.category) &&
-                    selectedMed.category.length > 0 && (
-                      <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
-                        {selectedMed.category.join(", ")}
-                      </Badge>
-                    )}
+                  {Array.isArray(selectedMed.category) && selectedMed.category.length > 0 && (
+                    <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
+                      {selectedMed.category.join(", ")}
+                    </Badge>
+                  )}
                   {selectedMed.type && (
                     <Badge className="bg-white text-emerald-700 border border-emerald-200 font-semibold">
-                      {Array.isArray(selectedMed.type)
-                        ? selectedMed.type.join(", ")
-                        : selectedMed.type}
+                      {Array.isArray(selectedMed.type) ? selectedMed.type.join(", ") : selectedMed.type}
                     </Badge>
                   )}
                 </div>
 
-                {/* Composition / Company */}
                 {selectedMed.composition && (
-                  <div className="text-sm text-neutral-700 mb-1">
-                    <b>Composition:</b> {selectedMed.composition}
-                  </div>
+                  <div className="text-sm text-neutral-700 mb-1"><b>Composition:</b> {selectedMed.composition}</div>
                 )}
                 {selectedMed.company && (
-                  <div className="text-sm text-neutral-700 mb-2">
-                    <b>Company:</b> {selectedMed.company}
-                  </div>
+                  <div className="text-sm text-neutral-700 mb-2"><b>Company:</b> {selectedMed.company}</div>
                 )}
 
-                {/* Price + Discount */}
                 <div className="flex items-center gap-2 mb-2">
-                  <div
-                    className="text-2xl font-extrabold"
-                    style={{ color: DEEP }}
-                  >
-                    ₹{selectedMed.price}
-                  </div>
+                  <div className="text-2xl font-extrabold" style={{ color: DEEP }}>₹{selectedMed.price}</div>
                   {selectedMed.mrp && selectedMed.price < selectedMed.mrp && (
                     <>
-                      <div className="text-sm text-neutral-400 line-through">
-                        ₹{selectedMed.mrp}
-                      </div>
+                      <div className="text-sm text-neutral-400 line-through">₹{selectedMed.mrp}</div>
                       <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
-                        {Math.round(
-                          ((selectedMed.mrp - selectedMed.price) /
-                            selectedMed.mrp) *
-                            100
-                        )}
-                        % OFF
+                        {Math.round(((selectedMed.mrp - selectedMed.price) / selectedMed.mrp) * 100)}% OFF
                       </Badge>
                     </>
                   )}
                 </div>
 
-                {/* Description */}
                 <div className="text-sm text-neutral-700 mb-3">
-                  {selectedMed.description ? (
-                    selectedMed.description
-                  ) : (
-                    <span className="text-neutral-400">
-                      No description available.
-                    </span>
-                  )}
+                  {selectedMed.description ? selectedMed.description : <span className="text-neutral-400">No description available.</span>}
                 </div>
               </div>
 
-              {/* Actions */}
               <div className="p-4 pt-0 flex gap-2">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setSelectedMed(null)}
-                >
+                <Button variant="outline" className="flex-1" onClick={() => setSelectedMed(null)}>
                   <X className="h-4 w-4 mr-1" /> Close
                 </Button>
                 <Button
@@ -417,13 +301,10 @@ export default function Medicines() {
         </DialogContent>
       </Dialog>
 
-      {/* Upload Prescription — SAME style as Home.js, lifts when cart bar shows */}
+      {/* Upload Prescription FAB */}
       <motion.div
         className="fixed right-0 left-0 z-[1201] flex justify-end px-5"
-        style={{
-          bottom: dockBottom, // <-- dynamic height based on cart length
-          pointerEvents: uploadOpen ? "none" : "auto",
-        }}
+        style={{ bottom: bottomDock((cart?.length || 0) > 0), pointerEvents: uploadOpen ? "none" : "auto" }}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
