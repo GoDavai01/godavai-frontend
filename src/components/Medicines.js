@@ -87,7 +87,12 @@ export default function Medicines() {
   const rightPaddingBottom = 120;
 
   return (
-    <div className="relative h-screen w-full max-w-[420px] mx-auto bg-[var(--pillo-page-bg,linear-gradient(180deg,#f9fbff,white))] overflow-hidden">
+    <div
+      className="
+        relative h-screen w-full max-w-[420px] mx-auto overflow-hidden
+        bg-[var(--pillo-page-bg,linear-gradient(180deg,#f9fbff,white))]
+      "
+    >
       {/* Header */}
       <div className="px-4 pt-4">
         {pharmacy ? (
@@ -105,29 +110,35 @@ export default function Medicines() {
       </div>
 
       {/* Two columns */}
-      <div className="px-3">
-        <div className="grid grid-cols-[94px,1fr] gap-3 items-start">
-          {/* LEFT rail — fills to bottom (no gap) and scrolls only when long */}
+      {/* removed left padding so the left rail hugs the edge */}
+      <div className="pl-0 pr-3">
+        <div className="grid grid-cols-[100px,1fr] gap-3 items-start">
+          {/* LEFT rail — fills to bottom and scrolls only when long */}
           <aside className="sticky self-start" style={{ top: TOP_OFFSET_PX, height: columnHeight }}>
-            <div className="h-full rounded-2xl bg-white/95 ring-1 ring-[var(--pillo-surface-border)] shadow-sm p-2 flex flex-col">
-              <div className="text-[11px] font-bold mb-1" style={{ color: DEEP }}>
+            <div
+              className="
+                h-full rounded-2xl p-2.5 flex flex-col
+                bg-white/90 ring-1 ring-[var(--pillo-surface-border)] shadow-sm backdrop-blur
+              "
+            >
+              <div className="text-[13px] font-semibold mb-1 tracking-wide text-emerald-900/90">
                 Categories
               </div>
-              {/* Take remaining height; scroll when overflow. */}
-              <div
-                className="flex-1 flex flex-col gap-1 overflow-y-auto pr-1 no-scrollbar"
-                /* header (≈20–24px) is accounted for by flex-1 on this list */
-              >
+
+              {/* list */}
+              <div className="flex-1 flex flex-col gap-1 overflow-y-auto pr-1 no-scrollbar">
                 {allCategories.map((c) => {
                   const active = c === selectedCategory;
                   return (
                     <button
                       key={c}
                       onClick={() => setSelectedCategory(c)}
-                      className={`text-left rounded-xl px-3 py-2 text-[12px] font-bold transition ${
-                        active ? "bg-emerald-50 ring-1 ring-emerald-200" : "hover:bg-neutral-50"
-                      }`}
-                      style={{ color: active ? DEEP : "#0b3f30" }}
+                      className={[
+                        "text-left rounded-xl px-3.5 py-2.5 text-[14px] font-semibold transition",
+                        active
+                          ? "bg-emerald-50/80 text-emerald-900 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.25)]"
+                          : "text-[#0b3f30] hover:bg-neutral-50/70",
+                      ].join(" ")}
                     >
                       {c}
                     </button>
@@ -144,18 +155,27 @@ export default function Medicines() {
           >
             {/* Type chips */}
             <div className="sticky top-0 z-10 pb-2 bg-[var(--pillo-page-bg,white)]">
-              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 pr-1">
+              <div
+                className="flex gap-2 overflow-x-auto no-scrollbar pb-1 pr-1"
+                style={{
+                  WebkitMaskImage:
+                    "linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent)",
+                  maskImage:
+                    "linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent)",
+                }}
+              >
                 {medTypes.map((t) => {
                   const active = t === selectedType;
                   return (
                     <button
                       key={t}
                       onClick={() => setSelectedType(t)}
-                      className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-bold ring-1 transition ${
+                      className={[
+                        "whitespace-nowrap rounded-full px-3.5 py-2 text-[14px] font-semibold ring-1 transition",
                         active
-                          ? "bg-white text-emerald-700 ring-emerald-300"
-                          : "bg-white/90 text-neutral-700 ring-[var(--pillo-surface-border)] hover:bg-white"
-                      }`}
+                          ? "bg-white text-emerald-700 ring-emerald-300 shadow-sm"
+                          : "bg-white/90 text-neutral-700 ring-[var(--pillo-surface-border)] hover:bg-white",
+                      ].join(" ")}
                     >
                       {t}
                     </button>
@@ -166,41 +186,77 @@ export default function Medicines() {
 
             {/* Products */}
             {loading ? (
-              <div className="mt-8 text-center text-neutral-400 animate-pulse">Loading medicines…</div>
+              <div className="mt-8 text-center text-neutral-400 animate-pulse">
+                Loading medicines…
+              </div>
             ) : filteredMeds.length === 0 ? (
               <div className="mt-8 text-center text-neutral-400">No medicines found.</div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 {filteredMeds.map((med) => {
                   const hasDiscount = med.mrp && Number(med.price) < Number(med.mrp);
-                  const discountPct = hasDiscount ? Math.round(((med.mrp - med.price) / med.mrp) * 100) : null;
+                  const discountPct = hasDiscount
+                    ? Math.round(((med.mrp - med.price) / med.mrp) * 100)
+                    : null;
 
                   return (
-                    <Card key={med._id} className="p-2 rounded-2xl bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm">
+                    <Card
+                      key={med._id}
+                      className="
+                        p-2 rounded-2xl bg-white ring-1 ring-[var(--pillo-surface-border)]
+                        shadow-sm transition-transform hover:-translate-y-0.5
+                      "
+                    >
                       <button
-                        className="w-full aspect-square grid place-items-center rounded-xl bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm overflow-hidden"
+                        className="
+                          w-full aspect-square grid place-items-center rounded-xl
+                          bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm overflow-hidden
+                        "
                         onClick={() => setSelectedMed(med)}
                         title="Know more"
                       >
-                        <img src={getImageUrl(med.img)} alt={med.name} className="h-full w-full object-contain" />
+                        <img
+                          src={getImageUrl(med.img)}
+                          alt={med.name}
+                          className="h-full w-full object-contain"
+                        />
                       </button>
 
                       <div className="mt-2">
                         <div
                           className="text-[13px] font-extrabold text-emerald-800 leading-snug cursor-pointer"
                           onClick={() => setSelectedMed(med)}
-                          style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                          style={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
                           title={med.brand || med.name}
                         >
                           {med.brand || med.name}
                         </div>
 
-                        {med.company && <div className="text-[11px] text-neutral-500 truncate mt-0.5">{med.company}</div>}
+                        {med.company && (
+                          <div className="text-[11px] text-neutral-500 truncate mt-0.5">
+                            {med.company}
+                          </div>
+                        )}
 
                         <div className="mt-1 flex items-baseline gap-1">
-                          <div className="text-[15px] font-extrabold" style={{ color: DEEP }}>₹{med.price}</div>
-                          {med.mrp && <div className="text-[11px] text-neutral-400 line-through">₹{med.mrp}</div>}
-                          {hasDiscount && <span className="ml-auto text-[10px] font-bold text-emerald-700">{discountPct}% OFF</span>}
+                          <div className="text-[15px] font-extrabold" style={{ color: DEEP }}>
+                            ₹{med.price}
+                          </div>
+                          {med.mrp && (
+                            <div className="text-[11px] text-neutral-400 line-through">
+                              ₹{med.mrp}
+                            </div>
+                          )}
+                          {hasDiscount && (
+                            <span className="ml-auto text-[10px] font-bold text-emerald-700">
+                              {discountPct}% OFF
+                            </span>
+                          )}
                         </div>
 
                         <div className="mt-2 flex items-center justify-between">
@@ -241,7 +297,11 @@ export default function Medicines() {
 
               <div className="px-4">
                 <div className="w-full grid place-items-center rounded-xl ring-1 ring-[var(--pillo-surface-border)] bg-white mb-3">
-                  <img src={getImageUrl(selectedMed.img)} alt={selectedMed.name} className="max-h-40 object-contain p-3" />
+                  <img
+                    src={getImageUrl(selectedMed.img)}
+                    alt={selectedMed.name}
+                    className="max-h-40 object-contain p-3"
+                  />
                 </div>
 
                 <div className="flex flex-wrap gap-2 mb-2">
@@ -258,14 +318,20 @@ export default function Medicines() {
                 </div>
 
                 {selectedMed.composition && (
-                  <div className="text-sm text-neutral-700 mb-1"><b>Composition:</b> {selectedMed.composition}</div>
+                  <div className="text-sm text-neutral-700 mb-1">
+                    <b>Composition:</b> {selectedMed.composition}
+                  </div>
                 )}
                 {selectedMed.company && (
-                  <div className="text-sm text-neutral-700 mb-2"><b>Company:</b> {selectedMed.company}</div>
+                  <div className="text-sm text-neutral-700 mb-2">
+                    <b>Company:</b> {selectedMed.company}
+                  </div>
                 )}
 
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="text-2xl font-extrabold" style={{ color: DEEP }}>₹{selectedMed.price}</div>
+                  <div className="text-2xl font-extrabold" style={{ color: DEEP }}>
+                    ₹{selectedMed.price}
+                  </div>
                   {selectedMed.mrp && selectedMed.price < selectedMed.mrp && (
                     <>
                       <div className="text-sm text-neutral-400 line-through">₹{selectedMed.mrp}</div>
@@ -277,7 +343,11 @@ export default function Medicines() {
                 </div>
 
                 <div className="text-sm text-neutral-700 mb-3">
-                  {selectedMed.description ? selectedMed.description : <span className="text-neutral-400">No description available.</span>}
+                  {selectedMed.description ? (
+                    selectedMed.description
+                  ) : (
+                    <span className="text-neutral-400">No description available.</span>
+                  )}
                 </div>
               </div>
 

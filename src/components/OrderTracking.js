@@ -1,55 +1,59 @@
 // src/components/OrderTracking.js
 import React, { useEffect, useState } from "react";
-import {
-  Box, Typography, Stepper, Step, StepLabel, StepConnector,
-  Card, CardContent, Button, Chip, Divider, Stack, Dialog,
-  DialogTitle, DialogContent, DialogActions, Avatar, Rating, CircularProgress, Badge
-} from "@mui/material";
-import LocalPharmacyIcon from "@mui/icons-material/LocalPharmacy";
-import ChatModal from "./ChatModal";
-import ShoppingCartCheckoutIcon from "@mui/icons-material/ShoppingCartCheckout";
-import DoneAllIcon from "@mui/icons-material/DoneAll";
-import NoteAltIcon from "@mui/icons-material/NoteAlt";
-import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
-import SentimentVerySatisfiedIcon from "@mui/icons-material/SentimentVerySatisfied";
-import SupportAgentIcon from "@mui/icons-material/SupportAgent";
-import CallIcon from "@mui/icons-material/Call";
-import ChatSupportModal from "./ChatSupportModal";
-import TwoWheelerIcon from "@mui/icons-material/TwoWheeler";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
-import Snackbar from "@mui/material/Snackbar";
-import MuiAlert from "@mui/material/Alert";
+import { motion, AnimatePresence } from "framer-motion";
 
-const steps = [
-  { label: "Order Placed", icon: <ShoppingCartCheckoutIcon /> },
-  { label: "Processing", icon: <LocalPharmacyIcon /> },
-  { label: "Out for Delivery", icon: <TwoWheelerIcon /> },
-  { label: "Delivered", icon: <DoneAllIcon /> }
-];
+// shadcn/ui
+import { Card, CardContent } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../components/ui/dialog";
+
+// Icons (lucide-react)
+import {
+  ShoppingCart,
+  Store,
+  Bike,
+  CheckCheck,
+  MessageCircle,
+  Phone,
+  Smile,
+  Headset,
+  FileText,
+  Timer,
+  Star,
+} from "lucide-react";
+
+// External modals you already have
+import ChatModal from "./ChatModal";
+import ChatSupportModal from "./ChatSupportModal";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
-const ColorConnector = (props) => (
-  <StepConnector
-    {...props}
-    sx={{
-      [`& .MuiStepConnector-line`]: {
-        transition: "background-color 0.4s",
-        height: 4,
-        border: 0,
-        backgroundColor: "#d5eaf2",
-        borderRadius: 2,
-      }
-    }}
-  />
-);
+// Palette
+const DEEP = "#0f6e51";
+const AMBER = "#FFD43B";
 
+const steps = [
+  { label: "Order Placed", icon: ShoppingCart },
+  { label: "Processing", icon: Store },
+  { label: "Out for Delivery", icon: Bike },
+  { label: "Delivered", icon: CheckCheck },
+];
+
+// ---------- helpers (UNCHANGED LOGIC) ----------
 function formatAddress(address) {
   if (!address) return "";
   if (typeof address === "object") {
-    // Prefer Google formatted address
     if (address.formatted) {
       return `${address.name ? address.name + ", " : ""}${address.formatted}${address.floor ? ", Floor: " + address.floor : ""}${address.landmark ? ", " + address.landmark : ""}${address.phone ? ", " + address.phone : ""}`;
     }
@@ -58,109 +62,156 @@ function formatAddress(address) {
   return address;
 }
 
-
 function formatTimestamp(ts) {
   if (!ts) return "";
   const d = new Date(ts);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+// simple inline toast
+function InlineToast({ open, kind = "success", children, onClose }) {
+  if (!open) return null;
+  return (
+    <div
+      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[1200] rounded-xl px-4 py-3 text-sm font-semibold shadow-lg
+      ${kind === "error" ? "bg-red-600 text-white" : "bg-emerald-600 text-white"}`}
+      onClick={onClose}
+    >
+      {children}
+    </div>
+  );
+}
+
+// Clickable star rating (controlled)
+function Stars({ value = 0, onChange, disabled }) {
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange && onChange(n)}
+          className="disabled:cursor-not-allowed"
+        >
+          <Star
+            className={`h-5 w-5 ${n <= value ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function OrderTracking() {
   const { orderId } = useParams();
   const navigate = useNavigate();
+
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+
   const [quoteDialog, setQuoteDialog] = useState(false);
   const [quoteActionLoading, setQuoteActionLoading] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false); // Delivery chat modal
+
+  const [chatOpen, setChatOpen] = useState(false);
   const [chatThread, setChatThread] = useState(null);
   const [chatPartner, setChatPartner] = useState({ name: "", type: "" });
-  const [supportChatOpen, setSupportChatOpen] = useState(false); // Support chat modal
+
+  const [supportChatOpen, setSupportChatOpen] = useState(false);
+
   const [eta, setEta] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
+
   const [pharmacyRating, setPharmacyRating] = useState(null);
   const [deliveryRating, setDeliveryRating] = useState(null);
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [deliveryBehavior, setDeliveryBehavior] = useState([]);
+
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMsg, setSnackbarMsg] = useState("");
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
-  const [deliveryUnreadCount, setDeliveryUnreadCount] = useState(0);
-  const getToken = () => localStorage.getItem('token') || '';
 
-  const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+  const [deliveryUnreadCount, setDeliveryUnreadCount] = useState(0);
+  const getToken = () => localStorage.getItem("token") || "";
 
   const { isLoaded } = useJsApiLoader({
-  id: "google-map-script",
-  googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    id: "google-map-script",
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY || "",
   });
 
+  // --- INITIAL LOAD (UNCHANGED LOGIC) ---
+  useEffect(() => {
+    let didCancel = false;
+    setLoading(true);
+    axios
+      .get(`${API_BASE_URL}/api/orders/${orderId}`)
+      .then((res) => {
+        if (didCancel) return;
+        setOrder({ ...res.data, __type: "order" });
+        setLoading(false);
 
-// --- INITIAL LOAD: Only set loading ONCE ---
-useEffect(() => {
-  let didCancel = false;
-  setLoading(true);
-  axios.get(`${API_BASE_URL}/api/orders/${orderId}`)
-    .then(res => {
-      if (didCancel) return;
-      setOrder({ ...res.data, __type: "order" });
-      setLoading(false);
+        if (res.data.deliveryRating && res.data.pharmacyRating && res.data.deliveryBehavior) {
+          setFeedbackSubmitted(true);
+        }
+        if (res.data.deliveryRating) setDeliveryRating(res.data.deliveryRating);
+        if (res.data.pharmacyRating) setPharmacyRating(res.data.pharmacyRating);
+      })
+      .catch(() => {
+        if (didCancel) return;
+        axios
+          .get(`${API_BASE_URL}/api/prescriptions/order/${orderId}`, {
+            headers: { Authorization: `Bearer ${getToken()}` },
+          })
+          .then((res) => {
+            if (didCancel) return;
+            setOrder({ ...res.data, __type: "prescription" });
+            setLoading(false);
+          })
+          .catch(() => {
+            if (didCancel) return;
+            setOrder(null);
+            setLoading(false);
+          });
+      });
+    return () => {
+      didCancel = true;
+    };
+  }, [orderId, quoteActionLoading]);
 
-      // Setup ratings/feedback on first load
-      if (res.data.deliveryRating && res.data.pharmacyRating && res.data.deliveryBehavior) {
-        setFeedbackSubmitted(true);
-      }
-      if (res.data.deliveryRating) setDeliveryRating(res.data.deliveryRating);
-      if (res.data.pharmacyRating) setPharmacyRating(res.data.pharmacyRating);
-    })
-    .catch(() => {
-      if (didCancel) return;
-      // Fallback: try prescription order fetch
-      axios.get(`${API_BASE_URL}/api/prescriptions/order/${orderId}`, { headers: { Authorization: `Bearer ${getToken()}` } })
-        .then(res => {
-          if (didCancel) return;
-          setOrder({ ...res.data, __type: "prescription" });
-          setLoading(false);
-        })
-        .catch(() => {
-          if (didCancel) return;
-          setOrder(null);
-          setLoading(false);
-        });
-    });
-  return () => { didCancel = true; };
-}, [orderId, quoteActionLoading]);
+  // --- POLLING (UNCHANGED LOGIC) ---
+  useEffect(() => {
+    if (!order || order.status === "rejected" || order.status === "cancelled") return;
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/api/orders/${orderId}`);
+        if (!cancelled) {
+          setOrder((prev) => {
+            if (!prev || prev.updatedAt !== res.data.updatedAt || prev.status !== res.data.status) {
+              return { ...res.data, __type: "order" };
+            }
+            return prev;
+          });
+        }
+      } catch {}
+    }, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId, order && order.status]);
 
-// --- POLLING (no loading, no flicker, silent data refresh) ---
-useEffect(() => {
-  // No polling if order not loaded, or cancelled/rejected
-  if (!order || order.status === "rejected" || order.status === "cancelled") return;
-  let cancelled = false;
-  const interval = setInterval(async () => {
-    try {
-      const res = await axios.get(`${API_BASE_URL}/api/orders/${orderId}`);
-      if (!cancelled) {
-        // Only update if data is different (optional: prevents unnecessary re-renders)
-        setOrder(prev => {
-          // Do a quick diff on status/timestamps if you want to be extra-cautious
-          if (!prev || prev.updatedAt !== res.data.updatedAt || prev.status !== res.data.status) {
-            return { ...res.data, __type: "order" };
-          }
-          return prev;
-        });
-      }
-    } catch { }
-  }, 3000);
-  return () => { cancelled = true; clearInterval(interval); };
-}, [orderId, order && order.status]);
-
+  // delivery unread count
   useEffect(() => {
     if (!order) return;
-    axios.get(`${API_BASE_URL}/api/chat/${order._id}/delivery-unread-count`, { withCredentials: true })
-      .then(res => setDeliveryUnreadCount(res.data.unreadCount || 0))
+    axios
+      .get(`${API_BASE_URL}/api/chat/${order._id}/delivery-unread-count`, { withCredentials: true })
+      .then((res) => setDeliveryUnreadCount(res.data.unreadCount || 0))
       .catch(() => setDeliveryUnreadCount(0));
   }, [order, refreshTick, chatOpen]);
 
+  // ETA (UNCHANGED LOGIC)
   useEffect(() => {
     let interval;
     const fetchETA = async () => {
@@ -180,11 +231,13 @@ useEffect(() => {
     return () => clearInterval(interval);
   }, [order]);
 
+  // quote modal controller
   useEffect(() => {
     if (order && order.status === "quoted") setQuoteDialog(true);
     else setQuoteDialog(false);
   }, [order]);
 
+  // clear active order on delivered/cancelled
   useEffect(() => {
     if (order && (order.status === "delivered" || order.status === "cancelled")) {
       localStorage.removeItem("activeOrderId");
@@ -201,7 +254,10 @@ useEffect(() => {
 
   const handleRejectQuote = async () => {
     setQuoteActionLoading(true);
-    await axios.put(`${API_BASE_URL}/api/orders/${order._id}/status`, { status: "rejected", statusText: "Rejected by User" });
+    await axios.put(`${API_BASE_URL}/api/orders/${order._id}/status`, {
+      status: "rejected",
+      statusText: "Rejected by User",
+    });
     setQuoteActionLoading(false);
     setQuoteDialog(false);
     window.location.reload();
@@ -213,7 +269,7 @@ useEffect(() => {
       await axios.post(`${API_BASE_URL}/api/orders/${order._id}/ratings`, {
         pharmacyRating,
         deliveryRating,
-        deliveryBehavior
+        deliveryBehavior,
       });
       setSnackbarMsg("Feedback submitted successfully!");
       setSnackbarOpen(true);
@@ -230,8 +286,8 @@ useEffect(() => {
 
   const handleOpenDeliveryChat = () => {
     setChatPartner({
-      name: (order.deliveryPartner && order.deliveryPartner.name) || "Delivery Partner",
-      type: "delivery"
+      name: (order?.deliveryPartner && order.deliveryPartner.name) || "Delivery Partner",
+      type: "delivery",
     });
     setChatThread("delivery");
     setChatOpen(true);
@@ -240,69 +296,91 @@ useEffect(() => {
   };
 
   if (loading)
-    return <Box sx={{ textAlign: "center", mt: 8, color: "#13C0A2", fontWeight: 700, fontSize: 22 }}>Loading…</Box>;
+    return (
+      <div className="w-full min-h-[70vh] grid place-items-center">
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-lg font-extrabold"
+          style={{ color: "#13C0A2" }}
+        >
+          Loading…
+        </motion.div>
+      </div>
+    );
 
   if (!order)
     return (
-      <Box sx={{ mt: 10, textAlign: "center" }}>
-        <Typography variant="h6" color="error">Order not found</Typography>
-        <Button sx={{ mt: 2, fontWeight: 700, bgcolor: "#13C0A2", color: "#fff" }} onClick={() => navigate("/orders")}>Go to My Orders</Button>
-      </Box>
+      <div className="mt-16 text-center">
+        <div className="text-red-600 font-semibold">Order not found</div>
+        <Button
+          className="mt-3 font-bold"
+          style={{ backgroundColor: "#13C0A2", color: "#fff" }}
+          onClick={() => navigate("/orders")}
+        >
+          Go to My Orders
+        </Button>
+      </div>
     );
-    if (order.status === "rejected" || order.status === "cancelled") {
-      // Mark as "viewed" in localStorage
-  localStorage.setItem(`order:${order._id}:cancelSeen`, "true");
-  return (
-    <Box sx={{ mt: 10, textAlign: "center" }}>
-      <Typography variant="h6" color="error">
-        This order was {order.status === "rejected" ? "rejected" : "cancelled"} by the pharmacy.
-      </Typography>
-      <Button
-        sx={{ mt: 2, fontWeight: 700, bgcolor: "#13C0A2", color: "#fff" }}
-        onClick={() => navigate("/orders")}
-      >
-        Go to My Orders
-      </Button>
-    </Box>
-  );
-}
 
-  const currentStep = typeof order.status === "number" ? order.status : (
-  order.status === "placed" ? 0 :
-  order.status === "processing" ? 1 :
-  order.status === "out_for_delivery" ? 2 :
-  order.status === "delivered" ? 3 :
-  order.status === "rejected" || order.status === "cancelled" ? -1 : 0
-);
+  if (order.status === "rejected" || order.status === "cancelled") {
+    localStorage.setItem(`order:${order._id}:cancelSeen`, "true");
+    return (
+      <div className="mt-16 text-center">
+        <div className="text-red-600 font-semibold">
+          This order was {order.status === "rejected" ? "rejected" : "cancelled"} by the pharmacy.
+        </div>
+        <Button
+          className="mt-3 font-bold"
+          style={{ backgroundColor: "#13C0A2", color: "#fff" }}
+          onClick={() => navigate("/orders")}
+        >
+          Go to My Orders
+        </Button>
+      </div>
+    );
+  }
+
+  const currentStep =
+    typeof order.status === "number"
+      ? order.status
+      : order.status === "placed"
+      ? 0
+      : order.status === "processing"
+      ? 1
+      : order.status === "out_for_delivery"
+      ? 2
+      : order.status === "delivered"
+      ? 3
+      : order.status === "rejected" || order.status === "cancelled"
+      ? -1
+      : 0;
+
   const isDelivered = currentStep === 3;
 
-  const stepTimes = [
-    order.placedAt || order.createdAt,
-    order.processingAt,
-    order.outForDeliveryAt,
-    order.deliveredAt,
-  ];
+  const stepTimes = [order.placedAt || order.createdAt, order.processingAt, order.outForDeliveryAt, order.deliveredAt];
 
-  const deliveryPartner = order.deliveryPartner && typeof order.deliveryPartner === "object"
-    ? order.deliveryPartner
-    : {
-      name: "Delivery Partner",
-      avatar: "/images/delivery-partner.png",
-      rating: 4.7,
-      phone: "******0000",
-      vehicle: "Bike"
-    };
+  const deliveryPartner =
+    order.deliveryPartner && typeof order.deliveryPartner === "object"
+      ? order.deliveryPartner
+      : {
+          name: "Delivery Partner",
+          avatar: "/images/delivery-partner.png",
+          rating: 4.7,
+          phone: "******0000",
+          vehicle: "Bike",
+        };
 
-  // ------ ROBUST PRESCRIPTION QUOTE LOGIC ------
+  // ------ PRESCRIPTION QUOTE LOGIC (UNCHANGED) ------
   let prescriptionQuote = null;
   if (order.__type === "prescription") {
-    if (order.quote && order.quote.items && order.quote.items.length > 0) {
+    if (order.quote?.items?.length > 0) {
       prescriptionQuote = order.quote;
-    } else if (order.tempQuote && order.tempQuote.items && order.tempQuote.items.length > 0) {
+    } else if (order.tempQuote?.items?.length > 0) {
       prescriptionQuote = {
         ...order.tempQuote,
         price: order.tempQuote.approxPrice,
-        items: order.tempQuote.items
+        items: order.tempQuote.items,
       };
     } else if (Array.isArray(order.quotes) && order.quotes.length > 0) {
       prescriptionQuote = order.quotes[order.quotes.length - 1];
@@ -310,522 +388,520 @@ useEffect(() => {
   }
 
   return (
-    <Box sx={{ bgcolor: "#f9fafb", minHeight: "100vh", pb: { xs: 10, sm: 3 }, pt: 3 }}>
-      <Box sx={{ maxWidth: 480, mx: "auto", p: { xs: 0.5, sm: 1.5 } }}>
-        <Card sx={{
-          p: { xs: 2, sm: 3 },
-          borderRadius: 5,
-          boxShadow: 4,
-          background: "#fff",
-        }}>
-          <Typography
-            variant="h5"
-            sx={{ color: "#13C0A2", fontWeight: 900, mb: 1, letterSpacing: 1, textAlign: "center" }}
-          >
-            Track Your Order
-          </Typography>
-          {/* ETA Bar */}
-          {eta && order.status === "out_for_delivery" && (
-            <Box sx={{
-              bgcolor: "#FFD43B",
-              color: "#1d4335",
-              fontWeight: 900,
-              borderRadius: "18px",
-              px: 3, py: 1.2,
-              mx: "auto",
-              my: 1,
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              fontSize: 19,
-              width: "fit-content",
-              boxShadow: "0 1px 8px #f1f1b2"
-            }}>
-              Arriving in {eta}
-            </Box>
-          )}
-          <Stack direction="row" alignItems="center" justifyContent="center" spacing={1} mb={1}>
-            <Chip label={`Order #${order.id || order._id?.slice(-5)}`} size="small" sx={{ bgcolor: "#e6f9f5", color: "#13C0A2", fontWeight: 700, fontSize: 15 }} />
-            <Chip label={order.statusText || steps[currentStep]?.label} size="small" color={isDelivered ? "success" : "primary"} sx={{ fontWeight: 700, fontSize: 15 }} />
-          </Stack>
-          {/* Stepper */}
-          <Stepper
-            activeStep={currentStep}
-            alternativeLabel
-            connector={<ColorConnector />}
-            sx={{ mb: 3, bgcolor: "#e3f2fd", borderRadius: 2, py: 2, transition: "all 0.3s" }}
-          >
-            {steps.map((step, i) => (
-              <Step key={step.label} completed={i < currentStep}>
-                <StepLabel icon={step.icon}>
-                  <span style={{
-                    fontWeight: i === currentStep ? 900 : 600,
-                    color: i <= currentStep ? "#13C0A2" : "#aaa",
-                    fontSize: 16
-                  }}>
-                    {step.label}
-                  </span>
-                  {stepTimes[i] && (
-                    <div style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      marginTop: 2,
-                      color: "#17879c"
-                    }}>
-                      {formatTimestamp(stepTimes[i])}
+    <div className="bg-slate-50 min-h-screen pb-24 pt-3">
+      <div className="max-w-md mx-auto px-2 sm:px-4">
+        <Card className="border-emerald-100/70 shadow-sm">
+          <CardContent className="p-4 sm:p-6">
+            {/* Title + ETA */}
+            <div className="text-center mb-3">
+              <h1
+                className="text-2xl font-black tracking-tight"
+                style={{ color: "#13C0A2" }}
+              >
+                Track Your Order
+              </h1>
+
+              {eta && order.status === "out_for_delivery" && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 mt-2 text-sm font-extrabold shadow"
+                  style={{ backgroundColor: AMBER, color: "#1d4335" }}
+                >
+                  <Timer className="h-4 w-4" />
+                  Arriving in {eta}
+                </motion.div>
+              )}
+
+              <div className="mt-2 flex items-center justify-center gap-2">
+                <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-bold text-[13px]">
+                  Order #{order.id || order._id?.slice(-5)}
+                </Badge>
+                <Badge
+                  className={`font-bold text-[13px] ${isDelivered ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-700"}`}
+                >
+                  {order.statusText || steps[currentStep]?.label}
+                </Badge>
+              </div>
+            </div>
+
+            {/* Stepper (2026 clean) */}
+            <div className="relative bg-emerald-50/60 rounded-2xl px-3 py-3 mb-4 overflow-hidden">
+              <div className="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-1.5 bg-emerald-100 rounded-full" />
+              <div
+                className="absolute left-3 top-1/2 -translate-y-1/2 h-1.5 bg-emerald-500 rounded-full transition-all"
+                style={{
+                  width:
+                    currentStep <= 0
+                      ? "0%"
+                      : currentStep === 1
+                      ? "33%"
+                      : currentStep === 2
+                      ? "66%"
+                      : "100%",
+                  right: "3",
+                }}
+              />
+              <div className="relative grid grid-cols-4 gap-2">
+                {steps.map((s, i) => {
+                  const ActiveIcon = s.icon;
+                  const active = i <= currentStep;
+                  return (
+                    <div key={s.label} className="flex flex-col items-center">
+                      <motion.div
+                        initial={{ scale: 0.9, opacity: 0.6 }}
+                        animate={{ scale: active ? 1 : 0.95, opacity: active ? 1 : 0.6 }}
+                        className={`grid place-items-center h-9 w-9 rounded-full border text-white shadow-sm ${
+                          active ? "bg-emerald-600 border-emerald-600" : "bg-emerald-200 border-emerald-200"
+                        }`}
+                      >
+                        <ActiveIcon className="h-4 w-4" />
+                      </motion.div>
+                      <div
+                        className={`mt-1 text-[11px] font-semibold ${
+                          i === currentStep ? "text-emerald-700" : active ? "text-emerald-500" : "text-gray-400"
+                        } text-center leading-tight`}
+                      >
+                        {s.label}
+                      </div>
+                      {stepTimes[i] && (
+                        <div className="text-[10px] font-semibold text-emerald-700/80">{formatTimestamp(stepTimes[i])}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Delivery partner card (when OFD) */}
+            {order.status === "out_for_delivery" && (
+              <div className="mb-3 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-14 w-14 rounded-full bg-white border border-emerald-100 overflow-hidden grid place-items-center">
+                    <img
+                      src={deliveryPartner.avatar || "/images/delivery-partner.png"}
+                      alt="Delivery Partner"
+                      className="h-full w-full object-cover"
+                      onError={(e) => (e.currentTarget.style.display = "none")}
+                    />
+                    {!deliveryPartner.avatar && (
+                      <div className="text-emerald-700 font-black">
+                        {(deliveryPartner.name || "D").charAt(0)}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-[17px] font-extrabold">{deliveryPartner.name || "Delivery Partner"}</div>
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="font-semibold">★ {deliveryPartner.rating || 4.7}</span>
+                      <span>•</span>
+                      <span>{deliveryPartner.vehicle || "Bike"}</span>
+                    </div>
+                    <div className="text-[13px] text-gray-500">
+                      Phone:{" "}
+                      {(deliveryPartner.phone ? deliveryPartner.phone : "******").replace(/.(?=.{4})/g, "*")}
+                    </div>
+                    <div className="mt-0.5 text-emerald-700 font-bold text-sm flex items-center gap-1">
+                      Arriving in {eta || "Calculating..."} <Bike className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center gap-2 ml-2">
+                  <Button
+                    size="icon"
+                    className="rounded-full h-12 w-12 shadow"
+                    style={{ backgroundColor: "#13C0A2", color: "#fff" }}
+                    onClick={() =>
+                      window.open(`tel:${deliveryPartner.mobile || deliveryPartner.phone || ""}`)
+                    }
+                  >
+                    <Phone className="h-5 w-5" />
+                  </Button>
+
+                  <div className="relative">
+                    {deliveryUnreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 h-5 min-w-5 px-1 grid place-items-center rounded-full bg-red-600 text-white text-[10px] font-bold">
+                        {deliveryUnreadCount}
+                      </span>
+                    )}
+                    <Button
+                      size="icon"
+                      className="rounded-full h-12 w-12 shadow"
+                      style={{ backgroundColor: AMBER, color: "#222" }}
+                      onClick={handleOpenDeliveryChat}
+                    >
+                      <MessageCircle className="h-5 w-5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ORDER SUMMARY */}
+            <div className="rounded-xl bg-white">
+              <div className="rounded-xl bg-emerald-50/40 p-3">
+                {/* PRESCRIPTION ORDER */}
+                {order.__type === "prescription" ? (
+                  <>
+                    <div className="text-sm font-bold">
+                      Pharmacy:
+                      <span className="text-emerald-700 ml-1">
+                        {prescriptionQuote && (prescriptionQuote.pharmacyName || prescriptionQuote.pharmacy?.name)
+                          ? (prescriptionQuote.pharmacyName || prescriptionQuote.pharmacy?.name)
+                          : "Pharmacy not assigned yet"}
+                      </span>
+                    </div>
+                    <div className="text-sm text-slate-700">
+                      Deliver to:
+                      <span className="text-emerald-700 ml-1">{formatAddress(order.address)}</span>
+                    </div>
+                    <div className="text-sm text-slate-700">
+                      Amount: <b>₹{prescriptionQuote ? (prescriptionQuote.price || prescriptionQuote.approxPrice || 0) : 0}</b>
+                    </div>
+                    <div className="text-sm text-slate-500">
+                      Items:
+                      {prescriptionQuote?.items?.length > 0 ? (
+                        prescriptionQuote.items.map((item, i) => (
+                          <span key={i} className="text-emerald-700 font-semibold">
+                            {" "}
+                            {item.medicineName} x{item.quantity || 1} [{item.available !== false ? "Available" : "Unavailable"}];
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-gray-400"> Quote not received yet</span>
+                      )}
+                    </div>
+
+                    {order.prescriptionUrl && (
+                      <div className="mt-3">
+                        <div className="text-sm text-emerald-700 font-semibold mb-1 flex items-center gap-1">
+                          <FileText className="h-4 w-4" />
+                          Prescription Uploaded:
+                        </div>
+                        <img
+                          src={
+                            order.prescriptionUrl.startsWith("http")
+                              ? order.prescriptionUrl
+                              : `${API_BASE_URL}${order.prescriptionUrl}`
+                          }
+                          alt="Prescription"
+                          className="w-[90%] max-h-[190px] rounded-lg shadow"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        variant="outline"
+                        className="font-semibold"
+                        style={{ borderColor: "#0ea5a2", color: "#0b7669" }}
+                        onClick={() => setSupportChatOpen(true)}
+                      >
+                        <Headset className="h-4 w-4 mr-2" />
+                        Contact Support
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  // NORMAL ORDER (UNCHANGED DATA)
+                  <>
+                    <div className="text-sm font-bold">
+                      Pharmacy:
+                      <span className="text-emerald-700 ml-1">
+                        {order.pharmacyName || (typeof order.pharmacy === "object" ? order.pharmacy?.name : order.pharmacy)}
+                      </span>
+                    </div>
+                    <div className="text-sm text-slate-700">
+                      Deliver to:
+                      <span className="text-emerald-700 ml-1">{formatAddress(order.address)}</span>
+                    </div>
+                    <div className="text-sm text-slate-700">
+                      Amount: <b>₹{order.amount || order.total || 0}</b>
+                    </div>
+                    <div className="text-sm text-slate-500">
+                      Items:
+                      {(order.items || []).map((item, i) => (
+                        <span key={i} className="text-emerald-700 font-semibold">
+                          {" "}
+                          {item.name} x{item.qty || item.quantity};
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        variant="outline"
+                        className="font-semibold"
+                        style={{ borderColor: "#0ea5a2", color: "#0b7669" }}
+                        onClick={() => setSupportChatOpen(true)}
+                      >
+                        <Headset className="h-4 w-4 mr-2" />
+                        Contact Support
+                      </Button>
+                    </div>
+
+                    {order.dosage && (
+                      <div className="mt-2 flex items-center text-sm text-emerald-700">
+                        <FileText className="h-4 w-4 mr-1" />
+                        Dosage: {order.dosage}
+                      </div>
+                    )}
+                    {order.note && (
+                      <div className="text-sm text-slate-500">
+                        <b>Note:</b> {order.note}
+                      </div>
+                    )}
+
+                    {order.prescription && (
+                      <div className="mt-3">
+                        <div className="text-sm text-emerald-700 font-semibold mb-1 flex items-center gap-1">
+                          <FileText className="h-4 w-4" />
+                          Prescription Uploaded:
+                        </div>
+                        <img
+                          src={
+                            order.prescription.startsWith("http")
+                              ? order.prescription
+                              : `${API_BASE_URL}${order.prescription}`
+                          }
+                          alt="Prescription"
+                          className="w-[90%] max-h-[190px] rounded-lg shadow"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Map */}
+              {isLoaded && order.driverLocation && currentStep >= 2 && currentStep < 3 && (
+                <div className="mt-3">
+                  <div className="text-sm text-emerald-700 mb-1">Live Delivery Location:</div>
+                  <div className="rounded-2xl overflow-hidden">
+                    <GoogleMap
+                      mapContainerStyle={{
+                        width: "100%",
+                        height: "230px",
+                        borderRadius: "18px",
+                        marginTop: "4px",
+                      }}
+                      center={{
+                        lat: order.driverLocation.lat || 28.4595,
+                        lng: order.driverLocation.lng || 77.0266,
+                      }}
+                      zoom={14}
+                    >
+                      <Marker
+                        position={{
+                          lat: order.driverLocation.lat,
+                          lng: order.driverLocation.lng,
+                        }}
+                      />
+                    </GoogleMap>
+                  </div>
+                  <div className="text-sm font-bold text-emerald-700 mt-2">
+                    Estimated time to delivery: {eta || "Calculating..."}
+                  </div>
+                </div>
+              )}
+
+              {/* Delivered cheer */}
+              {isDelivered && (
+                <div className="mt-3 flex items-center justify-center text-center gap-2">
+                  <Smile className="h-7 w-7" style={{ color: AMBER }} />
+                  <div className="text-emerald-700 font-extrabold">
+                    Fastest medicine, happiest you! Get well soon! 💊❤️
+                  </div>
+                </div>
+              )}
+
+              {/* Ratings */}
+              {isDelivered && (
+                <div className="mt-4">
+                  {feedbackSubmitted ? (
+                    <div className="text-center py-6">
+                      <Smile className="h-14 w-14 mx-auto mb-2" style={{ color: "#18c5ad" }} />
+                      <div className="text-2xl font-black" style={{ color: "#18c5ad" }}>
+                        Thank you for your feedback!
+                      </div>
+                      <div className="text-slate-600 font-medium">
+                        We&apos;re glad you chose GoDavaii. <br />
+                        Wishing you a speedy recovery!
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {/* Pharmacy rating card */}
+                      <div className="rounded-2xl border border-emerald-100 bg-white p-3 shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
+                        <div className="flex items-center gap-3">
+                          <div className="h-14 w-14 rounded-full border-2 border-emerald-500 bg-emerald-50 grid place-items-center overflow-hidden">
+                            <img
+                              src="/images/pharmacy.png"
+                              alt="Pharmacy"
+                              className="h-full w-full object-cover"
+                              onError={(e) => (e.currentTarget.style.display = "none")}
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-[17px] font-extrabold text-emerald-800">
+                              {order.pharmacyName ||
+                                (typeof order.pharmacy === "object" ? order.pharmacy?.name : order.pharmacy)}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Stars
+                                value={pharmacyRating || 0}
+                                onChange={(v) => setPharmacyRating(v)}
+                                disabled={ratingSubmitting}
+                              />
+                              <div className="text-sm font-semibold text-slate-600">Rate Pharmacy</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Delivery rating card */}
+                      <div className="rounded-2xl border border-emerald-100 bg-white p-3 shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
+                        <div className="flex items-center gap-3">
+                          <div className="h-14 w-14 rounded-full border-2 border-amber-400 bg-amber-50 grid place-items-center overflow-hidden">
+                            <img
+                              src={deliveryPartner.avatar || "/images/delivery-partner.png"}
+                              alt="Partner"
+                              className="h-full w-full object-cover"
+                              onError={(e) => (e.currentTarget.style.display = "none")}
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-[17px] font-extrabold text-emerald-800">
+                              {deliveryPartner.name || "Delivery Partner"}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Stars
+                                value={deliveryRating || 0}
+                                onChange={(v) => setDeliveryRating(v)}
+                                disabled={ratingSubmitting}
+                              />
+                              <div className="text-sm font-semibold text-slate-600">Rate Partner</div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 mt-2 max-w-[260px]">
+                              {["Polite", "Helpful", "Rude"].map((label) => {
+                                const selected = deliveryBehavior.includes(label.toLowerCase());
+                                const isBad = label === "Rude";
+                                return (
+                                  <button
+                                    key={label}
+                                    type="button"
+                                    onClick={() =>
+                                      setDeliveryBehavior((prev) =>
+                                        prev.includes(label.toLowerCase())
+                                          ? prev.filter((b) => b !== label.toLowerCase())
+                                          : [...prev, label.toLowerCase()]
+                                      )
+                                    }
+                                    className={`px-3 py-1.5 text-sm font-bold rounded-full border transition
+                                      ${
+                                        selected
+                                          ? isBad
+                                            ? "bg-red-50 text-red-700 border-red-200"
+                                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                          : "bg-slate-50 text-slate-600 border-slate-200"
+                                      }`}
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-center">
+                        <Button
+                          variant="outline"
+                          className="font-semibold mr-2"
+                          style={{ borderColor: "#0ea5a2", color: "#0b7669" }}
+                          onClick={() => setSupportChatOpen(true)}
+                        >
+                          <Headset className="h-4 w-4 mr-2" />
+                          Contact Support
+                        </Button>
+                        <Button
+                          disabled={!(pharmacyRating && deliveryRating && deliveryBehavior.length > 0) || ratingSubmitting}
+                          onClick={handleRatingSubmit}
+                          className="font-black text-base px-6 py-5 rounded-xl shadow"
+                          style={{ backgroundColor: AMBER, color: "#222" }}
+                        >
+                          {ratingSubmitting ? "Submitting..." : "Submit Feedback"}
+                        </Button>
+                      </div>
                     </div>
                   )}
-                </StepLabel>
-              </Step>
-            ))}
-          </Stepper>
-          {/* Delivery Partner Card */}
-          {order.status === "out_for_delivery" && (
-            <Card sx={{
-              mb: 2, boxShadow: 1, bgcolor: "#f9f9f6", borderRadius: 3, px: 2, py: 1.5,
-              border: "1.5px solid #eee",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between"
-            }}>
-              <Stack direction="row" spacing={2} alignItems="center" flex={1}>
-                <Avatar
-                  src={deliveryPartner.avatar || "/images/delivery-partner.png"}
-                  sx={{ width: 54, height: 54, bgcolor: "#fbefff", fontWeight: 900 }}
-                  alt={deliveryPartner.name || "Delivery Partner"}
-                >
-                  {(deliveryPartner.name || "D").charAt(0)}
-                </Avatar>
-                <Box>
-                  <Typography fontWeight={800} fontSize={17}>
-                    {deliveryPartner.name || "Delivery Partner"}
-                  </Typography>
-                  <Stack direction="row" alignItems="center" spacing={1} mt={0.3}>
-                    <Rating value={deliveryPartner.rating || 4.7} precision={0.1} readOnly size="small" />
-                    <Typography fontSize={13} fontWeight={700} color="#282828">★ {deliveryPartner.rating || 4.7}</Typography>
-                    <Typography fontSize={13} color="#777" sx={{ ml: 1 }}>{deliveryPartner.vehicle || "Bike"}</Typography>
-                  </Stack>
-                  <Typography fontSize={13} color="#888">
-                    Phone: {deliveryPartner.phone ? deliveryPartner.phone.replace(/.(?=.{4})/g, "*") : "******"}
-                  </Typography>
-                  <Typography sx={{ mt: 0.5, color: "#17879c", fontWeight: 700 }}>
-                    Arriving in {eta || "Calculating..."} <TwoWheelerIcon sx={{ fontSize: 17, mb: "-2px" }} />
-                  </Typography>
-                </Box>
-              </Stack>
-              <Stack spacing={1.7} direction="column" alignItems="center" ml={2}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  sx={{
-                    minWidth: 0, width: 52, height: 52, borderRadius: "50%",
-                    bgcolor: "#13C0A2",
-                    boxShadow: "0 2px 8px #b9e2db50",
-                    "&:hover": { bgcolor: "#17879c" }
-                  }}
-                  onClick={() => window.open(`tel:${deliveryPartner.mobile || deliveryPartner.phone || ""}`)}
-                >
-                  <CallIcon fontSize="medium" sx={{ color: "#fff" }} />
-                </Button>
-                <Badge color="error" badgeContent={deliveryUnreadCount} invisible={deliveryUnreadCount === 0}>
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    sx={{
-                      minWidth: 0, width: 52, height: 52, borderRadius: "50%",
-                      bgcolor: "#FFD43B",
-                      boxShadow: "0 2px 8px #ffd43b55",
-                      "&:hover": { bgcolor: "#ffe066" }
-                    }}
-                    onClick={handleOpenDeliveryChat}
-                  >
-                    <ChatBubbleOutlineIcon fontSize="medium" sx={{ color: "#333" }} />
-                  </Button>
-                </Badge>
-              </Stack>
-            </Card>
-          )}
-          {/* ORDER SUMMARY */}
-          <CardContent sx={{
-            bgcolor: "#f7faff",
-            borderRadius: 2,
-            boxShadow: 0,
-            mb: 2,
-            p: { xs: 1, sm: 2 },
-          }}>
-            <Stack spacing={1.2}>
-              {/* PRESCRIPTION ORDER RENDER */}
-              {order.__type === "prescription" ? (
-                <>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    Pharmacy:
-                    <span style={{ color: "#13C0A2", marginLeft: 6 }}>
-                      {prescriptionQuote && (prescriptionQuote.pharmacyName || prescriptionQuote.pharmacy?.name)
-                        ? (prescriptionQuote.pharmacyName || prescriptionQuote.pharmacy?.name)
-                        : "Pharmacy not assigned yet"}
-                    </span>
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: "#444" }}>
-                    Deliver to:
-                    <span style={{ color: "#13C0A2", marginLeft: 6 }}>
-                      {formatAddress(order.address)}
-                    </span>
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: "#444" }}>
-                    Amount: <b>₹{prescriptionQuote ? (prescriptionQuote.price || prescriptionQuote.approxPrice || 0) : 0}</b>
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: "#888" }}>
-                    Items:
-                    {prescriptionQuote && prescriptionQuote.items && prescriptionQuote.items.length > 0 ? (
-                      prescriptionQuote.items.map((item, i) =>
-                        <span key={i} style={{ color: "#13C0A2", fontWeight: 600 }}>
-                          {" "}{item.medicineName} x{item.quantity || 1} [{item.available !== false ? "Available" : "Unavailable"}];
-                        </span>
-                      )
-                    ) : (
-                      <span style={{ color: "#aaa" }}> Quote not received yet</span>
-                    )}
-                  </Typography>
-                  {/* Prescription image, if available */}
-                  {order.prescriptionUrl && (
-                    <Box sx={{ mt: 2, mb: 2 }}>
-                      <Typography variant="body2" sx={{ color: "#13C0A2", fontWeight: 600, mb: 0.5 }}>
-                        Prescription Uploaded:
-                      </Typography>
-                      <img
-                        src={
-                          order.prescriptionUrl.startsWith("http")
-                            ? order.prescriptionUrl
-                            : `${API_BASE_URL}${order.prescriptionUrl}`
-                        }
-                        alt="Prescription"
-                        style={{
-                          width: "90%",
-                          maxHeight: 190,
-                          borderRadius: 7,
-                          boxShadow: "0 2px 8px #bbb"
-                        }}
-                      />
-                    </Box>
-                  )}
-                  <Stack direction="row" spacing={2} sx={{ my: 2 }}>
-                    <Button
-                      variant="outlined"
-                      color="success"
-                      startIcon={<SupportAgentIcon />}
-                      sx={{ fontWeight: 600, textTransform: "none" }}
-                      onClick={() => setSupportChatOpen(true)}
-                    >
-                      Contact Support
-                    </Button>
-                  </Stack>
-                </>
-              ) : (
-                // NORMAL ORDER LOGIC (Unchanged)
-                <>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    Pharmacy:
-                    <span style={{ color: "#13C0A2", marginLeft: 6 }}>{order.pharmacyName || (typeof order.pharmacy === "object" ? order.pharmacy?.name : order.pharmacy)}</span>
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: "#444" }}>
-                    Deliver to:
-                    <span style={{ color: "#13C0A2", marginLeft: 6 }}>{formatAddress(order.address)}</span>
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: "#444" }}>
-                    Amount: <b>₹{order.amount || order.total || 0}</b>
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: "#888" }}>
-                    Items:
-                    {(order.items || []).map((item, i) =>
-                      <span key={i} style={{ color: "#13C0A2", fontWeight: 600 }}> {item.name} x{item.qty || item.quantity};</span>
-                    )}
-                  </Typography>
-                  <Stack direction="row" spacing={2} sx={{ my: 2 }}>
-                    <Button
-                      variant="outlined"
-                      color="success"
-                      startIcon={<SupportAgentIcon />}
-                      sx={{ fontWeight: 600, textTransform: "none" }}
-                      onClick={() => setSupportChatOpen(true)}
-                    >
-                      Contact Support
-                    </Button>
-                  </Stack>
-                  {order.dosage && (
-                    <Stack direction="row" alignItems="center">
-                      <NoteAltIcon sx={{ color: "#1976d2", mr: 1 }} />
-                      <Typography variant="body2" sx={{ color: "#1976d2" }}>
-                        Dosage: {order.dosage}
-                      </Typography>
-                    </Stack>
-                  )}
-                  {order.note && (
-                    <Typography variant="body2" sx={{ color: "#888" }}>
-                      <b>Note:</b> {order.note}
-                    </Typography>
-                  )}
-                  {order.prescription && (
-                    <Box sx={{ mt: 2, mb: 2 }}>
-                      <Typography variant="body2" sx={{ color: "#13C0A2", fontWeight: 600, mb: 0.5 }}>
-                        Prescription Uploaded:
-                      </Typography>
-                      <img
-                        src={
-                          order.prescription.startsWith("http")
-                            ? order.prescription
-                            : `${API_BASE_URL}${order.prescription}`
-                        }
-                        alt="Prescription"
-                        style={{
-                          width: "90%",
-                          maxHeight: 190,
-                          borderRadius: 7,
-                          boxShadow: "0 2px 8px #bbb"
-                        }}
-                      />
-                    </Box>
-                  )}
-                </>
+                </div>
               )}
-            </Stack>
-            <Divider sx={{ my: 2 }} />
-            {/* MAP (Delivery tracking) */}
-            {isLoaded && order.driverLocation && currentStep >= 2 && currentStep < 3 && (
-              <Box>
-                <Typography variant="body2" sx={{ mb: 1, color: "#1976d2" }}>
-                  Live Delivery Location:
-                </Typography>
-                <GoogleMap
-                  mapContainerStyle={{
-                    width: "100%",
-                    height: "230px",
-                    borderRadius: "18px",
-                    marginTop: "12px"
-                  }}
-                  center={{
-                    lat: order.driverLocation.lat || 28.4595,
-                    lng: order.driverLocation.lng || 77.0266
-                  }}
-                  zoom={14}
-                >
-                  <Marker
-                    position={{
-                      lat: order.driverLocation.lat,
-                      lng: order.driverLocation.lng
-                    }}
-                  />
-                </GoogleMap>
-                <Typography variant="body1" sx={{ color: "#1976d2", fontWeight: 700, mt: 1 }}>
-                  Estimated time to delivery: {eta || "Calculating..."}
-                </Typography>
-              </Box>
-            )}
-            {/* Cheerful Delivered Message */}
-            {isDelivered && (
-              <Stack direction="row" alignItems="center" justifyContent="center" sx={{ mt: 2 }}>
-                <SentimentVerySatisfiedIcon sx={{ color: "#FFD43B", fontSize: 36, mr: 1 }} />
-                <Typography variant="h6" sx={{
-                  color: "#13C0A2",
-                  fontWeight: 800,
-                  letterSpacing: 0.2
-                }}>
-                  Fastest medicine, happiest you! Get well soon! 💊❤️
-                </Typography>
-              </Stack>
-            )}
-            {/* Ratings Section (after delivered) */}
-            {isDelivered && (
-              feedbackSubmitted ? (
-                <Box sx={{ mt: 5, textAlign: "center" }}>
-                  <SentimentVerySatisfiedIcon sx={{ color: "#18c5ad", fontSize: 64, mb: 2 }} />
-                  <Typography variant="h5" sx={{ color: "#18c5ad", fontWeight: 900, mb: 1 }}>
-                    Thank you for your feedback!
-                  </Typography>
-                  <Typography variant="body1" sx={{ color: "#7f9183", fontWeight: 500 }}>
-                    We're glad you chose GoDavaii.<br />Wishing you a speedy recovery!
-                  </Typography>
-                </Box>
-              ) : (
-                <Stack spacing={3} sx={{ mt: 3 }}>
-                  {/* PHARMACY CARD */}
-                  <Card
-                    sx={{
-                      display: 'flex', alignItems: 'center', gap: 2,
-                      background: '#fff', boxShadow: '0 3px 18px #eaf4fb',
-                      borderRadius: 4, p: 2.5, minHeight: 90,
-                      border: '1.5px solid #e9f6f5'
-                    }}>
-                    <Avatar
-                      src="/images/pharmacy.png"
-                      sx={{ width: 56, height: 56, bgcolor: "#e8faf4", border: '2px solid #13C0A2' }}
-                    />
-                    <Box flex={1}>
-                      <Typography sx={{ fontWeight: 800, color: "#1b8077", fontSize: 17, mb: 0.5 }}>
-                        {order.pharmacyName || (typeof order.pharmacy === "object" ? order.pharmacy?.name : order.pharmacy)}
-                      </Typography>
-                      <Stack direction="row" alignItems="center" spacing={1.2}>
-                        <Rating
-                          name="pharmacy-rating"
-                          value={pharmacyRating || 0}
-                          onChange={(_, val) => setPharmacyRating(val)}
-                          disabled={ratingSubmitting}
-                          size="medium"
-                        />
-                        <Typography sx={{ fontWeight: 700, color: "#515d53", fontSize: 15 }}>
-                          Rate Pharmacy
-                        </Typography>
-                      </Stack>
-                    </Box>
-                  </Card>
-                  {/* DELIVERY PARTNER CARD */}
-                  <Card
-                    sx={{
-                      display: 'flex', alignItems: 'center', gap: 2,
-                      background: '#fff', boxShadow: '0 3px 18px #eaf4fb',
-                      borderRadius: 4, p: 2.5, minHeight: 90,
-                      border: '1.5px solid #e9f6f5'
-                    }}>
-                    <Avatar
-                      src={deliveryPartner.avatar || "/images/delivery-partner.png"}
-                      sx={{ width: 56, height: 56, bgcolor: "#fff2fb", border: '2px solid #FFD43B' }}
-                    />
-                    <Box flex={1}>
-                      <Typography sx={{ fontWeight: 800, color: "#1b8077", fontSize: 17, mb: 0.5 }}>
-                        {deliveryPartner.name || "Delivery Partner"}
-                      </Typography>
-                      <Stack direction="row" alignItems="center" spacing={1.2}>
-                        <Rating
-                          name="delivery-rating"
-                          value={deliveryRating || 0}
-                          onChange={(_, val) => setDeliveryRating(val)}
-                          disabled={ratingSubmitting}
-                          size="medium"
-                        />
-                        <Typography sx={{ fontWeight: 700, color: "#515d53", fontSize: 15 }}>
-                          Rate Partner
-                        </Typography>
-                      </Stack>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{
-                          mt: 1,
-                          flexWrap: "wrap",
-                          maxWidth: 230,
-                          rowGap: 1,
-                        }}
-                      >
-                        {["Polite", "Helpful", "Rude"].map((label) => (
-                          <Chip
-                            key={label}
-                            label={label}
-                            clickable
-                            color={
-                              deliveryBehavior.includes(label.toLowerCase())
-                                ? (label === "Rude" ? "error" : "success")
-                                : "default"
-                            }
-                            onClick={() => {
-                              setDeliveryBehavior((prev) =>
-                                prev.includes(label.toLowerCase())
-                                  ? prev.filter(b => b !== label.toLowerCase())
-                                  : [...prev, label.toLowerCase()]
-                              );
-                            }}
-                            sx={{
-                              fontWeight: 700,
-                              fontSize: 14,
-                              px: 2.5,
-                              bgcolor:
-                                deliveryBehavior.includes(label.toLowerCase())
-                                  ? (label === "Rude" ? "#ffe7e7" : "#e3ffe5")
-                                  : "#f7f8fa",
-                              color: deliveryBehavior.includes(label.toLowerCase())
-                                ? (label === "Rude" ? "#d32f2f" : "#13855c")
-                                : "#4d5863",
-                              mb: 1
-                            }}
-                          />
-                        ))}
-                      </Stack>
-                    </Box>
-                  </Card>
-                  <Box sx={{ textAlign: "center", mt: 0 }}>
-                    <Button
-                      variant="outlined"
-                      color="success"
-                      startIcon={<SupportAgentIcon />}
-                      sx={{ fontWeight: 600, textTransform: "none", fontSize: 15, mb: 1 }}
-                      onClick={() => setSupportChatOpen(true)}
-                    >
-                      Contact Support
-                    </Button>
-                  </Box>
-                  <Button
-                    onClick={handleRatingSubmit}
-                    disabled={!(pharmacyRating && deliveryRating && deliveryBehavior.length > 0) || ratingSubmitting}
-                    sx={{
-                      bgcolor: "#FFD43B", color: "#222", px: 5, py: 1.3,
-                      fontWeight: 900, borderRadius: 3, fontSize: 18,
-                      letterSpacing: 1,
-                      boxShadow: "0 2px 12px #ffe999",
-                      mt: 1, transition: "0.2s"
-                    }}
-                  >
-                    {ratingSubmitting ? <CircularProgress size={20} /> : "Submit Feedback"}
-                  </Button>
-                </Stack>
-              )
-            )}
+            </div>
+
+            {/* Back button */}
+            <Button
+              onClick={() => navigate("/orders")}
+              className="w-full mt-4 font-bold text-[16px]"
+              style={{ backgroundColor: "#13C0A2", color: "#fff" }}
+            >
+              Back to My Orders
+            </Button>
           </CardContent>
-          <Button
-            onClick={() => navigate("/orders")}
-            variant="contained"
-            color="primary"
-            sx={{
-              mt: 3, fontWeight: 700,
-              bgcolor: "#13C0A2", fontSize: 17,
-              "&:hover": { bgcolor: "#17879c" }
-            }}
-            fullWidth
-          >
-            Back to My Orders
-          </Button>
         </Card>
-      </Box>
-      {/* QUOTE MODAL */}
-      <Dialog open={quoteDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>Quote Available</DialogTitle>
-        <DialogContent>
-          {prescriptionQuote && (
-            <>
-              <Typography sx={{ mb: 2 }}>Pharmacy has sent you a quote for your prescription:</Typography>
-              <ul>
-                {prescriptionQuote.items && prescriptionQuote.items.map((item, idx) => (
-                  <li key={idx}>
-                    {item.medicineName} – {item.brand} – ₹{item.price} × {item.quantity} [{item.available !== false ? 'Available' : 'Unavailable'}]
-                  </li>
-                ))}
-              </ul>
-              <Typography sx={{ mt: 2, fontWeight: 700 }}>Total: ₹{prescriptionQuote.price || prescriptionQuote.approxPrice}</Typography>
-              {prescriptionQuote.message && (
-                <Typography sx={{ mt: 1, color: "#888" }}>
-                  Note: {prescriptionQuote.message}
-                </Typography>
-              )}
-            </>
-          )}
+      </div>
+
+      {/* QUOTE MODAL (UNCHANGED FLOW) */}
+      <Dialog open={quoteDialog} onOpenChange={setQuoteDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Quote Available</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-slate-700">
+            {prescriptionQuote && (
+              <>
+                <div className="mb-2">Pharmacy has sent you a quote for your prescription:</div>
+                <ul className="list-disc pl-5 space-y-1">
+                  {prescriptionQuote.items?.map((item, idx) => (
+                    <li key={idx}>
+                      {item.medicineName} – {item.brand} – ₹{item.price} × {item.quantity} [
+                      {item.available !== false ? "Available" : "Unavailable"}]
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-2 font-bold">
+                  Total: ₹{prescriptionQuote.price || prescriptionQuote.approxPrice}
+                </div>
+                {prescriptionQuote.message && (
+                  <div className="mt-1 text-slate-500">Note: {prescriptionQuote.message}</div>
+                )}
+              </>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              className="border-red-300 text-red-600 hover:bg-red-50"
+              onClick={handleRejectQuote}
+              disabled={quoteActionLoading}
+            >
+              Reject
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={handleAcceptQuote}
+              disabled={quoteActionLoading}
+            >
+              Accept & Pay
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button variant="outlined" color="error" onClick={handleRejectQuote} disabled={quoteActionLoading}>
-            Reject
-          </Button>
-          <Button variant="contained" color="success" onClick={handleAcceptQuote} disabled={quoteActionLoading}>
-            Accept & Pay
-          </Button>
-        </DialogActions>
       </Dialog>
-      {/* Chat Modal for Delivery Partner */}
+
+      {/* Delivery Chat Modal */}
       <ChatModal
         open={chatOpen && chatThread === "delivery"}
         onClose={() => setChatOpen(false)}
@@ -836,27 +912,18 @@ useEffect(() => {
         partnerType={chatPartner.type}
         currentRole="user"
       />
-      <ChatSupportModal
-        open={supportChatOpen}
-        onClose={() => setSupportChatOpen(false)}
-        orderId={order._id}
-      />
-      <Snackbar
+
+      {/* Support Chat */}
+      <ChatSupportModal open={supportChatOpen} onClose={() => setSupportChatOpen(false)} orderId={order._id} />
+
+      {/* Inline toast */}
+      <InlineToast
         open={snackbarOpen}
-        autoHideDuration={3500}
+        kind={snackbarMsg.toLowerCase().includes("fail") ? "error" : "success"}
         onClose={() => setSnackbarOpen(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <MuiAlert
-          elevation={6}
-          variant="filled"
-          onClose={() => setSnackbarOpen(false)}
-          severity={snackbarMsg.toLowerCase().includes("fail") ? "error" : "success"}
-          sx={{ width: "100%", fontWeight: 700, fontSize: 16 }}
-        >
-          {snackbarMsg}
-        </MuiAlert>
-      </Snackbar>
-    </Box>
+        {snackbarMsg}
+      </InlineToast>
+    </div>
   );
 }

@@ -85,6 +85,37 @@ export default function PharmaciesNearYou() {
     snapTo(toFullDist < toHalfDist ? FULL : HALF);
   };
 
+  // replace your StarRating with this one
+function StarRating({ value = 0, size = 16, showNumber = false }) {
+  const full = Math.floor(value);
+  const frac = Math.max(0, Math.min(1, value - full));
+  const starPath =
+    "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z";
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const pct = i < full ? 100 : i === full ? Math.round(frac * 100) : 0;
+        return (
+          <div key={i} className="relative" style={{ width: size, height: size }}>
+            <svg viewBox="0 0 24 24" className="absolute inset-0 text-gray-300" fill="currentColor">
+              <path d={starPath} />
+            </svg>
+            <div className="absolute inset-0 overflow-hidden" style={{ width: `${pct}%` }}>
+              <svg viewBox="0 0 24 24" className="absolute inset-0 text-amber-500" fill="currentColor">
+                <path d={starPath} />
+              </svg>
+            </div>
+          </div>
+        );
+      })}
+      {showNumber && (
+        <span className="ml-1 text-[11px] font-bold text-amber-600">{Number(value).toFixed(1)}</span>
+      )}
+    </div>
+  );
+}
+
   return (
     <div className="relative min-h-screen">
       {/* BACKGROUND = Home (non-interactive) */}
@@ -177,63 +208,71 @@ export default function PharmaciesNearYou() {
               ) : (
                 <div className="flex flex-col gap-4">
                   {pharmacies.map((pharmacy) => (
-                    <Card
-                      key={pharmacy._id}
-                      className={`p-4 rounded-2xl bg-white shadow-md hover:shadow-xl transition cursor-pointer ${
-                        canDeliver ? "" : "opacity-60 pointer-events-none"
-                      }`}
-                      style={{ borderColor: `${DEEP}14` }}
-                      onClick={() => canDeliver && navigate(`/medicines/${pharmacy._id}`)}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div
-                          className="h-14 w-14 grid place-items-center rounded-xl shrink-0"
-                          style={{ background: `${DEEP}0F`, border: `1px solid ${DEEP}22` }}
-                        >
-                          <img src="/pharmacy-icon.png" alt="Pharmacy" className="h-8 w-8 object-contain" />
-                        </div>
+  <Card
+    key={pharmacy._id}
+    className={`group p-4 rounded-2xl bg-white shadow-md hover:shadow-2xl transition
+                hover:-translate-y-0.5 cursor-pointer border border-slate-200
+                ${canDeliver ? "" : "opacity-60 pointer-events-none"}`}
+    style={{ borderColor: `${DEEP}26` }}
+    onClick={() => canDeliver && navigate(`/medicines/${pharmacy._id}`)}
+  >
+    <div className="flex items-center gap-4">
+      {/* Icon tile */}
+      <div
+        className="h-14 w-14 grid place-items-center rounded-2xl shrink-0
+                   bg-emerald-50 ring-1 ring-emerald-100"
+      >
+        <img
+          src="/pharmacy-icon.png"
+          alt="Pharmacy"
+          className="h-8 w-8 object-contain"
+        />
+      </div>
 
-                        <div className="flex-1 min-w-0">
-                          <div className="font-extrabold text-[15.5px] truncate" style={{ color: DEEP }} title={pharmacy.name}>
-                            {pharmacy.name}
-                          </div>
-                          <div className="text-xs text-neutral-500 truncate">
-                            {pharmacy.address?.area || pharmacy.area || "--"}
-                          </div>
-                          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                            <Badge className="font-bold text-[11px]" style={{ background: `${DEEP}10`, color: DEEP, borderColor: `${DEEP}30` }}>
-                              <Timer className="w-4 h-4 mr-1 inline-block" />
-                              13–29 min
-                            </Badge>
-                            <Badge className="font-bold text-[11px]" style={{ background: "#fff7e6", color: "#b7791f", borderColor: "#facc15" }}>
-                              <CheckCircle className="w-4 h-4 mr-1 inline-block" />
-                              Verified
-                            </Badge>
-                          </div>
-                        </div>
+      {/* Texts */}
+      <div className="flex-1 min-w-0">
+        <div
+          className="text-[16px] font-black truncate tracking-tight"
+          style={{ color: DEEP }}
+          title={pharmacy.name}
+        >
+          {pharmacy.name}
+        </div>
+        <div className="text-xs text-neutral-500 truncate">
+          {pharmacy.address?.area || pharmacy.area || "--"}
+        </div>
 
-                        <div className="flex flex-col items-end gap-1">
-                          <div className="flex items-center gap-1 text-xs font-bold text-yellow-500">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                            </svg>
-                            {pharmacy.rating || 4.5}
-                          </div>
-                          <Button
-                            size="sm"
-                            className="rounded-full font-bold shadow-none"
-                            style={{ backgroundColor: DEEP, color: "white" }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (canDeliver) navigate(`/medicines/${pharmacy._id}`);
-                            }}
-                          >
-                            View
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
+        {/* Badges row — time REMOVED, keep Verified only */}
+        <div className="mt-1.5 flex items-center gap-3 flex-wrap">
+  <Badge
+    className="font-bold text-[11px] border"
+    style={{ background: "#fff7e6", color: "#b7791f", borderColor: "#facc15" }}
+  >
+    <CheckCircle className="w-4 h-4 mr-1 inline-block" />
+    Verified
+  </Badge>
+</div>
+
+      </div>
+
+      {/* Right side: stars (middle) + View button */}
+<div className="ml-auto flex items-center gap-3">
+  <StarRating value={Number(pharmacy.rating) || 4.5} size={14} /* showNumber defaults to false */ />
+  <Button
+    size="sm"
+    className="rounded-full font-extrabold shadow-none hover:brightness-105"
+    style={{ backgroundColor: DEEP, color: "white" }}
+    onClick={(e) => {
+      e.stopPropagation();
+      if (canDeliver) navigate(`/medicines/${pharmacy._id}`);
+    }}
+  >
+    View
+  </Button>
+</div>
+    </div>
+  </Card>
+))}
                 </div>
               )}
             </div>
