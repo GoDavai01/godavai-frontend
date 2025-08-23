@@ -127,20 +127,34 @@ export default function Home() {
   }px + env(safe-area-inset-bottom, 0px) + 12px)`;
   const [allMedsByPharmacy, setAllMedsByPharmacy] = useState({});
 
-  /* === ADDED: state + helper for active order === */
+  /* === ADDED: state + helper for active order (expanded statuses) === */
   const ACTIVE_STATUSES = new Set([
+    "pending",
     "placed",
-    "processing",
-    "out_for_delivery",
     "quoted",
+    "processing",
+    "assigned",
+    "accepted",
+    "picked_up",
+    "out_for_delivery",
   ]);
   const [activeOrder, setActiveOrder] = useState(null);
 
   function statusLabel(s) {
-    return s === "placed"
+    return s === "pending"
+      ? "Pending"
+      : s === "placed"
       ? "Order Placed"
+      : s === "quoted"
+      ? "Quoted"
       : s === "processing"
       ? "Processing"
+      : s === "assigned"
+      ? "Assigned"
+      : s === "accepted"
+      ? "Accepted"
+      : s === "picked_up"
+      ? "Picked Up"
       : s === "out_for_delivery"
       ? "Out for Delivery"
       : s === "delivered"
@@ -417,11 +431,11 @@ export default function Home() {
         </div>
       </div>
 
-      {/* === ADDED: Track Order CTA under status strip === */}
+      {/* Track Order CTA */}
       {activeOrder && (
         <div className="px-4 mt-3">
           <button
-            onClick={() => navigate(`/order-tracking/${activeOrder._id}`)} // <- adjust path to your route
+            onClick={() => navigate(`/order-tracking/${activeOrder._id}`)}
             className="w-full flex items-center justify-between rounded-2xl bg-emerald-600 text-white px-4 py-3 shadow-lg active:scale-[0.99]"
           >
             <div className="text-left">
@@ -436,7 +450,6 @@ export default function Home() {
           </button>
         </div>
       )}
-      {/* === /ADDED === */}
 
       {/* PHARMACIES NEAR YOU (no extra arrow) */}
       <div className="mt-6 px-4">
