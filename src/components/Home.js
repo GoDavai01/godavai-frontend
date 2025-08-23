@@ -127,6 +127,28 @@ export default function Home() {
   }px + env(safe-area-inset-bottom, 0px) + 12px)`;
   const [allMedsByPharmacy, setAllMedsByPharmacy] = useState({});
 
+  /* === ADDED: state + helper for active order === */
+  const ACTIVE_STATUSES = new Set([
+    "placed",
+    "processing",
+    "out_for_delivery",
+    "quoted",
+  ]);
+  const [activeOrder, setActiveOrder] = useState(null);
+
+  function statusLabel(s) {
+    return s === "placed"
+      ? "Order Placed"
+      : s === "processing"
+      ? "Processing"
+      : s === "out_for_delivery"
+      ? "Out for Delivery"
+      : s === "delivered"
+      ? "Delivered"
+      : s;
+  }
+  /* === /ADDED === */
+
   useEffect(() => {
     if (currentAddress?.lat && currentAddress?.lng) {
       setUserCoords({ lat: currentAddress.lat, lng: currentAddress.lng });
@@ -154,6 +176,57 @@ export default function Home() {
     }
     fetchLastOrder();
   }, [user]);
+
+  /* === ADDED: effect to load active order === */
+  useEffect(() => {
+    async function getActive() {
+      const idFromLS = localStorage.getItem("activeOrderId");
+      try {
+        if (idFromLS) {
+          const r = await fetch(`${API_BASE_URL}/api/orders/${idFromLS}`);
+          if (r.ok) {
+            const o = await r.json();
+            if (ACTIVE_STATUSES.has(o.status)) {
+              setActiveOrder(o);
+              return;
+            }
+          }
+          // not active anymore
+          localStorage.removeItem("activeOrderId");
+        }
+      } catch {}
+
+      // fallback: look at user’s recent orders and pick the first active one
+      if (!user?._id && !user?.userId) return;
+      const userId = user._id || user.userId;
+      try {
+        const r = await fetch(
+          `${API_BASE_URL}/api/allorders/myorders-userid/${userId}`
+        );
+        const orders = await r.json();
+        if (Array.isArray(orders) && orders.length) {
+          // prefer the most recently updated active order
+          const active = orders
+            .filter((o) => ACTIVE_STATUSES.has(o.status))
+            .sort(
+              (a, b) =>
+                new Date(b.updatedAt || b.createdAt) -
+                new Date(a.updatedAt || a.createdAt)
+            )[0];
+          if (active) {
+            setActiveOrder(active);
+            localStorage.setItem("activeOrderId", active._id);
+            return;
+          }
+        }
+        setActiveOrder(null);
+      } catch {
+        /* ignore */
+      }
+    }
+    getActive();
+  }, [user]);
+  /* === /ADDED === */
 
   useEffect(() => {
     if (!userCoords) return;
@@ -215,7 +288,10 @@ export default function Home() {
   const handleAddToCart = (med) => {
     if (cart.length > 0) {
       const cartPharmacyId = cart[0]?.pharmacy?._id || cart[0]?.pharmacy;
-      if (med.pharmacy?._id !== cartPharmacyId && med.pharmacy !== cartPharmacyId) {
+      if (
+        med.pharmacy?._id !== cartPharmacyId &&
+        med.pharmacy !== cartPharmacyId
+      ) {
         alert("You can only order medicines from one pharmacy at a time.");
         return;
       }
@@ -250,7 +326,10 @@ export default function Home() {
     if (noneHaveMeds) {
       setShowFallbackMeds(false);
       if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
-      noMedicinesTimer.current = setTimeout(() => setShowFallbackMeds(true), 500);
+      noMedicinesTimer.current = setTimeout(
+        () => setShowFallbackMeds(true),
+        500
+      );
     } else {
       setShowFallbackMeds(false);
       if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
@@ -259,7 +338,12 @@ export default function Home() {
       if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
     };
     // eslint-disable-next-line
-  }, [selectedCategory, pharmaciesNearby, allMedsByPharmacy, mostOrderedByPharmacy]);
+  }, [
+    selectedCategory,
+    pharmaciesNearby,
+    allMedsByPharmacy,
+    mostOrderedByPharmacy,
+  ]);
 
   const filteredPharmacies = pharmaciesNearby
     .slice(0, 5)
@@ -332,6 +416,27 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* === ADDED: Track Order CTA under status strip === */}
+      {activeOrder && (
+        <div className="px-4 mt-3">
+          <button
+            onClick={() => navigate(`/order-tracking/${activeOrder._id}`)} // <- adjust path to your route
+            className="w-full flex items-center justify-between rounded-2xl bg-emerald-600 text-white px-4 py-3 shadow-lg active:scale-[0.99]"
+          >
+            <div className="text-left">
+              <div className="text-sm font-extrabold">Track current order</div>
+              <div className="text-xs text-emerald-100">
+                Status: {statusLabel(activeOrder.status)} · Tap to view live map
+              </div>
+            </div>
+            <span className="inline-flex items-center justify-center h-9 px-3 text-sm font-bold bg-white text-emerald-700 rounded-full">
+              Track
+            </span>
+          </button>
+        </div>
+      )}
+      {/* === /ADDED === */}
 
       {/* PHARMACIES NEAR YOU (no extra arrow) */}
       <div className="mt-6 px-4">
@@ -501,7 +606,10 @@ export default function Home() {
             {lastOrder && Array.isArray(lastOrder.items) && lastOrder.items.length
               ? lastOrder.items
                   .map(
-                    (i) => `${i.name || i.medicineName} x${i.quantity || i.qty || 1}`
+                    (i) =>
+                      `${i.name || i.medicineName} x${
+                        i.quantity || i.qty || 1
+                      }`
                   )
                   .join(", ")
               : "No recent orders"}
