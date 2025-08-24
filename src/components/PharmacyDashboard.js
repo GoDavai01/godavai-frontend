@@ -1029,8 +1029,9 @@ const handleEditImagesChange = (e) => {
       </Card>
     ))}
     {/* EDIT MEDICINE DIALOG */}
-    <Dialog open={!!editMedId} onClose={closeEditDialog} fullWidth maxWidth="xs">
+    <Dialog open={!!editMedId} onClose={closeEditDialog} fullWidth maxWidth="xs" aria-describedby="edit-med-desc">
       <DialogTitle>Edit Medicine</DialogTitle>
+      <DialogContent dividers id="edit-med-desc"></DialogContent>
       <DialogContent>
         <Stack spacing={2} mt={1}>
           {false && (
