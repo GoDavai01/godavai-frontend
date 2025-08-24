@@ -377,6 +377,7 @@ useEffect(() => {
     .join(",");
 
   const params = { pharmacyId: selectedPharmacy._id, limit: 20, exclude };
+  console.log("Fetching suggestions with", params);
   const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
   (async () => {
