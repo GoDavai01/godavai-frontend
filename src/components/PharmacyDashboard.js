@@ -397,7 +397,7 @@ const handleAddMedicine = async () => {
       headers = {
         Authorization: `Bearer ${token}`,
         // 👇 this avoids “OPTIONS 404” preflight issues on some hosts
-        "Content-Type": "multipart/form-data",
+        // let axios set the right boundary automatically
       };
     } else {
       // ✅ JSON path (no images)
@@ -474,13 +474,14 @@ const handleAddMedicine = async () => {
 };
 
   // Save edit
-  const handleSaveMedicine = async () => {
+  // Save edit
+const handleSaveMedicine = async () => {
   if (!editMedForm.name || !editMedForm.price || !editMedForm.stock ||
-    !editMedForm.category ||
-    (
-      (Array.isArray(editMedForm.category) && editMedForm.category.includes("Other") && !editMedForm.customCategory)
-      || (editMedForm.category === "Other" && !editMedForm.customCategory)
-    )
+      !editMedForm.category ||
+      (
+        (Array.isArray(editMedForm.category) && editMedForm.category.includes("Other") && !editMedForm.customCategory) ||
+        (editMedForm.category === "Other" && !editMedForm.customCategory)
+      )
   ) {
     setMedMsg("Fill all fields to edit.");
     return;
@@ -499,7 +500,9 @@ const handleAddMedicine = async () => {
 
   try {
     let data, headers;
+
     if (editMedImages && editMedImages.length) {
+      // ✅ MULTIPART path (new images present) — let Axios set the boundary
       data = new FormData();
       data.append("name", editMedForm.name);
       data.append("brand", editMedForm.brand);
@@ -508,32 +511,33 @@ const handleAddMedicine = async () => {
       data.append("price", editMedForm.price);
       data.append("mrp", editMedForm.mrp);
       data.append("stock", editMedForm.stock);
-      // CRUCIAL: category should be sent as JSON if array
       data.append("category", JSON.stringify(finalCategories));
       data.append("type", editMedForm.type);
-      if (editMedForm.type === "Other") {
-        data.append("customType", editMedForm.customType);
-      }
+      if (editMedForm.type === "Other") data.append("customType", editMedForm.customType || "");
       editMedImages.forEach(img => data.append("images", img));
+
       headers = {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "multipart/form-data",
+        Authorization: `Bearer ${token}`, // <-- keep ONLY this
       };
     } else {
+      // ✅ JSON path (no new images)
       data = {
-  name: editMedForm.name,
-  brand: editMedForm.brand,
-  composition: editMedForm.composition || "",
-  company: editMedForm.company || "",
-  price: editMedForm.price,
-  mrp: editMedForm.mrp,
-  stock: editMedForm.stock,
-  category: finalCategories,
-  type: editMedForm.type,
-  ...(editMedForm.type === "Other" && { customType: editMedForm.customType })
-};
+        name: editMedForm.name,
+        brand: editMedForm.brand,
+        composition: editMedForm.composition || "",
+        company: editMedForm.company || "",
+        price: editMedForm.price,
+        mrp: editMedForm.mrp,
+        stock: editMedForm.stock,
+        category: finalCategories,
+        type: editMedForm.type,
+        ...(editMedForm.type === "Other" && { customType: editMedForm.customType }),
+      };
 
-      headers = { Authorization: `Bearer ${token}` };
+      headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json", // <-- add this
+      };
     }
 
     await axios.patch(
