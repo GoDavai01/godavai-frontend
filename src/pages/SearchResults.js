@@ -1,15 +1,34 @@
+// src/pages/SearchResults.jsx
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { useCart } from '../context/CartContext';
+import { motion } from "framer-motion";
+import {
+  Search,
+  Store,
+  MapPin,
+  IndianRupee,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  ShoppingCart,
+} from "lucide-react";
+import { useCart } from "../context/CartContext";
+
+// shadcn/ui
+import { Card, CardContent } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+const DEEP = "#0f6e51";
 
-const highlight = (str, color = "#13C0A2") => (
-  <span style={{ color, fontWeight: 800 }}>{str}</span>
+// === styling-only highlight (logic unchanged)
+const highlight = (str, className = "text-emerald-700") => (
+  <span className={`${className} font-black`}>{str}</span>
 );
 
-const SearchResults = () => {
+export default function SearchResults() {
   const location = useLocation();
   const query = new URLSearchParams(location.search).get("q") || "";
   const [offers, setOffers] = useState([]);
@@ -25,34 +44,28 @@ const SearchResults = () => {
   const lng = locationObj.lng || null;
 
   useEffect(() => {
-  if (!query || !lat || !lng) return;   // Only search if we have query and geolocation
-  setLoading(true);
+    if (!query || !lat || !lng) return; // Only search if we have query and geolocation
+    setLoading(true);
 
-  axios
-    .get(`${API_BASE_URL}/api/medicines/by-name`, {
-      params: {
-        name: query,
-        lat,
-        lng
-      }
-    })
-    .then(res => setOffers(res.data || []))
-    .catch(() => setOffers([]))
-    .finally(() => setLoading(false));
-}, [query, lat, lng]);
+    axios
+      .get(`${API_BASE_URL}/api/medicines/by-name`, {
+        params: { name: query, lat, lng },
+      })
+      .then((res) => setOffers(res.data || []))
+      .catch(() => setOffers([]))
+      .finally(() => setLoading(false));
+  }, [query, lat, lng]);
 
   useEffect(() => {
-  if (!query) return;
-  axios
-    .get(`${API_BASE_URL}/api/medicines/search`, {
-      params: { q: query, lat, lng }
-    })
-    .then((res) => {
-      const names = Array.from(new Set(res.data.map((m) => m.name)));
-      setAutoSuggestions(names);
-    })
-    .catch(() => setAutoSuggestions([]));
-}, [query, lat, lng]);
+    if (!query) return;
+    axios
+      .get(`${API_BASE_URL}/api/medicines/search`, { params: { q: query, lat, lng } })
+      .then((res) => {
+        const names = Array.from(new Set(res.data.map((m) => m.name)));
+        setAutoSuggestions(names);
+      })
+      .catch(() => setAutoSuggestions([]));
+  }, [query, lat, lng]);
 
   const handleSuggestionClick = (suggestion) => {
     navigate(`/search?q=${encodeURIComponent(suggestion)}`);
@@ -69,193 +82,161 @@ const SearchResults = () => {
   });
 
   return (
-    <div style={{
-      padding: 24,
-      maxWidth: 700,
-      margin: "0 auto",
-      minHeight: "100vh"
-    }}>
-      <h2 style={{ fontWeight: 800, color: "#17879c", marginBottom: 2 }}>
-        Search Results for:
-      </h2>
-      <div style={{ fontSize: 25, color: "#17879c", marginBottom: 16 }}>
-        {highlight(query)}
-      </div>
-      {/* Suggestions */}
-      {autoSuggestions.length > 0 && (
-        <div style={{
-          background: "#f8faff",
-          borderRadius: 12,
-          marginBottom: 18,
-          boxShadow: "0 0 9px #dde8ff30",
-          padding: "10px 10px 8px 12px",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap"
-        }}>
-          <span style={{ color: "#aaa", fontWeight: 600 }}>Suggestions:</span>
-          {autoSuggestions.map((suggestion, i) => (
-            <button
-              key={suggestion}
-              onClick={() => handleSuggestionClick(suggestion)}
-              style={{
-                background: "#fff",
-                border: "1.5px solid #13C0A2",
-                color: "#13C0A2",
-                borderRadius: 9,
-                padding: "2.5px 14px",
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: "pointer",
-                margin: "2px 0"
-              }}>
-              {suggestion}
-            </button>
-          ))}
+    <div className="min-h-screen bg-slate-50 py-6">
+      <div className="mx-auto w-full max-w-3xl px-4">
+        {/* Header */}
+        <div className="mb-3 text-center">
+          <div className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1.5 text-emerald-800 font-extrabold text-sm">
+            <Search className="h-4 w-4" />
+            GoDavaii
+          </div>
+          <h1 className="mt-2 text-2xl font-black tracking-tight" style={{ color: DEEP }}>
+            Search Results
+          </h1>
+          <p className="text-sm font-semibold text-emerald-900/70">
+            for {highlight(query, "text-emerald-800")}
+          </p>
         </div>
-      )}
 
-      {/* Pharmacy search input */}
-      <input
-        type="text"
-        placeholder="Search pharmacy, area or city…"
-        value={pharmacySearch}
-        onChange={e => setPharmacySearch(e.target.value)}
-        style={{
-          width: "100%",
-          padding: "10px",
-          marginBottom: 18,
-          borderRadius: 8,
-          border: "1.5px solid #13C0A2",
-          fontSize: 16,
-          outline: "none",
-        }}
-      />
+        <Card className="rounded-3xl border-emerald-100/70 shadow-sm">
+          <CardContent className="p-5 sm:p-6">
+            {/* Suggestions */}
+            {autoSuggestions.length > 0 && (
+              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3">
+                <span className="text-xs font-extrabold text-emerald-700/80">Suggestions:</span>
+                {autoSuggestions.map((s) => (
+                  <Button
+                    key={s}
+                    type="button"
+                    onClick={() => handleSuggestionClick(s)}
+                    variant="outline"
+                    className="h-8 rounded-full border-emerald-300 text-emerald-800 font-bold hover:bg-emerald-50"
+                  >
+                    {s}
+                  </Button>
+                ))}
+              </div>
+            )}
 
-      <h3 style={{ fontWeight: 700, color: "#1188A3", margin: "22px 0 6px 0" }}>
-        Pharmacies near {highlight(locationObj.formatted || locationObj.city || "your location")}
-        {" with "}{highlight(query)}
-      </h3>
-      {loading ? (
-        <p style={{ marginTop: 20 }}>Loading...</p>
-      ) : filteredOffers.length === 0 ? (
-        <div style={{
-          background: "#fffbe6",
-          color: "#b29d29",
-          borderRadius: 9,
-          padding: "18px 16px",
-          boxShadow: "0 2px 8px #ffe06644",
-          fontWeight: 600,
-          marginTop: 18
-        }}>
-        No pharmacies found near <b>{locationObj.formatted || "your location"}</b> for <b>{query}</b>.
-        </div>
-      ) : (
-        <div style={{ marginTop: 20 }}>
-          {filteredOffers.map((offer, idx) => (
-            <div
-              key={offer.medId || offer._id || idx}
-              style={{
-                background: "#f8fbfc",
-                borderRadius: 15,
-                marginBottom: 16,
-                boxShadow: "0 3px 10px #dde8ff44",
-                padding: 0,
-                display: "flex",
-                alignItems: "stretch",
-                border: "1.5px solid #e4f3fc",
-                overflow: "hidden",
-                transition: "box-shadow 0.15s"
-              }}
-            >
-              {/* Pharmacy Info */}
-              <div style={{
-                flex: 2.3,
-                padding: "20px 18px 18px 22px",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center"
-              }}>
-                <div style={{
-                  fontWeight: 700,
-                  color: "#17879c",
-                  fontSize: 20,
-                  marginBottom: 4
-                }}>
-                  {offer.pharmacy?.name}
-                </div>
-                <div style={{ fontSize: 15, color: "#888", marginBottom: 1 }}>
-                  <span style={{ fontWeight: 600 }}>{offer.pharmacy?.area}</span>
-                  {offer.pharmacy?.area && offer.pharmacy?.city && ","} {offer.pharmacy?.city}
-                </div>
-              </div>
-             {/* Price/Stock */}
-              <div style={{
-                flex: 1.5,
-                background: "#fff",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                alignItems: "center",
-                borderLeft: "1.5px solid #e4f3fc",
-                borderRight: "1.5px solid #e4f3fc"
-              }}>
-                <div style={{
-                  fontSize: 19,
-                  color: "#13C0A2",
-                  fontWeight: 800,
-                  marginBottom: 2
-                }}>
-                  ₹{offer.price}
-                </div>
-                <div style={{
-                  fontWeight: 600,
-                  fontSize: 14,
-                  color: offer.stock > 0 ? "#1188A3" : "#e76c4b"
-                }}>
-                  {offer.stock > 0 ? "In stock" : "Out of stock"}
-                </div>
-              </div>
-              {/* Add to Cart */}
-              <div style={{
-                flex: 1.1,
-                background: "#13C0A2",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center"
-              }}>
-                <button
-                  onClick={() => addToCart({
-  ...offer,
-  _id: offer.medId || offer._id,
-  pharmacy: offer.pharmacy, // must be the whole object, not just id
-  name: offer.name || query,
-  price: offer.price,
-})}
-
-                  style={{
-                    background: "#fff",
-                    color: "#13C0A2",
-                    border: "none",
-                    borderRadius: 10,
-                    padding: "9px 18px",
-                    fontWeight: 800,
-                    fontSize: 15,
-                    cursor: "pointer",
-                    transition: "background 0.14s"
-                  }}
-                  disabled={offer.stock === 0}
-                >
-                  {offer.stock > 0 ? "Add to Cart" : "Out of Stock"}
-                </button>
-              </div>
+            {/* Pharmacy search input */}
+            <div className="relative mb-3">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-700/70" />
+              <Input
+                type="text"
+                value={pharmacySearch}
+                onChange={(e) => setPharmacySearch(e.target.value)}
+                placeholder="Search pharmacy, area or city…"
+                className="pl-9 rounded-xl border-emerald-300 focus-visible:ring-emerald-600"
+              />
             </div>
-          ))}
-        </div>
-      )}
+
+            <div className="mb-1 flex flex-wrap items-center gap-x-2 text-sm">
+              <span className="font-extrabold text-emerald-900">Pharmacies near</span>
+              <span className="inline-flex items-center gap-1 font-black text-emerald-700">
+                <MapPin className="h-3.5 w-3.5" />
+                {locationObj.formatted || locationObj.city || "your location"}
+              </span>
+              <span className="text-emerald-900 font-extrabold">with</span>
+              {highlight(query)}
+            </div>
+
+            {/* Results */}
+            {loading ? (
+              <div className="mt-6 grid place-items-center text-emerald-800">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="ml-2 text-sm font-bold">Loading…</span>
+              </div>
+            ) : filteredOffers.length === 0 ? (
+              <div className="mt-4 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+                <AlertCircle className="mt-0.5 h-5 w-5" />
+                <div className="text-sm font-bold">
+                  No pharmacies found near{" "}
+                  <b>{locationObj.formatted || "your location"}</b> for <b>{query}</b>.
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {filteredOffers.map((offer, idx) => (
+                  <motion.div
+                    key={offer.medId || offer._id || idx}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    whileHover={{ y: -2 }}
+                    className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-sm"
+                  >
+                    <div className="flex flex-col sm:flex-row">
+                      {/* Pharmacy info */}
+                      <div className="flex flex-1 items-center gap-3 p-4">
+                        <div className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50">
+                          <Store className="h-5 w-5 text-emerald-700" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-lg font-black text-emerald-800">
+                            {offer.pharmacy?.name}
+                          </div>
+                          <div className="truncate text-[13px] font-semibold text-emerald-900/70">
+                            <span className="font-bold">{offer.pharmacy?.area}</span>
+                            {offer.pharmacy?.area && offer.pharmacy?.city && ","}{" "}
+                            {offer.pharmacy?.city}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Price & stock */}
+                      <div className="grid w-full sm:w-56 place-items-center border-t sm:border-t-0 sm:border-l border-emerald-100 bg-emerald-50">
+                        <div className="py-3 text-center">
+                          <div className="inline-flex items-center gap-1 text-emerald-700">
+                            <IndianRupee className="h-4 w-4" />
+                            <span className="text-xl font-black">₹{offer.price}</span>
+                          </div>
+                          <div
+                            className={`mt-0.5 inline-flex items-center gap-1 text-xs font-extrabold ${
+                              offer.stock > 0 ? "text-emerald-700" : "text-rose-600"
+                            }`}
+                          >
+                            {offer.stock > 0 ? (
+                              <>
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                In stock
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle className="h-3.5 w-3.5" />
+                                Out of stock
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Add to cart */}
+                      <div className="grid w-full sm:w-48 place-items-center bg-emerald-700 p-3">
+                        <Button
+                          type="button"
+                          disabled={offer.stock === 0}
+                          onClick={() =>
+                            addToCart({
+                              ...offer,
+                              _id: offer.medId || offer._id,
+                              pharmacy: offer.pharmacy, // keep whole object (logic preserved)
+                              name: offer.name || query,
+                              price: offer.price,
+                            })
+                          }
+                          className="w-40 rounded-xl bg-white text-emerald-700 font-extrabold hover:bg-emerald-50 disabled:opacity-60"
+                        >
+                          <ShoppingCart className="mr-2 h-4 w-4" />
+                          {offer.stock > 0 ? "Add to Cart" : "Out of Stock"}
+                        </Button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
-};
-
-export default SearchResults;
+}
