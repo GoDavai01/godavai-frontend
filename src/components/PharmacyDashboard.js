@@ -348,23 +348,25 @@ const allPharmacyCategories = React.useMemo(() => {
 };
 
   // Add medicine - multipart if image
-  const handleAddMedicine = async () => {
-  if (!medForm.name || !medForm.price || !medForm.mrp || !medForm.stock ||
+const handleAddMedicine = async () => {
+  if (
+    !medForm.name || !medForm.price || !medForm.mrp || !medForm.stock ||
     !medForm.category ||
     (
-      (Array.isArray(medForm.category) && medForm.category.includes("Other") && !medForm.customCategory)
-      || (medForm.category === "Other" && !medForm.customCategory)
+      (Array.isArray(medForm.category) && medForm.category.includes("Other") && !medForm.customCategory) ||
+      (medForm.category === "Other" && !medForm.customCategory)
     )
   ) {
     setMedMsg("Fill all medicine fields.");
     return;
   }
+
   setLoading(true);
 
-  // THIS IS THE MAIN LOGIC:
+  // Normalize category to an array, swap "Other" with custom, and default.
   let finalCategories = Array.isArray(medForm.category)
     ? [...medForm.category]
-    : medForm.category ? [medForm.category] : [];
+    : (medForm.category ? [medForm.category] : []);
   if (finalCategories.includes("Other")) {
     finalCategories = finalCategories.filter(c => c !== "Other");
     if (medForm.customCategory) finalCategories.push(medForm.customCategory);
@@ -373,7 +375,9 @@ const allPharmacyCategories = React.useMemo(() => {
 
   try {
     let data, headers;
+
     if (medImages && medImages.length) {
+      // ✅ MULTIPART path (images present)
       data = new FormData();
       data.append("name", medForm.name);
       data.append("brand", medForm.brand);
@@ -383,41 +387,52 @@ const allPharmacyCategories = React.useMemo(() => {
       data.append("mrp", medForm.mrp);
       data.append("discount", medForm.discount);
       data.append("stock", medForm.stock);
-      // CRUCIAL: category should be sent as JSON if array
+      // send categories as JSON string for backend to parse
       data.append("category", JSON.stringify(finalCategories));
+      // send type/customType consistently
+      data.append("type", medForm.type || "Tablet");
+      if (medForm.type === "Other") data.append("customType", medForm.customType || "");
       medImages.forEach(img => data.append("images", img));
-      headers = { Authorization: `Bearer ${token}` };
-    } else {
-      data = {
-  name: medForm.name,
-  brand: medForm.brand,
-  composition: medForm.composition || "",
-  company: medForm.company || "",
-  price: medForm.price,
-  mrp: medForm.mrp,
-  discount: medForm.discount,
-  stock: medForm.stock,
-  category: finalCategories
-};
 
-      headers = { Authorization: `Bearer ${token}` };
+      headers = {
+        Authorization: `Bearer ${token}`,
+        // 👇 this avoids “OPTIONS 404” preflight issues on some hosts
+        "Content-Type": "multipart/form-data",
+      };
+    } else {
+      // ✅ JSON path (no images)
+      data = {
+        name: medForm.name,
+        brand: medForm.brand,
+        composition: medForm.composition || "",
+        company: medForm.company || "",
+        price: medForm.price,
+        mrp: medForm.mrp,
+        discount: medForm.discount,
+        stock: medForm.stock,
+        category: finalCategories,          // array is OK; backend normalizes
+        type: medForm.type || "Tablet",
+        ...(medForm.type === "Other" && { customType: medForm.customType || "" }),
+      };
+
+      headers = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
     }
 
-    await axios.post(
-      `${API_BASE_URL}/api/pharmacy/medicines`,
-      data,
-      { headers }
-    );
+    await axios.post(`${API_BASE_URL}/api/pharmacy/medicines`, data, { headers });
+
     setMedMsg("Medicine added!");
     setMedForm({
-  name: "", brand: "", composition: "", company: "",
-  price: "", mrp: "", stock: "", category: "", discount: "",
-  customCategory: "", type: "Tablet", customType: ""
-});
+      name: "", brand: "", composition: "", company: "",
+      price: "", mrp: "", stock: "", category: "", discount: "",
+      customCategory: "", type: "Tablet", customType: ""
+    });
     setMedImages([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  } catch {
-    setMedMsg("Failed to add medicine.");
+  } catch (err) {
+    setMedMsg(err?.response?.data?.error || "Failed to add medicine.");
   }
   setLoading(false);
 };
