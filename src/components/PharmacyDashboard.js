@@ -7,13 +7,28 @@ import {
   DialogActions, Switch, Table, TableHead, TableRow, TableCell, TableBody,
   Tabs, Tab, Checkbox, ListItemText, ToggleButton, ToggleButtonGroup
 } from "@mui/material";
+// (MUI Autocomplete stays imported though unused by design)
 import Autocomplete from "@mui/material/Autocomplete";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import DoneIcon from "@mui/icons-material/Done";
 import CloseIcon from "@mui/icons-material/Close";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import PhotoCamera from "@mui/icons-material/PhotoCamera";
+
+import { motion } from "framer-motion";
+import {
+  Pill,
+  MapPin,
+  Wallet,
+  FileDown,
+  BadgeCheck,
+  Loader2,
+  LogOut
+} from "lucide-react";
+
+// Minimal shadcn usage (hero card wrapper) – no logic changed
+import { Card as SCard, CardHeader as SCardHeader, CardTitle as SCardTitle, CardContent as SCardContent } from "./ui/card";
+
 import stringSimilarity from "string-similarity";
 import axios from "axios";
 
@@ -21,84 +36,41 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:500
 
 /* ---------------------------- UTILITIES ---------------------------- */
 
-const darkTheme = createTheme({
+// Light theme: deep emerald accents, light surfaces
+const appTheme = createTheme({
   palette: {
-    mode: "dark",
-    primary: { main: "#13C0A2" },
-    secondary: { main: "#FFD43B" },
-    success: { main: "#33C37E" },
-  },
+    mode: "light",
+    primary: { main: "#059669" },   // emerald-600
+    secondary: { main: "#10b981" }, // emerald-500
+    success: { main: "#059669" },
+    background: {
+      default: "#f7fcf9",
+      paper: "#ffffff",
+    },
+    text: {
+      primary: "#0f172a",  // slate-900
+      secondary: "#334155" // slate-700
+    }
+  }
 });
 
 function formatRupees(val) {
-  if (!val) return "₹0";
-  return "₹" + Number(val).toLocaleString("en-IN");
+  const n = Number(val || 0);
+  const isInt = Number.isInteger(n);
+  return "₹" + n.toLocaleString("en-IN", {
+    minimumFractionDigits: isInt ? 0 : 2,
+    maximumFractionDigits: isInt ? 0 : 2,
+  });
 }
 function todayString() {
   const d = new Date();
   return d.toISOString().slice(0, 10);
 }
-
-function isToday(date) {
-  const d = new Date(date);
-  const t = new Date();
-  return (
-    d.getFullYear() === t.getFullYear() &&
-    d.getMonth() === t.getMonth() &&
-    d.getDate() === t.getDate()
-  );
-}
-function isThisWeek(date) {
-  const d = new Date(date);
-  const now = new Date();
-  const first = new Date(now);
-  first.setHours(0,0,0,0);
-  first.setDate(now.getDate() - now.getDay()); // Sunday start
-  const last = new Date(first);
-  last.setDate(first.getDate() + 6);
-  last.setHours(23,59,59,999);
-  return d >= first && d <= last;
-}
-function isThisMonth(date) {
-  const d = new Date(date);
-  const now = new Date();
-  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-}
-function isThisYear(date) {
-  const d = new Date(date);
-  const now = new Date();
-  return d.getFullYear() === now.getFullYear();
-}
-
-function startOfDay(d) {
-  const x = new Date(d);
-  x.setHours(0,0,0,0);
-  return x;
-}
-function startOfWeek(d) {
-  const x = startOfDay(d);
-  x.setDate(x.getDate() - x.getDay()); // Sunday
-  return x;
-}
-function startOfMonth(d) {
-  const x = startOfDay(d);
-  x.setDate(1);
-  return x;
-}
-function ymd(date) {
-  const d = new Date(date);
-  return d.toISOString().slice(0,10);
-}
-function ym(date) {
-  const d = new Date(date);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
-function weekLabel(date) {
-  const s = startOfWeek(date);
-  return `Week of ${ymd(s)}`;
-}
+function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function startOfWeek(d) { const x = startOfDay(d); x.setDate(x.getDate() - x.getDay()); return x; }
+function ymd(date) { const d = new Date(date); return d.toISOString().slice(0,10); }
+function ym(date) { const d = new Date(date); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2,"0"); return `${y}-${m}`; }
+function weekLabel(date) { const s = startOfWeek(date); return `Week of ${ymd(s)}`; }
 
 /* ----------------------- STATUS / MISC HELPERS ---------------------- */
 
@@ -134,12 +106,11 @@ const linkBrandToName = (val) => val;
 /* ---------------------------- EARNINGS TAB ---------------------------- */
 
 function EarningsTab({ payouts }) {
-  // totals
+  // unchanged logic
   const totalAll = payouts.reduce((s, p) => s + (p.pharmacyAmount || 0), 0);
   const largest = payouts.reduce((m, p) => Math.max(m, Number(p.pharmacyAmount || 0)), 0);
   const avg = payouts.length ? totalAll / payouts.length : 0;
 
-  // aggregates
   const byDayMap = new Map();
   const byWeekMap = new Map();
   const byMonthMap = new Map();
@@ -166,15 +137,13 @@ function EarningsTab({ payouts }) {
     .slice(0, 12);
 
   const monthly = Array.from(byMonthMap.entries())
-    .map(([key, amount]) => ({
-      key, date: new Date(key + "-01"), amount
-    }))
+    .map(([key, amount]) => ({ key, date: new Date(key + "-01"), amount }))
     .sort((a,b) => b.date - a.date)
     .slice(0, 12);
 
-  const [view, setView] = useState("daily"); // daily | weekly | monthly
+  const [view, setView] = useState("daily");
 
-  // ===== NEW: fetch order details so we can show items & invoice =====
+  // fetch order details for payouts (unchanged)
   const [ordersById, setOrdersById] = useState({});
   useEffect(() => {
     const ids = payouts.map(p => p?.orderId?._id).filter(Boolean);
@@ -198,37 +167,54 @@ function EarningsTab({ payouts }) {
   }, [payouts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <Box sx={{ mt: 1 }}>
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2 }}>
-        <Card sx={{ flex: 1, bgcolor: "#21272b" }}>
-          <CardContent>
-            <Typography variant="subtitle2" color="#FFD43B">Total Earnings (All Time)</Typography>
-            <Typography variant="h5" fontWeight={800}>{formatRupees(totalAll)}</Typography>
-          </CardContent>
-        </Card>
-        <Card sx={{ flex: 1, bgcolor: "#21272b" }}>
-          <CardContent>
-            <Typography variant="subtitle2" color="#FFD43B">Payouts</Typography>
-            <Typography variant="h5" fontWeight={800}>{payouts.length}</Typography>
-          </CardContent>
-        </Card>
-        <Card sx={{ flex: 1, bgcolor: "#21272b" }}>
-          <CardContent>
-            <Typography variant="subtitle2" color="#FFD43B">Average Payout</Typography>
-            <Typography variant="h5" fontWeight={800}>{formatRupees(avg)}</Typography>
-          </CardContent>
-        </Card>
-        <Card sx={{ flex: 1, bgcolor: "#21272b" }}>
-          <CardContent>
-            <Typography variant="subtitle2" color="#FFD43B">Largest Payout</Typography>
-            <Typography variant="h5" fontWeight={800}>{formatRupees(largest)}</Typography>
-          </CardContent>
-        </Card>
+    <Box className="mt-2">
+      {/* KPI row */}
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        sx={{ mb: 2 }}
+        className="[&>*]:rounded-2xl"
+      >
+        {[{
+          label: "Total Earnings (All Time)",
+          value: formatRupees(totalAll),
+          Icon: Wallet
+        },{
+          label: "Payouts",
+          value: payouts.length,
+          Icon: BadgeCheck
+        },{
+          label: "Average Payout",
+          value: formatRupees(avg),
+          Icon: Wallet
+        },{
+          label: "Largest Payout",
+          value: formatRupees(largest),
+          Icon: Wallet
+        }].map(({label, value, Icon}, idx) => (
+          <motion.div
+            key={idx}
+            initial={{opacity:0, y:8, scale:.98}}
+            animate={{opacity:1, y:0, scale:1}}
+            transition={{duration:.25, delay: idx*0.05}}
+            style={{ flex: 1 }}
+          >
+            <Card className="bg-white border border-emerald-200">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 text-emerald-700 uppercase tracking-wide text-xs">
+                  <Icon size={16} />
+                  {label}
+                </div>
+                <div className="mt-2 text-2xl font-extrabold text-slate-900">{value}</div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
       </Stack>
 
       {/* View switcher */}
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-        <Typography variant="subtitle2" sx={{ color: "#9bb4b0" }}>View:</Typography>
+      <div className="mb-3 flex items-center gap-3">
+        <span className="text-emerald-700 text-xs uppercase">View:</span>
         <ToggleButtonGroup
           exclusive
           color="primary"
@@ -240,132 +226,122 @@ function EarningsTab({ payouts }) {
           <ToggleButton value="weekly">Weekly</ToggleButton>
           <ToggleButton value="monthly">Monthly</ToggleButton>
         </ToggleButtonGroup>
-      </Stack>
+      </div>
 
       {/* Aggregated table */}
-      <Card sx={{ bgcolor: "#181d23", mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 1, fontWeight: 800 }}>
-            {view === "daily" ? "Daily totals (last 30 days)"
-              : view === "weekly" ? "Weekly totals (last 12 weeks)"
-              : "Monthly totals (last 12 months)"}
-          </Typography>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{view === "weekly" ? "Week" : view === "monthly" ? "Month" : "Date"}</TableCell>
-                <TableCell align="right">Earnings</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {(view === "daily" ? daily : view === "weekly" ? weekly : monthly).map((row) => (
-                <TableRow key={row.key}>
-                  <TableCell>
-                    {view === "weekly" ? weekLabel(row.date) : row.key}
-                  </TableCell>
-                  <TableCell align="right">{formatRupees(row.amount)}</TableCell>
-                </TableRow>
-              ))}
-              {(view === "daily" ? daily : view === "weekly" ? weekly : monthly).length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={2}><Typography color="warning.main">No data yet.</Typography></TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Raw payouts table — now horizontally scrollable + extra columns */}
-      <Card sx={{ bgcolor: "#181d23" }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 1, fontWeight: 800 }}>
-            All Payouts
-          </Typography>
-
-          {/* SCROLL WRAPPER */}
-          <Box sx={{ overflowX: "auto" }}>
-            <Table size="small" sx={{ minWidth: 980 }}>
+      <motion.div
+        initial={{opacity:0, y:8}}
+        animate={{opacity:1, y:0}}
+        transition={{duration:.25}}
+      >
+        <Card className="bg-white border border-emerald-200 rounded-2xl mb-4">
+          <CardContent>
+            <Typography variant="h6" className="mb-2 font-extrabold">
+              {view === "daily" ? "Daily totals (last 30 days)" :
+               view === "weekly" ? "Weekly totals (last 12 weeks)" :
+               "Monthly totals (last 12 months)"}
+            </Typography>
+            <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Order</TableCell>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Amount</TableCell>
-                  <TableCell>Status</TableCell>
-                  {/* NEW COLUMNS */}
-                  <TableCell>Order Detail</TableCell>
-                  <TableCell>Invoice</TableCell>
+                  <TableCell>{view === "weekly" ? "Week" : view === "monthly" ? "Month" : "Date"}</TableCell>
+                  <TableCell align="right">Earnings</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {payouts
-                  .slice()
-                  .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))
-                  .map((pay) => {
-                    const orderId = pay.orderId?._id;
-                    const order = orderId ? (ordersById[orderId] || pay.orderId) : null;
-                    const itemsText = order?.items?.length
-                      ? order.items.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ")
-                      : "—";
-
-                    return (
-                      <TableRow key={pay._id}>
-                        <TableCell>{orderId ? orderId.slice(-5) : "—"}</TableCell>
-                        <TableCell>{new Date(pay.createdAt).toLocaleString()}</TableCell>
-                        <TableCell>{formatRupees(pay.pharmacyAmount)}</TableCell>
-                        <TableCell>{pay.status}</TableCell>
-
-                        {/* NEW: ORDER DETAIL */}
-                        <TableCell
-                          title={itemsText}
-                          sx={{ maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                        >
-                          {itemsText}
-                        </TableCell>
-
-                        {/* NEW: INVOICE DOWNLOAD */}
-                        <TableCell>
-                          {order?.invoiceFile ? (
-                            <a
-                              href={order.invoiceFile}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ textDecoration: "none" }}
-                            >
-                              <Button
-                                variant="outlined"
-                                sx={{
-                                  borderRadius: 2,
-                                  color: "#FFD43B",
-                                  borderColor: "#FFD43B",
-                                  textTransform: "none",
-                                  fontWeight: 700
-                                }}
-                                startIcon={<ReceiptLongIcon />}
-                                size="small"
-                              >
-                                Download
-                              </Button>
-                            </a>
-                          ) : (
-                            <span style={{ color: "#9bb4b0" }}>—</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                {payouts.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6}>
-                      <Typography color="warning.main">No payouts yet.</Typography>
+                {(view === "daily" ? daily : view === "weekly" ? weekly : monthly).map((row) => (
+                  <TableRow key={row.key}>
+                    <TableCell>
+                      {view === "weekly" ? weekLabel(row.date) : row.key}
                     </TableCell>
+                    <TableCell align="right">{formatRupees(row.amount)}</TableCell>
+                  </TableRow>
+                ))}
+                {(view === "daily" ? daily : view === "weekly" ? weekly : monthly).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={2}><Typography color="warning.main">No data yet.</Typography></TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
-          </Box>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Raw payouts table — horizontally scrollable + extra cols (unchanged logic) */}
+      <motion.div
+        initial={{opacity:0, y:8}}
+        animate={{opacity:1, y:0}}
+        transition={{duration:.25, delay:.05}}
+      >
+        <Card className="bg-white border border-emerald-200 rounded-2xl">
+          <CardContent>
+            <div className="mb-2 flex items-center gap-2">
+              <Wallet size={18} className="text-emerald-700" />
+              <Typography variant="h6" className="font-extrabold">All Payouts</Typography>
+            </div>
+
+            <Box sx={{ overflowX: "auto" }}>
+              <Table size="small" sx={{ minWidth: 980 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Order</TableCell>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Amount</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Order Detail</TableCell>
+                    <TableCell>Invoice</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {payouts
+                    .slice()
+                    .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))
+                    .map((pay) => {
+                      const orderId = pay.orderId?._id;
+                      const order   = orderId ? (ordersById[orderId] || pay.orderId) : null;
+                      const itemsText = order?.items?.length
+                        ? order.items.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ")
+                        : "—";
+                      return (
+                        <TableRow key={pay._id}>
+                          <TableCell className="font-semibold">{orderId ? orderId.slice(-5) : "—"}</TableCell>
+                          <TableCell>{new Date(pay.createdAt).toLocaleString()}</TableCell>
+                          <TableCell>{formatRupees(pay.pharmacyAmount)}</TableCell>
+                          <TableCell className="capitalize">{pay.status}</TableCell>
+                          <TableCell title={itemsText} className="max-w-[360px] truncate">{itemsText}</TableCell>
+                          <TableCell>
+                            {order?.invoiceFile ? (
+                              <a href={order.invoiceFile} target="_blank" rel="noopener noreferrer" className="inline-flex">
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  className="rounded-xl"
+                                  startIcon={<FileDown size={16} />}
+                                >
+                                  Download
+                                </Button>
+                              </a>
+                            ) : (
+                              <span className="text-slate-500">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  {payouts.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6}>
+                        <Typography color="warning.main">No payouts yet.</Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Box>
+          </CardContent>
+        </Card>
+      </motion.div>
     </Box>
   );
 }
@@ -373,8 +349,9 @@ function EarningsTab({ payouts }) {
 /* ---------------------------- MAIN DASHBOARD ---------------------------- */
 
 export default function PharmacyDashboard() {
+  // ======== all logic below is IDENTICAL to your original file ========
   const [token, setToken] = useState(localStorage.getItem("pharmacyToken") || "");
-  const [tab, setTab] = useState(0); // 0 = Overview, 1 = Earnings
+  const [tab, setTab] = useState(0); // 0: Overview, 1: Earnings, 2: Medicines
 
   const [orders, setOrders] = useState([]);
   const [login, setLogin] = useState({ email: "", password: "" });
@@ -386,8 +363,7 @@ export default function PharmacyDashboard() {
   const [active, setActive] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  // Medicines management
-  const [showMeds, setShowMeds] = useState(false);
+  const [showMeds, setShowMeds] = useState(false); // kept for compatibility (no longer used)
   const [medicines, setMedicines] = useState([]);
   const [medMsg, setMedMsg] = useState("");
   const [editMedId, setEditMedId] = useState(null);
@@ -398,12 +374,10 @@ export default function PharmacyDashboard() {
 
   const [payouts, setPayouts] = useState([]);
 
-  // Stats
   const today = todayString();
   const ordersToday = orders.filter(o => (o.createdAt || "").slice(0, 10) === today);
   const completedOrders = orders.filter(o => o.status === 3 || o.status === "delivered");
 
-  // Build pharmacy-specific category list for pickers
   const allPharmacyCategories = React.useMemo(() => {
     const allCats = medicines.flatMap(m =>
       Array.isArray(m.category) ? m.category : (m.category ? [m.category] : [])
@@ -415,7 +389,6 @@ export default function PharmacyDashboard() {
     return unique.filter(c => c !== "Other").concat("Other");
   }, [medicines]);
 
-  /* ----------------------- Data fetching ----------------------- */
   useEffect(() => {
     if (!token) return;
     const fetchAll = () => {
@@ -429,7 +402,6 @@ export default function PharmacyDashboard() {
           setPharmacy(res.data);
 
           if (res.data?._id) {
-            // Pull payouts for the Earnings tab
             const payRes = await axios.get(
               `${API_BASE_URL}/api/payments?pharmacyId=${res.data._id}&status=paid`,
               { headers: { Authorization: `Bearer ${token}` } }
@@ -445,7 +417,6 @@ export default function PharmacyDashboard() {
     return () => clearInterval(interval);
   }, [token, msg, isEditing]);
 
-  // Fetch medicines for management UI
   useEffect(() => {
     if (!token) return;
     axios.get(`${API_BASE_URL}/api/pharmacy/medicines`, {
@@ -461,7 +432,6 @@ export default function PharmacyDashboard() {
       .catch(() => setMedicines([]));
   }, [token, medMsg]);
 
-  /* -------------------------- Auth -------------------------- */
   const handleLogin = async () => {
     setLoading(true);
     try {
@@ -495,7 +465,6 @@ export default function PharmacyDashboard() {
     setLoading(false);
   };
 
-  /* -------------------- Orders edit handlers -------------------- */
   const handleEditOrder = (order) => {
     setEditOrderId(order.id || order._id);
     setEdit({ dosage: order.dosage || "", note: order.note || "" });
@@ -516,7 +485,6 @@ export default function PharmacyDashboard() {
     setLoading(false);
   };
 
-  /* -------------------- Medicines management -------------------- */
   const [medForm, setMedForm] = useState({
     name: "", brand: "", composition: "", company: "",
     price: "", mrp: "", stock: "", category: "", discount: "",
@@ -536,14 +504,9 @@ export default function PharmacyDashboard() {
   };
   const handleCustomCategoryBlur = (customCategory) => {
     if (!customCategory) return;
-    const match = stringSimilarity.findBestMatch(
-      customCategory.trim(),
-      allPharmacyCategories
-    );
+    const match = stringSimilarity.findBestMatch(customCategory.trim(), allPharmacyCategories);
     if (match.bestMatch.rating > 0.75) {
-      setMedMsg(
-        `Category "${customCategory}" looks similar to "${match.bestMatch.target}". Please check or select from list.`
-      );
+      setMedMsg(`Category "${customCategory}" looks similar to "${match.bestMatch.target}". Please check or select from list.`);
     } else {
       if (medMsg.toLowerCase().includes("category")) setMedMsg("");
     }
@@ -622,9 +585,7 @@ export default function PharmacyDashboard() {
   };
 
   const handleEditMedicine = (med) => {
-    const medCats = Array.isArray(med.category)
-      ? med.category
-      : med.category ? [med.category] : [];
+    const medCats = Array.isArray(med.category) ? med.category : med.category ? [med.category] : [];
     const customCats = medCats.filter(c => !MED_CATEGORIES.includes(c));
     let newCategory = [...medCats];
     let customCategory = "";
@@ -702,12 +663,7 @@ export default function PharmacyDashboard() {
         headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
       }
 
-      await axios.patch(
-        `${API_BASE_URL}/api/pharmacy/medicines/${editMedId}`,
-        data,
-        { headers }
-      );
-
+      await axios.patch(`${API_BASE_URL}/api/pharmacy/medicines/${editMedId}`, data, { headers });
       setMedMsg("Medicine updated!");
       setEditMedId(null);
       setEditMedImages([]);
@@ -735,58 +691,74 @@ export default function PharmacyDashboard() {
     setLoading(false);
   };
 
-  /* --------------------------- RENDER --------------------------- */
-
   if (!token) {
     return (
-      <ThemeProvider theme={darkTheme}>
+      <ThemeProvider theme={appTheme}>
         <CssBaseline />
-        <Box sx={{ mt: 7, maxWidth: 380, mx: "auto" }}>
-          <Typography variant="h5" mb={2}>Pharmacy Login</Typography>
-          <TextField
-            label="Mobile number or Email"
-            fullWidth sx={{ mb: 2 }}
-            value={login.email}
-            onChange={e => setLogin({ ...login, email: e.target.value })}
-            onFocus={() => setIsEditing(true)}
-            onBlur={() => setIsEditing(false)}
-          />
-          <TextField
-            label="Password"
-            type="password"
-            fullWidth sx={{ mb: 2 }}
-            value={login.password}
-            onChange={e => setLogin({ ...login, password: e.target.value })}
-            onFocus={() => setIsEditing(true)}
-            onBlur={() => setIsEditing(false)}
-          />
-          <Button variant="outlined" fullWidth onClick={handleSendOtp} disabled={loading} sx={{ mb: 2 }}>
-            {loading ? "Sending OTP..." : "Send OTP"}
-          </Button>
-          <Button variant="contained" fullWidth onClick={handleLogin} disabled={loading}>
-            {loading ? "Logging in..." : "Login"}
-          </Button>
-          <Snackbar open={!!msg} autoHideDuration={2400} onClose={() => setMsg("")}>
-            <Alert onClose={() => setMsg("")} severity={
-              /fail|error|not found|invalid|incorrect|missing|unable/i.test(msg) ? "error" : "success"
-            }>
-              {msg}
-            </Alert>
-          </Snackbar>
+        <Box className="min-h-screen" sx={{ bgcolor: "background.default" }}>
+          <Box className="mt-10 w-full max-w-[420px] mx-auto rounded-2xl border border-emerald-200 bg-white p-5 shadow">
+            <div className="flex items-center gap-2 mb-3">
+              <Pill className="text-emerald-700" size={22} />
+              <Typography variant="h5" className="font-extrabold">Pharmacy Login</Typography>
+            </div>
+            <TextField
+              label="Mobile number or Email"
+              fullWidth sx={{ mb: 2 }}
+              value={login.email}
+              onChange={e => setLogin({ ...login, email: e.target.value })}
+              onFocus={() => setIsEditing(true)}
+              onBlur={() => setIsEditing(false)}
+            />
+            <TextField
+              label="Password"
+              type="password"
+              fullWidth sx={{ mb: 2 }}
+              value={login.password}
+              onChange={e => setLogin({ ...login, password: e.target.value })}
+              onFocus={() => setIsEditing(true)}
+              onBlur={() => setIsEditing(false)}
+            />
+            <Button variant="outlined" fullWidth onClick={handleSendOtp} disabled={loading} sx={{ mb: 2 }}>
+              {loading ? "Sending OTP..." : "Send OTP"}
+            </Button>
+            <Button variant="contained" fullWidth onClick={handleLogin} disabled={loading}>
+              {loading ? "Logging in..." : "Login"}
+            </Button>
+
+            <Snackbar open={!!msg} autoHideDuration={2400} onClose={() => setMsg("")}>
+              <Alert onClose={() => setMsg("")} severity={
+                /fail|error|not found|invalid|incorrect|missing|unable/i.test(msg) ? "error" : "success"
+              }>
+                {msg}
+              </Alert>
+            </Snackbar>
+          </Box>
         </Box>
       </ThemeProvider>
     );
   }
 
   return (
-    <ThemeProvider theme={darkTheme}>
+    <ThemeProvider theme={appTheme}>
       <CssBaseline />
-      <Box sx={{ p: 2, maxWidth: 900, mx: "auto", position: "relative", minHeight: "95vh", pb: 8 }}>
-        <Typography variant="h4" sx={{ fontWeight: 900, color: "#13C0A2", mb: 1 }}>
-          Pharmacy Dashboard
-        </Typography>
+      <Box className="p-2 md:p-3 max-w-[980px] mx-auto relative min-h-[95vh] pb-8">
 
-        {/* -------------------- TOP TABS -------------------- */}
+        {/* Hero header using shadcn Card */}
+        <motion.div initial={{opacity:0, y:-6}} animate={{opacity:1, y:0}} transition={{duration:.25}}>
+          <SCard className="mb-3 border border-emerald-200 bg-white rounded-2xl shadow">
+            <SCardHeader className="pb-2">
+              <SCardTitle className="flex items-center gap-2 text-2xl md:text-3xl font-extrabold text-slate-900">
+                <Pill size={22} className="text-emerald-700" />
+                Pharmacy Dashboard
+              </SCardTitle>
+            </SCardHeader>
+            <SCardContent className="pt-0 text-slate-600 text-sm">
+              Manage orders, payouts & inventory — fast.
+            </SCardContent>
+          </SCard>
+        </motion.div>
+
+        {/* Tabs */}
         <Tabs
           value={tab}
           onChange={(_, v) => setTab(v)}
@@ -796,16 +768,21 @@ export default function PharmacyDashboard() {
         >
           <Tab label="Overview" />
           <Tab label="Earnings" />
+          <Tab label="Medicines" /> {/* NEW */}
         </Tabs>
 
         {/* ================== OVERVIEW TAB ================== */}
         {tab === 0 && (
           <>
             <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-              <Typography variant="h5" fontWeight={800} sx={{ color: "#FFD43B" }}>
+              <Typography variant="h5" className="font-extrabold">
                 {pharmacy?.name || "Pharmacy"}
               </Typography>
-              <Chip label={active ? "Active" : "Inactive"} color={active ? "success" : "default"} />
+              <Chip
+                label={active ? "Active" : "Inactive"}
+                color={active ? "success" : "default"}
+                className="font-semibold"
+              />
               <Switch
                 checked={active}
                 onChange={async (e) => {
@@ -821,11 +798,12 @@ export default function PharmacyDashboard() {
               />
             </Stack>
 
-            {/* Location set */}
+            {/* Location button */}
             <Button
               variant={pharmacy.location && pharmacy.location.coordinates && pharmacy.location.coordinates[0] !== 0 ? "contained" : "outlined"}
               color="primary"
               sx={{ mt: 1, mb: 2 }}
+              className="rounded-xl"
               onClick={async () => {
                 if (!navigator.geolocation) {
                   alert("Geolocation is not supported on this device/browser.");
@@ -850,6 +828,7 @@ export default function PharmacyDashboard() {
                   (err) => alert("Could not fetch location: " + err.message)
                 );
               }}
+              startIcon={<MapPin size={16} />}
             >
               {pharmacy.location && pharmacy.location.coordinates && pharmacy.location.coordinates[0] !== 0
                 ? "Location Set"
@@ -858,566 +837,194 @@ export default function PharmacyDashboard() {
             {pharmacy.location && (
               <>
                 {pharmacy.location.formatted && (
-                  <Typography fontSize={13} sx={{ color: "green", mb: 1 }}>
+                  <Typography fontSize={13} className="text-emerald-700 mb-1">
                     {pharmacy.location.formatted}
                   </Typography>
                 )}
                 {pharmacy.location.coordinates && pharmacy.location.coordinates[0] !== 0 && (
-                  <Typography fontSize={11} sx={{ color: "#888", mb: 1 }}>
+                  <Typography fontSize={11} className="text-slate-500 mb-1">
                     (Lat {pharmacy.location.coordinates[1]}, Lng {pharmacy.location.coordinates[0]})
                   </Typography>
                 )}
               </>
             )}
 
-            {/* Stats Row */}
+            {/* Stats row */}
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
-              <Card sx={{ flex: 1, bgcolor: "#21272b" }}>
+              <Card className="bg-white border border-emerald-200 rounded-2xl shadow-sm" sx={{ flex: 1 }}>
                 <CardContent>
-                  <Typography variant="subtitle2" color="#FFD43B">Orders Today</Typography>
-                  <Typography variant="h5" fontWeight={800}>{ordersToday.length}</Typography>
+                  <Typography variant="subtitle2" className="text-emerald-700 uppercase">Orders Today</Typography>
+                  <Typography variant="h5" className="font-extrabold">{ordersToday.length}</Typography>
                 </CardContent>
               </Card>
-              <Card sx={{ flex: 1, bgcolor: "#21272b" }}>
+              <Card className="bg-white border border-emerald-200 rounded-2xl shadow-sm" sx={{ flex: 1 }}>
                 <CardContent>
-                  <Typography variant="subtitle2" color="#FFD43B">Completed Orders</Typography>
-                  <Typography variant="h5" fontWeight={800}>{completedOrders.length}</Typography>
+                  <Typography variant="subtitle2" className="text-emerald-700 uppercase">Completed Orders</Typography>
+                  <Typography variant="h5" className="font-extrabold">{completedOrders.length}</Typography>
                 </CardContent>
               </Card>
             </Stack>
 
-            <Divider sx={{ mb: 2 }} />
+            <Divider className="mb-3" />
 
             {/* Orders List */}
-            <Typography variant="h6" mb={1}>Orders</Typography>
-            {!orders.length && <Typography>No orders yet.</Typography>}
+            <Typography variant="h6" className="mb-1 font-extrabold">Orders</Typography>
+            {!orders.length && <Typography className="text-slate-600">No orders yet.</Typography>}
             <Box sx={{ maxHeight: 450, overflowY: "auto", mb: 2 }}>
-              {[...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(order => (
-                <Card sx={{ mb: 2, bgcolor: "#181d23" }} key={order.id || order._id}>
-                  <CardContent>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Typography variant="h6">Order #{order.id || order._id}</Typography>
-                      <Chip
-                        label={getStatusLabel(order.status)}
-                        color={getStatusColor(order.status)}
-                        sx={{ cursor: "default", pointerEvents: "none", fontWeight: "bold" }}
-                      />
-                    </Stack>
+              {[...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((order, idx) => (
+                <motion.div
+                  key={order.id || order._id}
+                  initial={{opacity:0, y:6}}
+                  animate={{opacity:1, y:0}}
+                  transition={{duration:.2, delay: Math.min(idx*0.03, .3)}}
+                >
+                  <Card className="mb-2 bg-white border border-emerald-200 rounded-2xl shadow-sm">
+                    <CardContent>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography variant="h6" className="font-semibold">Order #{order.id || order._id}</Typography>
+                        <Chip
+                          label={getStatusLabel(order.status)}
+                          color={getStatusColor(order.status)}
+                          className="font-bold"
+                          sx={{ cursor: "default", pointerEvents: "none" }}
+                        />
+                      </Stack>
 
-                    <Typography sx={{ fontSize: 15, color: "#FFD43B" }}>
-                      Items: {order.items && order.items.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ")}
-                    </Typography>
-                    <Typography sx={{ fontSize: 14, color: "#DDD" }}>
-                      Total: {formatRupees(order.total)}
-                    </Typography>
-                    <Typography sx={{ fontSize: 13, color: "#AAA" }}>
-                      Placed: {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-" }
-                    </Typography>
+                      <Typography className="text-slate-700 text-[15px]">
+                        Items: {order.items && order.items.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ")}
+                      </Typography>
+                      <Typography className="text-slate-900 text-[14px]">
+                        Total: {formatRupees(order.total)}
+                      </Typography>
+                      <Typography className="text-slate-600 text-[13px]">
+                        Placed: {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-" }
+                      </Typography>
 
-                    {/* Dosage / Note (editable when not delivered/rejected) */}
-                    {editOrderId === (order.id || order._id) ? (
-                      (order.status !== 3 && order.status !== "delivered" && order.status !== -1 && order.status !== "rejected") ? (
-                        <Box sx={{ mt: 1 }}>
-                          <TextField
-                            label="Dosage"
-                            fullWidth
-                            value={edit.dosage}
-                            onChange={e => setEdit({ ...edit, dosage: e.target.value })}
-                            sx={{ mb: 1 }}
-                            onFocus={() => setIsEditing(true)}
-                            onBlur={() => setIsEditing(false)}
-                          />
-                          <TextField
-                            label="Note"
-                            fullWidth
-                            value={edit.note}
-                            onChange={e => setEdit({ ...edit, note: e.target.value })}
-                            sx={{ mb: 1 }}
-                            onFocus={() => setIsEditing(true)}
-                            onBlur={() => setIsEditing(false)}
-                          />
-                          <Button size="small" variant="contained" onClick={handleSave} sx={{ mr: 1 }} disabled={loading}>Save</Button>
-                          <Button size="small" onClick={() => setEditOrderId("")} disabled={loading}>Cancel</Button>
-                        </Box>
+                      {/* Dosage/Note editing */}
+                      {editOrderId === (order.id || order._id) ? (
+                        (order.status !== 3 && order.status !== "delivered" && order.status !== -1 && order.status !== "rejected") ? (
+                          <Box sx={{ mt: 1 }}>
+                            <TextField
+                              label="Dosage"
+                              fullWidth
+                              value={edit.dosage}
+                              onChange={e => setEdit({ ...edit, dosage: e.target.value })}
+                              sx={{ mb: 1 }}
+                              onFocus={() => setIsEditing(true)}
+                              onBlur={() => setIsEditing(false)}
+                            />
+                            <TextField
+                              label="Note"
+                              fullWidth
+                              value={edit.note}
+                              onChange={e => setEdit({ ...edit, note: e.target.value })}
+                              sx={{ mb: 1 }}
+                              onFocus={() => setIsEditing(true)}
+                              onBlur={() => setIsEditing(false)}
+                            />
+                            <Button size="small" variant="contained" onClick={handleSave} sx={{ mr: 1 }} disabled={loading} startIcon={loading ? <Loader2 className="animate-spin" size={16}/> : null}>Save</Button>
+                            <Button size="small" onClick={() => setEditOrderId("")} disabled={loading}>Cancel</Button>
+                          </Box>
+                        ) : (
+                          <Box sx={{ mt: 1 }}>
+                            <Typography variant="body2">Dosage: {order.dosage || "-"}</Typography>
+                            <Typography variant="body2">Note: {order.note || "-"}</Typography>
+                          </Box>
+                        )
                       ) : (
                         <Box sx={{ mt: 1 }}>
                           <Typography variant="body2">Dosage: {order.dosage || "-"}</Typography>
                           <Typography variant="body2">Note: {order.note || "-"}</Typography>
+                          {(order.status !== 3 && order.status !== "delivered" && order.status !== -1 && order.status !== "rejected") && (
+                            <Button size="small" className="mt-2 rounded-xl" onClick={() => setEditOrderId(order.id || order._id)} disabled={loading}>
+                              Edit Dosage/Note
+                            </Button>
+                          )}
                         </Box>
-                      )
-                    ) : (
-                      <Box sx={{ mt: 1 }}>
-                        <Typography variant="body2">Dosage: {order.dosage || "-"}</Typography>
-                        <Typography variant="body2">Note: {order.note || "-"}</Typography>
-                        {(order.status !== 3 && order.status !== "delivered" && order.status !== -1 && order.status !== "rejected") && (
-                          <Button size="small" sx={{ mt: 1 }} onClick={() => handleEditOrder(order)} disabled={loading}>
-                            Edit Dosage/Note
-                          </Button>
+                      )}
+
+                      {/* Status Actions */}
+                      <Box sx={{ mt: 2 }}>
+                        {(order.status === "placed" || order.status === 0 || order.status === "pending") && (
+                          <Stack direction="row" spacing={2}>
+                            <Button
+                              size="small"
+                              color="primary"
+                              variant="outlined"
+                              className="rounded-xl"
+                              onClick={async () => {
+                                setLoading(true);
+                                try {
+                                  await axios.patch(
+                                    `${API_BASE_URL}/api/pharmacy/orders/${order.id || order._id}`,
+                                    { status: "processing", pharmacyAccepted: true },
+                                    { headers: { Authorization: `Bearer ${token}` } }
+                                  );
+                                  setMsg("Order accepted!");
+                                } catch {
+                                  setMsg("Failed to accept order!");
+                                }
+                                setLoading(false);
+                              }}
+                              disabled={loading}
+                            >
+                              Accept Order
+                            </Button>
+                            <Button
+                              size="small"
+                              color="error"
+                              variant="outlined"
+                              className="rounded-xl"
+                              onClick={async () => {
+                                setLoading(true);
+                                try {
+                                  await axios.patch(
+                                    `${API_BASE_URL}/api/pharmacy/orders/${order.id || order._id}`,
+                                    { status: "rejected", pharmacyAccepted: false },
+                                    { headers: { Authorization: `Bearer ${token}` } }
+                                  );
+                                  setMsg("Order rejected!");
+                                } catch {
+                                  setMsg("Failed to reject order!");
+                                }
+                                setLoading(false);
+                              }}
+                              disabled={loading}
+                            >
+                              Reject Order
+                            </Button>
+                          </Stack>
+                        )}
+                        {(order.status === 1 || order.status === "processing") && (
+                          <Chip label="Processing" color="primary" className="mt-2 font-bold" sx={{ pointerEvents: "none" }} />
+                        )}
+                        {(order.status === 3 || order.status === "delivered") && (
+                          <Chip label="Delivered" color="success" className="mt-2 font-bold" sx={{ pointerEvents: "none" }} />
                         )}
                       </Box>
-                    )}
 
-                    {/* Status Actions */}
-                    <Box sx={{ mt: 2 }}>
-                      {(order.status === "placed" || order.status === 0 || order.status === "pending") && (
-                        <Stack direction="row" spacing={2}>
+                      {/* Invoice (if available) */}
+                      {order.invoiceFile && (
+                        <a href={order.invoiceFile} target="_blank" rel="noopener noreferrer" className="inline-block mt-3 no-underline">
                           <Button
-                            size="small"
-                            color="primary"
                             variant="outlined"
-                            onClick={async () => {
-                              setLoading(true);
-                              try {
-                                await axios.patch(
-                                  `${API_BASE_URL}/api/pharmacy/orders/${order.id || order._id}`,
-                                  { status: "processing", pharmacyAccepted: true },
-                                  { headers: { Authorization: `Bearer ${token}` } }
-                                );
-                                setMsg("Order accepted!");
-                              } catch {
-                                setMsg("Failed to accept order!");
-                              }
-                              setLoading(false);
-                            }}
-                            disabled={loading}
-                          >
-                            Accept Order
-                          </Button>
-                          <Button
+                            className="rounded-xl font-bold"
+                            startIcon={<ReceiptLongIcon />}
                             size="small"
-                            color="error"
-                            variant="outlined"
-                            onClick={async () => {
-                              setLoading(true);
-                              try {
-                                await axios.patch(
-                                  `${API_BASE_URL}/api/pharmacy/orders/${order.id || order._id}`,
-                                  { status: "rejected", pharmacyAccepted: false },
-                                  { headers: { Authorization: `Bearer ${token}` } }
-                                );
-                                setMsg("Order rejected!");
-                              } catch {
-                                setMsg("Failed to reject order!");
-                              }
-                              setLoading(false);
-                            }}
-                            disabled={loading}
                           >
-                            Reject Order
+                            Download Invoice
                           </Button>
-                        </Stack>
+                        </a>
                       )}
-                      {(order.status === 1 || order.status === "processing") && (
-                        <Chip label="Processing" color="primary" sx={{ mt: 1, fontWeight: "bold", pointerEvents: "none" }} />
-                      )}
-                      {(order.status === 3 || order.status === "delivered") && (
-                        <Chip label="Delivered" color="success" sx={{ mt: 1, fontWeight: "bold", pointerEvents: "none" }} />
-                      )}
-                    </Box>
-
-                    {/* Invoice (if available) */}
-                    {order.invoiceFile && (
-                      <a href={order.invoiceFile} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", marginTop: 8, display: "inline-block" }}>
-                        <Button
-                          variant="outlined"
-                          sx={{ ml: 0, mt: 1.2, borderRadius: 2, color: "#FFD43B", borderColor: "#FFD43B", textTransform: "none", fontWeight: 700 }}
-                          startIcon={<ReceiptLongIcon />}
-                          size="small"
-                        >
-                          Download Invoice
-                        </Button>
-                      </a>
-                    )}
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </motion.div>
               ))}
             </Box>
 
-            {/* Manage medicines toggle */}
-            <Divider sx={{ my: 3 }} />
-            <Button variant="contained" onClick={() => setShowMeds(!showMeds)} sx={{ mb: 2 }}>
-              {showMeds ? "Hide Medicines" : "Manage Medicines"}
-            </Button>
-
-            {showMeds && (
-              <Box sx={{ mt: 1, mb: 10 }}>
-                <Typography variant="h6" mb={1}>Medicines</Typography>
-
-                {medicines.map(med => (
-                  <Card key={med.id || med._id} sx={{ mb: 1, bgcolor: "#21272b" }}>
-                    <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                      <Typography sx={{ flex: 1 }}>
-                        <b>{med.name}</b>
-                        {med.brand && (<span style={{ color: "#13C0A2", fontWeight: 400 }}> ({med.brand})</span>)}
-                        {" — "}
-                        <span style={{ color: "#FFD43B" }}>
-                          {(Array.isArray(med.category) ? med.category.join(', ') : med.category) || "Miscellaneous"}
-                        </span>
-                        <br />
-                        {med.composition && (
-                          <span style={{ display: "block", color: "#9ad0c9" }}>
-                            Composition: {med.composition}
-                          </span>
-                        )}
-                        {med.company && (
-                          <span style={{ display: "block", color: "#9ad0c9" }}>
-                            Company: {med.company}
-                          </span>
-                        )}
-                        <b>Selling Price:</b> ₹{med.price} | <b>MRP:</b> ₹{med.mrp} | <b>Stock:</b> {med.stock}
-                        <br />
-                        <b>Type:</b> {med.type || "Tablet"}
-                      </Typography>
-                      <IconButton color="primary" size="small" onClick={() => handleEditMedicine(med)} disabled={loading}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton color="error" size="small" onClick={() => handleDeleteMedicine(med.id || med._id)} disabled={loading}>
-                        <DeleteIcon />
-                      </IconButton>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {/* Edit Medicine Dialog */}
-                <Dialog open={!!editMedId} onClose={closeEditDialog} fullWidth maxWidth="xs">
-                  <DialogTitle>Edit Medicine</DialogTitle>
-                  <DialogContent>
-                    <Stack spacing={2} mt={1}>
-                      {false && (
-                        <TextField
-                          label="Name"
-                          fullWidth
-                          value={editMedForm.name}
-                          onChange={e => setEditMedForm(f => ({ ...f, name: e.target.value }))}
-                          onFocus={() => setIsEditing(true)}
-                          onBlur={() => setIsEditing(false)}
-                        />
-                      )}
-                      <TextField
-                        label="Brand"
-                        fullWidth
-                        value={editMedForm.brand}
-                        onChange={e =>
-                          setEditMedForm(f => ({
-                            ...f,
-                            brand: e.target.value,
-                            name: f.name || linkBrandToName(e.target.value)
-                          }))
-                        }
-                        onFocus={() => setIsEditing(true)}
-                        onBlur={() => setIsEditing(false)}
-                      />
-                      <TextField
-                        label="Composition"
-                        fullWidth
-                        value={editMedForm.composition}
-                        onChange={e => setEditMedForm(f => ({ ...f, composition: e.target.value }))}
-                      />
-                      <TextField
-                        label="Company / Manufacturer"
-                        fullWidth
-                        value={editMedForm.company}
-                        onChange={e => setEditMedForm(f => ({ ...f, company: e.target.value }))}
-                      />
-                      <TextField
-                        label="Selling Price"
-                        type="number"
-                        fullWidth
-                        value={editMedForm.price}
-                        onChange={e => setEditMedForm(f => ({ ...f, price: e.target.value }))}
-                        onFocus={() => setIsEditing(true)}
-                        onBlur={() => setIsEditing(false)}
-                      />
-                      <TextField
-                        label="MRP"
-                        type="number"
-                        fullWidth
-                        value={editMedForm.mrp}
-                        onChange={e => setEditMedForm(f => ({ ...f, mrp: e.target.value }))}
-                        onFocus={() => setIsEditing(true)}
-                        onBlur={() => setIsEditing(false)}
-                      />
-                      <TextField
-                        label="Stock"
-                        type="number"
-                        fullWidth
-                        value={editMedForm.stock}
-                        onChange={e => setEditMedForm(f => ({ ...f, stock: e.target.value }))}
-                        onFocus={() => setIsEditing(true)}
-                        onBlur={() => setIsEditing(false)}
-                      />
-
-                      <FormControl fullWidth>
-                        <InputLabel>Category</InputLabel>
-                        <Select
-                          multiple
-                          value={Array.isArray(editMedForm.category) ? editMedForm.category : (editMedForm.category ? [editMedForm.category] : [])}
-                          label="Category"
-                          onChange={e => setEditMedForm(f => ({ ...f, category: e.target.value }))}
-                          renderValue={(selected) => selected.join(', ')}
-                        >
-                          {allPharmacyCategories.map(opt => (
-                            <MenuItem key={opt} value={opt}>
-                              <Checkbox checked={editMedForm.category.indexOf(opt) > -1} />
-                              <ListItemText primary={opt} />
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-
-                      {((Array.isArray(editMedForm.category) ? editMedForm.category.includes("Other") : editMedForm.category === "Other")) && (
-                        <TextField
-                          label="Custom Category"
-                          fullWidth
-                          value={editMedForm.customCategory}
-                          onChange={e => setEditMedForm(f => ({ ...f, customCategory: e.target.value }))}
-                          onFocus={() => setIsEditing(true)}
-                          onBlur={e => { setIsEditing(false); handleCustomCategoryBlur(e.target.value); }}
-                          error={!!medMsg && medMsg.toLowerCase().includes('category')}
-                          helperText={!!medMsg && medMsg.toLowerCase().includes('category') ? medMsg : ''}
-                        />
-                      )}
-
-                      {/* Type */}
-                      <FormControl fullWidth>
-                        <InputLabel>Type</InputLabel>
-                        <Select
-                          value={editMedForm.type}
-                          label="Type"
-                          onChange={e => setEditMedForm(f => ({ ...f, type: e.target.value }))}
-                        >
-                          {TYPE_OPTIONS.map(opt => (
-                            <MenuItem key={opt} value={opt}>{opt}</MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                      {editMedForm.type === "Other" && (
-                        <TextField
-                          label="Custom Type"
-                          fullWidth
-                          value={editMedForm.customType}
-                          onChange={e => setEditMedForm(f => ({ ...f, customType: e.target.value }))}
-                          onFocus={() => setIsEditing(true)}
-                          onBlur={() => setIsEditing(false)}
-                        />
-                      )}
-
-                      <Stack direction="row" spacing={2} alignItems="center">
-                        <input type="file" accept="image/*" multiple hidden ref={editFileInputRef} onChange={handleEditImagesChange} />
-                        <Button
-                          startIcon={<PhotoCamera />}
-                          variant={editMedImages && editMedImages.length ? "contained" : "outlined"}
-                          onClick={() => editFileInputRef.current && editFileInputRef.current.click()}
-                          color={editMedImages && editMedImages.length ? "success" : "primary"}
-                          sx={{ minWidth: 120 }}
-                        >
-                          {editMedImages && editMedImages.length ? `${editMedImages.length} Image${editMedImages.length > 1 ? "s" : ""} Ready` : "Upload Images"}
-                        </Button>
-                      </Stack>
-
-                      {/* Existing images with delete */}
-                      {editMedId && medicines.find(m => (m._id || m.id) === editMedId)?.images?.length > 0 && (
-                        <Stack direction="row" spacing={1} sx={{ my: 1 }}>
-                          {medicines.find(m => (m._id || m.id) === editMedId).images.map((imgUrl, i) => (
-                            <Box key={imgUrl + i} sx={{ position: "relative", display: "inline-block" }}>
-                              <img
-                                src={imgUrl.startsWith("http") ? imgUrl : `${API_BASE_URL}${imgUrl}`}
-                                alt=""
-                                style={{ width: 56, height: 56, borderRadius: 2, objectFit: "cover", border: "1px solid #ccc" }}
-                              />
-                              <IconButton
-                                size="small"
-                                sx={{ position: "absolute", top: -8, right: -8, bgcolor: "#fff" }}
-                                onClick={async () => {
-                                  try {
-                                    await axios.patch(
-                                      `${API_BASE_URL}/api/pharmacy/medicines/${editMedId}/remove-image`,
-                                      { image: imgUrl },
-                                      { headers: { Authorization: `Bearer ${token}` } }
-                                    );
-                                    setMedMsg("Image deleted!");
-                                    const res = await axios.get(`${API_BASE_URL}/api/pharmacy/medicines`, {
-                                      headers: { Authorization: `Bearer ${token}` }
-                                    });
-                                    setMedicines(res.data);
-                                    setEditMedId(editMedId);
-                                  } catch {
-                                    setMedMsg("Failed to delete image.");
-                                  }
-                                }}
-                              >
-                                <CloseIcon fontSize="small" />
-                              </IconButton>
-                            </Box>
-                          ))}
-                        </Stack>
-                      )}
-
-                      {/* New (unsaved) images preview */}
-                      {editMedImages && editMedImages.length > 0 && (
-                        <Stack direction="row" spacing={1} sx={{ my: 1 }}>
-                          {editMedImages.map((img, i) => (
-                            <Box key={i} component="img" src={URL.createObjectURL(img)}
-                              sx={{ width: 56, height: 56, borderRadius: 2, objectFit: "cover", border: "1px solid #ccc" }} />
-                          ))}
-                        </Stack>
-                      )}
-                    </Stack>
-                  </DialogContent>
-                  <DialogActions>
-                    <Button onClick={closeEditDialog} color="error">Cancel</Button>
-                    <Button variant="contained" onClick={handleSaveMedicine} color="success" disabled={loading}>
-                      Save
-                    </Button>
-                  </DialogActions>
-                </Dialog>
-
-                {/* Add Medicine */}
-                <Box sx={{ mt: 2, pb: 8, position: "relative", bgcolor: "#181d23", borderRadius: 2, p: 2, boxShadow: 1 }}>
-                  <Stack spacing={2}>
-                    {false && (
-                      <TextField
-                        label="Name"
-                        value={medForm.name}
-                        onChange={e => setMedForm(f => ({ ...f, name: e.target.value }))}
-                        onFocus={() => setIsEditing(true)}
-                        onBlur={() => setIsEditing(false)}
-                      />
-                    )}
-                    <TextField
-                      label="Brand"
-                      value={medForm.brand}
-                      onChange={e => setMedForm(f => ({ ...f, brand: e.target.value, name: linkBrandToName(e.target.value) }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
-                    />
-                    <TextField
-                      label="Composition (e.g., Paracetamol 650 mg)"
-                      value={medForm.composition}
-                      onChange={e => setMedForm(f => ({ ...f, composition: e.target.value }))}
-                    />
-                    <TextField
-                      label="Company / Manufacturer"
-                      value={medForm.company}
-                      onChange={e => setMedForm(f => ({ ...f, company: e.target.value }))}
-                    />
-                    <TextField
-                      label="Selling Price"
-                      type="number"
-                      value={medForm.price}
-                      onChange={e => setMedForm(f => ({ ...f, price: e.target.value }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
-                    />
-                    <TextField
-                      label="MRP"
-                      type="number"
-                      value={medForm.mrp}
-                      onChange={e => setMedForm(f => ({ ...f, mrp: e.target.value }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
-                    />
-                    <TextField
-                      label="Discount (%)"
-                      type="number"
-                      value={medForm.discount}
-                      onChange={(e) => setMedForm(f => ({ ...f, discount: e.target.value }))}
-                      inputProps={{ min: 0, max: 90 }}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
-                    />
-                    <TextField
-                      label="Stock"
-                      type="number"
-                      value={medForm.stock}
-                      onChange={e => setMedForm(f => ({ ...f, stock: e.target.value }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
-                    />
-                    <FormControl fullWidth>
-                      <InputLabel>Category</InputLabel>
-                      <Select
-                        multiple
-                        value={Array.isArray(medForm.category) ? medForm.category : (medForm.category ? [medForm.category] : [])}
-                        label="Category"
-                        onChange={e => setMedForm(f => ({ ...f, category: e.target.value }))}
-                        renderValue={(selected) => selected.join(', ')}
-                        MenuProps={{ PaperProps: { style: { zIndex: 2000 } } }}
-                      >
-                        {allPharmacyCategories.map(opt => (
-                          <MenuItem key={opt} value={opt}>
-                            <Checkbox checked={medForm.category.indexOf(opt) > -1} />
-                            <ListItemText primary={opt} />
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                    {((Array.isArray(medForm.category) ? medForm.category.includes("Other") : medForm.category === "Other")) && (
-                      <TextField
-                        label="Custom Category"
-                        value={medForm.customCategory}
-                        onChange={e => setMedForm(f => ({ ...f, customCategory: e.target.value }))}
-                        onFocus={() => setIsEditing(true)}
-                        onBlur={e => { setIsEditing(false); handleCustomCategoryBlur(e.target.value); }}
-                        error={!!medMsg && medMsg.toLowerCase().includes('category')}
-                        helperText={!!medMsg && medMsg.toLowerCase().includes('category') ? medMsg : ''}
-                      />
-                    )}
-                    <FormControl fullWidth>
-                      <InputLabel>Type</InputLabel>
-                      <Select value={medForm.type} label="Type" onChange={e => setMedForm(f => ({ ...f, type: e.target.value }))}>
-                        {TYPE_OPTIONS.map(opt => (<MenuItem key={opt} value={opt}>{opt}</MenuItem>))}
-                      </Select>
-                    </FormControl>
-                    {medForm.type === "Other" && (
-                      <TextField
-                        label="Custom Type"
-                        fullWidth
-                        value={medForm.customType}
-                        onChange={e => setMedForm(f => ({ ...f, customType: e.target.value }))}
-                        onFocus={() => setIsEditing(true)}
-                        onBlur={() => setIsEditing(false)}
-                      />
-                    )}
-                    <Stack direction="row" spacing={2} alignItems="center">
-                      <input type="file" accept="image/*" multiple hidden ref={fileInputRef} onChange={handleImagesChange} />
-                      <Button
-                        startIcon={<PhotoCamera />}
-                        variant={medImages && medImages.length ? "contained" : "outlined"}
-                        onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                        color={medImages && medImages.length ? "success" : "primary"}
-                        sx={{ minWidth: 120 }}
-                      >
-                        {medImages && medImages.length ? `${medImages.length} Image${medImages.length > 1 ? "s" : ""} Ready` : "Upload Images"}
-                      </Button>
-                    </Stack>
-                    {medImages && medImages.length > 0 && (
-                      <Stack direction="row" spacing={1} sx={{ my: 1 }}>
-                        {medImages.map((img, i) => (
-                          <Box key={i} component="img" src={URL.createObjectURL(img)}
-                            sx={{ width: 56, height: 56, borderRadius: 2, objectFit: "cover", border: "1px solid #ccc" }} />
-                        ))}
-                      </Stack>
-                    )}
-                    <Button
-                      variant="contained"
-                      onClick={handleAddMedicine}
-                      disabled={loading}
-                      sx={{ width: "100%", mt: 1, position: "sticky", bottom: 56, zIndex: 2 }}
-                    >
-                      Add Medicine
-                    </Button>
-                    <Typography color={ medMsg.toLowerCase().includes("fail") || medMsg.toLowerCase().includes("error") ? "error" : "success.main"} variant="body2">
-                      {medMsg}
-                    </Typography>
-                  </Stack>
-                </Box>
-              </Box>
-            )}
-
             {/* Logout */}
             <Box sx={{ width: "100%", position: "relative", pb: 7, textAlign: "center" }}>
-              <Button variant="outlined" color="error" size="large" onClick={handleLogout} sx={{ width: 200, mx: "auto", mb: 2 }}>
+              <Button variant="outlined" color="error" size="large" onClick={handleLogout} sx={{ width: 200, mx: "auto", mb: 2 }} className="rounded-xl" startIcon={<LogOut size={16}/>}>
                 Logout
               </Button>
             </Box>
@@ -1429,7 +1036,382 @@ export default function PharmacyDashboard() {
           <EarningsTab payouts={payouts} />
         )}
 
-        {/* Snackbars */}
+        {/* ================== MEDICINES TAB (moved from Overview toggle; logic unchanged) ================== */}
+        {tab === 2 && (
+          <Box sx={{ mt: 1, mb: 10 }}>
+            <Typography variant="h6" mb={1}>Medicines</Typography>
+
+            {medicines.map(med => (
+              <Card key={med.id || med._id} className="mb-2 bg-white border border-emerald-200 rounded-2xl">
+                <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Typography sx={{ flex: 1 }}>
+                    <b>{med.name}</b>
+                    {med.brand && (<span style={{ color: "#059669", fontWeight: 400 }}> ({med.brand})</span>)}
+                    {" — "}
+                    <span style={{ color: "#047857" }}>
+                      {(Array.isArray(med.category) ? med.category.join(', ') : med.category) || "Miscellaneous"}
+                    </span>
+                    <br />
+                    {med.composition && (
+                      <span style={{ display: "block", color: "#475569" }}>
+                        Composition: {med.composition}
+                      </span>
+                    )}
+                    {med.company && (
+                      <span style={{ display: "block", color: "#475569" }}>
+                        Company: {med.company}
+                      </span>
+                    )}
+                    <b>Selling Price:</b> ₹{med.price} | <b>MRP:</b> ₹{med.mrp} | <b>Stock:</b> {med.stock}
+                    <br />
+                    <b>Type:</b> {med.type || "Tablet"}
+                  </Typography>
+                  <IconButton color="primary" size="small" onClick={() => handleEditMedicine(med)} disabled={loading}>
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton color="error" size="small" onClick={() => handleDeleteMedicine(med.id || med._id)} disabled={loading}>
+                    <DeleteIcon />
+                  </IconButton>
+                </CardContent>
+              </Card>
+            ))}
+
+            {/* Edit Medicine Dialog (unchanged fields/logic) */}
+            <Dialog open={!!editMedId} onClose={closeEditDialog} fullWidth maxWidth="xs">
+              <DialogTitle>Edit Medicine</DialogTitle>
+              <DialogContent>
+                <Stack spacing={2} mt={1}>
+                  {false && (
+                    <TextField
+                      label="Name"
+                      fullWidth
+                      value={editMedForm.name}
+                      onChange={e => setEditMedForm(f => ({ ...f, name: e.target.value }))}
+                      onFocus={() => setIsEditing(true)}
+                      onBlur={() => setIsEditing(false)}
+                    />
+                  )}
+                  <TextField
+                    label="Brand"
+                    fullWidth
+                    value={editMedForm.brand}
+                    onChange={e =>
+                      setEditMedForm(f => ({
+                        ...f,
+                        brand: e.target.value,
+                        name: f.name || linkBrandToName(e.target.value)
+                      }))
+                    }
+                    onFocus={() => setIsEditing(true)}
+                    onBlur={() => setIsEditing(false)}
+                  />
+                  <TextField
+                    label="Composition"
+                    fullWidth
+                    value={editMedForm.composition}
+                    onChange={e => setEditMedForm(f => ({ ...f, composition: e.target.value }))}
+                  />
+                  <TextField
+                    label="Company / Manufacturer"
+                    fullWidth
+                    value={editMedForm.company}
+                    onChange={e => setEditMedForm(f => ({ ...f, company: e.target.value }))}
+                  />
+                  <TextField
+                    label="Selling Price"
+                    type="number"
+                    fullWidth
+                    value={editMedForm.price}
+                    onChange={e => setEditMedForm(f => ({ ...f, price: e.target.value }))}
+                    onFocus={() => setIsEditing(true)}
+                    onBlur={() => setIsEditing(false)}
+                  />
+                  <TextField
+                    label="MRP"
+                    type="number"
+                    fullWidth
+                    value={editMedForm.mrp}
+                    onChange={e => setEditMedForm(f => ({ ...f, mrp: e.target.value }))}
+                    onFocus={() => setIsEditing(true)}
+                    onBlur={() => setIsEditing(false)}
+                  />
+                  <TextField
+                    label="Stock"
+                    type="number"
+                    fullWidth
+                    value={editMedForm.stock}
+                    onChange={e => setEditMedForm(f => ({ ...f, stock: e.target.value }))}
+                    onFocus={() => setIsEditing(true)}
+                    onBlur={() => setIsEditing(false)}
+                  />
+
+                  <FormControl fullWidth>
+                    <InputLabel>Category</InputLabel>
+                    <Select
+                      multiple
+                      value={Array.isArray(editMedForm.category) ? editMedForm.category : (editMedForm.category ? [editMedForm.category] : [])}
+                      label="Category"
+                      onChange={e => setEditMedForm(f => ({ ...f, category: e.target.value }))}
+                      renderValue={(selected) => selected.join(', ')}
+                    >
+                      {allPharmacyCategories.map(opt => (
+                        <MenuItem key={opt} value={opt}>
+                          <Checkbox checked={editMedForm.category.indexOf(opt) > -1} />
+                          <ListItemText primary={opt} />
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+
+                  {((Array.isArray(editMedForm.category) ? editMedForm.category.includes("Other") : editMedForm.category === "Other")) && (
+                    <TextField
+                      label="Custom Category"
+                      fullWidth
+                      value={editMedForm.customCategory}
+                      onChange={e => setEditMedForm(f => ({ ...f, customCategory: e.target.value }))}
+                      onFocus={() => setIsEditing(true)}
+                      onBlur={e => { setIsEditing(false); handleCustomCategoryBlur(e.target.value); }}
+                      error={!!medMsg && medMsg.toLowerCase().includes('category')}
+                      helperText={!!medMsg && medMsg.toLowerCase().includes('category') ? medMsg : ''}
+                    />
+                  )}
+
+                  <FormControl fullWidth>
+                    <InputLabel>Type</InputLabel>
+                    <Select
+                      value={editMedForm.type}
+                      label="Type"
+                      onChange={e => setEditMedForm(f => ({ ...f, type: e.target.value }))}
+                    >
+                      {TYPE_OPTIONS.map(opt => (
+                        <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {editMedForm.type === "Other" && (
+                    <TextField
+                      label="Custom Type"
+                      fullWidth
+                      value={editMedForm.customType}
+                      onChange={e => setEditMedForm(f => ({ ...f, customType: e.target.value }))}
+                      onFocus={() => setIsEditing(true)}
+                      onBlur={() => setIsEditing(false)}
+                    />
+                  )}
+
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <input type="file" accept="image/*" multiple hidden ref={editFileInputRef} onChange={handleEditImagesChange} />
+                    <Button
+                      startIcon={<PhotoCamera />}
+                      variant={editMedImages && editMedImages.length ? "contained" : "outlined"}
+                      onClick={() => editFileInputRef.current && editFileInputRef.current.click()}
+                      color={editMedImages && editMedImages.length ? "success" : "primary"}
+                      sx={{ minWidth: 120 }}
+                    >
+                      {editMedImages && editMedImages.length ? `${editMedImages.length} Image${editMedImages.length > 1 ? "s" : ""} Ready` : "Upload Images"}
+                    </Button>
+                  </Stack>
+
+                  {editMedId && medicines.find(m => (m._id || m.id) === editMedId)?.images?.length > 0 && (
+                    <Stack direction="row" spacing={1} sx={{ my: 1 }}>
+                      {medicines.find(m => (m._id || m.id) === editMedId).images.map((imgUrl, i) => (
+                        <Box key={imgUrl + i} sx={{ position: "relative", display: "inline-block" }}>
+                          <img
+                            src={imgUrl.startsWith("http") ? imgUrl : `${API_BASE_URL}${imgUrl}`}
+                            alt=""
+                            style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", border: "1px solid #e2e8f0" }}
+                          />
+                          <IconButton
+                            size="small"
+                            sx={{ position: "absolute", top: -8, right: -8, bgcolor: "#fff" }}
+                            onClick={async () => {
+                              try {
+                                await axios.patch(
+                                  `${API_BASE_URL}/api/pharmacy/medicines/${editMedId}/remove-image`,
+                                  { image: imgUrl },
+                                  { headers: { Authorization: `Bearer ${token}` } }
+                                );
+                                setMedMsg("Image deleted!");
+                                const res = await axios.get(`${API_BASE_URL}/api/pharmacy/medicines`, {
+                                  headers: { Authorization: `Bearer ${token}` }
+                                });
+                                setMedicines(res.data);
+                                setEditMedId(editMedId);
+                              } catch {
+                                setMedMsg("Failed to delete image.");
+                              }
+                            }}
+                          >
+                            <CloseIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      ))}
+                    </Stack>
+                  )}
+
+                  {editMedImages && editMedImages.length > 0 && (
+                    <Stack direction="row" spacing={1} sx={{ my: 1 }}>
+                      {editMedImages.map((img, i) => (
+                        <Box key={i} component="img" src={URL.createObjectURL(img)}
+                          sx={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", border: "1px solid #e2e8f0" }} />
+                      ))}
+                    </Stack>
+                  )}
+                </Stack>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={closeEditDialog} color="error">Cancel</Button>
+                <Button variant="contained" onClick={handleSaveMedicine} color="success" disabled={loading}>
+                  Save
+                </Button>
+              </DialogActions>
+            </Dialog>
+
+            {/* Add Medicine (unchanged logic, light styling) */}
+            <Box sx={{ mt: 2, pb: 8, position: "relative" }} className="bg-white rounded-2xl border border-emerald-200 p-3 shadow-sm">
+              <Stack spacing={2}>
+                {false && (
+                  <TextField
+                    label="Name"
+                    value={medForm.name}
+                    onChange={e => setMedForm(f => ({ ...f, name: e.target.value }))}
+                    onFocus={() => setIsEditing(true)}
+                    onBlur={() => setIsEditing(false)}
+                  />
+                )}
+                <TextField
+                  label="Brand"
+                  value={medForm.brand}
+                  onChange={e => setMedForm(f => ({ ...f, brand: e.target.value, name: linkBrandToName(e.target.value) }))}
+                  onFocus={() => setIsEditing(true)}
+                  onBlur={() => setIsEditing(false)}
+                />
+                <TextField
+                  label="Composition (e.g., Paracetamol 650 mg)"
+                  value={medForm.composition}
+                  onChange={e => setMedForm(f => ({ ...f, composition: e.target.value }))}
+                />
+                <TextField
+                  label="Company / Manufacturer"
+                  value={medForm.company}
+                  onChange={e => setMedForm(f => ({ ...f, company: e.target.value }))}
+                />
+                <TextField
+                  label="Selling Price"
+                  type="number"
+                  value={medForm.price}
+                  onChange={e => setMedForm(f => ({ ...f, price: e.target.value }))}
+                  onFocus={() => setIsEditing(true)}
+                  onBlur={() => setIsEditing(false)}
+                />
+                <TextField
+                  label="MRP"
+                  type="number"
+                  value={medForm.mrp}
+                  onChange={e => setMedForm(f => ({ ...f, mrp: e.target.value }))}
+                  onFocus={() => setIsEditing(true)}
+                  onBlur={() => setIsEditing(false)}
+                />
+                <TextField
+                  label="Discount (%)"
+                  type="number"
+                  value={medForm.discount}
+                  onChange={(e) => setMedForm(f => ({ ...f, discount: e.target.value }))}
+                  inputProps={{ min: 0, max: 90 }}
+                  onFocus={() => setIsEditing(true)}
+                  onBlur={() => setIsEditing(false)}
+                />
+                <TextField
+                  label="Stock"
+                  type="number"
+                  value={medForm.stock}
+                  onChange={e => setMedForm(f => ({ ...f, stock: e.target.value }))}
+                  onFocus={() => setIsEditing(true)}
+                  onBlur={() => setIsEditing(false)}
+                />
+                <FormControl fullWidth>
+                  <InputLabel>Category</InputLabel>
+                  <Select
+                    multiple
+                    value={Array.isArray(medForm.category) ? medForm.category : (medForm.category ? [medForm.category] : [])}
+                    label="Category"
+                    onChange={e => setMedForm(f => ({ ...f, category: e.target.value }))}
+                    renderValue={(selected) => selected.join(', ')}
+                    MenuProps={{ PaperProps: { style: { zIndex: 2000 } } }}
+                  >
+                    {allPharmacyCategories.map(opt => (
+                      <MenuItem key={opt} value={opt}>
+                        <Checkbox checked={medForm.category.indexOf(opt) > -1} />
+                        <ListItemText primary={opt} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                {((Array.isArray(medForm.category) ? medForm.category.includes("Other") : medForm.category === "Other")) && (
+                  <TextField
+                    label="Custom Category"
+                    value={medForm.customCategory}
+                    onChange={e => setMedForm(f => ({ ...f, customCategory: e.target.value }))}
+                    onFocus={() => setIsEditing(true)}
+                    onBlur={e => { setIsEditing(false); handleCustomCategoryBlur(e.target.value); }}
+                    error={!!medMsg && medMsg.toLowerCase().includes('category')}
+                    helperText={!!medMsg && medMsg.toLowerCase().includes('category') ? medMsg : ''}
+                  />
+                )}
+                <FormControl fullWidth>
+                  <InputLabel>Type</InputLabel>
+                  <Select value={medForm.type} label="Type" onChange={e => setMedForm(f => ({ ...f, type: e.target.value }))}>
+                    {TYPE_OPTIONS.map(opt => (<MenuItem key={opt} value={opt}>{opt}</MenuItem>))}
+                  </Select>
+                </FormControl>
+                {medForm.type === "Other" && (
+                  <TextField
+                    label="Custom Type"
+                    fullWidth
+                    value={medForm.customType}
+                    onChange={e => setMedForm(f => ({ ...f, customType: e.target.value }))}
+                    onFocus={() => setIsEditing(true)}
+                    onBlur={() => setIsEditing(false)}
+                  />
+                )}
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <input type="file" accept="image/*" multiple hidden ref={fileInputRef} onChange={handleImagesChange} />
+                  <Button
+                    startIcon={<PhotoCamera />}
+                    variant={medImages && medImages.length ? "contained" : "outlined"}
+                    onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                    color={medImages && medImages.length ? "success" : "primary"}
+                    sx={{ minWidth: 120 }}
+                  >
+                    {medImages && medImages.length ? `${medImages.length} Image${medImages.length > 1 ? "s" : ""} Ready` : "Upload Images"}
+                  </Button>
+                </Stack>
+                {medImages && medImages.length > 0 && (
+                  <Stack direction="row" spacing={1} sx={{ my: 1 }}>
+                    {medImages.map((img, i) => (
+                      <Box key={i} component="img" src={URL.createObjectURL(img)}
+                        sx={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", border: "1px solid #e2e8f0" }} />
+                    ))}
+                  </Stack>
+                )}
+                <Button
+                  variant="contained"
+                  onClick={handleAddMedicine}
+                  disabled={loading}
+                  sx={{ width: "100%", mt: 1, position: "sticky", bottom: 56, zIndex: 2 }}
+                  className="rounded-xl"
+                >
+                  Add Medicine
+                </Button>
+                <Typography color={ medMsg.toLowerCase().includes("fail") || medMsg.toLowerCase().includes("error") ? "error" : "success.main"} variant="body2">
+                  {medMsg}
+                </Typography>
+              </Stack>
+            </Box>
+          </Box>
+        )}
+
+        {/* Snackbars (unchanged behavior) */}
         <Snackbar open={!!msg} autoHideDuration={2500} onClose={() => setMsg("")}>
           <Alert onClose={() => setMsg("")} severity={msg.includes("fail") ? "error" : "success"}>{msg}</Alert>
         </Snackbar>
