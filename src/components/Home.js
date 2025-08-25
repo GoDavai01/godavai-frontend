@@ -244,10 +244,11 @@ export default function Home() {
 
   useEffect(() => {
     if (!userCoords) return;
-    fetch(
-      `${API_BASE_URL}/api/pharmacies/nearby?lat=${userCoords.lat}&lng=${userCoords.lng}&maxDistance=8000`
-    )
-      .then((res) => res.json())
+    fetch(`${API_BASE_URL}/api/pharmacies/nearby?lat=${userCoords.lat}&lng=${userCoords.lng}&maxDistance=8000`)
+      .then(async (res) => {
+      if (!res.ok) throw new Error(`Nearby pharmacies HTTP ${res.status}`);
+      return res.json();
+      })
       .then((pharmacies) => {
         const active = pharmacies
           .filter((ph) => ph.active !== false)
