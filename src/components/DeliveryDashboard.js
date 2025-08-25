@@ -1,102 +1,61 @@
 // src/components/DeliveryDashboard.js
 import React, { useEffect, useState, useRef } from "react";
-import {
-  Box, Typography, Card, CardContent, Stack, Button, Chip, CircularProgress, Snackbar, Alert,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField, Tabs, Tab, Avatar, Badge, Switch,
-  Table, TableHead, TableRow, TableCell, TableBody
-} from "@mui/material";
-import TwoWheelerIcon from "@mui/icons-material/TwoWheeler";
-import DoneAllIcon from "@mui/icons-material/DoneAll";
-import LocalPharmacyIcon from "@mui/icons-material/LocalPharmacy";
-import LogoutIcon from "@mui/icons-material/Logout";
-import ChatModal from "./ChatModal";
-import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import axios from "axios";
+import dayjs from "dayjs";
 import { GoogleMap, Marker, Polyline, useJsApiLoader } from "@react-google-maps/api";
-import dayjs from "dayjs"; // You must have dayjs installed (run: npm install dayjs)
+
+// shadcn/ui
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Switch } from "../components/ui/switch";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
+
+// framer-motion
+import { motion, AnimatePresence } from "framer-motion";
+
+// lucide-react
+import { Bike, CheckCheck, Pill, LogOut, MessageSquare, MapPin, Map, Route, Loader2 } from "lucide-react";
+
+// other components (unchanged logic)
+import ChatModal from "./ChatModal";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-
-function DeliveryPayoutsSection({ partner }) {
-  const [payouts, setPayouts] = useState([]);
-  const [tab, setTab] = useState(0); // 0: today, 1: yesterday
-
-  useEffect(() => {
-    if (!partner?._id) return;
-    axios
-      .get(`${API_BASE_URL}/api/payments?deliveryPartnerId=${partner._id}&status=paid`)
-      .then(res => setPayouts(res.data));
-  }, [partner]);
-
-  const today = dayjs().format("YYYY-MM-DD");
-  const yesterday = dayjs().subtract(1, "day").format("YYYY-MM-DD");
-
-  const filtered = payouts.filter(pay => {
-    const payDay = dayjs(pay.createdAt).format("YYYY-MM-DD");
-    return tab === 0 ? payDay === today : payDay === yesterday;
-  });
-
-  const total = filtered.reduce((sum, p) => sum + (p.deliveryAmount || 0), 0);
-
-  if (!partner?._id) return null;
-  return (
-    <Box sx={{ mb: 3 }}>
-      <Card sx={{ bgcolor: "#f3f6fa", mb: 1 }}>
-        <CardContent>
-          <Typography variant="h6" color="secondary" fontWeight={700}>
-            Your Delivery Earnings {tab === 0 ? "Today" : "Yesterday"}
-          </Typography>
-          <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-            <Button
-              size="small"
-              variant={tab === 0 ? "contained" : "text"}
-              onClick={() => setTab(0)}
-            >
-              Today
-            </Button>
-            <Button
-              size="small"
-              variant={tab === 1 ? "contained" : "text"}
-              onClick={() => setTab(1)}
-            >
-              Yesterday
-            </Button>
-          </Stack>
-          <Typography variant="h4" fontWeight={900} sx={{ mb: 2 }}>
-            ₹{total.toLocaleString("en-IN")}
-          </Typography>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Order</TableCell>
-                <TableCell>Date</TableCell>
-                <TableCell>Fee</TableCell>
-                <TableCell>Status</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filtered.map(pay => (
-                <TableRow key={pay._id}>
-                  <TableCell>{pay.orderId?._id?.slice(-5) || "NA"}</TableCell>
-                  <TableCell>{dayjs(pay.createdAt).format("DD/MM/YYYY")}</TableCell>
-                  <TableCell>₹{pay.deliveryAmount}</TableCell>
-                  <TableCell>{pay.status}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {filtered.length === 0 && (
-            <Typography color="warning.main" fontSize={15}>No payouts yet.</Typography>
-          )}
-        </CardContent>
-      </Card>
-    </Box>
-  );
-}
-
 const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
-// Helper: Get directions route (async, returns array of latlngs for polyline)
+/* ------------------------- helpers (unchanged logic) ------------------------ */
+
+function getHiddenRejectionIds() {
+  try {
+    return JSON.parse(localStorage.getItem("hiddenRejectionPopupOrderIds") || "[]").map(String);
+  } catch {
+    return [];
+  }
+}
+function addHiddenRejectionId(orderId) {
+  const ids = getHiddenRejectionIds();
+  const idStr = String(orderId);
+  if (!ids.includes(idStr)) {
+    ids.push(idStr);
+    localStorage.setItem("hiddenRejectionPopupOrderIds", JSON.stringify(ids));
+  }
+}
+
+function formatOrderDate(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  const opts = { day: "numeric", month: "long" };
+  const date = d.toLocaleDateString("en-IN", opts);
+  let hour = d.getHours();
+  const min = d.getMinutes().toString().padStart(2, "0");
+  const ampm = hour >= 12 ? "pm" : "am";
+  hour = hour % 12 || 12;
+  return `${date}, ${hour}:${min}${ampm}`;
+}
+
 const getRouteAndDistance = async (origin, destination) => {
   const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&key=${GOOGLE_MAPS_API_KEY}`;
   const res = await fetch(url);
@@ -105,11 +64,9 @@ const getRouteAndDistance = async (origin, destination) => {
   let distanceKm = null;
 
   if (data.routes && data.routes[0]) {
-    // Decode the route for map polyline
     if (data.routes[0].overview_polyline) {
       poly = decodePolyline(data.routes[0].overview_polyline.points);
     }
-    // Fetch the distance (in meters), then convert to km
     if (data.routes[0].legs && data.routes[0].legs[0] && data.routes[0].legs[0].distance) {
       distanceKm = data.routes[0].legs[0].distance.value / 1000;
     }
@@ -117,7 +74,6 @@ const getRouteAndDistance = async (origin, destination) => {
   return { poly, distanceKm };
 };
 
-// Helper: Polyline decoding
 function decodePolyline(encoded) {
   let points = [];
   let index = 0, len = encoded.length;
@@ -145,6 +101,80 @@ function decodePolyline(encoded) {
   return points;
 }
 
+/* --------------------------- payouts sub-section --------------------------- */
+
+function DeliveryPayoutsSection({ partner }) {
+  const [payouts, setPayouts] = useState([]);
+  const [tab, setTab] = useState(0); // 0 today, 1 yesterday
+
+  useEffect(() => {
+    if (!partner?._id) return;
+    axios
+      .get(`${API_BASE_URL}/api/payments?deliveryPartnerId=${partner._id}&status=paid`)
+      .then(res => setPayouts(res.data));
+  }, [partner]);
+
+  const today = dayjs().format("YYYY-MM-DD");
+  const yesterday = dayjs().subtract(1, "day").format("YYYY-MM-DD");
+
+  const filtered = payouts.filter(pay => {
+    const payDay = dayjs(pay.createdAt).format("YYYY-MM-DD");
+    return tab === 0 ? payDay === today : payDay === yesterday;
+  });
+
+  const total = filtered.reduce((sum, p) => sum + (p.deliveryAmount || 0), 0);
+
+  if (!partner?._id) return null;
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-emerald-200/60 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h3 className="text-emerald-900 font-extrabold text-lg">
+            Your Delivery Earnings {tab === 0 ? "Today" : "Yesterday"}
+          </h3>
+          <div className="flex gap-2">
+            <Button size="sm" variant={tab === 0 ? "default" : "outline"} className="!font-bold" onClick={() => setTab(0)}>Today</Button>
+            <Button size="sm" variant={tab === 1 ? "default" : "outline"} className="!font-bold" onClick={() => setTab(1)}>Yesterday</Button>
+          </div>
+        </div>
+
+        <div className="mt-3 text-3xl font-extrabold text-emerald-700">₹{total.toLocaleString("en-IN")}</div>
+
+        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-700">
+              <tr>
+                <th className="px-3 py-2 text-left">Order</th>
+                <th className="px-3 py-2 text-left">Date</th>
+                <th className="px-3 py-2 text-left">Fee</th>
+                <th className="px-3 py-2 text-left">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(pay => (
+                <tr key={pay._id} className="border-t">
+                  <td className="px-3 py-2">#{pay.orderId?._id?.slice(-5) || "NA"}</td>
+                  <td className="px-3 py-2">{dayjs(pay.createdAt).format("DD/MM/YYYY")}</td>
+                  <td className="px-3 py-2">₹{pay.deliveryAmount}</td>
+                  <td className="px-3 py-2">{pay.status}</td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan="4" className="px-3 py-3 text-amber-600">No payouts yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------- component -------------------------------- */
+
 export default function DeliveryDashboard() {
   const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem("deliveryToken"));
   const [partner, setPartner] = useState(null);
@@ -155,7 +185,7 @@ export default function DeliveryDashboard() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatOrder, setChatOrder] = useState(null);
   const [loading, setLoading] = useState(false);
-  const firstLoad = useRef(true); // <-- add this line
+  const firstLoad = useRef(true);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [loginDialog, setLoginDialog] = useState(!loggedIn);
   const [loginForm, setLoginForm] = useState({ mobile: "", password: "" });
@@ -163,75 +193,60 @@ export default function DeliveryDashboard() {
   const [resetPhase, setResetPhase] = useState(0);
   const [forgotForm, setForgotForm] = useState({ mobile: "", otp: "", newPassword: "" });
   const [polylines, setPolylines] = useState({});
-  const [orderDistances, setOrderDistances] = useState({});  // <--- ADD THIS LINE!
+  const [orderDistances, setOrderDistances] = useState({});
   const [orderUnreadCounts, setOrderUnreadCounts] = useState({});
 
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY
-  });
+  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: GOOGLE_MAPS_API_KEY });
 
-  // Auto-refresh every 3 seconds
+  // Auto-refresh every 3s (unchanged logic)
   useEffect(() => {
-  if (!loggedIn || loading) return;
-  const interval = setInterval(() => {
-    fetchProfileAndOrders();
-  }, 3000);
-  return () => clearInterval(interval);
-  // Optionally add [loggedIn, tab] as dependencies for more precise updates
-}, [loggedIn, tab, loading]);
+    if (!loggedIn || loading) return;
+    const interval = setInterval(() => { fetchProfileAndOrders(); }, 3000);
+    return () => clearInterval(interval);
+  }, [loggedIn, tab, loading]);
 
-  // Always send driver location while logged in & ACTIVE (even with zero orders)
-useEffect(() => {
-  if (!loggedIn || !partner?._id || !active) return;
+  // Send driver location while ACTIVE
+  useEffect(() => {
+    if (!loggedIn || !partner?._id || !active) return;
 
-  let watchId;
+    let watchId;
+    const send = async (coords) => {
+      const { latitude, longitude } = coords;
+      try {
+        await axios.post(`${API_BASE_URL}/api/delivery/update-location`, {
+          partnerId: partner._id, lat: latitude, lng: longitude,
+        });
+      } catch {}
+    };
 
-  const send = async (coords) => {
-    const { latitude, longitude } = coords;
-    try {
-      await axios.post(`${API_BASE_URL}/api/delivery/update-location`, {
-        partnerId: partner._id,
-        lat: latitude,
-        lng: longitude,   // no orderId on idle
-      });
-    } catch (e) {
-      // ignore network bumps
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => send(pos.coords), () => {},
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+      );
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => send(pos.coords), () => {},
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+      );
     }
-  };
 
-  if (navigator.geolocation) {
-    // seed once immediately
-    navigator.geolocation.getCurrentPosition(
-      (pos) => send(pos.coords),
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
-    );
-
-    // keep updating while app is open & active
-    watchId = navigator.geolocation.watchPosition(
-      (pos) => send(pos.coords),
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
-    );
-  }
-
-  return () => {
-    if (navigator.geolocation && watchId) navigator.geolocation.clearWatch(watchId);
-  };
-}, [loggedIn, partner?._id, active]);
+    return () => {
+      if (navigator.geolocation && watchId) navigator.geolocation.clearWatch(watchId);
+    };
+  }, [loggedIn, partner?._id, active]);
 
   useEffect(() => {
-  if (loggedIn) {
-    setLoading(true);          // <-- always show loading for initial
-    fetchProfileAndOrders().finally(() => {
-      setLoading(false);
-      firstLoad.current = false;
-    });
-  }
-  // eslint-disable-next-line
-}, [loggedIn]);
+    if (loggedIn) {
+      setLoading(true);
+      fetchProfileAndOrders().finally(() => {
+        setLoading(false);
+        firstLoad.current = false;
+      });
+    }
+    // eslint-disable-next-line
+  }, [loggedIn]);
 
-  // Unread badge fetcher
+  // Unread chat counts (unchanged logic)
   useEffect(() => {
     if (!loggedIn || !orders.length) return;
     const token = localStorage.getItem("deliveryToken");
@@ -254,53 +269,45 @@ useEffect(() => {
     return () => clearInterval(interval);
   }, [orders, loggedIn, chatOpen]);
 
-  // Fetch partner profile and orders (and set active state)
   const fetchProfileAndOrders = async () => {
-  try {
-    const token = localStorage.getItem("deliveryToken");
-    const partnerId = localStorage.getItem("deliveryPartnerId");
-    const resProfile = await axios.get(`${API_BASE_URL}/api/delivery/partner/${partnerId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    setPartner(resProfile.data.partner || {});
-    setActive(resProfile.data.partner?.active || false);
-    const resOrders = await axios.get(`${API_BASE_URL}/api/delivery/orders`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        deliverypartnerid: partnerId
+    try {
+      const token = localStorage.getItem("deliveryToken");
+      const partnerId = localStorage.getItem("deliveryPartnerId");
+      const resProfile = await axios.get(`${API_BASE_URL}/api/delivery/partner/${partnerId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPartner(resProfile.data.partner || {});
+      setActive(resProfile.data.partner?.active || false);
+
+      const resOrders = await axios.get(`${API_BASE_URL}/api/delivery/orders`, {
+        headers: { Authorization: `Bearer ${token}`, deliverypartnerid: partnerId }
+      });
+      const activeOrders = resOrders.data || [];
+      setOrders(activeOrders);
+      setPastOrders(resProfile.data.pastOrders || []);
+
+      let newPolys = {};
+      let newDistances = {};
+      for (const o of activeOrders) {
+        if (o.pharmacy?.location?.lat && o.pharmacy?.location?.lng && o.address?.lat && o.address?.lng) {
+          if (!polylines[o._id] || orderDistances[o._id] == null) {
+            const { poly, distanceKm } = await getRouteAndDistance(o.pharmacy.location, o.address);
+            newPolys[o._id] = poly;
+            newDistances[o._id] = distanceKm;
+          } else {
+            newPolys[o._id] = polylines[o._id];
+            newDistances[o._id] = orderDistances[o._id];
+          }
+        }
       }
-    });
-    const activeOrders = resOrders.data || [];
-    setOrders(activeOrders);
-    setPastOrders(resProfile.data.pastOrders || []);
-    let newPolys = {};
-let newDistances = {};
-for (const o of activeOrders) {
-  if (
-    o.pharmacy?.location?.lat &&
-    o.pharmacy?.location?.lng &&
-    o.address?.lat &&
-    o.address?.lng
-  ) {
-    // Only fetch if not already available
-    if (!polylines[o._id] || orderDistances[o._id] == null) {
-      const { poly, distanceKm } = await getRouteAndDistance(o.pharmacy.location, o.address);
-      newPolys[o._id] = poly;
-      newDistances[o._id] = distanceKm;
-    } else {
-      newPolys[o._id] = polylines[o._id];
-      newDistances[o._id] = orderDistances[o._id];
+      setPolylines(newPolys);
+      setOrderDistances(newDistances);
+    } catch (err) {
+      setSnackbar({ open: true, message: "Failed to load profile/orders", severity: "error" });
+      setLoggedIn(false);
+      setLoginDialog(true);
     }
-  }
-}
-setPolylines(newPolys);
-setOrderDistances(newDistances);
-  } catch (err) {
-    setSnackbar({ open: true, message: "Failed to load profile/orders", severity: "error" });
-    setLoggedIn(false);
-    setLoginDialog(true);
-  }
-};
+  };
 
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
@@ -315,7 +322,7 @@ setOrderDistances(newDistances);
     }
   };
 
-  // Auth Logic
+  // Auth
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -341,7 +348,7 @@ setOrderDistances(newDistances);
     setLoginDialog(true);
   };
 
-  // Forgot/Reset Password Logic
+  // Forgot / Reset
   const handleForgotStart = async () => {
     try {
       await axios.post(`${API_BASE_URL}/api/delivery/forgot-password`, { mobile: forgotForm.mobile });
@@ -354,9 +361,7 @@ setOrderDistances(newDistances);
   const handleResetPassword = async () => {
     try {
       await axios.post(`${API_BASE_URL}/api/delivery/reset-password`, {
-        mobile: forgotForm.mobile,
-        otp: forgotForm.otp,
-        newPassword: forgotForm.newPassword
+        mobile: forgotForm.mobile, otp: forgotForm.otp, newPassword: forgotForm.newPassword
       });
       setSnackbar({ open: true, message: "Password reset! Please log in.", severity: "success" });
       setForgotOpen(false);
@@ -367,446 +372,358 @@ setOrderDistances(newDistances);
     }
   };
 
-  // === UI ===
+  /* ------------------------------ login dialog ------------------------------ */
   if (!loggedIn) {
     return (
-      <Dialog open={loginDialog} onClose={() => {}}>
-        <DialogTitle>Delivery Partner Login</DialogTitle>
-        <DialogContent>
-          <form onSubmit={handleLogin}>
-            <Stack spacing={2} sx={{ mt: 1 }}>
-              <TextField
-                label="Mobile Number"
-                required
-                value={loginForm.mobile}
-                onChange={e => setLoginForm(f => ({ ...f, mobile: e.target.value }))}
-              />
-              <TextField
-                label="Password"
-                type="password"
-                required
-                value={loginForm.password}
-                onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
-              />
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                fullWidth
-                sx={{ mt: 1 }}
-              >
-                Login
-              </Button>
-              <Button
-                color="secondary"
-                onClick={() => setForgotOpen(true)}
-                sx={{ fontSize: 13 }}
-              >
-                Forgot Password?
-              </Button>
-            </Stack>
+      <Dialog open={loginDialog} onOpenChange={() => {}}>
+        <DialogContent className="force-light sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-emerald-800 font-extrabold">Delivery Partner Login</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleLogin} className="space-y-3">
+            <div className="grid gap-1.5">
+              <Label>Mobile Number</Label>
+              <Input value={loginForm.mobile} onChange={e => setLoginForm(f => ({ ...f, mobile: e.target.value }))} required className="gd-input" />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Password</Label>
+              <Input type="password" value={loginForm.password} onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))} required className="gd-input" />
+            </div>
+            <Button type="submit" className="w-full btn-primary-emerald !font-bold mt-1">Login</Button>
+            <Button type="button" variant="ghost" className="w-full btn-ghost-soft !font-bold" onClick={() => setForgotOpen(true)}>
+              Forgot Password?
+            </Button>
           </form>
-        </DialogContent>
-        {/* Forgot/Reset Password Modal */}
-        <Dialog open={forgotOpen} onClose={() => { setForgotOpen(false); setResetPhase(0); }}>
-          <DialogTitle>Forgot Password</DialogTitle>
-          <DialogContent>
-            {resetPhase === 0 ? (
-              <Stack spacing={2} sx={{ mt: 1 }}>
-                <TextField
-                  label="Registered Mobile"
-                  value={forgotForm.mobile}
-                  onChange={e => setForgotForm(f => ({ ...f, mobile: e.target.value }))}
-                />
-                <Button variant="contained" onClick={handleForgotStart}>
-                  Send OTP
-                </Button>
-              </Stack>
-            ) : (
-              <Stack spacing={2} sx={{ mt: 1 }}>
-                <TextField
-                  label="OTP"
-                  value={forgotForm.otp}
-                  onChange={e => setForgotForm(f => ({ ...f, otp: e.target.value }))}
-                />
-                <TextField
-                  label="New Password"
-                  type="password"
-                  value={forgotForm.newPassword}
-                  onChange={e => setForgotForm(f => ({ ...f, newPassword: e.target.value }))}
-                />
-                <Button variant="contained" onClick={handleResetPassword}>
-                  Reset Password
-                </Button>
-              </Stack>
+
+          {/* Forgot / Reset Modal */}
+          <Dialog open={forgotOpen} onOpenChange={(open) => { setForgotOpen(open); if (!open) setResetPhase(0); }}>
+            <DialogContent className="force-light sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Forgot Password</DialogTitle>
+              </DialogHeader>
+              {resetPhase === 0 ? (
+                <div className="space-y-3">
+                  <div className="grid gap-1.5">
+                    <Label>Registered Mobile</Label>
+                    <Input value={forgotForm.mobile} onChange={e => setForgotForm(f => ({ ...f, mobile: e.target.value }))} />
+                  </div>
+                  <DialogFooter>
+                    <Button onClick={handleForgotStart} className="btn-primary-emerald !font-bold">Send OTP</Button>
+                  </DialogFooter>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid gap-1.5">
+                    <Label>OTP</Label>
+                    <Input value={forgotForm.otp} onChange={e => setForgotForm(f => ({ ...f, otp: e.target.value }))} />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label>New Password</Label>
+                    <Input type="password" value={forgotForm.newPassword} onChange={e => setForgotForm(f => ({ ...f, newPassword: e.target.value }))} />
+                  </div>
+                  <DialogFooter>
+                    <Button onClick={handleResetPassword} className="btn-primary-emerald !font-bold">Reset Password</Button>
+                  </DialogFooter>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Snackbar mimic */}
+          <AnimatePresence>
+            {snackbar.open && (
+              <motion.div
+                initial={{ y: 30, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 30, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 320, damping: 24 }}
+                className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[2000] rounded-full px-4 py-2 font-semibold shadow-lg ${
+                  snackbar.severity === "error" ? "bg-red-600 text-white" : "bg-emerald-600 text-white"
+                }`}
+                onAnimationComplete={() => setTimeout(() => setSnackbar(s => ({ ...s, open: false })), 2200)}
+              >
+                {snackbar.message}
+              </motion.div>
             )}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => { setForgotOpen(false); setResetPhase(0); }}>Close</Button>
-          </DialogActions>
-        </Dialog>
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={2500}
-          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        >
-          <Alert severity={snackbar.severity}>{snackbar.message}</Alert>
-        </Snackbar>
+          </AnimatePresence>
+        </DialogContent>
       </Dialog>
     );
   }
 
-  // DASHBOARD
+  /* -------------------------------- dashboard ------------------------------- */
+  const tabsValue = tab === 0 ? "active" : tab === 1 ? "past" : "earnings";
+
   return (
-    <Box sx={{ maxWidth: 900, mx: "auto", mt: 4, p: 2 }}>
-      {/* Profile, Toggle, and Logout */}
-      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-        <Avatar sx={{ width: 54, height: 54, fontWeight: 700, bgcolor: "#FFD43B", color: "#232323" }}>
-          {partner?.name?.charAt(0)}
+    <div className="mx-auto max-w-[900px] px-3 pt-4 pb-16">
+      {/* header */}
+      <div className="flex items-center gap-3 rounded-2xl border border-emerald-200/60 bg-white p-3 shadow-sm">
+        <Avatar className="h-14 w-14 ring-2 ring-emerald-100">
+          <AvatarImage src={partner?.avatar || ""} />
+          <AvatarFallback className="bg-amber-300 text-slate-900 font-bold">
+            {partner?.name?.charAt(0) || "D"}
+          </AvatarFallback>
         </Avatar>
-        <Box sx={{ ml: 2 }}>
-          <Typography variant="h6" fontWeight={700}>
-            {partner?.name}
-          </Typography>
-          <Typography sx={{ color: "#555", fontSize: 15 }}>
-            {partner?.mobile} &nbsp; | &nbsp; {partner?.city}, {partner?.area}
-          </Typography>
-          {/* Active Toggle */}
-          <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
+        <div className="min-w-0 flex-1">
+          <div className="text-lg font-extrabold text-emerald-900 truncate">{partner?.name}</div>
+          <div className="text-sm text-slate-600 truncate">
+            {partner?.mobile} <span className="mx-2">|</span> {partner?.city}, {partner?.area}
+          </div>
+          <div className="mt-1 flex items-center gap-2">
             <Switch
-  checked={active}
-  onChange={async (e) => {
-    const next = e.target.checked;
-    setActive(next);
-    const token = localStorage.getItem("deliveryToken");
-
-    // If going Online, try to include the current GPS once
-    if (navigator.geolocation && next) {
-      navigator.geolocation.getCurrentPosition((pos) => {
-        axios.patch(
-          `${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
-          {
-            active: next,
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-      });
-    } else {
-      // Offline or no geolocation available
-      await axios.patch(
-        `${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
-        { active: next },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-    }
-  }}
-  inputProps={{ "aria-label": "Active Status" }}
-  color="success"
-/>
-
-            <Typography sx={{ color: active ? "#13C0A2" : "#f44336", fontWeight: 600, ml: 1 }}>
+              checked={active}
+              onCheckedChange={async (next) => {
+                setActive(next);
+                const token = localStorage.getItem("deliveryToken");
+                if (navigator.geolocation && next) {
+                  navigator.geolocation.getCurrentPosition((pos) => {
+                    axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`, {
+                      active: next, lat: pos.coords.latitude, lng: pos.coords.longitude,
+                    }, { headers: { Authorization: `Bearer ${token}` } });
+                  });
+                } else {
+                  await axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
+                    { active: next }, { headers: { Authorization: `Bearer ${token}` } });
+                }
+              }}
+            />
+            <span className={`text-sm font-bold ${active ? "text-emerald-600" : "text-red-600"}`}>
               {active ? "Active" : "Inactive"}
-            </Typography>
-          </Box>
-        </Box>
-        {/* LOGOUT at right! */}
-        <Button
-          variant="outlined"
-          color="error"
-          sx={{
-            ml: "auto",
-            fontWeight: 700,
-            borderRadius: 4,
-            minWidth: 90,
-            whiteSpace: "nowrap",
-          }}
-          startIcon={<LogoutIcon />}
-          onClick={handleLogout}
-        >
-          Logout
+            </span>
+          </div>
+        </div>
+        <Button variant="outline" className="btn-danger-outline !font-bold" onClick={handleLogout}>
+          <LogOut className="h-4 w-4 mr-2" /> Logout
         </Button>
-      </Box>
+      </div>
 
-      {/* Tabs for Active / Past Orders / Earnings */}
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
-        <Tab label="Active Orders" />
-        <Tab label="Past Orders" />
-        <Tab label="Earnings" />
-      </Tabs>
-      {/* MAIN CONTENT BASED ON TAB */}
-      {loading ? (
-        <Box sx={{ textAlign: "center", mt: 6 }}>
-          <CircularProgress />
-        </Box>
-      ) : tab === 0 ? (
-        // ACTIVE ORDERS TAB
-        <Stack spacing={3}>
-          {orders.length === 0 && (
-            <Typography sx={{ textAlign: "center", color: "#888" }}>
-              No active orders assigned to you.
-            </Typography>
-          )}
-          {orders.map((order) => {
-            const pharmacyLoc = order.pharmacy?.location;
-            const userLoc = order.address;
-            // Patch for GeoJSON -> lat/lng if missing
-let patchedPharmacyLoc = pharmacyLoc;
-if (
-  pharmacyLoc &&
-  Array.isArray(pharmacyLoc.coordinates) &&
-  pharmacyLoc.coordinates.length === 2
-) {
-  patchedPharmacyLoc = {
-    ...pharmacyLoc,
-    lat: pharmacyLoc.coordinates[1],
-    lng: pharmacyLoc.coordinates[0],
-  };
-}
+      {/* tabs */}
+      <div className="mt-4">
+        <Tabs value={tabsValue} onValueChange={(v) => setTab(v === "active" ? 0 : v === "past" ? 1 : 2)}>
+          <TabsList className="grid w-full grid-cols-3 rounded-xl bg-emerald-50">
+            <TabsTrigger value="active" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white !font-bold">Active Orders</TabsTrigger>
+            <TabsTrigger value="past" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white !font-bold">Past Orders</TabsTrigger>
+            <TabsTrigger value="earnings" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white !font-bold">Earnings</TabsTrigger>
+          </TabsList>
 
-let patchedUserLoc = userLoc;
-if (
-  userLoc &&
-  Array.isArray(userLoc.coordinates) &&
-  userLoc.coordinates.length === 2
-) {
-  patchedUserLoc = {
-    ...userLoc,
-    lat: userLoc.coordinates[1],
-    lng: userLoc.coordinates[0],
-  };
-}
+          {/* ACTIVE */}
+          <TabsContent value="active" className="mt-4">
+            {loading ? (
+              <div className="flex items-center justify-center py-10 text-slate-500">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading...
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {orders.length === 0 && (
+                  <div className="text-center text-slate-500">No active orders assigned to you.</div>
+                )}
 
-            const poly = polylines[order._id] || [];
-            const mapCenter = patchedPharmacyLoc?.lat && patchedPharmacyLoc?.lng
-              ? { lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }
-              : { lat: 19.076, lng: 72.877 };
-            return (
-              <Card key={order._id} sx={{ borderRadius: 5, bgcolor: "#f7fafc" }}>
-                <CardContent>
-                  <Stack direction="row" alignItems="center" spacing={2}>
-                    <LocalPharmacyIcon sx={{ color: "#13C0A2" }} />
-                    <Typography sx={{ fontWeight: 700, fontSize: 17 }}>
-                      Pharmacy: <span style={{ color: "#13C0A2" }}>
-                        {order.pharmacy?.name || order.pharmacy}
-                      </span>
-                    </Typography>
-                    <Chip label={order.status} color="primary" sx={{ ml: "auto" }} />
-                  </Stack>
-                  <Typography sx={{ mt: 1, color: "#555" }}>
-                    Pharmacy Address: <b>{order.pharmacy?.address}</b>
-                  </Typography>
-                  <Typography sx={{ color: "#555" }}>
-  {orderDistances[order._id] != null &&
-    `Distance: ${orderDistances[order._id].toFixed(2)} km`
-  }
-</Typography>
-                  <Typography sx={{ color: "#555" }}>
-                    Deliver to: <b>
-    {order.address?.formatted || 
-     order.address?.fullAddress || 
-     [
-       order.address?.addressLine,
-       order.address?.floor,
-       order.address?.landmark,
-       order.address?.area,
-       order.address?.city,
-       order.address?.state,
-       order.address?.pin
-     ].filter(Boolean).join(', ')
-    }
-  </b>
-                  </Typography>
-                  <Typography sx={{ color: "#555" }}>
-                    Amount: ₹{order.total || order.amount || 0}
-                  </Typography>
-                  <Typography sx={{ color: "#555" }}>
-                    Items: {order.items.map((item, i) => (
-                      <span key={i}>{item.name} x{item.qty || item.quantity}; </span>
-                    ))}
-                  </Typography>
-                  {/* ===== LIVE MAP BELOW ===== */}
-{isLoaded ? (
-  !patchedPharmacyLoc?.lat
-    ? <Typography sx={{ color: "#bbb", fontSize: 14, mt: 2 }}>
-        Pharmacy location missing
-      </Typography>
-    : !patchedUserLoc?.lat
-      ? <Typography sx={{ color: "#bbb", fontSize: 14, mt: 2 }}>
-          Customer location missing
-        </Typography>
-      : (
-        <Box sx={{ mt: 2, mb: 1 }}>
-          <GoogleMap
-            mapContainerStyle={{ width: "100%", height: "230px", borderRadius: "18px" }}
-            center={mapCenter}
-            zoom={13}
-            options={{ streetViewControl: false, mapTypeControl: false }}
-          >
-            {/* Pharmacy marker */}
-            <Marker
-              position={{ lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }}
-              label="P"
-              title="Pharmacy"
-              icon={{
-                url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
-                scaledSize: { width: 40, height: 40 }
-              }}
-            />
-            {/* User marker */}
-            <Marker
-              position={{ lat: patchedUserLoc.lat, lng: patchedUserLoc.lng }}
-              label="U"
-              title="Delivery Address"
-              icon={{
-                url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
-                scaledSize: { width: 40, height: 40 }
-              }}
-            />
-            {/* Polyline */}
-            {poly.length > 0 && (
-              <Polyline
-                path={poly}
-                options={{
-                  strokeColor: "#1976d2",
-                  strokeOpacity: 0.8,
-                  strokeWeight: 4,
-                }}
-              />
+                {orders.map((order) => {
+                  const pharmacyLoc = order.pharmacy?.location;
+                  const userLoc = order.address;
+
+                  // GeoJSON safeguard -> lat/lng
+                  let patchedPharmacyLoc = pharmacyLoc;
+                  if (pharmacyLoc && Array.isArray(pharmacyLoc.coordinates) && pharmacyLoc.coordinates.length === 2) {
+                    patchedPharmacyLoc = { ...pharmacyLoc, lat: pharmacyLoc.coordinates[1], lng: pharmacyLoc.coordinates[0] };
+                  }
+                  let patchedUserLoc = userLoc;
+                  if (userLoc && Array.isArray(userLoc.coordinates) && userLoc.coordinates.length === 2) {
+                    patchedUserLoc = { ...userLoc, lat: userLoc.coordinates[1], lng: userLoc.coordinates[0] };
+                  }
+
+                  const poly = polylines[order._id] || [];
+                  const mapCenter = patchedPharmacyLoc?.lat && patchedPharmacyLoc?.lng
+                    ? { lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }
+                    : { lat: 19.076, lng: 72.877 };
+
+                  return (
+                    <motion.div
+                      key={order._id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-2xl border border-emerald-200/60 bg-white p-4 shadow-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Pill className="h-5 w-5 text-emerald-600" />
+                        <div className="font-semibold">
+                          Pharmacy: <span className="text-emerald-700 font-extrabold">{order.pharmacy?.name || order.pharmacy}</span>
+                        </div>
+                        <Badge className="ml-auto bg-emerald-600">{order.status}</Badge>
+                      </div>
+
+                      <div className="mt-2 text-sm text-slate-700">
+                        <div className="flex items-start gap-2">
+                          <MapPin className="h-4 w-4 mt-0.5 text-slate-500" />
+                          <span>Pharmacy Address: <b>{order.pharmacy?.address}</b></span>
+                        </div>
+                        <div className="flex items-start gap-2 mt-1">
+                          <Route className="h-4 w-4 mt-0.5 text-slate-500" />
+                          <span>
+                            {orderDistances[order._id] != null && `Distance: ${orderDistances[order._id].toFixed(2)} km`}
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-2 mt-1">
+                          <MapPin className="h-4 w-4 mt-0.5 text-slate-500" />
+                          <span>
+                            Deliver to: <b>
+                              {order.address?.formatted ||
+                                order.address?.fullAddress ||
+                                [order.address?.addressLine, order.address?.floor, order.address?.landmark, order.address?.area, order.address?.city, order.address?.state, order.address?.pin]
+                                  .filter(Boolean).join(", ")}
+                            </b>
+                          </span>
+                        </div>
+                        <div className="mt-1">Amount: ₹{order.total || order.amount || 0}</div>
+                        <div className="mt-1">
+                          Items: {order.items.map((item, i) => (
+                            <span key={i} className="text-slate-800">{item.name} x{item.qty || item.quantity}; </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* map */}
+                      {isLoaded ? (
+                        !patchedPharmacyLoc?.lat ? (
+                          <div className="text-xs text-slate-400 mt-2">Pharmacy location missing</div>
+                        ) : !patchedUserLoc?.lat ? (
+                          <div className="text-xs text-slate-400 mt-2">Customer location missing</div>
+                        ) : (
+                          <div className="mt-3">
+                            <GoogleMap
+                              mapContainerStyle={{ width: "100%", height: "230px", borderRadius: 18 }}
+                              center={mapCenter}
+                              zoom={13}
+                              options={{ streetViewControl: false, mapTypeControl: false }}
+                            >
+                              <Marker
+                                position={{ lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }}
+                                label="P"
+                                title="Pharmacy"
+                                icon={{ url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png", scaledSize: { width: 40, height: 40 } }}
+                              />
+                              <Marker
+                                position={{ lat: patchedUserLoc.lat, lng: patchedUserLoc.lng }}
+                                label="U"
+                                title="Delivery Address"
+                                icon={{ url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png", scaledSize: { width: 40, height: 40 } }}
+                              />
+                              {poly.length > 0 && (
+                                <Polyline path={poly} options={{ strokeColor: "#0ea5a4", strokeOpacity: 0.9, strokeWeight: 4 }} />
+                              )}
+                            </GoogleMap>
+                            <Button
+                              variant="outline"
+                              className="mt-2 !font-bold"
+                              target="_blank"
+                              href={`https://www.google.com/maps/dir/?api=1&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
+                            >
+                              <Map className="h-4 w-4 mr-2" /> Get Directions in Google Maps
+                            </Button>
+                          </div>
+                        )
+                      ) : (
+                        <div className="text-xs text-slate-400 mt-2">Loading map...</div>
+                      )}
+
+                      {/* actions */}
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {order.status === "assigned" && (
+                          <>
+                            <Button className="btn-primary-emerald !font-bold" onClick={() => handleUpdateStatus(order._id, "accepted")}>
+                              Accept Order
+                            </Button>
+                            <Button variant="destructive" className="!font-bold" onClick={() => handleUpdateStatus(order._id, "rejected")}>
+                              Reject
+                            </Button>
+                          </>
+                        )}
+                        {order.status === "accepted" && (
+                          <Button className="!font-bold" onClick={() => handleUpdateStatus(order._id, "out_for_delivery")}>
+                            <Bike className="h-4 w-4 mr-2" /> Mark as Out for Delivery
+                          </Button>
+                        )}
+                        {order.status === "out_for_delivery" && (
+                          <Button className="bg-emerald-600 hover:bg-emerald-700 !font-bold" onClick={() => handleUpdateStatus(order._id, "delivered")}>
+                            <CheckCheck className="h-4 w-4 mr-2" /> Mark as Delivered
+                          </Button>
+                        )}
+                        {order.status === "delivered" && (
+                          <Badge className="bg-emerald-600">Delivered</Badge>
+                        )}
+
+                        {order.status !== "delivered" && (
+                          <div className="relative ml-auto">
+                            {!!(orderUnreadCounts[order._id]) && (
+                              <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
+                                {orderUnreadCounts[order._id]}
+                              </span>
+                            )}
+                            <Button
+                              className="bg-amber-300 text-slate-900 hover:bg-amber-400 !font-bold"
+                              onClick={async () => {
+                                setChatOrder(order);
+                                setChatOpen(true);
+                                const token = localStorage.getItem("deliveryToken");
+                                await axios.patch(`${API_BASE_URL}/api/chat/${order._id}/user-chat-seen`, {}, {
+                                  headers: { Authorization: `Bearer ${token}` }
+                                });
+                                setOrderUnreadCounts((c) => ({ ...c, [order._id]: 0 }));
+                              }}
+                            >
+                              <MessageSquare className="h-4 w-4 mr-2" /> Chat
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
             )}
-          </GoogleMap>
-          <Button
-            variant="outlined"
-            sx={{ mt: 1 }}
-            target="_blank"
-            href={`https://www.google.com/maps/dir/?api=1&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
-          >
-            Get Directions in Google Maps
-          </Button>
-        </Box>
-      )
-) : (
-  <Typography sx={{ color: "#bbb", fontSize: 14, mt: 2 }}>
-    Loading map...
-  </Typography>
-)}
-                  {/* Update Status Button */}
-                  <Stack direction="row" spacing={2} mt={2}>
-                    {order.status === "assigned" && (
-                      <>
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          onClick={() => handleUpdateStatus(order._id, "accepted")}
-                        >
-                          Accept Order
-                        </Button>
-                        <Button
-                          variant="contained"
-                          color="error"
-                          onClick={() => handleUpdateStatus(order._id, "rejected")}
-                        >
-                          Reject
-                        </Button>
-                      </>
-                    )}
-                    {order.status === "accepted" && (
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={() => handleUpdateStatus(order._id, "out_for_delivery")}
-                        startIcon={<TwoWheelerIcon />}
-                      >
-                        Mark as Out for Delivery
-                      </Button>
-                    )}
-                    {order.status === "out_for_delivery" && (
-                      <Button
-                        variant="contained"
-                        color="success"
-                        onClick={() => handleUpdateStatus(order._id, "delivered")}
-                        startIcon={<DoneAllIcon />}
-                      >
-                        Mark as Delivered
-                      </Button>
-                    )}
-                    {order.status === "delivered" && (
-                      <Chip label="Delivered" color="success" icon={<DoneAllIcon />} />
-                    )}
-                    {/* ===== Delivery Chat Button (ONLY if not delivered) ===== */}
-                    {order.status !== "delivered" && (
-                      <Badge
-                        color="error"
-                        badgeContent={orderUnreadCounts[order._id] || 0}
-                        invisible={!orderUnreadCounts[order._id]}
-                      >
-                        <Button
-                          variant="contained"
-                          color="secondary"
-                          startIcon={<ChatBubbleOutlineIcon />}
-                          sx={{ ml: 2, fontWeight: 600, borderRadius: 4, bgcolor: "#FFD43B", color: "#222" }}
-                          onClick={async () => {
-                            setChatOrder(order);
-                            setChatOpen(true);
-                            // Mark as seen when opening
-                            const token = localStorage.getItem("deliveryToken");
-                            await axios.patch(`${API_BASE_URL}/api/chat/${order._id}/user-chat-seen`, {}, {
-                              headers: { Authorization: `Bearer ${token}` }
-                            });
-                            setOrderUnreadCounts((c) => ({ ...c, [order._id]: 0 }));
-                          }}
-                        >
-                          Chat
-                        </Button>
-                      </Badge>
-                    )}
-                  </Stack>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </Stack>
-      ) : tab === 1 ? (
-        // PAST ORDERS TAB
-        <Stack spacing={3}>
-          {pastOrders.length === 0 && (
-            <Typography sx={{ textAlign: "center", color: "#888" }}>
-              No past orders delivered yet.
-            </Typography>
-          )}
-          {pastOrders.map((order) => (
-            <Card key={order._id} sx={{ borderRadius: 5, bgcolor: "#f3f6fa" }}>
-              <CardContent>
-                <Stack direction="row" alignItems="center" spacing={2}>
-                  <DoneAllIcon sx={{ color: "#13C0A2" }} />
-                  <Typography sx={{ fontWeight: 700, fontSize: 17 }}>
-                    Delivered #{order._id?.slice(-5)}
-                  </Typography>
-                  <Chip label={order.status} color="success" sx={{ ml: "auto" }} />
-                </Stack>
-                <Typography sx={{ color: "#555" }}>
-                  Pharmacy: {order.pharmacy?.name || order.pharmacy}
-                </Typography>
-                <Typography sx={{ color: "#555" }}>
-                  Delivered to: {order.address?.addressLine}
-                </Typography>
-                <Typography sx={{ color: "#555" }}>
-                  Amount: ₹{order.total || order.amount || 0}
-                </Typography>
-                <Typography sx={{ color: "#888" }}>
-                  {order.createdAt && (new Date(order.createdAt)).toLocaleString()}
-                </Typography>
-              </CardContent>
-            </Card>
-          ))}
-        </Stack>
-      ) : (
-        // EARNINGS TAB
-        <DeliveryPayoutsSection partner={partner} />
-      )}
-      {/* DELIVERY CHAT MODAL */}
+          </TabsContent>
+
+          {/* PAST */}
+          <TabsContent value="past" className="mt-4">
+            {loading ? (
+              <div className="flex items-center justify-center py-10 text-slate-500">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading...
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {pastOrders.length === 0 && (
+                  <div className="text-center text-slate-500">No past orders delivered yet.</div>
+                )}
+                {pastOrders.map((order) => (
+                  <motion.div
+                    key={order._id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="rounded-2xl border border-emerald-200/60 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <CheckCheck className="h-5 w-5 text-emerald-600" />
+                      <div className="font-semibold">Delivered #{order._id?.slice(-5)}</div>
+                      <Badge className="ml-auto bg-emerald-600">{order.status}</Badge>
+                    </div>
+                    <div className="mt-1 text-sm text-slate-700">Pharmacy: {order.pharmacy?.name || order.pharmacy}</div>
+                    <div className="text-sm text-slate-700">Delivered to: {order.address?.addressLine}</div>
+                    <div className="text-sm text-slate-700">Amount: ₹{order.total || order.amount || 0}</div>
+                    <div className="text-xs text-slate-500">{order.createdAt && new Date(order.createdAt).toLocaleString()}</div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* EARNINGS */}
+          <TabsContent value="earnings" className="mt-4">
+            <DeliveryPayoutsSection partner={partner} />
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* CHAT MODAL (unchanged logic) */}
       <ChatModal
         open={chatOpen}
         onClose={() => setChatOpen(false)}
@@ -817,14 +734,24 @@ if (
         partnerType="user"
         currentRole="delivery"
       />
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={2500}
-        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert severity={snackbar.severity}>{snackbar.message}</Alert>
-      </Snackbar>
-    </Box>
+
+      {/* Snackbar mimic */}
+      <AnimatePresence>
+        {snackbar.open && (
+          <motion.div
+            initial={{ y: 30, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 30, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 320, damping: 24 }}
+            className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[2000] rounded-full px-4 py-2 font-semibold shadow-lg ${
+              snackbar.severity === "error" ? "bg-red-600 text-white" : "bg-emerald-600 text-white"
+            }`}
+            onAnimationComplete={() => setTimeout(() => setSnackbar(s => ({ ...s, open: false })), 2200)}
+          >
+            {snackbar.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
