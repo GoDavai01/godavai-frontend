@@ -1,32 +1,32 @@
 // src/components/MyOrdersPage.js
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
-import {
-  Box,
-  Typography,
-  Card,
-  Button,
-  Stack,
-  Snackbar,
-  Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Chip,
-  IconButton,
-} from "@mui/material";
-import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ReceiptText,
+  X,
+} from "lucide-react";
+
 import QuoteReviewModal from "./QuoteReviewModal";
-import { useCart } from "../context/CartContext";
-import Tooltip from "@mui/material/Tooltip";
 import PrescriptionUploadModal from "./PrescriptionUploadModal";
-import CloseIcon from "@mui/icons-material/Close";
+import { useCart } from "../context/CartContext";
+
+// shadcn/ui
+import { Button } from "../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
+import { Badge } from "../components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../components/ui/tooltip";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
-// --- Robust util: always store IDs as string! ---
+/* ------------------- utils (UNCHANGED LOGIC) ------------------- */
 function getHiddenRejectionIds() {
   try {
     return JSON.parse(localStorage.getItem("hiddenRejectionPopupOrderIds") || "[]").map(String);
@@ -42,7 +42,6 @@ function addHiddenRejectionId(orderId) {
     localStorage.setItem("hiddenRejectionPopupOrderIds", JSON.stringify(ids));
   }
 }
-
 function formatOrderDate(dateStr) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -54,40 +53,31 @@ function formatOrderDate(dateStr) {
   hour = hour % 12 || 12;
   return `${date}, ${hour}:${min}${ampm}`;
 }
-
 function getTotalPrice(order) {
   if (order.tempQuote && Array.isArray(order.tempQuote.items) && order.tempQuote.items.length)
     return order.tempQuote.items
       .filter(i => i.available !== false)
       .reduce((a, b) => a + ((b.price || 0) * (b.quantity || 1)), 0);
-
   if (order.tempQuote && typeof order.tempQuote.approxPrice === "number")
     return order.tempQuote.approxPrice;
-
   if (order.quote && Array.isArray(order.quote.items) && order.quote.items.length)
     return order.quote.items
       .filter(i => i.available !== false)
       .reduce((a, b) => a + ((b.price || 0) * (b.quantity || 1)), 0);
-
   if (order.quote && typeof order.quote.price === "number")
     return order.quote.price;
-
   if (Array.isArray(order.quote) && order.quote.length)
     return order.quote
       .filter(i => i.available !== false)
       .reduce((a, b) => a + ((b.price || 0) * (b.quantity || 1)), 0);
-
   if (Array.isArray(order.quotes) && order.quotes.length && typeof order.quotes[order.quotes.length - 1]?.price === "number")
     return order.quotes[order.quotes.length - 1].price;
-
   if (order.tempQuote && Array.isArray(order.tempQuote.items))
     return order.tempQuote.items
       .filter(i => i.available !== false)
       .reduce((a, b) => a + ((b.price || 0) * (b.quantity || 1)), 0);
-
   return 0;
 }
-
 function getQuoteType(order) {
   let items = [];
   if (order.tempQuote && order.tempQuote.items && order.tempQuote.items.length) {
@@ -104,18 +94,11 @@ function getQuoteType(order) {
   if (items.some(i => i.available === false)) return "partial";
   return "none";
 }
-
 function groupSplitOrders(orders) {
   const orderMap = {};
   const result = [];
-  orders.forEach(order => {
-    orderMap[order._id] = { ...order, splits: [] };
-  });
-  orders.forEach(order => {
-    if (order.parentOrder && orderMap[order.parentOrder]) {
-      orderMap[order.parentOrder].splits.push(order);
-    }
-  });
+  orders.forEach(order => { orderMap[order._id] = { ...order, splits: [] }; });
+  orders.forEach(order => { if (order.parentOrder && orderMap[order.parentOrder]) { orderMap[order.parentOrder].splits.push(order); } });
   const used = new Set();
   orders.forEach(order => {
     if (order.parentOrder) {
@@ -125,24 +108,20 @@ function groupSplitOrders(orders) {
       orderMap[order._id].splits.forEach(split => used.add(split._id));
     }
   });
-  orders.forEach(order => {
-    if (!used.has(order._id)) result.push(order);
-  });
+  orders.forEach(order => { if (!used.has(order._id)) result.push(order); });
   return result;
 }
-
 function getDisplayAddress(address) {
   if (!address) return "";
   return (
     address.formatted ||
-    [address.addressLine, address.floor, address.area, address.city]
-      .filter(Boolean).join(", ") ||
+    [address.addressLine, address.floor, address.area, address.city].filter(Boolean).join(", ") ||
     address.fullAddress ||
     JSON.stringify(address)
   );
 }
 
-
+/* ------------------- component ------------------- */
 export default function MyOrdersPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -162,14 +141,14 @@ export default function MyOrdersPage() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const userId = user._id || user.userId;
 
-  // --- PHARMACY REJECTION POPUP LOGIC ---
+  // PHARMACY REJECTION POPUP
   const [showPharmacyRejectionPopup, setShowPharmacyRejectionPopup] = useState(false);
   const [rejectedPrescriptionOrder, setRejectedPrescriptionOrder] = useState(null);
   const [reuploadModalOpen, setReuploadModalOpen] = useState(false);
   const [reuploadMode, setReuploadMode] = useState("manual");
   const [reuploadOrderData, setReuploadOrderData] = useState(null);
 
-  // 1. Initial load spinner
+  // 1. Initial load spinner (logic unchanged)
   useEffect(() => {
     const fetchInitial = async () => {
       setLoading(true);
@@ -180,7 +159,7 @@ export default function MyOrdersPage() {
     // eslint-disable-next-line
   }, [userId]);
 
-  // 2. Poll (no spinner)
+  // 2. Poll (logic unchanged)
   useEffect(() => {
     const poll = setInterval(() => {
       fetchOrders();
@@ -208,53 +187,48 @@ export default function MyOrdersPage() {
       setOrders(allOrders);
     } catch (err) {
       setOrders([]);
-      // console.error("MYORDERS FETCH ERROR:", err?.response?.data || err.message); // <-- REMOVE this line
     }
   };
 
- // --- Show "Pharmacy Rejected" popup ONLY ONCE per order (BULLETPROOF) ---
-useEffect(() => {
-  const hiddenIds = getHiddenRejectionIds();
-  let rejected = null;
-  // Find a rejected prescription order that isn't hidden, manual only
-  for (const o of orders) {
-    // Defensive: allow o to be object or array (if bug!)
-    const oid = String(o._id || (Array.isArray(o) && o[0]) || "");
-    const status = o.status || (Array.isArray(o) && o[1]);
-    const uploadType = o.uploadType || (Array.isArray(o) && o[2]);
-    if (
-      o.orderType === "prescription" &&
-      (status === "cancelled" || status === "rejected") &&
-      uploadType === "manual"
-    ) {
-      if (!hiddenIds.includes(oid)) {
-        rejected = { ...o, _id: oid };
-        break;
+  // Pharmacy rejected popup (logic unchanged)
+  useEffect(() => {
+    const hiddenIds = getHiddenRejectionIds();
+    let rejected = null;
+    for (const o of orders) {
+      const oid = String(o._id || (Array.isArray(o) && o[0]) || "");
+      const status = o.status || (Array.isArray(o) && o[1]);
+      const uploadType = o.uploadType || (Array.isArray(o) && o[2]);
+      if (
+        o.orderType === "prescription" &&
+        (status === "cancelled" || status === "rejected") &&
+        uploadType === "manual"
+      ) {
+        if (!hiddenIds.includes(oid)) {
+          rejected = { ...o, _id: oid };
+          break;
+        }
       }
     }
-  }
-  // If can't get _id, auto-hide ALL future popups
-  if (!rejected || !rejected._id) {
+    if (!rejected || !rejected._id) {
+      setShowPharmacyRejectionPopup(false);
+      setRejectedPrescriptionOrder(null);
+      return;
+    }
+    if (!showPharmacyRejectionPopup || (rejectedPrescriptionOrder && String(rejectedPrescriptionOrder._id) !== String(rejected._id))) {
+      setShowPharmacyRejectionPopup(true);
+      setRejectedPrescriptionOrder(rejected);
+    }
+  }, [orders]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleClosePharmacyRejectionPopup = () => {
+    if (rejectedPrescriptionOrder?._id) {
+      addHiddenRejectionId(String(rejectedPrescriptionOrder._id));
+    }
     setShowPharmacyRejectionPopup(false);
     setRejectedPrescriptionOrder(null);
-    return;
-  }
-  if (!showPharmacyRejectionPopup || (rejectedPrescriptionOrder && String(rejectedPrescriptionOrder._id) !== String(rejected._id))) {
-    setShowPharmacyRejectionPopup(true);
-    setRejectedPrescriptionOrder(rejected);
-  }
-}, [orders]);
+  };
 
-
-  // When user closes, remember for this order (forever, survives reload)
-  const handleClosePharmacyRejectionPopup = () => {
-  if (rejectedPrescriptionOrder?._id) {
-    addHiddenRejectionId(String(rejectedPrescriptionOrder._id)); // always string
-  }
-  setShowPharmacyRejectionPopup(false);
-  setRejectedPrescriptionOrder(null);
-};
-
+  // Handlers (UNCHANGED LOGIC)
   const handleOrderAgain = (order) => {
     const pharmacyId =
       (order.pharmacy && order.pharmacy._id) ||
@@ -296,13 +270,8 @@ useEffect(() => {
         setSnackbar({ open: true, message: "Reason is required for rejection", severity: "error" });
         return;
       }
-      const body =
-        type === "rejected"
-          ? { response: "rejected", reason }
-          : { response: "accepted" };
-
+      const body = type === "rejected" ? { response: "rejected", reason } : { response: "accepted" };
       await axios.post(`${API_BASE_URL}/api/prescriptions/respond/${orderId}`, body);
-
       setSnackbar({
         open: true,
         message: type === "rejected" ? "Order rejected." : "Order confirmed.",
@@ -311,14 +280,11 @@ useEffect(() => {
       setOrders((prev) =>
         prev.map((o) =>
           o._id === orderId
-            ? {
-                ...o,
-                status: type === "rejected" ? "rejected" : "confirmed",
-              }
+            ? { ...o, status: type === "rejected" ? "rejected" : "confirmed" }
             : o
         )
       );
-    } catch (err) {
+    } catch {
       setSnackbar({ open: true, message: "Failed to submit response", severity: "error" });
     }
     setRejectSubmitting(false);
@@ -329,377 +295,236 @@ useEffect(() => {
 
   const groupedOrders = groupSplitOrders(orders);
 
-  // Renders as before...
+  // Safety check (UNCHANGED)
+  if (orders.length && (!orders[0] || typeof orders[0] !== "object" || Array.isArray(orders[0]))) {
+    throw new Error("BUG: orders should be an array of objects. Got: " + JSON.stringify(orders[0]));
+  }
+
+  /* ------------------- view helpers (styling only) ------------------- */
+  const Pill = ({ children, color = "emerald" }) => (
+    <span className={`ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-[13px] font-semibold bg-${color}-50 text-${color}-600`} >
+      {children}
+    </span>
+  );
+
+  // Renders as before (content/flow identical); just styled with Tailwind/shadcn
   const renderOrderCard = (o, splitBadge = null, uniqueKey = null) => (
-    <Card
-      key={uniqueKey || o._id}
-      sx={{
-        borderRadius: 4,
-        boxShadow: 2,
-        bgcolor: "#fff",
-        p: 2.3,
-        display: "flex",
-        flexDirection: "column",
-        gap: 1.5,
-        border: "1.5px solid #eafaf3",
-        minWidth: 280,
-      }}
-    >
-      <Box sx={{ display: "flex", alignItems: "center", mb: 0.5 }}>
-        <Typography fontWeight={700} fontSize={17} color="#13C0A2" sx={{ mr: 1 }}>
-          {o.pharmacy?.name || o.pharmacy}
-        </Typography>
-        {o.orderType === "prescription" && (
-          <span style={{ color: "#f18e1b", fontWeight: 700, marginLeft: 8 }}>
-            (Prescription)
+    <Card key={uniqueKey || o._id} className="rounded-2xl border border-emerald-100 shadow-sm bg-white">
+      <CardHeader className="pb-2">
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-[17px] font-extrabold text-emerald-700">
+            {o.pharmacy?.name || o.pharmacy}
+          </CardTitle>
+          {o.orderType === "prescription" && (
+            <span className="ml-1 text-[13px] font-bold text-amber-600">(Prescription)</span>
+          )}
+          <span className="ml-1 text-[13px] text-slate-600">
+            {o.address?.area || o.address?.city || ""}
           </span>
-        )}
-        <Typography fontSize={13} color="#555" sx={{ ml: 1 }}>
-          {(o.address?.area || o.address?.city || "")}
-        </Typography>
-        {splitBadge && (
-          <Tooltip title={splitBadge}>
-            <Chip
-              label={
-                <span
-                  style={{
-                    display: "inline-block",
-                    maxWidth: 140,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    verticalAlign: "middle",
-                  }}
+
+          {!!splitBadge && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    className={`ml-2 max-w-[170px] truncate ${splitBadge.includes("Parent") ? "bg-blue-600 hover:bg-blue-600" : "bg-emerald-600 hover:bg-emerald-600"}`}
+                  >
+                    {splitBadge}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent className="text-sm">{splitBadge}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+      </CardHeader>
+
+      <CardContent className="pt-0">
+        <div className="text-[14px] text-slate-700 mb-1.5">
+          Placed on: <b className="text-slate-900">{formatOrderDate(o.createdAt)}</b>
+        </div>
+
+        {/* PRESCRIPTION ORDER */}
+        {o.orderType === "prescription" ? (
+          <>
+            <div className="text-[14px] mt-2">
+              <b>Prescription:</b>{" "}
+              {o.prescriptionUrl || o.prescription ? (
+                <a
+                  href={o.prescriptionUrl || o.prescription}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 underline font-semibold"
                 >
-                  {splitBadge}
-                </span>
-              }
-              size="small"
-              sx={{
-                ml: 1,
-                bgcolor: splitBadge.includes("Parent") ? "#1976d2" : "#13C0A2",
-                color: "#fff",
-                fontWeight: 700,
-                borderRadius: 1,
-                fontSize: 13,
-                maxWidth: 150,
-              }}
-            />
-          </Tooltip>
-        )}
-      </Box>
-      <Typography fontSize={14} color="#555" sx={{ mb: 0.2 }}>
-        Placed on: <b>{formatOrderDate(o.createdAt)}</b>
-      </Typography>
-      {/* PRESCRIPTION ORDER */}
-      {o.orderType === "prescription" ? (
-        <>
-          <Typography fontSize={14} sx={{ mt: 1 }}>
-  <b>Prescription:</b>{" "}
-  {o.prescriptionUrl || o.prescription ? (
-    <a
-      href={o.prescriptionUrl || o.prescription}
-      target="_blank"
-      rel="noreferrer"
-      style={{ color: "#1976d2", textDecoration: "underline" }}
-    >
-      View
-    </a>
-  ) : (
-    "Not Available"
-  )}
-</Typography>
-          {(o.status === "quoted" || o.status === "pending_user_confirm") && (
-            <Box
-              sx={{
-                mt: 1.2,
-                mb: 0.3,
-                bgcolor: "#F8FCF9",
-                borderRadius: 2,
-                border: "1.5px solid #e2f7eb",
-                p: 2,
-                display: "flex",
-                flexDirection: "column",
-                gap: 1,
-              }}
-            >
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.3 }}>
-                <Typography sx={{ color: "#FFD43B", fontWeight: 700, fontSize: 15, mr: 1 }}>
-                  Quote Ready!
-                </Typography>
-                <Button
-                  variant="contained"
-                  startIcon={<ReceiptLongIcon />}
-                  size="small"
-                  sx={{
-                    bgcolor: "#13C0A2",
-                    color: "#fff",
-                    borderRadius: 3,
-                    fontWeight: 700,
-                    textTransform: "none",
-                    boxShadow: "0px 2px 8px #13C0A229",
-                    fontSize: 14,
-                    py: 0.3,
-                    px: 1.7,
-                    minWidth: 0,
-                    "&:hover": { bgcolor: "#0e9c87" }
-                  }}
-                  onClick={() => {
-                    setSelectedOrder(o);
-                    setQuoteModalOpen(true);
-                  }}
-                >
-                  View Quote
-                </Button>
-              </Box>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.1 }}>
-                <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
-                  Total Price: <span style={{ color: "#151515" }}>₹{getTotalPrice(o)}</span>
-                </Typography>
-                {getQuoteType(o) === "full" && (
-                  <span style={{
-                    marginLeft: 4,
-                    color: "#28a745",
-                    fontWeight: 600,
-                    fontSize: 13,
-                    background: "#eafaf3",
-                    padding: "2.5px 12px",
-                    borderRadius: 12
-                  }}>
-                    All Available
+                  View
+                </a>
+              ) : (
+                "Not Available"
+              )}
+            </div>
+
+            {(o.status === "quoted" || o.status === "pending_user_confirm") && (
+              <div className="mt-3 mb-1.5 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[15px] font-extrabold text-yellow-500">Quote Ready!</span>
+                  <Button
+                    size="sm"
+                    className="ml-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow"
+                    onClick={() => { setSelectedOrder(o); setQuoteModalOpen(true); }}
+                  >
+                    <ReceiptText className="mr-1 h-4 w-4" /> View Quote
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px] font-semibold">
+                    Total Price: <span className="text-slate-900">₹{getTotalPrice(o)}</span>
                   </span>
+                  {getQuoteType(o) === "full" && <Pill>All Available</Pill>}
+                  {getQuoteType(o) === "partial" && <Pill color="amber">Partial Fulfillment</Pill>}
+                </div>
+
+                {getQuoteType(o) === "full" && (
+                  <div className="mt-2 text-[13.7px] font-semibold text-emerald-700 bg-emerald-50 rounded-md px-2 py-1">
+                    ✅ All medicines are available at this pharmacy. Tap <b>"Accept &amp; Pay"</b> to get your order delivered fast!
+                  </div>
                 )}
                 {getQuoteType(o) === "partial" && (
-                  <span style={{
-                    marginLeft: 4,
-                    color: "#e67e22",
-                    fontWeight: 600,
-                    fontSize: 13,
-                    background: "#fff6e3",
-                    padding: "2.5px 10px",
-                    borderRadius: 12
-                  }}>
-                    Partial Fulfillment
-                  </span>
+                  <div className="mt-2 text-[13.3px] text-amber-600 bg-amber-50 rounded-md px-2 py-1">
+                    Only some medicines are available. You can pay for available items, or wait/split the order.
+                  </div>
                 )}
-              </Box>
-              {getQuoteType(o) === "full" && (
-                <Typography
-                  sx={{
-                    color: "#27ae60",
-                    fontWeight: 600,
-                    fontSize: 13.7,
-                    bgcolor: "#e8f6ef",
-                    borderRadius: 1.5,
-                    px: 1.2,
-                    py: 0.6,
-                  }}
-                >
-                  ✅ All medicines are available at this pharmacy. Tap <b>"Accept & Pay"</b> to get your order delivered fast!
-                </Typography>
-              )}
-              {getQuoteType(o) === "partial" && (
-                <Typography
-                  sx={{
-                    color: "#e67e22",
-                    fontWeight: 500,
-                    fontSize: 13.3,
-                    bgcolor: "#fff8eb",
-                    borderRadius: 1.5,
-                    px: 1.2,
-                    py: 0.6,
-                  }}
-                >
-                  Only some medicines are available. You can pay for available items, or wait/split the order.
-                </Typography>
-              )}
-              {o.quote && o.quote.items && o.quote.items.some(i => i.available === false) && (
-                <Typography fontSize={13} color="#d32f2f" sx={{ mt: 0.5 }}>
-                  Unavailable: {o.quote.items.filter(i => i.available === false).map(i => i.medicineName).join(", ")}
-                </Typography>
-              )}
-              {o.status === "pending_user_confirm" && (
-                <Box sx={{ mt: 1.8, mb: 0.5 }}>
-                  <Stack direction="column" spacing={1.2} alignItems="stretch">
-                    <Button
-                      variant="contained"
-                      color="success"
-                      fullWidth
-                      disabled={rejectSubmitting}
-                      onClick={() => handleAcceptAndPay(o)}
-                      sx={{
-                        fontWeight: 700,
-                        fontSize: 16,
-                        borderRadius: 2.5,
-                        py: 1.1,
-                        letterSpacing: 0.7,
-                        boxShadow: "0px 2px 12px #1abb9979"
-                      }}
-                    >
-                      ACCEPT & PAY
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      fullWidth
-                      disabled={rejectSubmitting}
-                      onClick={() => {
-                        setRejectDialogOpen(true);
-                        setPendingRejectOrderId(o._id);
-                        setRejectReason("");
-                      }}
-                      sx={{
-                        fontWeight: 700,
-                        fontSize: 16,
-                        borderRadius: 2.5,
-                        py: 1,
-                        border: "2px solid #f44336",
-                        color: "#f44336",
-                        background: "#fff",
-                        '&:hover': {
-                          background: "#fff4f4"
-                        }
-                      }}
-                    >
-                      Reject
-                    </Button>
-                  </Stack>
-                </Box>
-              )}
-            </Box>
-          )}
-          <Typography fontWeight={700} fontSize={15} sx={{ color: "#1976d2", mr: 2, mt: 1 }}>
-            Status:{" "}
-            <span style={{ textTransform: "capitalize", marginLeft: 3 }}>
-              {o.status}
-            </span>
-          </Typography>
-        </>
-      ) : (
-        <>
-          <Typography fontWeight={700} fontSize={15} sx={{ mb: 0.5 }}>
-            Items:
-            <span style={{ fontWeight: 400, marginLeft: 4 }}>
-              {o.items
-                ? o.items
-                    .map(i => `${i.name || i.medicineName} (${i.quantity || i.qty || "-"})`)
-                    .join(", ")
-                : ""}
-            </span>
-          </Typography>
-          <Typography fontSize={15} color="#232323">
-            <b>Total Price:</b> ₹{o.total}
-          </Typography>
-        </>
-      )}
-      <Typography fontSize={14} color="#232323">
-  <b>Address:</b> {getDisplayAddress(o.address)}
-</Typography>
 
-      <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
-        {o.orderType !== "prescription" && (
-          <Typography fontWeight={700} fontSize={15} sx={{ color: "#1976d2", mr: 2 }}>
-            {o.status === "quoted" ? (
-              <span style={{ color: "#FFD43B" }}>
-                Quote Ready!
-                <Button
-                  variant="outlined"
-                  size="small"
-                  sx={{ ml: 1 }}
-                  onClick={() => {
-                    setSelectedOrder(o);
-                    setQuoteModalOpen(true);
-                  }}
-                >
-                  View & Accept/Reject
-                </Button>
-              </span>
-            ) : (
-              <>
-                Status:{" "}
-                <span style={{ textTransform: "capitalize", marginLeft: 3 }}>
-                  {o.status || "Placed"}
-                </span>
-              </>
+                {o.quote && o.quote.items && o.quote.items.some(i => i.available === false) && (
+                  <div className="mt-1 text-[13px] text-red-600">
+                    Unavailable: {o.quote.items.filter(i => i.available === false).map(i => i.medicineName).join(", ")}
+                  </div>
+                )}
+
+                {o.status === "pending_user_confirm" && (
+                  <div className="mt-3">
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl py-3 shadow"
+                        disabled={rejectSubmitting}
+                        onClick={() => handleAcceptAndPay(o)}
+                      >
+                        ACCEPT &amp; PAY
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="w-full border-2 border-red-500 text-red-600 bg-white hover:bg-red-50 font-extrabold rounded-xl py-2.5"
+                        disabled={rejectSubmitting}
+                        onClick={() => {
+                          setRejectDialogOpen(true);
+                          setPendingRejectOrderId(o._id);
+                          setRejectReason("");
+                        }}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
-          </Typography>
+
+            <div className="mt-2 text-[15px] font-extrabold text-blue-600">
+              Status: <span className="ml-1 capitalize text-slate-900 font-bold">{o.status}</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="text-[15px] font-bold mb-1">
+              Items:
+              <span className="font-normal ml-1">
+                {o.items ? o.items.map(i => `${i.name || i.medicineName} (${i.quantity || i.qty || "-"})`).join(", ") : ""}
+              </span>
+            </div>
+            <div className="text-[15px] text-slate-900">
+              <b>Total Price:</b> ₹{o.total}
+            </div>
+          </>
         )}
-        <Button
-          variant="contained"
-          size="small"
-          sx={{
-            bgcolor: "#13C0A2",
-            color: "#fff",
-            fontWeight: 700,
-            fontSize: 14,
-            borderRadius: 2.5,
-            textTransform: "none",
-            boxShadow: 1,
-            ml: "auto",
-            "&:hover": { bgcolor: "#0e9c87" },
-          }}
-          onClick={() => handleOrderAgain(o)}
-        >
-          Order Again
-        </Button>
-      </Box>
-      {/* --- INVOICE DOWNLOAD BUTTON --- */}
-{o.invoiceFile && (
-  <a
-    href={o.invoiceFile}
-    target="_blank"
-    rel="noopener noreferrer"
-    style={{ textDecoration: "none", marginTop: 8, display: "inline-block" }}
-  >
-    <Button
-      variant="outlined"
-      sx={{
-        ml: 0,
-        mt: 1.2,
-        borderRadius: 2,
-        color: "#1976d2",
-        borderColor: "#1976d2",
-        textTransform: "none",
-        fontWeight: 700,
-      }}
-      startIcon={<ReceiptLongIcon />}
-      size="small"
-    >
-      Download Invoice
-    </Button>
-  </a>
-)}
+
+        <div className="text-[14px] text-slate-900 mt-1">
+          <b>Address:</b> {getDisplayAddress(o.address)}
+        </div>
+
+        <div className="mt-2 flex items-center">
+          {o.orderType !== "prescription" && (
+            <div className="text-[15px] font-bold text-blue-600 mr-2">
+              {o.status === "quoted" ? (
+                <span className="text-yellow-500">
+                  Quote Ready!
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-2 rounded-lg font-semibold"
+                    onClick={() => { setSelectedOrder(o); setQuoteModalOpen(true); }}
+                  >
+                    View &amp; Accept/Reject
+                  </Button>
+                </span>
+              ) : (
+                <>
+                  Status:{" "}
+                  <span className="ml-1 capitalize text-slate-900 font-bold">{o.status || "Placed"}</span>
+                </>
+              )}
+            </div>
+          )}
+
+          <Button
+            size="sm"
+            className="ml-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow"
+            onClick={() => handleOrderAgain(o)}
+          >
+            Order Again
+          </Button>
+        </div>
+
+        {/* Invoice button */}
+        {o.invoiceFile && (
+          <a
+            href={o.invoiceFile}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block mt-3 no-underline"
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-lg font-bold text-blue-700 border-blue-700"
+            >
+              <ReceiptText className="mr-1 h-4 w-4" />
+              Download Invoice
+            </Button>
+          </a>
+        )}
+      </CardContent>
     </Card>
   );
 
-  // Debug safety: crash if orders is accidentally set to array of arrays!
-  if (
-  orders.length &&
-  (!orders[0] || typeof orders[0] !== "object" || Array.isArray(orders[0]))
-) {
-  throw new Error("BUG: orders should be an array of objects. Got: " + JSON.stringify(orders[0]));
-}
-
   return (
-    <Box sx={{ bgcolor: "#f9fafb", minHeight: "100vh", pb: 12, pt: 3 }}>
-      <Box sx={{ maxWidth: 480, mx: "auto", px: 2 }}>
-        <Typography fontWeight={800} fontSize={24} sx={{ mb: 2, mt: 1 }}>
-          My Orders
-        </Typography>
+    <div className="min-h-screen bg-slate-50 pb-12 pt-3">
+      <div className="mx-auto w-full max-w-[480px] px-3">
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 mt-1 mb-3">My Orders</h1>
+
         {loading ? (
-          <Typography color="text.secondary">Loading...</Typography>
-        ) : groupedOrders.length === 0 ? (
-          <Typography color="text.secondary">No orders yet.</Typography>
+          <div className="text-slate-500">Loading...</div>
+        ) : groupSplitOrders(orders).length === 0 ? (
+          <div className="text-slate-500">No orders yet.</div>
         ) : (
-          <Stack spacing={2}>
-            {groupedOrders.map((order, idx) => {
+          <div className="space-y-3">
+            {groupSplitOrders(orders).map((order) => {
               if (order.splits && order.splits.length > 0) {
                 return (
                   <React.Fragment key={`parent-${order._id}`}>
                     {renderOrderCard(order, "Parent Order (Split)", `parent-${order._id}`)}
                     {order.splits
                       .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-                      .map((split, splitIdx) =>
+                      .map((split) =>
                         renderOrderCard(
                           split,
                           `Split Order (Part of: #${String(order._id).slice(-6).toUpperCase()})`,
@@ -720,99 +545,69 @@ useEffect(() => {
                 );
               }
             })}
-          </Stack>
+          </div>
         )}
 
-        {/* --- REJECT DIALOG (ONLY FOR PENDING_USER_CONFIRM) --- */}
+        {/* Reject dialog (same logic, shadcn UI) */}
         <Dialog
           open={rejectDialogOpen}
-          onClose={() => {
-            setRejectDialogOpen(false);
-            setRejectReason("");
+          onOpenChange={(open) => {
+            if (!open) { setRejectDialogOpen(false); setRejectReason(""); }
           }}
         >
-          <DialogTitle>Reject Order</DialogTitle>
-          <DialogContent>
-            <Typography sx={{ mb: 1 }}>
-              Please provide a reason for rejecting this order:
-            </Typography>
+          <DialogContent className="force-light">
+            <DialogHeader>
+              <DialogTitle>Reject Order</DialogTitle>
+            </DialogHeader>
+            <div className="mb-2 text-slate-700">Please provide a reason for rejecting this order:</div>
             <textarea
-              style={{
-                width: "100%",
-                minHeight: 60,
-                border: "1.5px solid #f44336",
-                borderRadius: 6,
-                padding: 10,
-                fontSize: 16,
-                color: "#222"
-              }}
+              className="w-full min-h-[72px] rounded-md border border-red-500 p-2 text-[16px] text-slate-900 outline-none focus:ring-2 focus:ring-red-400"
               value={rejectReason}
               onChange={e => setRejectReason(e.target.value)}
               placeholder="Enter reason (required)"
               disabled={rejectSubmitting}
             />
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                className="btn-ghost-soft"
+                onClick={() => setRejectDialogOpen(false)}
+                disabled={rejectSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 font-extrabold rounded-xl"
+                disabled={!rejectReason.trim() || rejectSubmitting}
+                onClick={async () => {
+                  setRejectSubmitting(true);
+                  await handleUserConfirmRespond(pendingRejectOrderId, "rejected", rejectReason.trim());
+                  setRejectSubmitting(false);
+                }}
+              >
+                Reject Order
+              </Button>
+            </DialogFooter>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setRejectDialogOpen(false)} disabled={rejectSubmitting}>
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              color="error"
-              disabled={!rejectReason.trim() || rejectSubmitting}
-              onClick={async () => {
-                setRejectSubmitting(true);
-                await handleUserConfirmRespond(pendingRejectOrderId, "rejected", rejectReason.trim());
-                setRejectSubmitting(false);
-              }}
-              sx={{ minWidth: 130, fontWeight: 700, fontSize: 16, borderRadius: 3 }}
-            >
-              Reject Order
-            </Button>
-          </DialogActions>
         </Dialog>
 
-        {/* --- PHARMACY REJECTION POPUP --- */}
-        <Dialog
-          open={showPharmacyRejectionPopup}
-          onClose={handleClosePharmacyRejectionPopup}
-          maxWidth="xs"
-          fullWidth
-        >
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              p: 2,
-              pb: 1,
-            }}
-          >
-            <Typography variant="h6" fontWeight={700}>
-              Pharmacy Rejected Your Prescription
-            </Typography>
-            <IconButton
-              aria-label="close"
-              onClick={handleClosePharmacyRejectionPopup}
-              sx={{
-                color: "#888",
-                ml: 2,
-              }}
-              size="large"
-            >
-              <CloseIcon />
-            </IconButton>
-          </Box>
-          <DialogContent>
-            <Typography sx={{ mb: 2 }}>
-              The pharmacy you selected couldn't fulfill your prescription.<br />
+        {/* Pharmacy Rejection Popup */}
+        <Dialog open={showPharmacyRejectionPopup} onOpenChange={handleClosePharmacyRejectionPopup}>
+          <DialogContent className="max-w-sm force-light">
+            <div className="flex items-center justify-between pb-1">
+              <DialogTitle className="text-lg font-extrabold">Pharmacy Rejected Your Prescription</DialogTitle>
+              <Button variant="ghost" size="icon" onClick={handleClosePharmacyRejectionPopup} className="text-slate-500 hover:text-slate-700">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="text-slate-700">
+              The pharmacy you selected couldn't fulfill your prescription.
+              <br />
               What would you like to do next?
-            </Typography>
-            <Stack spacing={2}>
+            </div>
+            <div className="mt-4 space-y-2">
               <Button
-                variant="contained"
-                color="primary"
-                sx={{ fontWeight: 700, borderRadius: 2 }}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl"
                 onClick={() => {
                   if (rejectedPrescriptionOrder?._id) addHiddenRejectionId(rejectedPrescriptionOrder._id);
                   setShowPharmacyRejectionPopup(false);
@@ -824,9 +619,8 @@ useEffect(() => {
                 Choose Another Pharmacy
               </Button>
               <Button
-                variant="outlined"
-                color="primary"
-                sx={{ fontWeight: 700, borderRadius: 2 }}
+                variant="outline"
+                className="w-full font-extrabold rounded-xl"
                 onClick={() => {
                   if (rejectedPrescriptionOrder?._id) addHiddenRejectionId(rejectedPrescriptionOrder._id);
                   setShowPharmacyRejectionPopup(false);
@@ -837,11 +631,11 @@ useEffect(() => {
               >
                 Let GoDavaii Handle It
               </Button>
-            </Stack>
+            </div>
           </DialogContent>
         </Dialog>
 
-        {/* --- REUPLOAD PRESCRIPTION MODAL --- */}
+        {/* Reupload Prescription Modal (unchanged) */}
         <PrescriptionUploadModal
           open={reuploadModalOpen}
           onClose={() => setReuploadModalOpen(false)}
@@ -854,7 +648,7 @@ useEffect(() => {
           initialAddress={reuploadOrderData?.address || {}}
         />
 
-        {/* --- QUOTE REVIEW MODAL --- */}
+        {/* Quote Review Modal (unchanged) */}
         <QuoteReviewModal
           open={quoteModalOpen}
           order={selectedOrder}
@@ -862,18 +656,24 @@ useEffect(() => {
           onAccept={() => handleAcceptAndPay(selectedOrder)}
         />
 
-        {/* Snackbar for Order Again, etc */}
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={2200}
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          anchorOrigin={{ vertical: "top", horizontal: "center" }}
-        >
-          <Alert severity={snackbar.severity} sx={{ width: "100%" }}>
-            {snackbar.message}
-          </Alert>
-        </Snackbar>
-      </Box>
-    </Box>
+        {/* Snackbar (Tailwind + framer-motion) */}
+        <AnimatePresence>
+          {snackbar.open && (
+            <motion.div
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -20, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 320, damping: 24 }}
+              onAnimationComplete={() => setTimeout(() => setSnackbar((s) => ({ ...s, open: false })), 2200)}
+              className={`fixed top-4 left-1/2 -translate-x-1/2 z-[2000] rounded-full px-4 py-2 text-white shadow-lg
+              ${snackbar.severity === "error" ? "bg-red-600" :
+                snackbar.severity === "info" ? "bg-emerald-800" : "bg-emerald-600"}`}
+            >
+              {snackbar.message}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
   );
 }
