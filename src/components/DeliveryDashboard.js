@@ -18,31 +18,18 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs"
 import { motion, AnimatePresence } from "framer-motion";
 
 // lucide-react
-import { Bike, CheckCheck, Pill, LogOut, MessageSquare, MapPin, Map, Route, Loader2 } from "lucide-react";
+import {
+  Bike, CheckCheck, Pill, LogOut, MessageSquare, MapPin, Map, Route, Loader2,
+  AlarmClock, ShieldAlert, TimerReset, Navigation, Gauge, DollarSign
+} from "lucide-react";
 
-// other components (unchanged logic)
+// other components (existing logic)
 import ChatModal from "./ChatModal";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
 /* ------------------------- helpers (unchanged logic) ------------------------ */
-
-function getHiddenRejectionIds() {
-  try {
-    return JSON.parse(localStorage.getItem("hiddenRejectionPopupOrderIds") || "[]").map(String);
-  } catch {
-    return [];
-  }
-}
-function addHiddenRejectionId(orderId) {
-  const ids = getHiddenRejectionIds();
-  const idStr = String(orderId);
-  if (!ids.includes(idStr)) {
-    ids.push(idStr);
-    localStorage.setItem("hiddenRejectionPopupOrderIds", JSON.stringify(ids));
-  }
-}
 
 function formatOrderDate(dateStr) {
   if (!dateStr) return "";
@@ -80,26 +67,23 @@ function decodePolyline(encoded) {
   let lat = 0, lng = 0;
   while (index < len) {
     let b, shift = 0, result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
     let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
     lat += dlat;
-    shift = 0;
-    result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
+    shift = 0; result = 0;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
     let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
     lng += dlng;
     points.push({ lat: lat / 1e5, lng: lng / 1e5 });
   }
   return points;
 }
+
+const mmss = (secs) => {
+  const m = Math.floor(secs / 60).toString().padStart(2, "0");
+  const s = Math.floor(secs % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
+};
 
 /* --------------------------- payouts sub-section --------------------------- */
 
@@ -109,8 +93,7 @@ function DeliveryPayoutsSection({ partner }) {
 
   useEffect(() => {
     if (!partner?._id) return;
-    axios
-      .get(`${API_BASE_URL}/api/payments?deliveryPartnerId=${partner._id}&status=paid`)
+    axios.get(`${API_BASE_URL}/api/payments?deliveryPartnerId=${partner._id}&status=paid`)
       .then(res => setPayouts(res.data));
   }, [partner]);
 
@@ -196,16 +179,25 @@ export default function DeliveryDashboard() {
   const [orderDistances, setOrderDistances] = useState({});
   const [orderUnreadCounts, setOrderUnreadCounts] = useState({});
 
+  // NEW: Live Ops & Availability (UI only)
+  const [autoAccept, setAutoAccept] = useState(() => localStorage.getItem("gd_auto_accept") === "1");
+  const [onBreak, setOnBreak] = useState(false);
+  const [breakRemaining, setBreakRemaining] = useState(0); // seconds
+
+  // NEW: Performance glance (UI only; fetch payments for today)
+  const [todayEarnings, setTodayEarnings] = useState(null); // ₹
+  const [cashDue, setCashDue] = useState(0); // UI-only stub
+
   const { isLoaded } = useJsApiLoader({ googleMapsApiKey: GOOGLE_MAPS_API_KEY });
 
-  // Auto-refresh every 3s (unchanged logic)
+  // Auto-refresh orders (existing)
   useEffect(() => {
     if (!loggedIn || loading) return;
     const interval = setInterval(() => { fetchProfileAndOrders(); }, 3000);
     return () => clearInterval(interval);
   }, [loggedIn, tab, loading]);
 
-  // Send driver location while ACTIVE
+  // Send driver location while ACTIVE (existing)
   useEffect(() => {
     if (!loggedIn || !partner?._id || !active) return;
 
@@ -229,10 +221,7 @@ export default function DeliveryDashboard() {
         { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
       );
     }
-
-    return () => {
-      if (navigator.geolocation && watchId) navigator.geolocation.clearWatch(watchId);
-    };
+    return () => { if (navigator.geolocation && watchId) navigator.geolocation.clearWatch(watchId); };
   }, [loggedIn, partner?._id, active]);
 
   useEffect(() => {
@@ -246,7 +235,7 @@ export default function DeliveryDashboard() {
     // eslint-disable-next-line
   }, [loggedIn]);
 
-  // Unread chat counts (unchanged logic)
+  // Unread chat counts (existing)
   useEffect(() => {
     if (!loggedIn || !orders.length) return;
     const token = localStorage.getItem("deliveryToken");
@@ -268,6 +257,43 @@ export default function DeliveryDashboard() {
     const interval = setInterval(fetchUnread, 3000);
     return () => clearInterval(interval);
   }, [orders, loggedIn, chatOpen]);
+
+  // NEW: Persist auto-accept toggle locally
+  useEffect(() => {
+    localStorage.setItem("gd_auto_accept", autoAccept ? "1" : "0");
+  }, [autoAccept]);
+
+  // NEW: Break timer countdown (UI only)
+  useEffect(() => {
+    if (!onBreak || breakRemaining <= 0) return;
+    const t = setInterval(() => setBreakRemaining((s) => s - 1), 1000);
+    return () => clearInterval(t);
+  }, [onBreak, breakRemaining]);
+
+  // When break completes
+  useEffect(() => {
+    if (onBreak && breakRemaining <= 0) {
+      setOnBreak(false);
+      setSnackbar({ open: true, message: "Break finished — back online!", severity: "success" });
+    }
+  }, [onBreak, breakRemaining]);
+
+  // NEW: fetch today's earnings (UI glance)
+  useEffect(() => {
+    const fetchToday = async () => {
+      try {
+        if (!partner?._id) return;
+        const res = await axios.get(`${API_BASE_URL}/api/payments?deliveryPartnerId=${partner._id}&status=paid`);
+        const today = dayjs().format("YYYY-MM-DD");
+        const todays = (res.data || []).filter(p => dayjs(p.createdAt).format("YYYY-MM-DD") === today);
+        const total = todays.reduce((s, p) => s + (p.deliveryAmount || 0), 0);
+        setTodayEarnings(total);
+      } catch {
+        setTodayEarnings(null);
+      }
+    };
+    fetchToday();
+  }, [partner?._id]);
 
   const fetchProfileAndOrders = async () => {
     try {
@@ -322,7 +348,7 @@ export default function DeliveryDashboard() {
     }
   };
 
-  // Auth
+  // Auth (existing)
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -348,29 +374,34 @@ export default function DeliveryDashboard() {
     setLoginDialog(true);
   };
 
-  // Forgot / Reset
-  const handleForgotStart = async () => {
-    try {
-      await axios.post(`${API_BASE_URL}/api/delivery/forgot-password`, { mobile: forgotForm.mobile });
-      setSnackbar({ open: true, message: "OTP sent to mobile!", severity: "success" });
-      setResetPhase(1);
-    } catch {
-      setSnackbar({ open: true, message: "Mobile not found!", severity: "error" });
-    }
-  };
-  const handleResetPassword = async () => {
-    try {
-      await axios.post(`${API_BASE_URL}/api/delivery/reset-password`, {
-        mobile: forgotForm.mobile, otp: forgotForm.otp, newPassword: forgotForm.newPassword
-      });
-      setSnackbar({ open: true, message: "Password reset! Please log in.", severity: "success" });
-      setForgotOpen(false);
-      setResetPhase(0);
-      setForgotForm({ mobile: "", otp: "", newPassword: "" });
-    } catch {
-      setSnackbar({ open: true, message: "Invalid OTP or error", severity: "error" });
-    }
-  };
+  // Forgot / Reset handlers (add back)
+const handleForgotStart = async () => {
+  try {
+    await axios.post(`${API_BASE_URL}/api/delivery/forgot-password`, {
+      mobile: forgotForm.mobile,
+    });
+    setSnackbar({ open: true, message: "OTP sent to mobile!", severity: "success" });
+    setResetPhase(1);
+  } catch {
+    setSnackbar({ open: true, message: "Mobile not found!", severity: "error" });
+  }
+};
+
+const handleResetPassword = async () => {
+  try {
+    await axios.post(`${API_BASE_URL}/api/delivery/reset-password`, {
+      mobile: forgotForm.mobile,
+      otp: forgotForm.otp,
+      newPassword: forgotForm.newPassword,
+    });
+    setSnackbar({ open: true, message: "Password reset! Please log in.", severity: "success" });
+    setForgotOpen(false);
+    setResetPhase(0);
+    setForgotForm({ mobile: "", otp: "", newPassword: "" });
+  } catch {
+    setSnackbar({ open: true, message: "Invalid OTP or error", severity: "error" });
+  }
+};
 
   /* ------------------------------ login dialog ------------------------------ */
   if (!loggedIn) {
@@ -398,9 +429,7 @@ export default function DeliveryDashboard() {
           {/* Forgot / Reset Modal */}
           <Dialog open={forgotOpen} onOpenChange={(open) => { setForgotOpen(open); if (!open) setResetPhase(0); }}>
             <DialogContent className="force-light sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Forgot Password</DialogTitle>
-              </DialogHeader>
+              <DialogHeader><DialogTitle>Forgot Password</DialogTitle></DialogHeader>
               {resetPhase === 0 ? (
                 <div className="space-y-3">
                   <div className="grid gap-1.5">
@@ -454,51 +483,127 @@ export default function DeliveryDashboard() {
   /* -------------------------------- dashboard ------------------------------- */
   const tabsValue = tab === 0 ? "active" : tab === 1 ? "past" : "earnings";
 
+  // glance metrics (UI only)
+  const todayStr = dayjs().format("YYYY-MM-DD");
+  const deliveriesToday = (pastOrders || []).filter(o =>
+    o.status === "delivered" && dayjs(o.createdAt).format("YYYY-MM-DD") === todayStr
+  ).length;
+  const rph = null; // ₹/hr (needs backend session time) – showing as "—" below
+
   return (
     <div className="mx-auto max-w-[900px] px-3 pt-4 pb-16">
       {/* header */}
       <div className="flex items-center gap-3 rounded-2xl border border-emerald-200/60 bg-white p-3 shadow-sm">
         <Avatar className="h-14 w-14 ring-2 ring-emerald-100">
-  {partner?.avatar ? (
-    <AvatarImage src={partner.avatar} alt={partner?.name || "Partner"} />
-  ) : (
-    <AvatarFallback className="bg-emerald-600 text-white font-bold">
-      {(partner?.name || "D").charAt(0).toUpperCase()}
-    </AvatarFallback>
-  )}
-</Avatar>
+          {partner?.avatar ? (
+            <AvatarImage src={partner.avatar} alt={partner?.name || "Partner"} />
+          ) : (
+            <AvatarFallback className="bg-emerald-600 text-white font-bold">
+              {(partner?.name || "D").charAt(0).toUpperCase()}
+            </AvatarFallback>
+          )}
+        </Avatar>
 
         <div className="min-w-0 flex-1">
           <div className="text-lg font-extrabold text-emerald-900 truncate">{partner?.name}</div>
           <div className="text-sm text-slate-600 truncate">
             {partner?.mobile} <span className="mx-2">|</span> {partner?.city}, {partner?.area}
           </div>
-          <div className="mt-1 flex items-center gap-2">
-            <Switch
-              checked={active}
-              onCheckedChange={async (next) => {
-                setActive(next);
-                const token = localStorage.getItem("deliveryToken");
-                if (navigator.geolocation && next) {
-                  navigator.geolocation.getCurrentPosition((pos) => {
-                    axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`, {
-                      active: next, lat: pos.coords.latitude, lng: pos.coords.longitude,
-                    }, { headers: { Authorization: `Bearer ${token}` } });
+
+          {/* Live Ops & Availability row */}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {/* Online/Offline (existing switch) */}
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200/60 bg-white px-3 py-2">
+              <Switch
+                checked={active}
+                onCheckedChange={async (next) => {
+                  setActive(next);
+                  const token = localStorage.getItem("deliveryToken");
+                  if (navigator.geolocation && next) {
+                    navigator.geolocation.getCurrentPosition((pos) => {
+                      axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`, {
+                        active: next, lat: pos.coords.latitude, lng: pos.coords.longitude,
+                      }, { headers: { Authorization: `Bearer ${token}` } });
+                    });
+                  } else {
+                    await axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
+                      { active: next }, { headers: { Authorization: `Bearer ${token}` } });
+                  }
+                }}
+              />
+              <span className={`text-sm font-bold ${active ? "text-emerald-600" : "text-red-600"}`}>
+                {active ? "Active" : "Inactive"}
+              </span>
+            </div>
+
+            {/* Auto-accept toggle (UI only) */}
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200/60 bg-white px-3 py-2">
+              <span className="text-sm font-semibold text-emerald-900">Auto-accept</span>
+              <Switch
+                checked={autoAccept}
+                onCheckedChange={(v) => {
+                  setAutoAccept(v);
+                  setSnackbar({
+                    open: true,
+                    message: v ? "Auto-accept enabled" : "Auto-accept disabled",
+                    severity: v ? "success" : "error"
                   });
-                } else {
-                  await axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
-                    { active: next }, { headers: { Authorization: `Bearer ${token}` } });
-                }
-              }}
-            />
-            <span className={`text-sm font-bold ${active ? "text-emerald-600" : "text-red-600"}`}>
-              {active ? "Active" : "Inactive"}
-            </span>
+                }}
+              />
+            </div>
+
+            {/* Cash due chip (UI stub) */}
+            <Badge className="bg-amber-400 text-emerald-900 font-bold">
+              Cash to deposit: ₹{cashDue ?? 0}
+            </Badge>
+          </div>
+
+          {/* Break timer (UI only) */}
+          <div className="mt-2 flex items-center gap-2">
+            {!onBreak ? (
+              <Button size="sm" variant="outline" className="!font-bold"
+                onClick={() => { setOnBreak(true); setBreakRemaining(10 * 60); }}>
+                <AlarmClock className="h-4 w-4 mr-1" /> Start 10-min Break
+              </Button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Badge className="bg-emerald-600"><TimerReset className="h-3.5 w-3.5 mr-1" /> {mmss(breakRemaining)}</Badge>
+                <Button size="sm" variant="outline" className="!font-bold"
+                  onClick={() => { setOnBreak(false); setBreakRemaining(0); }}>
+                  Resume Now
+                </Button>
+              </div>
+            )}
           </div>
         </div>
+
         <Button variant="outline" className="btn-danger-outline !font-bold" onClick={handleLogout}>
           <LogOut className="h-4 w-4 mr-2" /> Logout
         </Button>
+      </div>
+
+      {/* Performance / Earnings at a glance */}
+      <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="rounded-xl border border-emerald-200/60 bg-white p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+            <DollarSign className="h-4 w-4 text-emerald-600" /> Today
+          </div>
+          <div className="mt-1 text-2xl font-extrabold text-emerald-700">
+            {todayEarnings == null ? "—" : `₹${todayEarnings.toLocaleString("en-IN")}`}
+          </div>
+        </div>
+        <div className="rounded-xl border border-emerald-200/60 bg-white p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+            <CheckCheck className="h-4 w-4 text-emerald-600" /> Deliveries (Today)
+          </div>
+          <div className="mt-1 text-2xl font-extrabold text-emerald-700">{deliveriesToday}</div>
+        </div>
+        <div className="rounded-xl border border-emerald-200/60 bg-white p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+            <Gauge className="h-4 w-4 text-emerald-600" /> ₹ / hr
+          </div>
+          <div className="mt-1 text-2xl font-extrabold text-emerald-700">{rph == null ? "—" : rph}</div>
+        </div>
       </div>
 
       {/* tabs */}
@@ -506,26 +611,23 @@ export default function DeliveryDashboard() {
         <Tabs value={tabsValue} onValueChange={(v) => setTab(v === "active" ? 0 : v === "past" ? 1 : 2)}>
           <TabsList className="grid w-full grid-cols-3 rounded-xl bg-transparent p-0">
             <TabsTrigger
-  value="active"
-  className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white 
-             data-[state=active]:shadow-none data-[state=inactive]:text-slate-600 !font-extrabold"
->
-  Active Orders
-</TabsTrigger>
+              value="active"
+              className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white
+                         data-[state=active]:shadow-none data-[state=inactive]:text-slate-600 !font-extrabold">
+              Active Orders
+            </TabsTrigger>
             <TabsTrigger
-  value="past"
-  className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white 
-             data-[state=active]:shadow-none data-[state=inactive]:text-slate-600 !font-extrabold"
->
-  Past Orders
-</TabsTrigger>
+              value="past"
+              className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white
+                         data-[state=active]:shadow-none data-[state=inactive]:text-slate-600 !font-extrabold">
+              Past Orders
+            </TabsTrigger>
             <TabsTrigger
-  value="earnings"
-  className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white 
-             data-[state=active]:shadow-none data-[state=inactive]:text-slate-600 !font-extrabold"
->
-  Earnings
-</TabsTrigger>
+              value="earnings"
+              className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white
+                         data-[state=active]:shadow-none data-[state=inactive]:text-slate-600 !font-extrabold">
+              Earnings
+            </TabsTrigger>
           </TabsList>
 
           {/* ACTIVE */}
@@ -559,6 +661,10 @@ export default function DeliveryDashboard() {
                     ? { lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }
                     : { lat: 19.076, lng: 72.877 };
 
+                  // Navigation & Status: simple ETA from distance (UI only, assumes ~22 km/h)
+                  const dist = orderDistances[order._id];
+                  const etaMin = dist != null ? Math.max(3, Math.round((dist / 22) * 60)) : null;
+
                   return (
                     <motion.div
                       key={order._id}
@@ -571,19 +677,25 @@ export default function DeliveryDashboard() {
                         <div className="font-semibold">
                           Pharmacy: <span className="text-emerald-700 font-extrabold">{order.pharmacy?.name || order.pharmacy}</span>
                         </div>
-                        <Badge className="ml-auto bg-emerald-600">{order.status}</Badge>
+
+                        {/* Distance & ETA pills */}
+                        <div className="ml-auto flex items-center gap-2">
+                          {dist != null && (
+                            <Badge className="bg-emerald-100 text-emerald-800 font-bold">
+                              {dist.toFixed(2)} km
+                            </Badge>
+                          )}
+                          {etaMin != null && (
+                            <Badge className="bg-emerald-600">ETA ~ {etaMin} min</Badge>
+                          )}
+                          <Badge className="bg-emerald-600">{order.status}</Badge>
+                        </div>
                       </div>
 
                       <div className="mt-2 text-sm text-slate-700">
                         <div className="flex items-start gap-2">
                           <MapPin className="h-4 w-4 mt-0.5 text-slate-500" />
                           <span>Pharmacy Address: <b>{order.pharmacy?.address}</b></span>
-                        </div>
-                        <div className="flex items-start gap-2 mt-1">
-                          <Route className="h-4 w-4 mt-0.5 text-slate-500" />
-                          <span>
-                            {orderDistances[order._id] != null && `Distance: ${orderDistances[order._id].toFixed(2)} km`}
-                          </span>
                         </div>
                         <div className="flex items-start gap-2 mt-1">
                           <MapPin className="h-4 w-4 mt-0.5 text-slate-500" />
@@ -634,14 +746,22 @@ export default function DeliveryDashboard() {
                                 <Polyline path={poly} options={{ strokeColor: "#0ea5a4", strokeOpacity: 0.9, strokeWeight: 4 }} />
                               )}
                             </GoogleMap>
-                            <Button
-                              variant="outline"
-                              className="mt-2 !font-bold"
-                              target="_blank"
-                              href={`https://www.google.com/maps/dir/?api=1&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
-                            >
-                              <Map className="h-4 w-4 mr-2" /> Get Directions in Google Maps
-                            </Button>
+
+                            {/* Navigation picker */}
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <Button variant="outline" className="!font-bold" asChild>
+                                <a target="_blank"
+                                   href={`https://www.google.com/maps/dir/?api=1&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}`}>
+                                  <Navigation className="h-4 w-4 mr-2" /> Google Maps
+                                </a>
+                              </Button>
+                              <Button variant="outline" className="!font-bold" asChild>
+                                <a target="_blank"
+                                   href={`http://maps.apple.com/?saddr=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&daddr=${patchedUserLoc.lat},${patchedUserLoc.lng}`}>
+                                  Apple Maps
+                                </a>
+                              </Button>
+                            </div>
                           </div>
                         )
                       ) : (
@@ -674,8 +794,27 @@ export default function DeliveryDashboard() {
                           <Badge className="bg-emerald-600">Delivered</Badge>
                         )}
 
+                        {/* Comms & Safety: quick canned replies (copy to clipboard) */}
+                        <div className="flex items-center gap-1 ml-auto">
+                          {["Reaching in 5–7 mins", "Outside your gate", "Call me if needed"].map((txt) => (
+                            <Button
+                              key={txt}
+                              size="sm"
+                              variant="secondary"
+                              className="rounded-full !font-bold"
+                              onClick={async () => {
+                                try { await navigator.clipboard.writeText(txt); } catch {}
+                                setSnackbar({ open: true, message: "Canned reply copied", severity: "success" });
+                              }}
+                            >
+                              {txt}
+                            </Button>
+                          ))}
+                        </div>
+
+                        {/* Chat */}
                         {order.status !== "delivered" && (
-                          <div className="relative ml-auto">
+                          <div className="relative">
                             {!!(orderUnreadCounts[order._id]) && (
                               <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
                                 {orderUnreadCounts[order._id]}
@@ -745,7 +884,7 @@ export default function DeliveryDashboard() {
         </Tabs>
       </div>
 
-      {/* CHAT MODAL (unchanged logic) */}
+      {/* CHAT MODAL (existing) */}
       <ChatModal
         open={chatOpen}
         onClose={() => setChatOpen(false)}
@@ -756,6 +895,14 @@ export default function DeliveryDashboard() {
         partnerType="user"
         currentRole="delivery"
       />
+
+      {/* Safety: SOS sticky (UI only) */}
+      <Button
+        className="fixed bottom-24 right-4 z-[2000] bg-red-600 hover:bg-red-700 font-extrabold shadow-lg"
+        onClick={() => setSnackbar({ open: true, message: "SOS sent to support (demo)", severity: "error" })}
+      >
+        <ShieldAlert className="h-4 w-4 mr-2" /> SOS
+      </Button>
 
       {/* Snackbar mimic */}
       <AnimatePresence>

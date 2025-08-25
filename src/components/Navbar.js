@@ -49,38 +49,60 @@ export default function Navbar({
 
   useEffect(() => setSearch(searchProp), [searchProp]);
 
-  useEffect(() => {
+    useEffect(() => {
     if (!search) {
       setOptions([]);
       setDropdownOpen(false);
       return;
     }
     const controller = new AbortController();
+
     const load = async () => {
       setLoading(true);
+      const type = routerLocation.pathname.startsWith("/medicines")
+        ? "medicine"
+        : routerLocation.pathname.startsWith("/doctors")
+        ? "doctor"
+        : routerLocation.pathname.startsWith("/labs")
+        ? "lab"
+        : "all";
+
+      const tryReq = async (url, params) =>
+        axios.get(url, { params, signal: controller.signal }).then(r => r.data);
+
       try {
-        const type = routerLocation.pathname.startsWith("/medicines")
-          ? "medicine"
-          : routerLocation.pathname.startsWith("/doctors")
-          ? "doctor"
-          : routerLocation.pathname.startsWith("/labs")
-          ? "lab"
-          : "all";
-        const res = await axios.get(
-          `${API_BASE_URL}/api/search-autocomplete?q=${encodeURIComponent(search)}&type=${type}`,
-          { signal: controller.signal }
-        );
-        setOptions(res.data || []);
+        // 1) existing route
+        let data = await tryReq(`${API_BASE_URL}/api/search-autocomplete`, { q: search, type });
+        setOptions(data || []);
         setDropdownOpen(true);
-      } catch {
-        if (!controller.signal.aborted) {
-          setOptions([]);
-          setDropdownOpen(false);
+      } catch (e1) {
+        try {
+          // 2) alt route with slash
+          let data = await tryReq(`${API_BASE_URL}/api/search/autocomplete`, { q: search, type });
+          setOptions(data || []);
+          setDropdownOpen(true);
+        } catch (e2) {
+          // 3) safe fallback for medicines
+          if ((type === "medicine" || type === "all")) {
+            try {
+              const meds = await tryReq(`${API_BASE_URL}/api/medicines/search`, { q: search });
+              const names = Array.from(new Set((meds || []).map(m => m.name))).slice(0, 10);
+              setOptions(names);
+              setDropdownOpen(true);
+            } catch {
+              setOptions([]);
+              setDropdownOpen(false);
+            }
+          } else {
+            setOptions([]);
+            setDropdownOpen(false);
+          }
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
     };
+
     const t = setTimeout(load, 160);
     return () => {
       controller.abort();

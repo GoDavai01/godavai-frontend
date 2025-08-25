@@ -201,7 +201,7 @@ function EarningsTab({ payouts }) {
           >
             <Card className="bg-white border border-emerald-200">
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-emerald-700 uppercase tracking-wide text-xs">
+                <div className="flex items-center gap-2 text-emerald-700 uppercase tracking-wide text-xs font-bold">
                   <Icon size={16} />
                   {label}
                 </div>
@@ -214,13 +214,14 @@ function EarningsTab({ payouts }) {
 
       {/* View switcher */}
       <div className="mb-3 flex items-center gap-3">
-        <span className="text-emerald-700 text-xs uppercase">View:</span>
+        <span className="text-emerald-700 text-xs uppercase font-bold">View:</span>
         <ToggleButtonGroup
           exclusive
           color="primary"
           size="small"
           value={view}
           onChange={(_, v) => v && setView(v)}
+          sx={{ "& .MuiToggleButton-root": { fontWeight: 700 } }}
         >
           <ToggleButton value="daily">Daily</ToggleButton>
           <ToggleButton value="weekly">Weekly</ToggleButton>
@@ -458,7 +459,7 @@ export default function PharmacyDashboard() {
     try {
       const isEmail = login.email.includes("@");
       await axios.post(`${API_BASE_URL}/api/pharmacy/send-otp`, { contact: login.email, pin: login.password });
-      setMsg("OTP sent! " + (isEmail ? "Check your email." : "Check your mobile."));
+      setMsg("OTP sent! " + (isEmail ? "Check your email." : "Check your mobile.") );
     } catch (err) {
       setMsg(err.response?.data?.message || "Failed to send OTP");
     }
@@ -853,13 +854,13 @@ export default function PharmacyDashboard() {
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
               <Card className="bg-white border border-emerald-200 rounded-2xl shadow-sm" sx={{ flex: 1 }}>
                 <CardContent>
-                  <Typography variant="subtitle2" className="text-emerald-700 uppercase">Orders Today</Typography>
+                  <Typography variant="subtitle2" className="text-emerald-700 uppercase font-bold">Orders Today</Typography>
                   <Typography variant="h5" className="font-extrabold">{ordersToday.length}</Typography>
                 </CardContent>
               </Card>
               <Card className="bg-white border border-emerald-200 rounded-2xl shadow-sm" sx={{ flex: 1 }}>
                 <CardContent>
-                  <Typography variant="subtitle2" className="text-emerald-700 uppercase">Completed Orders</Typography>
+                  <Typography variant="subtitle2" className="text-emerald-700 uppercase font-bold">Completed Orders</Typography>
                   <Typography variant="h5" className="font-extrabold">{completedOrders.length}</Typography>
                 </CardContent>
               </Card>
