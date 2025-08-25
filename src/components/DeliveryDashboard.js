@@ -459,11 +459,15 @@ export default function DeliveryDashboard() {
       {/* header */}
       <div className="flex items-center gap-3 rounded-2xl border border-emerald-200/60 bg-white p-3 shadow-sm">
         <Avatar className="h-14 w-14 ring-2 ring-emerald-100">
-          <AvatarImage src={partner?.avatar || ""} />
-          <AvatarFallback className="bg-amber-300 text-slate-900 font-bold">
-            {partner?.name?.charAt(0) || "D"}
-          </AvatarFallback>
-        </Avatar>
+  {partner?.avatar ? (
+    <AvatarImage src={partner.avatar} alt={partner?.name || "Partner"} />
+  ) : (
+    <AvatarFallback className="bg-emerald-600 text-white font-bold">
+      {(partner?.name || "D").charAt(0).toUpperCase()}
+    </AvatarFallback>
+  )}
+</Avatar>
+
         <div className="min-w-0 flex-1">
           <div className="text-lg font-extrabold text-emerald-900 truncate">{partner?.name}</div>
           <div className="text-sm text-slate-600 truncate">
@@ -500,10 +504,28 @@ export default function DeliveryDashboard() {
       {/* tabs */}
       <div className="mt-4">
         <Tabs value={tabsValue} onValueChange={(v) => setTab(v === "active" ? 0 : v === "past" ? 1 : 2)}>
-          <TabsList className="grid w-full grid-cols-3 rounded-xl bg-emerald-50">
-            <TabsTrigger value="active" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white !font-bold">Active Orders</TabsTrigger>
-            <TabsTrigger value="past" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white !font-bold">Past Orders</TabsTrigger>
-            <TabsTrigger value="earnings" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white !font-bold">Earnings</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 rounded-xl bg-transparent p-0">
+            <TabsTrigger
+  value="active"
+  className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white 
+             data-[state=active]:shadow-none data-[state=inactive]:text-slate-600 !font-extrabold"
+>
+  Active Orders
+</TabsTrigger>
+            <TabsTrigger
+  value="past"
+  className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white 
+             data-[state=active]:shadow-none data-[state=inactive]:text-slate-600 !font-extrabold"
+>
+  Past Orders
+</TabsTrigger>
+            <TabsTrigger
+  value="earnings"
+  className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white 
+             data-[state=active]:shadow-none data-[state=inactive]:text-slate-600 !font-extrabold"
+>
+  Earnings
+</TabsTrigger>
           </TabsList>
 
           {/* ACTIVE */}
