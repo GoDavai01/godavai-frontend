@@ -86,6 +86,40 @@ export default function Medicines() {
   const columnHeight = `calc(100vh - ${TOP_OFFSET_PX}px)`;
   const rightPaddingBottom = 120;
 
+  // =========================
+  // --- gallery / zoom state
+  // =========================
+  const [activeImg, setActiveImg] = useState(0);
+  const images = selectedMed
+    ? (Array.isArray(selectedMed.images) && selectedMed.images.length
+        ? selectedMed.images
+        : [selectedMed.img])
+    : [];
+
+  const [zoomOpen, setZoomOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const resetZoom = () => { setZoom(1); setOffset({ x:0, y:0 }); };
+
+  function wheelZoom(e) {
+    e.preventDefault();
+    const next = Math.min(4, Math.max(1, zoom + (e.deltaY > 0 ? -0.1 : 0.1)));
+    setZoom(next);
+  }
+  let dragging = false; let last = { x:0, y:0 };
+  function onDragStart(e) {
+    dragging = true;
+    last = { x: e.clientX ?? e.touches?.[0]?.clientX, y: e.clientY ?? e.touches?.[0]?.clientY };
+  }
+  function onDragMove(e) {
+    if (!dragging) return;
+    const cx = e.clientX ?? e.touches?.[0]?.clientX;
+    const cy = e.clientY ?? e.touches?.[0]?.clientY;
+    setOffset(o => ({ x: o.x + (cx - last.x), y: o.y + (cy - last.y) }));
+    last = { x: cx, y: cy };
+  }
+  function onDragEnd(){ dragging = false; }
+
   return (
     <div
       className="
@@ -284,26 +318,96 @@ export default function Medicines() {
         </div>
       </div>
 
-      {/* Dialog */}
-      <Dialog open={!!selectedMed} onOpenChange={() => setSelectedMed(null)}>
-        <DialogContent className="max-w-sm p-0 overflow-hidden rounded-2xl">
+      {/* Dialog with bigger gallery + tap-to-zoom */}
+      <Dialog open={!!selectedMed} onOpenChange={() => { setSelectedMed(null); setActiveImg(0); }}>
+        <DialogContent
+          className="
+            w-[min(96vw,740px)]
+            p-0 overflow-hidden rounded-2xl
+            md:w-[720px]
+          "
+        >
           {selectedMed && (
             <>
-              <DialogHeader className="px-4 pt-4 pb-1">
-                <DialogTitle className="text-xl font-extrabold" style={{ color: DEEP }}>
+              <DialogHeader className="px-5 pt-5 pb-2">
+                <DialogTitle className="text-2xl font-extrabold" style={{ color: DEEP }}>
                   {selectedMed.brand || selectedMed.name}
                 </DialogTitle>
               </DialogHeader>
 
-              <div className="px-4">
-                <div className="w-full grid place-items-center rounded-xl ring-1 ring-[var(--pillo-surface-border)] bg-white mb-3">
-                  <img
-                    src={getImageUrl(selectedMed.img)}
-                    alt={selectedMed.name}
-                    className="max-h-40 object-contain p-3"
-                  />
-                </div>
+              {/* --- GALLERY --- */}
+              <div className="px-5">
+                <div
+                  className="
+                    relative w-full h-[320px] md:h-[380px]
+                    rounded-xl ring-1 ring-[var(--pillo-surface-border)] bg-white overflow-hidden
+                  "
+                >
+                  {/* swipeable rail */}
+                  <div
+                    className="h-full flex transition-transform duration-300"
+                    style={{ transform: `translateX(-${activeImg * 100}%)` }}
+                    onTouchStart={(e)=> (e.currentTarget.dataset.sx = e.touches[0].clientX)}
+                    onTouchEnd={(e)=> {
+                      const sx = Number(e.currentTarget.dataset.sx || 0);
+                      const dx = e.changedTouches[0].clientX - sx;
+                      if (dx < -40 && activeImg < images.length - 1) setActiveImg(i => i + 1);
+                      if (dx >  40 && activeImg > 0)               setActiveImg(i => i - 1);
+                    }}
+                  >
+                    {images.map((src, i) => (
+                      <button
+                        key={i}
+                        className="min-w-full h-full grid place-items-center"
+                        onClick={() => { setZoomOpen(true); resetZoom(); }}
+                        title="Tap to zoom"
+                      >
+                        <img
+                          src={getImageUrl(src)}
+                          alt={selectedMed.name}
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      </button>
+                    ))}
+                  </div>
 
+                  {/* prev/next */}
+                  {images.length > 1 && (
+                    <>
+                      <button
+                        className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5"
+                        onClick={() => setActiveImg(i => Math.max(0, i - 1))}
+                      >
+                        ‹
+                      </button>
+                      <button
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5"
+                        onClick={() => setActiveImg(i => Math.min(images.length - 1, i + 1))}
+                      >
+                        ›
+                      </button>
+                    </>
+                  )}
+
+                  {/* dots */}
+                  {images.length > 1 && (
+                    <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5">
+                      {images.map((_, i) => (
+                        <span
+                          key={i}
+                          onClick={()=>setActiveImg(i)}
+                          className={`h-1.5 rounded-full cursor-pointer transition-all ${
+                            i === activeImg ? "w-5 bg-emerald-600" : "w-2.5 bg-emerald-200"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* tags + info */}
+              <div className="px-5 pt-3">
                 <div className="flex flex-wrap gap-2 mb-2">
                   {Array.isArray(selectedMed.category) && selectedMed.category.length > 0 && (
                     <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
@@ -342,7 +446,7 @@ export default function Medicines() {
                   )}
                 </div>
 
-                <div className="text-sm text-neutral-700 mb-3">
+                <div className="text-sm text-neutral-700 mb-4">
                   {selectedMed.description ? (
                     selectedMed.description
                   ) : (
@@ -351,17 +455,15 @@ export default function Medicines() {
                 </div>
               </div>
 
-              <div className="p-4 pt-0 flex gap-2">
+              {/* actions */}
+              <div className="p-5 pt-0 flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setSelectedMed(null)}>
                   <X className="h-4 w-4 mr-1" /> Close
                 </Button>
                 <Button
                   className="flex-1 font-bold"
                   style={{ backgroundColor: DEEP, color: "white" }}
-                  onClick={() => {
-                    addToCart(selectedMed);
-                    setSelectedMed(null);
-                  }}
+                  onClick={() => { addToCart(selectedMed); setSelectedMed(null); }}
                 >
                   Add to Cart
                 </Button>
@@ -370,6 +472,73 @@ export default function Medicines() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Full-screen zoom viewer */}
+      {zoomOpen && (
+        <div
+          className="fixed inset-0 z-[2000] bg-black/90"
+          onWheel={wheelZoom}
+          onMouseMove={onDragMove}
+          onMouseDown={onDragStart}
+          onMouseUp={onDragEnd}
+          onMouseLeave={onDragEnd}
+          onTouchStart={onDragStart}
+          onTouchMove={onDragMove}
+          onTouchEnd={onDragEnd}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/90 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5"
+            onClick={() => { setZoomOpen(false); resetZoom(); }}
+          >
+            Close
+          </button>
+
+          {images.length > 1 && (
+            <>
+              <button
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-white/90 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5"
+                onClick={() => setActiveImg(i => Math.max(0, i - 1))}
+              >‹</button>
+              <button
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/90 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5"
+                onClick={() => setActiveImg(i => Math.min(images.length - 1, i + 1))}
+              >›</button>
+            </>
+          )}
+
+          <div className="absolute inset-0 grid place-items-center overflow-hidden">
+            <img
+              src={getImageUrl(images[activeImg])}
+              alt=""
+              draggable={false}
+              className="max-w-none"
+              style={{
+                transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+                transition: dragging ? "none" : "transform 120ms ease-out",
+                willChange: "transform"
+              }}
+              onDoubleClick={() => setZoom(z => (z >= 2 ? 1 : 2))}
+            />
+          </div>
+
+          {/* zoom controls */}
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-6 flex gap-2">
+            <button
+              className="text-white/90 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5"
+              onClick={() => setZoom(z => Math.max(1, z - 0.25))}
+            >–</button>
+            <span className="px-2 py-1 text-white/80 text-sm">{Math.round(zoom*100)}%</span>
+            <button
+              className="text-white/90 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5"
+              onClick={() => setZoom(z => Math.min(4, z + 0.25))}
+            >+</button>
+            <button
+              className="text-white/90 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5"
+              onClick={resetZoom}
+            >Reset</button>
+          </div>
+        </div>
+      )}
 
       {/* Upload Prescription FAB */}
       <motion.div
