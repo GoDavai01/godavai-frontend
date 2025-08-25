@@ -236,7 +236,7 @@ const allPharmacyCategories = React.useMemo(() => {
       axios.get(`${API_BASE_URL}/api/pharmacy/orders`, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => setOrders(res.data))
         .catch(() => setOrders([]));
-      axios.get(`${API_BASE_URL}/api/pharmacy/me`, { headers: { Authorization: `Bearer ${token}` } })
+      axios.get(`${API_BASE_URL}/api/pharmacies/me`, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => {
           setActive(res.data.active);
           setPharmacy(res.data);
@@ -682,7 +682,7 @@ const handleEditImagesChange = (e) => {
               onChange={async (e) => {
                 setActive(e.target.checked);
                 await axios.patch(
-                  `${API_BASE_URL}/api/pharmacy/active`,
+                  `${API_BASE_URL}/api/pharmacies/active`,
                   { active: e.target.checked },
                   { headers: { Authorization: `Bearer ${token}` } }
                 );
@@ -709,7 +709,7 @@ const handleEditImagesChange = (e) => {
       const res = await axios.get(`${API_BASE_URL}/api/geocode?lat=${latitude}&lng=${longitude}`);
       const formatted = res.data.results?.[0]?.formatted_address || "";
       // Patch to backend (include formatted address)
-      await axios.patch(`${API_BASE_URL}/api/pharmacy/set-location`, {
+      await axios.patch(`${API_BASE_URL}/api/pharmacies/set-location`, {
         lat: latitude,
         lng: longitude,
         formatted
