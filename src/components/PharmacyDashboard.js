@@ -174,6 +174,29 @@ function EarningsTab({ payouts }) {
 
   const [view, setView] = useState("daily"); // daily | weekly | monthly
 
+  // ===== NEW: fetch order details so we can show items & invoice =====
+  const [ordersById, setOrdersById] = useState({});
+  useEffect(() => {
+    const ids = payouts.map(p => p?.orderId?._id).filter(Boolean);
+    const toFetch = ids.filter(id => !ordersById[id]);
+    if (!toFetch.length) return;
+
+    Promise.all(
+      toFetch.map(id =>
+        axios
+          .get(`${API_BASE_URL}/api/orders/${id}`)
+          .then(res => [id, res.data])
+          .catch(() => [id, null])
+      )
+    ).then(entries => {
+      setOrdersById(prev => {
+        const out = { ...prev };
+        for (const [id, data] of entries) if (data) out[id] = data;
+        return out;
+      });
+    });
+  }, [payouts]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <Box sx={{ mt: 1 }}>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2 }}>
@@ -253,42 +276,94 @@ function EarningsTab({ payouts }) {
         </CardContent>
       </Card>
 
-      {/* Raw payouts table */}
+      {/* Raw payouts table — now horizontally scrollable + extra columns */}
       <Card sx={{ bgcolor: "#181d23" }}>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1, fontWeight: 800 }}>
             All Payouts
           </Typography>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Order</TableCell>
-                <TableCell>Date</TableCell>
-                <TableCell>Amount</TableCell>
-                <TableCell>Status</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {payouts
-                .slice()
-                .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))
-                .map((pay) => (
-                  <TableRow key={pay._id}>
-                    <TableCell>{pay.orderId?._id?.slice(-5)}</TableCell>
-                    <TableCell>{new Date(pay.createdAt).toLocaleString()}</TableCell>
-                    <TableCell>{formatRupees(pay.pharmacyAmount)}</TableCell>
-                    <TableCell>{pay.status}</TableCell>
-                  </TableRow>
-                ))}
-              {payouts.length === 0 && (
+
+          {/* SCROLL WRAPPER */}
+          <Box sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 980 }}>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={4}>
-                    <Typography color="warning.main">No payouts yet.</Typography>
-                  </TableCell>
+                  <TableCell>Order</TableCell>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Amount</TableCell>
+                  <TableCell>Status</TableCell>
+                  {/* NEW COLUMNS */}
+                  <TableCell>Order Detail</TableCell>
+                  <TableCell>Invoice</TableCell>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {payouts
+                  .slice()
+                  .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))
+                  .map((pay) => {
+                    const orderId = pay.orderId?._id;
+                    const order = orderId ? (ordersById[orderId] || pay.orderId) : null;
+                    const itemsText = order?.items?.length
+                      ? order.items.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ")
+                      : "—";
+
+                    return (
+                      <TableRow key={pay._id}>
+                        <TableCell>{orderId ? orderId.slice(-5) : "—"}</TableCell>
+                        <TableCell>{new Date(pay.createdAt).toLocaleString()}</TableCell>
+                        <TableCell>{formatRupees(pay.pharmacyAmount)}</TableCell>
+                        <TableCell>{pay.status}</TableCell>
+
+                        {/* NEW: ORDER DETAIL */}
+                        <TableCell
+                          title={itemsText}
+                          sx={{ maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        >
+                          {itemsText}
+                        </TableCell>
+
+                        {/* NEW: INVOICE DOWNLOAD */}
+                        <TableCell>
+                          {order?.invoiceFile ? (
+                            <a
+                              href={order.invoiceFile}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ textDecoration: "none" }}
+                            >
+                              <Button
+                                variant="outlined"
+                                sx={{
+                                  borderRadius: 2,
+                                  color: "#FFD43B",
+                                  borderColor: "#FFD43B",
+                                  textTransform: "none",
+                                  fontWeight: 700
+                                }}
+                                startIcon={<ReceiptLongIcon />}
+                                size="small"
+                              >
+                                Download
+                              </Button>
+                            </a>
+                          ) : (
+                            <span style={{ color: "#9bb4b0" }}>—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                {payouts.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      <Typography color="warning.main">No payouts yet.</Typography>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Box>
         </CardContent>
       </Card>
     </Box>
@@ -795,7 +870,7 @@ export default function PharmacyDashboard() {
               </>
             )}
 
-            {/* Stats Row (NOTE: Earnings summary removed from here) */}
+            {/* Stats Row */}
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
               <Card sx={{ flex: 1, bgcolor: "#21272b" }}>
                 <CardContent>
