@@ -1,5 +1,5 @@
 // src/pages/Medicines.js
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -90,35 +90,57 @@ export default function Medicines() {
   // --- gallery / zoom state
   // =========================
   const [activeImg, setActiveImg] = useState(0);
-  const images = selectedMed
-    ? (Array.isArray(selectedMed.images) && selectedMed.images.length
-        ? selectedMed.images
-        : [selectedMed.img])
-    : [];
+
+  const images = useMemo(() => {
+    if (!selectedMed) return [];
+    const arr = (Array.isArray(selectedMed.images) && selectedMed.images.length
+      ? selectedMed.images
+      : [selectedMed.img]
+    ).filter(Boolean);
+    return arr;
+  }, [selectedMed]);
 
   const [zoomOpen, setZoomOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const resetZoom = () => { setZoom(1); setOffset({ x:0, y:0 }); };
+  const [isDragging, setIsDragging] = useState(false);
+  const draggingRef = useRef(false);
+  const lastRef = useRef({ x: 0, y: 0 });
 
-  function wheelZoom(e) {
+  const resetZoom = () => { setZoom(1); setOffset({ x:0, y:0 }); setIsDragging(false); draggingRef.current=false; };
+
+  const wheelZoom = (e) => {
     e.preventDefault();
     const next = Math.min(4, Math.max(1, zoom + (e.deltaY > 0 ? -0.1 : 0.1)));
     setZoom(next);
-  }
-  let dragging = false; let last = { x:0, y:0 };
-  function onDragStart(e) {
-    dragging = true;
-    last = { x: e.clientX ?? e.touches?.[0]?.clientX, y: e.clientY ?? e.touches?.[0]?.clientY };
-  }
-  function onDragMove(e) {
-    if (!dragging) return;
-    const cx = e.clientX ?? e.touches?.[0]?.clientX;
-    const cy = e.clientY ?? e.touches?.[0]?.clientY;
-    setOffset(o => ({ x: o.x + (cx - last.x), y: o.y + (cy - last.y) }));
-    last = { x: cx, y: cy };
-  }
-  function onDragEnd(){ dragging = false; }
+  };
+
+  const startDrag = (x, y) => {
+    draggingRef.current = true;
+    setIsDragging(true);
+    lastRef.current = { x, y };
+  };
+  const moveDrag = (x, y) => {
+    if (!draggingRef.current) return;
+    setOffset((o) => ({ x: o.x + (x - lastRef.current.x), y: o.y + (y - lastRef.current.y) }));
+    lastRef.current = { x, y };
+  };
+  const endDrag = () => {
+    draggingRef.current = false;
+    setIsDragging(false);
+  };
+
+  // Close zoom with ESC and lock background scroll while open
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") { setZoomOpen(false); resetZoom(); } };
+    if (zoomOpen) {
+      document.body.style.overflow = "hidden";
+      window.addEventListener("keydown", onKey);
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+  }, [zoomOpen]);
 
   return (
     <div
@@ -144,10 +166,9 @@ export default function Medicines() {
       </div>
 
       {/* Two columns */}
-      {/* removed left padding so the left rail hugs the edge */}
       <div className="pl-0 pr-3">
         <div className="grid grid-cols-[100px,1fr] gap-3 items-start">
-          {/* LEFT rail — fills to bottom and scrolls only when long */}
+          {/* LEFT rail */}
           <aside className="sticky self-start" style={{ top: TOP_OFFSET_PX, height: columnHeight }}>
             <div
               className="
@@ -159,7 +180,6 @@ export default function Medicines() {
                 Categories
               </div>
 
-              {/* list */}
               <div className="flex-1 flex flex-col gap-1 overflow-y-auto pr-1 no-scrollbar">
                 {allCategories.map((c) => {
                   const active = c === selectedCategory;
@@ -182,7 +202,7 @@ export default function Medicines() {
             </div>
           </aside>
 
-          {/* RIGHT rail — the only vertical scroller */}
+          {/* RIGHT rail */}
           <section
             className="min-w-0 overflow-y-auto no-scrollbar"
             style={{ height: columnHeight, paddingBottom: rightPaddingBottom }}
@@ -246,7 +266,7 @@ export default function Medicines() {
                           w-full aspect-square grid place-items-center rounded-xl
                           bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm overflow-hidden
                         "
-                        onClick={() => setSelectedMed(med)}
+                        onClick={() => { setSelectedMed(med); setActiveImg(0); }}
                         title="Know more"
                       >
                         <img
@@ -259,7 +279,7 @@ export default function Medicines() {
                       <div className="mt-2">
                         <div
                           className="text-[13px] font-extrabold text-emerald-800 leading-snug cursor-pointer"
-                          onClick={() => setSelectedMed(med)}
+                          onClick={() => { setSelectedMed(med); setActiveImg(0); }}
                           style={{
                             display: "-webkit-box",
                             WebkitLineClamp: 2,
@@ -319,7 +339,10 @@ export default function Medicines() {
       </div>
 
       {/* Dialog with bigger gallery + tap-to-zoom */}
-      <Dialog open={!!selectedMed} onOpenChange={() => { setSelectedMed(null); setActiveImg(0); }}>
+      <Dialog
+        open={!!selectedMed}
+        onOpenChange={() => { setSelectedMed(null); setActiveImg(0); }}
+      >
         <DialogContent
           className="
             w-[min(96vw,740px)]
@@ -359,7 +382,7 @@ export default function Medicines() {
                       <button
                         key={i}
                         className="min-w-full h-full grid place-items-center"
-                        onClick={() => { setZoomOpen(true); resetZoom(); }}
+                        onClick={() => { setActiveImg(i); setZoomOpen(true); resetZoom(); }}
                         title="Tap to zoom"
                       >
                         <img
@@ -478,13 +501,13 @@ export default function Medicines() {
         <div
           className="fixed inset-0 z-[2000] bg-black/90"
           onWheel={wheelZoom}
-          onMouseMove={onDragMove}
-          onMouseDown={onDragStart}
-          onMouseUp={onDragEnd}
-          onMouseLeave={onDragEnd}
-          onTouchStart={onDragStart}
-          onTouchMove={onDragMove}
-          onTouchEnd={onDragEnd}
+          onMouseMove={(e) => moveDrag(e.clientX, e.clientY)}
+          onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY); }}
+          onMouseUp={endDrag}
+          onMouseLeave={endDrag}
+          onTouchStart={(e) => { const t = e.touches[0]; startDrag(t.clientX, t.clientY); }}
+          onTouchMove={(e) => { e.preventDefault(); const t = e.touches[0]; moveDrag(t.clientX, t.clientY); }}
+          onTouchEnd={endDrag}
         >
           <button
             className="absolute top-4 right-4 text-white/90 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5"
@@ -511,10 +534,10 @@ export default function Medicines() {
               src={getImageUrl(images[activeImg])}
               alt=""
               draggable={false}
-              className="max-w-none"
+              className={`max-w-none ${zoom > 1 ? (isDragging ? "cursor-grabbing" : "cursor-grab") : "cursor-zoom-in"}`}
               style={{
                 transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-                transition: dragging ? "none" : "transform 120ms ease-out",
+                transition: isDragging ? "none" : "transform 120ms ease-out",
                 willChange: "transform"
               }}
               onDoubleClick={() => setZoom(z => (z >= 2 ? 1 : 2))}
