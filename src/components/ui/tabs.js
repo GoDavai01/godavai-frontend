@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { cn } from "../../lib/utils"; // <-- make sure you have this utility (shadcn usually generates it)
+import { cn } from "../../libs/utils"; // keep this path as you created it
 
 export const Tabs = TabsPrimitive.Root;
 
@@ -10,7 +10,8 @@ export const TabsList = React.forwardRef(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-10 items-center justify-center rounded-lg bg-slate-100 p-1 text-slate-500",
+      // transparent container (no white bar)
+      "inline-flex h-10 items-center justify-center gap-2 bg-transparent p-0 text-slate-600",
       className
     )}
     {...props}
@@ -22,10 +23,15 @@ export const TabsTrigger = React.forwardRef(({ className, ...props }, ref) => (
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium " +
-        "ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 " +
-        "disabled:pointer-events-none disabled:opacity-50 " +
-        "data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm",
+      // base
+      "inline-flex items-center justify-center whitespace-nowrap px-3 py-2 text-sm font-extrabold",
+      "border-b-2 border-transparent transition-all",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ring-offset-white",
+      "disabled:pointer-events-none disabled:opacity-50",
+      // active (NO background; deep-green underline + text)
+      "data-[state=active]:text-emerald-700 data-[state=active]:border-emerald-600",
+      // inactive
+      "data-[state=inactive]:text-slate-600",
       className
     )}
     {...props}
