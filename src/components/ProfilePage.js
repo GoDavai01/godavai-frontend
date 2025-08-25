@@ -215,20 +215,32 @@ export default function ProfilePage() {
   }
 
   // --- Orders (logic unchanged) ---
-  const [orders, setOrders] = useState([]);
-  const [orderDetail, setOrderDetail] = useState(null);
+const [orders, setOrders] = useState([]);
+const [orderDetail, setOrderDetail] = useState(null);
 
-  useEffect(() => {
-    if (user?._id) {
-      axios
-        .get(`${API_BASE_URL}/api/orders/myorders-userid/${user._id}`)
-        .then((res) => {
-          const sorted = [...res.data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-          setOrders(sorted);
-        })
-        .catch(() => setOrders([]));
-    }
-  }, [user?._id]);
+// Fetch the logged-in user's orders using the correct protected route
+useEffect(() => {
+  if (!user?._id || !token) return;
+
+  const ac = new AbortController();
+  axios
+    .get(`${API_BASE_URL}/api/orders/myorders`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: ac.signal,
+    })
+    .then((res) => {
+      const sorted = [...res.data].sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      );
+      setOrders(sorted);
+    })
+    .catch(() => {
+      // swallow errors to avoid noisy popups/console spam
+      setOrders([]);
+    });
+
+  return () => ac.abort();
+}, [user?._id, token]);
 
   const handleOrderAgain = (order) => {
     const pharmacyId =

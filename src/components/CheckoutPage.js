@@ -744,7 +744,7 @@ useEffect(() => {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2" style={{ color: DEEP }}>
               <Sparkles className="h-4 w-4" />
-              Smart Suggestions from this store
+              Smart Suggestions
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">

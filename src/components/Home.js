@@ -1,5 +1,5 @@
 // src/components/Home.js
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
@@ -15,7 +15,13 @@ import {
   Clock,
   ChevronRight,
   MapPin,
+  X,
 } from "lucide-react";
+
+// UI primitives (same ones used in Medicines.js)
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
 
 function isMedicineInCategory(med, selectedCategory) {
   if (!med || !selectedCategory) return false;
@@ -46,25 +52,42 @@ const categories = [
   "Painkiller",
   "Cough",
 ];
+
 const API_BASE_URL =
   process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
+// same image helper as Medicines.js
+const getImageUrl = (img) => {
+  if (!img)
+    return "https://img.freepik.com/free-vector/medicine-bottle-pills-isolated_1284-42391.jpg?w=400";
+  if (typeof img === "string" && img.startsWith("/uploads/"))
+    return `${API_BASE_URL}${img}`;
+  if (typeof img === "string" && (img.startsWith("http://") || img.startsWith("https://")))
+    return img;
+  return img;
+};
+
+const DEEP = "#0f6e51";
+
 /* ---------- Horizontal medicine card (image left, details right) ---------- */
-function MedCard({ med, onAdd }) {
+function MedCard({ med, onAdd, onOpen }) {
   const [src, setSrc] = useState(
-    med.img || med.image || med.imageUrl || ICONS.medicine
+    getImageUrl(med.img || med.image || med.imageUrl) || ICONS.medicine
   );
 
   const price =
     med.price ?? med.mrp ?? med.sellingPrice ?? med.salePrice ?? "--";
 
   return (
-    <div className="min-w-[260px] max-w-[260px] h-[106px] rounded-2xl bg-white/95 ring-1 ring-[var(--pillo-surface-border)] shadow-sm flex items-center p-3 gap-3 cursor-pointer active:scale-[0.99] transition">
+    <div
+      className="min-w-[260px] max-w-[260px] h-[106px] rounded-2xl bg-white/95 ring-1 ring-[var(--pillo-surface-border)] shadow-sm flex items-center p-3 gap-3 cursor-pointer active:scale-[0.99] transition"
+      onClick={() => onOpen?.(med)}
+    >
       {/* BIG thumbnail */}
       <div className="h-[78px] w-[86px] rounded-xl bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm overflow-hidden grid place-items-center">
         <img
           src={src}
-          alt={med.name}
+          alt={med.brand || med.name || "Medicine"}
           loading="lazy"
           onError={() => setSrc(ICONS.medicine)}
           className="h-full w-full object-contain"
@@ -81,8 +104,10 @@ function MedCard({ med, onAdd }) {
             WebkitBoxOrient: "vertical",
             overflow: "hidden",
           }}
+          title={med.brand || med.name || med.medicineName}
         >
-          {med.name || med.medicineName || "Medicine"}
+          {/* BRAND first (fallback to name) */}
+          {med.brand || med.name || med.medicineName || "Medicine"}
         </div>
 
         <div className="mt-0.5 text-[13px] font-semibold text-[var(--pillo-active-text)]">
@@ -127,7 +152,20 @@ export default function Home() {
   }px + env(safe-area-inset-bottom, 0px) + 12px)`;
   const [allMedsByPharmacy, setAllMedsByPharmacy] = useState({});
 
-  /* === ADDED: state + helper for active order (expanded statuses) === */
+  // Dialog state (reuse Medicines.js UI)
+  const [selectedMed, setSelectedMed] = useState(null);
+  const [activeImg, setActiveImg] = useState(0);
+  const images = useMemo(() => {
+    if (!selectedMed) return [];
+    const arr =
+      (Array.isArray(selectedMed.images) && selectedMed.images.length
+        ? selectedMed.images
+        : [selectedMed.img]
+      ).filter(Boolean) || [];
+    return arr;
+  }, [selectedMed]);
+
+  /* === state + helper for active order (expanded statuses) === */
   const ACTIVE_STATUSES = new Set([
     "pending",
     "placed",
@@ -161,7 +199,7 @@ export default function Home() {
       ? "Delivered"
       : s;
   }
-  /* === /ADDED === */
+  /* === /active order === */
 
   useEffect(() => {
     if (currentAddress?.lat && currentAddress?.lng) {
@@ -191,7 +229,7 @@ export default function Home() {
     fetchLastOrder();
   }, [user]);
 
-  /* === ADDED: effect to load active order === */
+  // Load / keep active order (if any)
   useEffect(() => {
     async function getActive() {
       const idFromLS = localStorage.getItem("activeOrderId");
@@ -205,12 +243,10 @@ export default function Home() {
               return;
             }
           }
-          // not active anymore
           localStorage.removeItem("activeOrderId");
         }
       } catch {}
 
-      // fallback: look at user’s recent orders and pick the first active one
       if (!user?._id && !user?.userId) return;
       const userId = user._id || user.userId;
       try {
@@ -219,7 +255,6 @@ export default function Home() {
         );
         const orders = await r.json();
         if (Array.isArray(orders) && orders.length) {
-          // prefer the most recently updated active order
           const active = orders
             .filter((o) => ACTIVE_STATUSES.has(o.status))
             .sort(
@@ -234,20 +269,19 @@ export default function Home() {
           }
         }
         setActiveOrder(null);
-      } catch {
-        /* ignore */
-      }
+      } catch {}
     }
     getActive();
   }, [user]);
-  /* === /ADDED === */
 
   useEffect(() => {
     if (!userCoords) return;
-    fetch(`${API_BASE_URL}/api/pharmacies/nearby?lat=${userCoords.lat}&lng=${userCoords.lng}&maxDistance=8000`)
+    fetch(
+      `${API_BASE_URL}/api/pharmacies/nearby?lat=${userCoords.lat}&lng=${userCoords.lng}&maxDistance=8000`
+    )
       .then(async (res) => {
-      if (!res.ok) throw new Error(`Nearby pharmacies HTTP ${res.status}`);
-      return res.json();
+        if (!res.ok) throw new Error(`Nearby pharmacies HTTP ${res.status}`);
+        return res.json();
       })
       .then((pharmacies) => {
         const active = pharmacies
@@ -301,7 +335,7 @@ export default function Home() {
   }, [selectedCategory, pharmaciesNearby]);
 
   const handleAddToCart = (med) => {
-    if (cart.length > 0) {
+    if ((cart?.length || 0) > 0) {
       const cartPharmacyId = cart[0]?.pharmacy?._id || cart[0]?.pharmacy;
       if (
         med.pharmacy?._id !== cartPharmacyId &&
@@ -418,7 +452,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* STATUS STRIP (bold line) */}
+      {/* STATUS STRIP */}
       <div className="px-4 mt-3">
         <div className="flex items-center justify-between rounded-xl bg-white/90 backdrop-blur ring-1 ring-[var(--pillo-surface-border)] px-3 py-2 text-[12.5px] text-[var(--pillo-active-text)] shadow-sm font-bold">
           <div className="flex items-center gap-1.5">
@@ -452,7 +486,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* PHARMACIES NEAR YOU (no extra arrow) */}
+      {/* PHARMACIES NEAR YOU */}
       <div className="mt-6 px-4">
         <div className="flex items-center justify-between mb-2">
           <button
@@ -524,7 +558,7 @@ export default function Home() {
           </div>
         )}
 
-      {/* MEDICINES BY PHARMACY (horizontal image-first cards) */}
+      {/* MEDICINES BY PHARMACY */}
       {(!selectedCategory ||
         showFallbackMeds ||
         filteredPharmacies.some((ph) => ph.medicines.length > 0)) &&
@@ -548,12 +582,16 @@ export default function Home() {
 
               <div className="flex gap-3 pb-2 snap-x overflow-x-auto">
                 {ph.medicines.map((med, mi) => (
-                  <div
-                    key={med._id || mi}
-                    className="snap-center"
-                    onClick={() => navigate(`/medicines/${ph._id}`)}
-                  >
-                    <MedCard med={med} onAdd={handleAddToCart} />
+                  <div key={med._id || mi} className="snap-center">
+                    {/* OPEN dialog (not redirect) */}
+                    <MedCard
+                      med={med}
+                      onAdd={handleAddToCart}
+                      onOpen={(m) => {
+                        setSelectedMed(m);
+                        setActiveImg(0);
+                      }}
+                    />
                   </div>
                 ))}
               </div>
@@ -667,6 +705,196 @@ export default function Home() {
       </motion.div>
 
       <BottomNavBar />
+
+      {/* ======== Medicine Details Dialog (same UX as Medicines.js) ======== */}
+      <Dialog
+        open={!!selectedMed}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedMed(null);
+            setActiveImg(0);
+          }
+        }}
+      >
+        <DialogContent className="w-[min(96vw,740px)] p-0 overflow-hidden rounded-2xl md:w-[720px]">
+          {selectedMed && (
+            <>
+              <DialogHeader className="px-5 pt-5 pb-2">
+                <DialogTitle
+                  className="text-2xl font-extrabold"
+                  style={{ color: DEEP }}
+                >
+                  {selectedMed.brand || selectedMed.name}
+                </DialogTitle>
+              </DialogHeader>
+
+              {/* --- GALLERY --- */}
+              <div className="px-5">
+                <div className="relative w-full h-[320px] md:h-[380px] rounded-xl ring-1 ring-[var(--pillo-surface-border)] bg-white overflow-hidden">
+                  {/* swipeable rail */}
+                  <div
+                    className="h-full flex transition-transform duration-300"
+                    style={{ transform: `translateX(-${activeImg * 100}%)` }}
+                    onTouchStart={(e) =>
+                      (e.currentTarget.dataset.sx = e.touches[0].clientX)
+                    }
+                    onTouchEnd={(e) => {
+                      const sx = Number(e.currentTarget.dataset.sx || 0);
+                      const dx = e.changedTouches[0].clientX - sx;
+                      if (dx < -40 && activeImg < images.length - 1)
+                        setActiveImg((i) => i + 1);
+                      if (dx > 40 && activeImg > 0)
+                        setActiveImg((i) => i - 1);
+                    }}
+                  >
+                    {images.map((src, i) => (
+                      <div
+                        key={i}
+                        className="min-w-full h-full grid place-items-center select-none"
+                      >
+                        <img
+                          src={getImageUrl(src)}
+                          alt={selectedMed.name}
+                          className="max-h-full max-w-full object-contain"
+                          draggable={false}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* prev/next */}
+                  {images.length > 1 && (
+                    <>
+                      <button
+                        className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5"
+                        onClick={() =>
+                          setActiveImg((i) => Math.max(0, i - 1))
+                        }
+                      >
+                        ‹
+                      </button>
+                      <button
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5"
+                        onClick={() =>
+                          setActiveImg((i) =>
+                            Math.min(images.length - 1, i + 1)
+                          )
+                        }
+                      >
+                        ›
+                      </button>
+                    </>
+                  )}
+
+                  {/* dots */}
+                  {images.length > 1 && (
+                    <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5">
+                      {images.map((_, i) => (
+                        <span
+                          key={i}
+                          onClick={() => setActiveImg(i)}
+                          className={`h-1.5 rounded-full cursor-pointer transition-all ${
+                            i === activeImg ? "w-5 bg-emerald-600" : "w-2.5 bg-emerald-200"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* tags + info */}
+              <div className="px-5 pt-3">
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {Array.isArray(selectedMed.category) &&
+                    selectedMed.category.length > 0 && (
+                      <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
+                        {selectedMed.category.join(", ")}
+                      </Badge>
+                    )}
+                  {selectedMed.type && (
+                    <Badge className="bg-white text-emerald-700 border border-emerald-200 font-semibold">
+                      {Array.isArray(selectedMed.type)
+                        ? selectedMed.type.join(", ")
+                        : selectedMed.type}
+                    </Badge>
+                  )}
+                </div>
+
+                {selectedMed.composition && (
+                  <div className="text-sm text-neutral-700 mb-1">
+                    <b>Composition:</b> {selectedMed.composition}
+                  </div>
+                )}
+                {selectedMed.company && (
+                  <div className="text-sm text-neutral-700 mb-2">
+                    <b>Company:</b> {selectedMed.company}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 mb-2">
+                  <div
+                    className="text-2xl font-extrabold"
+                    style={{ color: DEEP }}
+                  >
+                    ₹{selectedMed.price}
+                  </div>
+                  {selectedMed.mrp && selectedMed.price < selectedMed.mrp && (
+                    <>
+                      <div className="text-sm text-neutral-400 line-through">
+                        ₹{selectedMed.mrp}
+                      </div>
+                      <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
+                        {Math.round(
+                          ((selectedMed.mrp - selectedMed.price) /
+                            selectedMed.mrp) *
+                            100
+                        )}
+                        % OFF
+                      </Badge>
+                    </>
+                  )}
+                </div>
+
+                <div className="text-sm text-neutral-700 mb-4">
+                  {selectedMed.description ? (
+                    selectedMed.description
+                  ) : (
+                    <span className="text-neutral-400">
+                      No description available.
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* actions */}
+              <div className="p-5 pt-0 flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setSelectedMed(null);
+                    setActiveImg(0);
+                  }}
+                >
+                  <X className="h-4 w-4 mr-1" /> Close
+                </Button>
+                <Button
+                  className="flex-1 font-bold"
+                  style={{ backgroundColor: DEEP, color: "white" }}
+                  onClick={() => {
+                    handleAddToCart(selectedMed);
+                    setSelectedMed(null);
+                  }}
+                >
+                  Add to Cart
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      {/* ================== /dialog ================== */}
     </div>
   );
 }
