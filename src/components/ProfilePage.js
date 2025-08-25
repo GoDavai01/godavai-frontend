@@ -218,26 +218,40 @@ export default function ProfilePage() {
 const [orders, setOrders] = useState([]);
 const [orderDetail, setOrderDetail] = useState(null);
 
-// Fetch the logged-in user's orders using the correct protected route
+// Fetch the logged-in user's orders with a fallback (same as MyOrdersPage)
 useEffect(() => {
   if (!user?._id || !token) return;
 
   const ac = new AbortController();
-  axios
-    .get(`${API_BASE_URL}/api/orders/myorders`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: ac.signal,
-    })
-    .then((res) => {
+
+  const load = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/api/orders/myorders`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: ac.signal,
+      });
       const sorted = [...res.data].sort(
         (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
       );
       setOrders(sorted);
-    })
-    .catch(() => {
-      // swallow errors to avoid noisy popups/console spam
-      setOrders([]);
-    });
+    } catch {
+      // Fallback to userId-based route used on MyOrdersPage
+      try {
+        const res2 = await axios.get(
+          `${API_BASE_URL}/api/allorders/myorders-userid/${user._id}`,
+          { signal: ac.signal }
+        );
+        const sorted2 = [...res2.data].sort(
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+        );
+        setOrders(sorted2);
+      } catch {
+        setOrders([]);
+      }
+    }
+  };
+
+  load();
 
   return () => ac.abort();
 }, [user?._id, token]);
