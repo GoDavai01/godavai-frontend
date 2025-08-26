@@ -71,8 +71,12 @@ export default function Navbar({
         axios.get(url, { params, signal: controller.signal }).then(r => r.data);
 
       try {
-        // 1) existing route
-        let data = await tryReq(`${API_BASE_URL}/api/search-autocomplete`, { q: search, type });
+        // 1) correct route as mounted by backend
+        const city = (currentAddress?.city || "").trim();
+        let data = await tryReq(
+          `${API_BASE_URL}/api/search/search-autocomplete`,
+          { q: search, type, city }
+          );
         setOptions(data || []);
         setDropdownOpen(true);
       } catch (e1) {
