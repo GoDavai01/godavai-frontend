@@ -229,23 +229,31 @@ export default function Navbar({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 6, scale: 0.98 }}
                 transition={{ duration: 0.15, ease: "easeOut" }}
-                className="absolute left-0 right-0 z-[1300] mt-2 max-h-72 overflow-auto rounded-2xl border border-zinc-200 bg-white shadow-xl"
+                className="absolute left-0 right-0 z-[1300] mt-2 max-h-72 overflow-auto rounded-2xl border border-zinc-200 bg-white text-zinc-800 shadow-xl"
               >
-                {options.map((opt, idx) => {
-                  const label =
-                    typeof opt === "string" ? opt : opt.label || opt.value || opt.name || "";
-                  return (
-                    <button
-                      key={`${label}-${idx}`}
-                      type="button"
-                      onClick={() => handleSelect(label)}
-                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[15px] hover:bg-zinc-50"
-                    >
-                      <Search className="h-4 w-4 text-zinc-500" />
-                      <span className="truncate">{label}</span>
-                    </button>
-                  );
-                })}
+                {options
+  // normalize each option to a label string
+  .map(opt =>
+    typeof opt === "string" ? opt : (opt?.label || opt?.value || opt?.name || "")
+  )
+  // drop blanks
+  .filter(label => label && label.trim().length > 0)
+  // de-dupe (optional but nice)
+  .filter((label, i, arr) => arr.indexOf(label) === i)
+  // limit (optional)
+  .slice(0, 10)
+  // render
+  .map((label, idx) => (
+    <button
+      key={`${label}-${idx}`}
+      type="button"
+      onClick={() => handleSelect(label)}
+      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[15px] text-zinc-800 hover:bg-zinc-50"
+    >
+      <Search className="h-4 w-4 text-zinc-500" />
+      <span className="truncate text-zinc-800">{label}</span>
+    </button>
+  ))}
               </motion.div>
             )}
           </AnimatePresence>
