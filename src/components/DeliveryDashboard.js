@@ -28,7 +28,6 @@ import ChatModal from "./ChatModal";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
-const unreadTimerRef = useRef(null);
 
 /* ------------------------- helpers (unchanged logic) ------------------------ */
 
@@ -170,6 +169,7 @@ export default function DeliveryDashboard() {
   const [chatOrder, setChatOrder] = useState(null);
   const [loading, setLoading] = useState(false);
   const firstLoad = useRef(true);
+  const unreadTimerRef = useRef(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [loginDialog, setLoginDialog] = useState(!loggedIn);
   const [loginForm, setLoginForm] = useState({ mobile: "", password: "" });
