@@ -26,71 +26,184 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0f6e51";
 
-// highlight (styling only)
+// purely visual
 const highlight = (str, className = "text-emerald-700") => (
   <span className={`${className} font-black`}>{str}</span>
 );
 
-// image util (same behavior as Medicines.jsx)
+// same image helper used elsewhere
 const getImageUrl = (img) => {
   if (!img)
     return "https://img.freepik.com/free-vector/medicine-bottle-pills-isolated_1284-42391.jpg?w=400";
-  if (img.startsWith("/uploads/")) return `${API_BASE_URL}${img}`;
-  if (img.startsWith("http://") || img.startsWith("https://")) return img;
+  if (typeof img === "string" && img.startsWith("/uploads/")) return `${API_BASE_URL}${img}`;
+  if (typeof img === "string" && (img.startsWith("http://") || img.startsWith("https://")))
+    return img;
   return img;
 };
+
+// simple scorer so results are ordered by how well they match the query
+function scoreMatch(q, m) {
+  const qn = (q || "").toLowerCase().trim();
+  if (!qn) return 0;
+
+  const fields = [
+    m.name,
+    m.brand,
+    m.company,
+    m.composition,
+    Array.isArray(m.category) ? m.category.join(" ") : m.category,
+    Array.isArray(m.type) ? m.type.join(" ") : m.type,
+  ]
+    .filter(Boolean)
+    .map(String)
+    .map((s) => s.toLowerCase());
+
+  let score = 0;
+  for (const f of fields) {
+    if (!f) continue;
+    if (f === qn) score += 100; // exact
+    if (f.startsWith(qn)) score += 40; // prefix
+    if (f.includes(qn)) score += 20; // contains
+  }
+  return score;
+}
 
 export default function SearchResults() {
   const location = useLocation();
   const query = new URLSearchParams(location.search).get("q") || "";
-  const [offers, setOffers] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // medicines matched by name/brand/company/composition
+  const [meds, setMeds] = useState([]);
+
+  // suggestions from results (chips)
   const [autoSuggestions, setAutoSuggestions] = useState([]);
+
+  // pharmacies that carry the searched item
+  const [offers, setOffers] = useState([]);
+
+  // local filter for pharmacy list
   const [pharmacySearch, setPharmacySearch] = useState("");
-  const [meds, setMeds] = useState([]);               // NEW: medicines list
-  const [selectedMed, setSelectedMed] = useState(null); // NEW: dialog
-  const [activeImg, setActiveImg] = useState(0);        // NEW: dialog gallery index
+
+  // dialog state (same UX as Medicines.jsx)
+  const [selectedMed, setSelectedMed] = useState(null);
+  const [activeImg, setActiveImg] = useState(0);
   const { addToCart } = useCart();
   const navigate = useNavigate();
 
-  // location
+  // geolocation from LS (same keys as rest of app)
   const locationObj = JSON.parse(localStorage.getItem("currentAddress") || "{}");
   const lat = locationObj.lat || null;
   const lng = locationObj.lng || null;
 
-  // nearby offers for the typed name (used for price/in-stock + Add)
+  // 1) Fetch medicines matching query (brand/name/company/composition)
   useEffect(() => {
-    if (!query || !lat || !lng) return;
+    if (!query) {
+      setMeds([]);
+      setAutoSuggestions([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     axios
-      .get(`${API_BASE_URL}/api/medicines/by-name`, { params: { name: query, lat, lng } })
-      .then((res) => setOffers(res.data || []))
-      .catch(() => setOffers([]))
-      .finally(() => setLoading(false));
-  }, [query, lat, lng]);
-
-  // suggestions + the actual medicine docs for the query
-  useEffect(() => {
-    if (!query) return;
-    axios
-      .get(`${API_BASE_URL}/api/medicines/search`, { params: { q: query, lat, lng } })
+      .get(`${API_BASE_URL}/api/medicines/search`, {
+        params: { q: query, lat, lng },
+      })
       .then((res) => {
-        const data = res.data || [];
-        setMeds(data);
-        const names = Array.from(new Set(data.map((m) => m.name)));
-        setAutoSuggestions(names);
+        const data = Array.isArray(res.data) ? res.data : [];
+        // sort by our local score so closest matches float up
+        const sorted = data
+          .map((m) => ({ ...m, __score: scoreMatch(query, m) }))
+          .sort((a, b) => b.__score - a.__score);
+        setMeds(sorted);
+
+        // suggestions from unique names/brands
+        const chips = Array.from(
+          new Set(
+            sorted
+              .map((m) => m.brand || m.name)
+              .filter(Boolean)
+              .map((s) => String(s))
+          )
+        ).slice(0, 12);
+        setAutoSuggestions(chips);
       })
       .catch(() => {
         setMeds([]);
         setAutoSuggestions([]);
-      });
+      })
+      .finally(() => setLoading(false));
   }, [query, lat, lng]);
 
+  // 2) Fetch nearby pharmacy offers for the typed query.
+  //    If that returns nothing, try with the best-matching medicine names as a fallback,
+  //    so "dolo" still finds "Dolo 650" offers even if /by-name is strict.
+  useEffect(() => {
+    if (!query || !lat || !lng) {
+      setOffers([]);
+      return;
+    }
+
+    let didCancel = false;
+
+    (async () => {
+      const baseParams = { name: query, lat, lng };
+      try {
+        const r1 = await axios.get(`${API_BASE_URL}/api/medicines/by-name`, { params: baseParams });
+        if (!didCancel && Array.isArray(r1.data) && r1.data.length) {
+          setOffers(r1.data);
+          return;
+        }
+      } catch {
+        /* fall through */
+      }
+
+      // fallback: try top 3 best-matching medicine names
+      try {
+        const topNames = meds
+          .slice(0, 3)
+          .map((m) => m.brand || m.name)
+          .filter(Boolean);
+        if (topNames.length === 0) {
+          if (!didCancel) setOffers([]);
+          return;
+        }
+        const results = await Promise.allSettled(
+          topNames.map((n) =>
+            axios.get(`${API_BASE_URL}/api/medicines/by-name`, { params: { name: n, lat, lng } })
+          )
+        );
+        const merged = results
+          .filter((p) => p.status === "fulfilled" && Array.isArray(p.value?.data))
+          .flatMap((p) => p.value.data);
+
+        // de-dupe by pharmacy+medId so we don’t spam the list
+        const seen = new Set();
+        const dedup = [];
+        for (const o of merged) {
+          const key = `${o.pharmacy?._id || o.pharmacy}-${o.medId || o._id || ""}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          dedup.push(o);
+        }
+        if (!didCancel) setOffers(dedup);
+      } catch {
+        if (!didCancel) setOffers([]);
+      }
+    })();
+
+    return () => {
+      didCancel = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, lat, lng, meds.length]);
+
+  // suggestions chip click
   const handleSuggestionClick = (suggestion) => {
     navigate(`/search?q=${encodeURIComponent(suggestion)}`);
   };
 
-  // filter pharmacy cards by search box (unchanged)
+  // local filter for pharmacy list
   const filteredOffers = offers.filter((offer) => {
     if (!pharmacySearch) return true;
     const term = pharmacySearch.toLowerCase();
@@ -101,26 +214,26 @@ export default function SearchResults() {
     );
   });
 
-  // pick the best (in-stock, lowest price) offer per medicine id
+  // choose the best offer we know (in-stock & lowest price) for a medicine
   const bestOfferByMedId = useMemo(() => {
     const map = new Map();
     for (const o of offers) {
       const key = o.medId || o._id || o.id;
       if (!key) continue;
       const prev = map.get(key);
-      const candidateWins =
+      const wins =
         !prev ||
         (o.stock > 0 && prev.stock === 0) ||
         (o.stock > 0 && prev.stock > 0 && Number(o.price) < Number(prev.price));
-      if (candidateWins) map.set(key, o);
+      if (wins) map.set(key, o);
     }
     return map;
   }, [offers]);
 
   const priceForMed = (m) => {
     const key = m._id || m.id;
-    const offer = key ? bestOfferByMedId.get(key) : null;
-    return offer ? offer.price : m.price || m.mrp || 0;
+    const best = key ? bestOfferByMedId.get(key) : null;
+    return best ? best.price : m.price ?? m.mrp ?? 0;
   };
 
   const addMedToCart = (m) => {
@@ -139,6 +252,7 @@ export default function SearchResults() {
     }
   };
 
+  // gallery images for dialog
   const images = useMemo(() => {
     if (!selectedMed) return [];
     const arr = (Array.isArray(selectedMed.images) && selectedMed.images.length
@@ -185,7 +299,7 @@ export default function SearchResults() {
               </div>
             )}
 
-            {/* === Medicines grid (NEW) === */}
+            {/* Medicines grid */}
             {loading ? (
               <div className="mt-2 grid place-items-center text-emerald-800">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -196,6 +310,7 @@ export default function SearchResults() {
                 <div className="mb-2 text-[13px] font-extrabold text-emerald-900">
                   Medicines matching {highlight(query)}
                 </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   {meds.map((m) => {
                     const p = priceForMed(m);
@@ -211,7 +326,10 @@ export default function SearchResults() {
                       >
                         <button
                           className="w-full aspect-square grid place-items-center rounded-xl bg-white ring-1 ring-[var(--pillo-surface-border,#e6f4ef)] shadow-sm overflow-hidden"
-                          onClick={() => { setSelectedMed(m); setActiveImg(0); }}
+                          onClick={() => {
+                            setSelectedMed(m);
+                            setActiveImg(0);
+                          }}
                           title="Know more"
                         >
                           <img src={getImageUrl(m.img)} alt={m.name} className="h-full w-full object-contain" />
@@ -220,7 +338,10 @@ export default function SearchResults() {
                         <div className="mt-2">
                           <div
                             className="text-[13px] font-extrabold text-emerald-800 leading-snug cursor-pointer"
-                            onClick={() => { setSelectedMed(m); setActiveImg(0); }}
+                            onClick={() => {
+                              setSelectedMed(m);
+                              setActiveImg(0);
+                            }}
                             style={{
                               display: "-webkit-box",
                               WebkitLineClamp: 2,
@@ -233,7 +354,9 @@ export default function SearchResults() {
                           </div>
 
                           {m.company && (
-                            <div className="text-[11px] text-neutral-500 truncate mt-0.5">{m.company}</div>
+                            <div className="text-[11px] text-neutral-500 truncate mt-0.5">
+                              {m.company}
+                            </div>
                           )}
 
                           <div className="mt-1 flex items-baseline gap-1">
@@ -273,9 +396,13 @@ export default function SearchResults() {
 
                 <div className="my-4 border-t border-emerald-100" />
               </>
-            ) : null}
+            ) : (
+              <div className="mt-2 text-center text-sm text-neutral-500">
+                No medicines matched <b>{query}</b>.
+              </div>
+            )}
 
-            {/* Pharmacy search input (kept) */}
+            {/* Pharmacy search input */}
             <div className="relative mb-3">
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-700/70" />
               <Input
@@ -297,7 +424,7 @@ export default function SearchResults() {
               {highlight(query)}
             </div>
 
-            {/* Pharmacy offers list (unchanged layout) */}
+            {/* Pharmacy offers list */}
             {loading ? (
               <div className="mt-6 grid place-items-center text-emerald-800">
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -394,11 +521,14 @@ export default function SearchResults() {
         </Card>
       </div>
 
-      {/* === Medicine dialog (same UX as Medicines.jsx) === */}
+      {/* Medicine dialog (same UX as Medicines.jsx) */}
       <Dialog
         open={!!selectedMed}
         onOpenChange={(open) => {
-          if (!open) { setSelectedMed(null); setActiveImg(0); }
+          if (!open) {
+            setSelectedMed(null);
+            setActiveImg(0);
+          }
         }}
       >
         <DialogContent className="w-[min(96vw,740px)] p-0 overflow-hidden rounded-2xl md:w-[720px]">
@@ -416,25 +546,40 @@ export default function SearchResults() {
                   <div
                     className="h-full flex transition-transform duration-300"
                     style={{ transform: `translateX(-${activeImg * 100}%)` }}
-                    onTouchStart={(e)=> (e.currentTarget.dataset.sx = e.touches[0].clientX)}
-                    onTouchEnd={(e)=> {
+                    onTouchStart={(e) => (e.currentTarget.dataset.sx = e.touches[0].clientX)}
+                    onTouchEnd={(e) => {
                       const sx = Number(e.currentTarget.dataset.sx || 0);
                       const dx = e.changedTouches[0].clientX - sx;
-                      if (dx < -40 && activeImg < images.length - 1) setActiveImg(i => i + 1);
-                      if (dx >  40 && activeImg > 0)               setActiveImg(i => i - 1);
+                      if (dx < -40 && activeImg < images.length - 1) setActiveImg((i) => i + 1);
+                      if (dx > 40 && activeImg > 0) setActiveImg((i) => i - 1);
                     }}
                   >
                     {images.map((src, i) => (
                       <div key={i} className="min-w-full h-full grid place-items-center select-none">
-                        <img src={getImageUrl(src)} alt={selectedMed.name} className="max-h-full max-w-full object-contain" draggable={false} />
+                        <img
+                          src={getImageUrl(src)}
+                          alt={selectedMed.name}
+                          className="max-h-full max-w-full object-contain"
+                          draggable={false}
+                        />
                       </div>
                     ))}
                   </div>
 
                   {images.length > 1 && (
                     <>
-                      <button className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5" onClick={() => setActiveImg(i => Math.max(0, i - 1))}>‹</button>
-                      <button className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5" onClick={() => setActiveImg(i => Math.min(images.length - 1, i + 1))}>›</button>
+                      <button
+                        className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5"
+                        onClick={() => setActiveImg((i) => Math.max(0, i - 1))}
+                      >
+                        ‹
+                      </button>
+                      <button
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5"
+                        onClick={() => setActiveImg((i) => Math.min(images.length - 1, i + 1))}
+                      >
+                        ›
+                      </button>
                     </>
                   )}
 
@@ -443,8 +588,10 @@ export default function SearchResults() {
                       {images.map((_, i) => (
                         <span
                           key={i}
-                          onClick={()=>setActiveImg(i)}
-                          className={`h-1.5 rounded-full cursor-pointer transition-all ${i === activeImg ? "w-5 bg-emerald-600" : "w-2.5 bg-emerald-200"}`}
+                          onClick={() => setActiveImg(i)}
+                          className={`h-1.5 rounded-full cursor-pointer transition-all ${
+                            i === activeImg ? "w-5 bg-emerald-600" : "w-2.5 bg-emerald-200"
+                          }`}
                         />
                       ))}
                     </div>
@@ -452,6 +599,7 @@ export default function SearchResults() {
                 </div>
               </div>
 
+              {/* info */}
               <div className="px-5 pt-3">
                 <div className="flex flex-wrap gap-2 mb-2">
                   {Array.isArray(selectedMed.category) && selectedMed.category.length > 0 && (
@@ -485,7 +633,10 @@ export default function SearchResults() {
                     <>
                       <div className="text-sm text-neutral-400 line-through">₹{selectedMed.mrp}</div>
                       <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
-                        {Math.round(((selectedMed.mrp - priceForMed(selectedMed)) / selectedMed.mrp) * 100)}% OFF
+                        {Math.round(
+                          ((selectedMed.mrp - priceForMed(selectedMed)) / selectedMed.mrp) * 100
+                        )}
+                        % OFF
                       </Badge>
                     </>
                   )}
@@ -507,7 +658,10 @@ export default function SearchResults() {
                 <Button
                   className="flex-1 font-bold"
                   style={{ backgroundColor: DEEP, color: "white" }}
-                  onClick={() => { addMedToCart(selectedMed); setSelectedMed(null); }}
+                  onClick={() => {
+                    addMedToCart(selectedMed);
+                    setSelectedMed(null);
+                  }}
                 >
                   Add to Cart
                 </Button>
