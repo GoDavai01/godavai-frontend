@@ -28,6 +28,7 @@ import ChatModal from "./ChatModal";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+const unreadTimerRef = useRef(null);
 
 /* ------------------------- helpers (unchanged logic) ------------------------ */
 
@@ -237,26 +238,44 @@ export default function DeliveryDashboard() {
 
   // Unread chat counts (existing)
   useEffect(() => {
-    if (!loggedIn || !orders.length) return;
-    const token = localStorage.getItem("deliveryToken");
-    const fetchUnread = async () => {
-      let counts = {};
-      await Promise.all(orders.map(async (order) => {
+  if (!loggedIn || !orders.length) return;
+
+  const token = localStorage.getItem("deliveryToken");
+  if (!token) return; // <-- avoid 401 spam when not logged in / token missing
+
+  let cancelled = false;
+
+  const fetchUnread = async () => {
+    const counts = {};
+    await Promise.all(
+      orders.map(async (order) => {
         try {
-          const res = await axios.get(`${API_BASE_URL}/api/chat/${order._id}/user-unread-count`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          const res = await axios.get(
+            `${API_BASE_URL}/api/chat/${order._id}/user-unread-count`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
           counts[order._id] = res.data.unreadCount || 0;
-        } catch {
+        } catch (err) {
+          // If unauthorized, stop polling to avoid console flood
+          if (err?.response?.status === 401 && unreadTimerRef.current) {
+            clearInterval(unreadTimerRef.current);
+            unreadTimerRef.current = null;
+          }
           counts[order._id] = 0;
         }
-      }));
-      setOrderUnreadCounts(counts);
-    };
-    fetchUnread();
-    const interval = setInterval(fetchUnread, 3000);
-    return () => clearInterval(interval);
-  }, [orders, loggedIn, chatOpen]);
+      })
+    );
+    if (!cancelled) setOrderUnreadCounts(counts);
+  };
+
+  fetchUnread();
+  unreadTimerRef.current = setInterval(fetchUnread, 7000); // a bit lighter than 3s
+  return () => {
+    cancelled = true;
+    if (unreadTimerRef.current) clearInterval(unreadTimerRef.current);
+  };
+}, [orders, loggedIn]);
+
 
   // NEW: Persist auto-accept toggle locally
   useEffect(() => {
@@ -748,20 +767,26 @@ const handleResetPassword = async () => {
                             </GoogleMap>
 
                             {/* Navigation picker */}
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <Button variant="outline" className="!font-bold" asChild>
-                                <a target="_blank"
-                                   href={`https://www.google.com/maps/dir/?api=1&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}`}>
-                                  <Navigation className="h-4 w-4 mr-2" /> Google Maps
-                                </a>
-                              </Button>
-                              <Button variant="outline" className="!font-bold" asChild>
-                                <a target="_blank"
-                                   href={`http://maps.apple.com/?saddr=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&daddr=${patchedUserLoc.lat},${patchedUserLoc.lng}`}>
-                                  Apple Maps
-                                </a>
-                              </Button>
-                            </div>
+<div className="mt-2 grid grid-cols-2 gap-2">
+  <Button asChild variant="outline" className="!font-bold h-9 w-full">
+    <a
+      target="_blank"
+      href={`https://www.google.com/maps/dir/?api=1&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
+      rel="noreferrer"
+    >
+      <Navigation className="h-4 w-4 mr-2" /> Google Maps
+    </a>
+  </Button>
+  <Button asChild variant="outline" className="!font-bold h-9 w-full">
+    <a
+      target="_blank"
+      href={`http://maps.apple.com/?saddr=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&daddr=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
+      rel="noreferrer"
+    >
+      <Navigation className="h-4 w-4 mr-2" /> Apple Maps
+    </a>
+  </Button>
+</div>
                           </div>
                         )
                       ) : (
@@ -769,74 +794,72 @@ const handleResetPassword = async () => {
                       )}
 
                       {/* actions */}
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        {order.status === "assigned" && (
-                          <>
-                            <Button className="btn-primary-emerald !font-bold" onClick={() => handleUpdateStatus(order._id, "accepted")}>
-                              Accept Order
-                            </Button>
-                            <Button variant="destructive" className="!font-bold" onClick={() => handleUpdateStatus(order._id, "rejected")}>
-                              Reject
-                            </Button>
-                          </>
-                        )}
-                        {order.status === "accepted" && (
-                          <Button className="!font-bold" onClick={() => handleUpdateStatus(order._id, "out_for_delivery")}>
-                            <Bike className="h-4 w-4 mr-2" /> Mark as Out for Delivery
-                          </Button>
-                        )}
-                        {order.status === "out_for_delivery" && (
-                          <Button className="bg-emerald-600 hover:bg-emerald-700 !font-bold" onClick={() => handleUpdateStatus(order._id, "delivered")}>
-                            <CheckCheck className="h-4 w-4 mr-2" /> Mark as Delivered
-                          </Button>
-                        )}
-                        {order.status === "delivered" && (
-                          <Badge className="bg-emerald-600">Delivered</Badge>
-                        )}
+<div className="mt-3 flex flex-wrap items-center gap-2">
+  {order.status === "assigned" && (
+    <>
+      <Button className="btn-primary-emerald !font-bold" onClick={() => handleUpdateStatus(order._id, "accepted")}>
+        Accept Order
+      </Button>
+      <Button variant="destructive" className="!font-bold" onClick={() => handleUpdateStatus(order._id, "rejected")}>
+        Reject
+      </Button>
+    </>
+  )}
+  {order.status === "accepted" && (
+    <Button className="!font-bold" onClick={() => handleUpdateStatus(order._id, "out_for_delivery")}>
+      <Bike className="h-4 w-4 mr-2" /> Mark as Out for Delivery
+    </Button>
+  )}
+  {order.status === "out_for_delivery" && (
+    <Button className="bg-emerald-600 hover:bg-emerald-700 !font-bold" onClick={() => handleUpdateStatus(order._id, "delivered")}>
+      <CheckCheck className="h-4 w-4 mr-2" /> Mark as Delivered
+    </Button>
+  )}
+  {order.status === "delivered" && <Badge className="bg-emerald-600">Delivered</Badge>}
 
-                        {/* Comms & Safety: quick canned replies (copy to clipboard) */}
-                        <div className="flex items-center gap-1 ml-auto">
-                          {["Reaching in 5–7 mins", "Outside your gate", "Call me if needed"].map((txt) => (
-                            <Button
-                              key={txt}
-                              size="sm"
-                              variant="secondary"
-                              className="rounded-full !font-bold"
-                              onClick={async () => {
-                                try { await navigator.clipboard.writeText(txt); } catch {}
-                                setSnackbar({ open: true, message: "Canned reply copied", severity: "success" });
-                              }}
-                            >
-                              {txt}
-                            </Button>
-                          ))}
-                        </div>
+  {/* line break */}
+  <div className="basis-full h-0" />
 
-                        {/* Chat */}
-                        {order.status !== "delivered" && (
-                          <div className="relative">
-                            {!!(orderUnreadCounts[order._id]) && (
-                              <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
-                                {orderUnreadCounts[order._id]}
-                              </span>
-                            )}
-                            <Button
-                              className="bg-amber-300 text-slate-900 hover:bg-amber-400 !font-bold"
-                              onClick={async () => {
-                                setChatOrder(order);
-                                setChatOpen(true);
-                                const token = localStorage.getItem("deliveryToken");
-                                await axios.patch(`${API_BASE_URL}/api/chat/${order._id}/user-chat-seen`, {}, {
-                                  headers: { Authorization: `Bearer ${token}` }
-                                });
-                                setOrderUnreadCounts((c) => ({ ...c, [order._id]: 0 }));
-                              }}
-                            >
-                              <MessageSquare className="h-4 w-4 mr-2" /> Chat
-                            </Button>
-                          </div>
-                        )}
-                      </div>
+  {/* canned replies row */}
+  <div className="w-full flex flex-wrap gap-2">
+    {["Reaching in 5–7 mins","Outside your gate","Call me if needed"].map((txt) => (
+      <Button
+        key={txt}
+        size="sm"
+        variant="secondary"
+        className="rounded-full !font-bold"
+        onClick={async () => { try { await navigator.clipboard.writeText(txt); } catch {} ; setSnackbar({ open:true, message:"Canned reply copied", severity:"success" }); }}
+      >
+        {txt}
+      </Button>
+    ))}
+  </div>
+
+  {/* chat button on its own line on mobile */}
+  {order.status !== "delivered" && (
+    <div className="w-full sm:w-auto sm:ml-auto relative">
+      {!!(orderUnreadCounts[order._id]) && (
+        <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
+          {orderUnreadCounts[order._id]}
+        </span>
+      )}
+      <Button
+        className="bg-amber-300 text-slate-900 hover:bg-amber-400 !font-bold w-full sm:w-auto"
+        onClick={async () => {
+          setChatOrder(order);
+          setChatOpen(true);
+          const token = localStorage.getItem("deliveryToken");
+          try {
+            await axios.patch(`${API_BASE_URL}/api/chat/${order._id}/user-chat-seen`, {}, { headers: { Authorization: `Bearer ${token}` } });
+          } catch {}
+          setOrderUnreadCounts((c) => ({ ...c, [order._id]: 0 }));
+        }}
+      >
+        <MessageSquare className="h-4 w-4 mr-2" /> Chat
+      </Button>
+    </div>
+  )}
+</div>
                     </motion.div>
                   );
                 })}

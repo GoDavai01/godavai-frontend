@@ -34,20 +34,15 @@ export default function ChatModal({
 
   // Helper: use correct token for currentRole
   const getAuthConfig = () => {
-    let token = "";
-    if (currentRole === "delivery") {
-      token = localStorage.getItem("deliveryToken");
-    } else if (currentRole === "pharmacy") {
-      token = localStorage.getItem("pharmacyToken");
-    } else {
-      token = localStorage.getItem("token");
-    }
-    return {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    };
-  };
+  let token = "";
+  if (currentRole === "delivery") token = localStorage.getItem("deliveryToken");
+  else if (currentRole === "pharmacy") token = localStorage.getItem("pharmacyToken");
+  else token = localStorage.getItem("token");
+
+  return token
+    ? { headers: { Authorization: `Bearer ${token}` } }
+    : { headers: {} };
+};
 
   // Fetch chat history
   useEffect(() => {
@@ -75,20 +70,24 @@ export default function ChatModal({
 
   // Send message
   const sendMessage = async () => {
-    if (!input.trim() || orderStatus === "delivered") return;
-    try {
-      const res = await axios.post(
-        `${API_BASE_URL}/api/chat/${orderId}/${thread}`,
-        { message: input.trim() },
-        getAuthConfig()
-      );
-      setMessages((m) => [...m, res.data]);
-      setInput("");
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-    }catch (err) {
-      alert("Send failed: " + (err.response?.data?.error || err.message));
-    }
-  };
+  if (!input.trim() || orderStatus === "delivered") return;
+
+  try {
+    const res = await axios.post(
+      `${API_BASE_URL}/api/chat/${orderId}/${thread}`,
+      { message: input.trim() },
+      getAuthConfig()
+    );
+    setMessages((m) => [...m, res.data]);
+    setInput("");
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+  } catch (err) {
+    const msg = err?.response?.status === 401
+      ? "Session expired. Please log in again."
+      : (err.response?.data?.error || err.message);
+    alert("Send failed: " + msg);
+  }
+};
 
   // --- Core change: map senderType to "You" or proper role label ---
   const getLabel = (msg) => {
