@@ -218,7 +218,7 @@ export default function Medicines() {
                     >
                       <button
                         className="
-                          w-full aspect-square grid place-items-center rounded-xl
+                          relative w-full aspect-square grid place-items-center rounded-xl
                           bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm overflow-hidden
                         "
                         onClick={() => { setSelectedMed(med); setActiveImg(0); }}
@@ -229,6 +229,18 @@ export default function Medicines() {
                           alt={med.name}
                           className="h-full w-full object-contain"
                         />
+                        {med.prescriptionRequired && (
+                          <span
+                           className="
+                           absolute top-2 left-2 rounded-full
+                           bg-white text-red-600 border border-red-200
+                           text-[10px] font-semibold px-2 py-0.5 shadow-sm
+                           "
+                           title="Prescription required"
+                           >
+                            Rx
+                           </span>
+                           )}
                       </button>
 
                       <div className="mt-2">
@@ -276,12 +288,7 @@ export default function Medicines() {
                                 {med.category[0]}
                               </Badge>
                             )}
-                            {/* ⬇️ Optional Rx badge */}
-                            {med.prescriptionRequired && (
-                              <Badge className="bg-white text-red-600 border border-red-200 font-semibold text-[10px] px-2 py-0.5">
-                                Rx
-                              </Badge>
-                            )}
+                            
                           </div>
 
                           {/* RIGHT: Add button */}
