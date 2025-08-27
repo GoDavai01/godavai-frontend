@@ -560,13 +560,22 @@ const handleResetPassword = async () => {
               <span className="text-sm font-semibold text-emerald-900">Auto-accept</span>
               <Switch
                 checked={autoAccept}
-                onCheckedChange={(v) => {
+                onCheckedChange={async (v) => {
                   setAutoAccept(v);
                   setSnackbar({
                     open: true,
                     message: v ? "Auto-accept enabled" : "Auto-accept disabled",
                     severity: v ? "success" : "error"
                   });
+                  // ⬇️ persist to backend (keeps your localStorage useEffect as-is)
+                  try {
+                    const token = localStorage.getItem("deliveryToken");
+                    await axios.patch(
+                      `${API_BASE_URL}/api/delivery/partner/${partner?._id}/active`,
+                      { autoAccept: v },
+                      { headers: { Authorization: `Bearer ${token}` } }
+                      );
+                      } catch {}
                 }}
               />
             </div>
@@ -797,24 +806,55 @@ const handleResetPassword = async () => {
 <div className="mt-3 flex flex-wrap items-center gap-2">
   {order.status === "assigned" && (
     <>
-      <Button className="btn-primary-emerald !font-bold" onClick={() => handleUpdateStatus(order._id, "accepted")}>
+      <Button
+        className="btn-primary-emerald !font-extrabold"
+        onClick={() => handleUpdateStatus(order._id, "accepted")}
+      >
         Accept Order
       </Button>
-      <Button variant="destructive" className="!font-bold" onClick={() => handleUpdateStatus(order._id, "rejected")}>
+
+      {/* REJECT — solid RED box, bold white text */}
+      <Button
+        onClick={() => handleUpdateStatus(order._id, "rejected")}
+        className="
+          !font-extrabold
+          bg-red-600 hover:bg-red-700 active:bg-red-800
+          text-white
+          border border-red-700/80
+          shadow-sm
+        "
+      >
         Reject
       </Button>
     </>
   )}
+
   {order.status === "accepted" && (
-    <Button className="!font-bold" onClick={() => handleUpdateStatus(order._id, "out_for_delivery")}>
-      <Bike className="h-4 w-4 mr-2" /> Mark as Out for Delivery
+    /* OUT FOR DELIVERY — bright AMBER so it's very visible */
+    <Button
+      onClick={() => handleUpdateStatus(order._id, "out_for_delivery")}
+      className="
+        !font-extrabold
+        bg-amber-400 hover:bg-amber-500 active:bg-amber-600
+        text-emerald-950
+        border border-amber-500/70
+        shadow-sm
+      "
+    >
+      <Bike className="h-4 w-4 mr-2" />
+      MARK AS OUT FOR DELIVERY
     </Button>
   )}
+
   {order.status === "out_for_delivery" && (
-    <Button className="bg-emerald-600 hover:bg-emerald-700 !font-bold" onClick={() => handleUpdateStatus(order._id, "delivered")}>
+    <Button
+      onClick={() => handleUpdateStatus(order._id, "delivered")}
+      className="bg-emerald-600 hover:bg-emerald-700 !font-extrabold text-white"
+    >
       <CheckCheck className="h-4 w-4 mr-2" /> Mark as Delivered
     </Button>
   )}
+
   {order.status === "delivered" && <Badge className="bg-emerald-600">Delivered</Badge>}
 
   {/* line break */}

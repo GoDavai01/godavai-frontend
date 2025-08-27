@@ -269,11 +269,22 @@ export default function Medicines() {
                         </div>
 
                         <div className="mt-2 flex items-center justify-between">
-                          {Array.isArray(med.category) && med.category[0] && (
-                            <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold text-[10px] px-2 py-0.5">
-                              {med.category[0]}
-                            </Badge>
-                          )}
+                          {/* LEFT: category + (optional) Rx badge */}
+                          <div className="flex items-center gap-1">
+                            {Array.isArray(med.category) && med.category[0] && (
+                              <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold text-[10px] px-2 py-0.5">
+                                {med.category[0]}
+                              </Badge>
+                            )}
+                            {/* ⬇️ Optional Rx badge */}
+                            {med.prescriptionRequired && (
+                              <Badge className="bg-white text-red-600 border border-red-200 font-semibold text-[10px] px-2 py-0.5">
+                                Rx
+                              </Badge>
+                            )}
+                          </div>
+
+                          {/* RIGHT: Add button */}
                           <Button
                             size="sm"
                             className="h-8 rounded-full px-3 text-[12px] font-bold"
@@ -406,10 +417,15 @@ export default function Medicines() {
                   </div>
                 )}
                 {selectedMed.company && (
-                  <div className="text-sm text-neutral-700 mb-2">
+                  <div className="text-sm text-neutral-700 mb-1">
                     <b>Company:</b> {selectedMed.company}
                   </div>
                 )}
+
+                {/* ⬇️ ADDED: Prescription Required line */}
+                <div className="text-sm text-neutral-700 mb-2">
+                  <b>Prescription Required:</b> {selectedMed.prescriptionRequired ? "Yes" : "No"}
+                </div>
 
                 <div className="flex items-center gap-2 mb-2">
                   <div className="text-2xl font-extrabold" style={{ color: DEEP }}>

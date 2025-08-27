@@ -489,12 +489,12 @@ export default function PharmacyDashboard() {
   const [medForm, setMedForm] = useState({
     name: "", brand: "", composition: "", company: "",
     price: "", mrp: "", stock: "", category: "", discount: "",
-    customCategory: "", type: "Tablet", customType: ""
+    customCategory: "", type: "Tablet", customType: "", prescriptionRequired: false
   });
   const [editMedForm, setEditMedForm] = useState({
     name: "", brand: "", composition: "", company: "",
     price: "", mrp: "", stock: "", category: "", customCategory: "",
-    type: "Tablet", customType: ""
+    type: "Tablet", customType: "", prescriptionRequired: false
   });
 
   const handleImagesChange = (e) => {
@@ -551,6 +551,8 @@ export default function PharmacyDashboard() {
         data.append("category", JSON.stringify(finalCategories));
         data.append("type", medForm.type || "Tablet");
         if (medForm.type === "Other") data.append("customType", medForm.customType || "");
+        // ⬇️ add prescription flag
+        data.append("prescriptionRequired", medForm.prescriptionRequired);
         medImages.forEach(img => data.append("images", img));
         headers = { Authorization: `Bearer ${token}` };
       } else {
@@ -566,6 +568,8 @@ export default function PharmacyDashboard() {
           category: finalCategories,
           type: medForm.type || "Tablet",
           ...(medForm.type === "Other" && { customType: medForm.customType || "" }),
+          // ⬇️ add prescription flag
+          prescriptionRequired: medForm.prescriptionRequired,
         };
         headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
       }
@@ -575,7 +579,7 @@ export default function PharmacyDashboard() {
       setMedForm({
         name: "", brand: "", composition: "", company: "",
         price: "", mrp: "", stock: "", category: "", discount: "",
-        customCategory: "", type: "Tablet", customType: ""
+        customCategory: "", type: "Tablet", customType: "", prescriptionRequired: false
       });
       setMedImages([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -606,7 +610,8 @@ export default function PharmacyDashboard() {
       category: newCategory,
       customCategory,
       type: TYPE_OPTIONS.includes(med.type) ? med.type : "Other",
-      customType: TYPE_OPTIONS.includes(med.type) ? "" : (med.type || "")
+      customType: TYPE_OPTIONS.includes(med.type) ? "" : (med.type || ""),
+      prescriptionRequired: !!med.prescriptionRequired
     });
   };
 
@@ -646,6 +651,8 @@ export default function PharmacyDashboard() {
         data.append("category", JSON.stringify(finalCategories));
         data.append("type", editMedForm.type);
         if (editMedForm.type === "Other") data.append("customType", editMedForm.customType || "");
+        // ⬇️ add prescription flag
+        data.append("prescriptionRequired", editMedForm.prescriptionRequired);
         editMedImages.forEach(img => data.append("images", img));
         headers = { Authorization: `Bearer ${token}` };
       } else {
@@ -660,6 +667,8 @@ export default function PharmacyDashboard() {
           category: finalCategories,
           type: editMedForm.type,
           ...(editMedForm.type === "Other" && { customType: editMedForm.customType }),
+          // ⬇️ add prescription flag
+          prescriptionRequired: editMedForm.prescriptionRequired,
         };
         headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
       }
@@ -1200,6 +1209,18 @@ export default function PharmacyDashboard() {
                     />
                   )}
 
+                  {/* Prescription Required toggle */}
+                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                    <Typography>Prescription Required</Typography>
+                    <Switch
+                      checked={!!editMedForm.prescriptionRequired}
+                      onChange={e =>
+                        setEditMedForm(f => ({ ...f, prescriptionRequired: e.target.checked }))
+                      }
+                      color="success"
+                    />
+                  </Stack>
+
                   <Stack direction="row" spacing={2} alignItems="center">
                     <input type="file" accept="image/*" multiple hidden ref={editFileInputRef} onChange={handleEditImagesChange} />
                     <Button
@@ -1375,6 +1396,19 @@ export default function PharmacyDashboard() {
                     onBlur={() => setIsEditing(false)}
                   />
                 )}
+
+                {/* Prescription Required toggle */}
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Typography>Prescription Required</Typography>
+                  <Switch
+                    checked={!!medForm.prescriptionRequired}
+                    onChange={e =>
+                      setMedForm(f => ({ ...f, prescriptionRequired: e.target.checked }))
+                    }
+                    color="success"
+                  />
+                </Stack>
+
                 <Stack direction="row" spacing={2} alignItems="center">
                   <input type="file" accept="image/*" multiple hidden ref={fileInputRef} onChange={handleImagesChange} />
                   <Button
