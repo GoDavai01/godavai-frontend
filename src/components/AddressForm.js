@@ -135,7 +135,7 @@ export default function AddressForm({
     setType(initial.type || "Home");
     setName(initial.name || "");
     setPhone(initial.phone || "");
-    setAddressLine(initial.addressLine || "");
+    setAddressLine(initial.addressLine || initial.formatted || "");
     setInput(initial.formatted || "");
     setSelectedPlace(
       initial.place_id
@@ -179,6 +179,7 @@ export default function AddressForm({
       const resp = await axios.get(detailsUrl);
       const result = resp.data.result;
       setInput(result.formatted_address);
+      setAddressLine(result.formatted_address);
       setSelectedPlace({
         formatted: result.formatted_address,
         lat: result.geometry.location.lat,
@@ -290,6 +291,7 @@ export default function AddressForm({
           onClick={() => {
             if (currentAddress && currentAddress.lat && currentAddress.lng) {
               setInput(currentAddress.formatted || "");
+              setAddressLine(currentAddress.formatted || "");
               setSelectedPlace({
                 formatted: currentAddress.formatted,
                 lat: currentAddress.lat,
