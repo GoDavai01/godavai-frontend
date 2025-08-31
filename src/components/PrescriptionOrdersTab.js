@@ -5,6 +5,7 @@ import {
   DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Select, Snackbar, Alert, Autocomplete
 } from "@mui/material";
 import axios from "axios";
+import RxAiSideBySideDialog from "./RxAiSideBySideDialog";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
@@ -40,6 +41,9 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [acceptDialogOpen, setAcceptDialogOpen] = useState(false);
   const [acceptDialogData, setAcceptDialogData] = useState([]); // [{ name, qty, brand, ... }]
+
+  // Viewer state
+  const [previewOrder, setPreviewOrder] = useState(null);
 
   // Get all prescription orders for this pharmacy
   useEffect(() => {
@@ -104,11 +108,12 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
   const handleAcceptOrder = (order) => {
     setSelectedOrder(order);
     setQuoteMode("accept");
-    setAcceptDialogData((order.medicinesRequested || []).map(med => ({
-      medicineName: med.name,
+    const base = (order.ai?.items?.length ? order.ai.items : (order.medicinesRequested || []));
+    setAcceptDialogData(base.map(med => ({
+      medicineName: med.name || med.medicineName,
       quantity: med.quantity || 1,
       brand: "",
-      price: "",
+      price: ""
     })));
     setAcceptDialogOpen(true);
   };
@@ -117,10 +122,11 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
   const handlePartialFulfill = (order) => {
     setSelectedOrder(order);
     setQuoteMode("partial");
-    const meds = (order.medicinesRequested || []).length
-      ? order.medicinesRequested.map((med) => ({
-          medicineName: med.name,
-          brand: med.brand || "",
+    const base = (order.ai?.items?.length ? order.ai.items : (order.medicinesRequested || []));
+    const meds = base.length
+      ? base.map((med) => ({
+          medicineName: med.name || med.medicineName,
+          brand: "",
           price: "",
           quantity: med.quantity || 1,
           available: true
@@ -247,22 +253,49 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                   <span style={{ color: "#AAA" }}>Not Available</span>
                 )}
               </Typography>
+
+              {/* Quick viewer launch */}
+              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setPreviewOrder(order)}
+                  sx={{ color: "#8dd3c7", borderColor: "#2f3840", fontWeight: 700 }}
+                >
+                  View Rx + AI
+                </Button>
+              </Stack>
+
+              {/* A) AI suggestions under the "Prescription: View" line */}
+              {(order.ai?.items?.length > 0) && (
+                <Box sx={{ mt: 1, bgcolor: "#23292e", borderRadius: 1.5, p: 1.5, border: "1px solid #2f3840" }}>
+                  <Typography sx={{ color: "#8dd3c7", fontWeight: 700, fontSize: 14 }}>
+                    AI suggestions (pharmacist must verify):
+                  </Typography>
+                  <Typography sx={{ color: "#cfe9e5", fontSize: 14 }}>
+                    {order.ai.items.map(i =>
+                      `${i.name}${i.strength ? " " + i.strength : ""}${i.form ? " (" + i.form + ")" : ""} × ${i.quantity || 1}`
+                    ).join(", ")}
+                  </Typography>
+                </Box>
+              )}
+
               {/* Already Fulfilled Items from Parent */}
-{order.alreadyFulfilledItems && order.alreadyFulfilledItems.length > 0 && (
-  <Box sx={{ mt: 1, mb: 1, bgcolor: "#23292e", borderRadius: 1.5, p: 1.5, border: "1.5px solid #FFD43B" }}>
-    <Typography sx={{ color: "#FFD43B", fontWeight: 700, fontSize: 14 }}>
-      Already fulfilled in this order:
-    </Typography>
-    <Typography sx={{ color: "#f18e1b", fontWeight: 600, fontSize: 15 }}>
-      {order.alreadyFulfilledItems.map(med =>
-        med.medicineName + (med.quantity ? ` (${med.quantity})` : '')
-      ).join(", ")}
-    </Typography>
-    <Typography sx={{ color: "#bbb", fontSize: 13, mt: 1 }}>
-      Please quote for the <b>remaining</b> medicines below.
-    </Typography>
-  </Box>
-)}
+              {order.alreadyFulfilledItems && order.alreadyFulfilledItems.length > 0 && (
+                <Box sx={{ mt: 1, mb: 1, bgcolor: "#23292e", borderRadius: 1.5, p: 1.5, border: "1.5px solid #FFD43B" }}>
+                  <Typography sx={{ color: "#FFD43B", fontWeight: 700, fontSize: 14 }}>
+                    Already fulfilled in this order:
+                  </Typography>
+                  <Typography sx={{ color: "#f18e1b", fontWeight: 600, fontSize: 15 }}>
+                    {order.alreadyFulfilledItems.map(med =>
+                      med.medicineName + (med.quantity ? ` (${med.quantity})` : '')
+                    ).join(", ")}
+                  </Typography>
+                  <Typography sx={{ color: "#bbb", fontSize: 13, mt: 1 }}>
+                    Please quote for the <b>remaining</b> medicines below.
+                  </Typography>
+                </Box>
+              )}
               {order.notes && (
                 <Typography sx={{ mt: 1, color: "#FFD43B" }}>
                   User Message: {order.notes}
@@ -326,36 +359,36 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
 
               {/* After actions or other statuses */}
               {!showActions && !isRejected && (
-  <>
-    {order.status === "quoted" ? (
-      <Typography color="success.main" fontWeight={600} sx={{ mt: 2 }}>
-        Quote submitted
-      </Typography>
-    ) : timer > 0 ? (
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 2 }}>
-        <Typography color="secondary" fontWeight={600}>
-          ⏳ {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")} left to quote
-        </Typography>
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={() => handlePartialFulfill(order)}
-        >
-          Submit Quote
-        </Button>
-      </Stack>
-    ) : (
-      <Typography color="error" fontWeight={600} sx={{ mt: 2 }}>
-        Quote window expired
-      </Typography>
-    )}
-  </>
-)}
-{isRejected && (
-  <Typography color="error" fontWeight={700} sx={{ mt: 2 }}>
-    Order rejected
-  </Typography>
-)}
+                <>
+                  {order.status === "quoted" ? (
+                    <Typography color="success.main" fontWeight={600} sx={{ mt: 2 }}>
+                      Quote submitted
+                    </Typography>
+                  ) : timer > 0 ? (
+                    <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 2 }}>
+                      <Typography color="secondary" fontWeight={600}>
+                        ⏳ {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")} left to quote
+                      </Typography>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => handlePartialFulfill(order)}
+                      >
+                        Submit Quote
+                      </Button>
+                    </Stack>
+                  ) : (
+                    <Typography color="error" fontWeight={600} sx={{ mt: 2 }}>
+                      Quote window expired
+                    </Typography>
+                  )}
+                </>
+              )}
+              {isRejected && (
+                <Typography color="error" fontWeight={700} sx={{ mt: 2 }}>
+                  Order rejected
+                </Typography>
+              )}
             </CardContent>
           </Card>
         );
@@ -414,6 +447,15 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                           arr[i].medicineName = value;
                           setAcceptDialogData(arr);
                         }}
+                        // (optional) tiny UI nicety: Rx tag
+                        renderOption={(props, option) => (
+                          <li {...props}>
+                            <span>{option.name}</span>
+                            {!!option.prescriptionRequired && (
+                              <span style={{ marginLeft: 8, fontSize: 11, color: "#f87171" }}>Rx</span>
+                            )}
+                          </li>
+                        )}
                         renderInput={(params) => (
                           <TextField
                             {...params}
@@ -600,6 +642,15 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                         onInputChange={(_, value) =>
                           updateRow(i, "medicineName", value)
                         }
+                        // (optional) tiny UI nicety: Rx tag
+                        renderOption={(props, option) => (
+                          <li {...props}>
+                            <span>{option.name}</span>
+                            {!!option.prescriptionRequired && (
+                              <span style={{ marginLeft: 8, fontSize: 11, color: "#f87171" }}>Rx</span>
+                            )}
+                          </li>
+                        )}
                         renderInput={(params) => (
                           <TextField
                             {...params}
@@ -728,6 +779,13 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Viewer dialog (side-by-side Rx + AI) */}
+      <RxAiSideBySideDialog
+        open={!!previewOrder}
+        onClose={() => setPreviewOrder(null)}
+        order={previewOrder}
+      />
 
       <Snackbar
         open={!!msg}
