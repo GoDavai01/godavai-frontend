@@ -878,12 +878,6 @@ export default function PharmacyDashboard() {
 
             <Divider className="mb-3" />
             
-            {/* PRESCRIPTION ORDERS (quotes flow) */}
-    <Typography variant="h6" className="mb-1 font-extrabold">Prescription Orders</Typography>
-    <PrescriptionOrdersTab token={token} medicines={medicines} />
-
-    <Divider className="my-3" />
-
             {/* Orders List */}
             <Typography variant="h6" className="mb-1 font-extrabold">Orders</Typography>
             {!orders.length && <Typography className="text-slate-600">No orders yet.</Typography>}
@@ -1038,6 +1032,11 @@ export default function PharmacyDashboard() {
                 </motion.div>
               ))}
             </Box>
+            <Divider className="my-3" />
+
+{/* PRESCRIPTION ORDERS (quotes flow) */}
+<Typography variant="h6" className="mb-1 font-extrabold">Prescription Orders</Typography>
+<PrescriptionOrdersTab token={token} medicines={medicines} />
 
             {/* Logout */}
             <Box sx={{ width: "100%", position: "relative", pb: 7, textAlign: "center" }}>

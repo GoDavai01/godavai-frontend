@@ -1,5 +1,5 @@
 // src/components/PrescriptionOrdersTab.js
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Box, Typography, Card, CardContent, Button, Stack, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Select, Snackbar, Alert, Autocomplete
@@ -45,10 +45,9 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
   // Viewer state
   const [previewOrder, setPreviewOrder] = useState(null);
 
-  // Get all prescription orders for this pharmacy
-  useEffect(() => {
+  // --- ADDED: fetchOrders helper ---
+  const fetchOrders = useCallback(() => {
     if (!token) return;
-    setLoading(true);
     axios
       .get(`${API_BASE_URL}/api/prescriptions/pharmacy-orders`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -56,7 +55,24 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
       .then((res) => setOrders(res.data || []))
       .catch(() => setOrders([]))
       .finally(() => setLoading(false));
-  }, [token, msg, showQuoteDialog, showRejectDialog]);
+  }, [token]);
+
+  // Get all prescription orders for this pharmacy
+  useEffect(() => {
+    if (!token) return;
+    setLoading(true);
+    fetchOrders();
+  }, [token, fetchOrders]);
+
+  // Auto-refresh every 3s (pause while dialogs are open)
+  useEffect(() => {
+    if (!token) return;
+    const busy = showQuoteDialog || showRejectDialog || acceptDialogOpen;
+    const id = setInterval(() => {
+      if (!busy) fetchOrders();
+    }, 3000);
+    return () => clearInterval(id);
+  }, [token, fetchOrders, showQuoteDialog, showRejectDialog, acceptDialogOpen]);
 
   // Set up timers (global tick every 1s, update all order timers)
   useEffect(() => {
@@ -220,14 +236,13 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
 
   return (
     <Box sx={{ mb: 4 }}>
-      <Typography variant="h6" mb={1}>Prescription Orders</Typography>
       {orders.map((order) => {
         const timer = timers[order._id] ?? 0;
         const isRejected = order.status === "cancelled" || order.userResponse === "rejected";
         const showActions = order.status === "waiting_for_quotes" && timer > 0 && !isRejected;
 
         return (
-          <Card key={order._id} sx={{ mb: 2, bgcolor: "#21272b" }}>
+          <Card key={order._id} sx={{ mb: 2, bgcolor: "background.paper", border: '1px solid', borderColor: 'divider' }}>
             <CardContent>
               <Typography variant="subtitle1" fontWeight={600}>
                 Order #{order._id.slice(-5)} —{" "}
@@ -266,9 +281,9 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                 </Button>
               </Stack>
 
-              {/* A) AI suggestions under the "Prescription: View" line */}
+              {/* A) AI suggestions */}
               {(order.ai?.items?.length > 0) && (
-                <Box sx={{ mt: 1, bgcolor: "#23292e", borderRadius: 1.5, p: 1.5, border: "1px solid #2f3840" }}>
+                <Box sx={{ mt: 1, bgcolor: "grey.50", borderRadius: 1.5, p: 1.5, border: "1px solid", borderColor: "divider" }}>
                   <Typography sx={{ color: "#8dd3c7", fontWeight: 700, fontSize: 14 }}>
                     AI suggestions (pharmacist must verify):
                   </Typography>
@@ -282,7 +297,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
 
               {/* Already Fulfilled Items from Parent */}
               {order.alreadyFulfilledItems && order.alreadyFulfilledItems.length > 0 && (
-                <Box sx={{ mt: 1, mb: 1, bgcolor: "#23292e", borderRadius: 1.5, p: 1.5, border: "1.5px solid #FFD43B" }}>
+                <Box sx={{ mt: 1, mb: 1, bgcolor: "grey.50", borderRadius: 1.5, p: 1.5, border: "1.5px solid", borderColor: "warning.main" }}>
                   <Typography sx={{ color: "#FFD43B", fontWeight: 700, fontSize: 14 }}>
                     Already fulfilled in this order:
                   </Typography>
@@ -403,12 +418,11 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
               style={{
                 width: "100%",
                 background: "transparent",
-                color: "#fff",
                 borderCollapse: "collapse"
               }}
             >
               <thead>
-                <tr style={{ background: "#222", fontWeight: 700 }}>
+                <tr style={{ background: "rgba(0,0,0,0.04)", fontWeight: 700 }}>
                   <th style={{ padding: 8 }}>Medicine</th>
                   <th style={{ padding: 8 }}>Brand</th>
                   <th style={{ padding: 8 }}>Qty</th>
@@ -418,7 +432,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
               </thead>
               <tbody>
                 {acceptDialogData.map((row, i) => (
-                  <tr key={i} style={{ background: "#181d23" }}>
+                  <tr key={i} style={{ background: "transparent" }}>
                     <td style={{ padding: 6 }}>
                       <Autocomplete
                         freeSolo
@@ -600,12 +614,11 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
               style={{
                 width: "100%",
                 background: "transparent",
-                color: "#fff",
                 borderCollapse: "collapse"
               }}
             >
               <thead>
-                <tr style={{ background: "#222", fontWeight: 700 }}>
+                <tr style={{ background: "rgba(0,0,0,0.04)", fontWeight: 700 }}>
                   <th style={{ padding: 8 }}>Medicine</th>
                   <th style={{ padding: 8 }}>Brand</th>
                   <th style={{ padding: 8 }}>Qty</th>
@@ -616,7 +629,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
               </thead>
               <tbody>
                 {quote.map((row, i) => (
-                  <tr key={i} style={{ background: "#181d23" }}>
+                  <tr key={i} style={{ background: "transparent" }}>
                     <td style={{ padding: 6 }}>
                       <Autocomplete
                         freeSolo
