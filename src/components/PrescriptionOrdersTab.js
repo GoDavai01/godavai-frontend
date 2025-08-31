@@ -798,6 +798,8 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
         open={!!previewOrder}
         onClose={() => setPreviewOrder(null)}
         order={previewOrder}
+        token={token}
+        onRefetched={() => fetchOrders()}   // already defined in that file
       />
 
       <Snackbar

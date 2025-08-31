@@ -1,5 +1,6 @@
 // src/components/RxAiSideBySideDialog.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, Typography, Box, Chip, Divider, LinearProgress, Stack, IconButton
@@ -14,7 +15,7 @@ const DARK_BG = "#181d23";
 const DARK_CARD = "#21272b";
 const BORDER = "#2f3840";
 
-export default function RxAiSideBySideDialog({ open, onClose, order }) {
+export default function RxAiSideBySideDialog({ open, onClose, order, token, onRefetched }) {
   const containerRef = useRef(null);
   const imgRef = useRef(null);
 
@@ -34,6 +35,39 @@ export default function RxAiSideBySideDialog({ open, onClose, order }) {
   const dragStart = useRef({ x: 0, y: 0 });
   const startOffset = useRef({ x: 0, y: 0 });
 
+  // --- AI state/polling ---
+  const [ai, setAi] = useState(order?.ai || null);
+  const [loadingAi, setLoadingAi] = useState(false);
+
+  // seed local AI when order changes
+  useEffect(() => {
+    setAi(order?.ai || null);
+  }, [order?._id]);
+
+  // fetch & poll AI while dialog is open
+  useEffect(() => {
+    if (!open || !order?._id || !token) return;
+    let stop = false;
+
+    const load = async () => {
+      try {
+        setLoadingAi(true);
+        const res = await axios.get(`${API_BASE_URL}/api/prescriptions/ai/${order._id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!stop) setAi(res.data || { items: [] });
+      } catch {
+        if (!stop) setAi(order?.ai || { items: [] });
+      } finally {
+        if (!stop) setLoadingAi(false);
+      }
+    };
+
+    load();
+    const id = setInterval(load, 3000); // light polling while open
+    return () => { stop = true; clearInterval(id); };
+  }, [open, order?._id, token]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!open) {
       setScale(1);
@@ -48,13 +82,11 @@ export default function RxAiSideBySideDialog({ open, onClose, order }) {
     const oldScale = scale;
     const newScale = clamp(oldScale + delta, 1, 4);
 
-    // Zoom towards cursor (simple UX nicety)
     if (containerRef.current && imgRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       const cx = center?.x ?? rect.width / 2;
       const cy = center?.y ?? rect.height / 2;
 
-      // translate so that point under cursor stays roughly in place
       const dx = (cx - rect.width / 2 - offset.x);
       const dy = (cy - rect.height / 2 - offset.y);
 
@@ -84,9 +116,10 @@ export default function RxAiSideBySideDialog({ open, onClose, order }) {
   };
   const endDrag = () => setDragging(false);
 
+  const aiItems = ai?.items || [];
+
   const copyAiList = async () => {
-    const items = order?.ai?.items || [];
-    const text = items.map(i => {
+    const text = aiItems.map(i => {
       const parts = [i.name];
       if (i.strength) parts.push(i.strength);
       if (i.form) parts.push(`(${i.form})`);
@@ -95,8 +128,6 @@ export default function RxAiSideBySideDialog({ open, onClose, order }) {
     }).join("\n");
     try { await navigator.clipboard.writeText(text || ""); } catch {}
   };
-
-  const aiItems = order?.ai?.items || [];
 
   return (
     <Dialog
@@ -226,13 +257,39 @@ export default function RxAiSideBySideDialog({ open, onClose, order }) {
                 (You must verify. AI can miss or misread.)
               </Typography>
               <Box sx={{ ml: "auto" }}>
-                <Button onClick={copyAiList} size="small" variant="outlined" sx={{ color: "#8dd3c7", borderColor: "#3a4a55" }}>
+                <Button
+                  onClick={copyAiList}
+                  size="small"
+                  variant="outlined"
+                  sx={{ color: "#8dd3c7", borderColor: "#3a4a55" }}
+                >
                   Copy list
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (!order?._id || !token) return;
+                    try {
+                      await axios.post(
+                        `${API_BASE_URL}/api/prescriptions/reparse/${order._id}`,
+                        {},
+                        { headers: { Authorization: `Bearer ${token}` } }
+                      );
+                      onRefetched && onRefetched(); // optional external refresh
+                    } catch { /* ignore */ }
+                  }}
+                  size="small"
+                  variant="outlined"
+                  sx={{ ml: 1, color: "#8dd3c7", borderColor: "#3a4a55" }}
+                  startIcon={<RestartAltIcon fontSize="small" />}
+                >
+                  Re-scan
                 </Button>
               </Box>
             </Stack>
 
-            {(!aiItems.length) ? (
+            {loadingAi ? (
+              <Typography sx={{ color: "#9aa7b0", mt: 1 }}>Scanning…</Typography>
+            ) : (!aiItems.length) ? (
               <Typography sx={{ color: "#9aa7b0", mt: 1 }}>
                 No AI items yet for this order.
               </Typography>
