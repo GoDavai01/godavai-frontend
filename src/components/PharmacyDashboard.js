@@ -30,6 +30,7 @@ import {
 import { Card as SCard, CardHeader as SCardHeader, CardTitle as SCardTitle, CardContent as SCardContent } from "./ui/card";
 
 import stringSimilarity from "string-similarity";
+import PrescriptionOrdersTab from "./PrescriptionOrdersTab";
 import axios from "axios";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -876,6 +877,12 @@ export default function PharmacyDashboard() {
             </Stack>
 
             <Divider className="mb-3" />
+            
+            {/* PRESCRIPTION ORDERS (quotes flow) */}
+    <Typography variant="h6" className="mb-1 font-extrabold">Prescription Orders</Typography>
+    <PrescriptionOrdersTab token={token} medicines={medicines} />
+
+    <Divider className="my-3" />
 
             {/* Orders List */}
             <Typography variant="h6" className="mb-1 font-extrabold">Orders</Typography>
