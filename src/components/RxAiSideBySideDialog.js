@@ -141,7 +141,7 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
   const onPointerMove = (e) => {
     if (!dragging) return;
     const dx = e.clientX - dragStart.current.x;
-    the dy = e.clientY - dragStart.current.y;
+    const dy = e.clientY - dragStart.current.y; // <-- fixed line
     setOffset({ x: startOffset.current.x + dx, y: startOffset.current.y + dy });
   };
   const endDrag = () => setDragging(false);
