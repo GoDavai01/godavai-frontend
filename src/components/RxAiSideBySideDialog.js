@@ -44,7 +44,24 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
     setAi(order?.ai || null);
   }, [order?._id]);
 
-  // fetch & poll AI while dialog is open
+  // helper: call the new direct OCR endpoint once
+  const scanFromImageDirect = async () => {
+    if (!imgUrl) return;
+    try {
+      setLoadingAi(true);
+      const res = await axios.get(`${API_BASE_URL}/api/prescriptions/ai-scan`, {
+        params: { url: imgUrl },
+      });
+      setAi(res.data || { items: [] });
+    } catch {
+      /* keep current ai on failure */
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
+  // fetch & poll AI while dialog is open (stored AI on the order),
+  // and fall back once to direct scan if nothing is available yet.
   useEffect(() => {
     if (!open || !order?._id || !token) return;
     let stop = false;
@@ -64,9 +81,22 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
     };
 
     load();
+
+    // one-shot fallback to direct scanner if still empty after first poll
+    (async () => {
+      await new Promise(r => setTimeout(r, 600));
+      if (!stop) {
+        const hasItems = (ai?.items || []).length > 0;
+        if (!hasItems) {
+          scanFromImageDirect().catch(() => {});
+        }
+      }
+    })();
+
     const id = setInterval(load, 3000); // light polling while open
     return () => { stop = true; clearInterval(id); };
-  }, [open, order?._id, token]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, order?._id, token]); // keep deps same as before
 
   useEffect(() => {
     if (!open) {
@@ -111,7 +141,7 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
   const onPointerMove = (e) => {
     if (!dragging) return;
     const dx = e.clientX - dragStart.current.x;
-    const dy = e.clientY - dragStart.current.y;
+    the dy = e.clientY - dragStart.current.y;
     setOffset({ x: startOffset.current.x + dx, y: startOffset.current.y + dy });
   };
   const endDrag = () => setDragging(false);
@@ -267,15 +297,20 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
                 </Button>
                 <Button
                   onClick={async () => {
-                    if (!order?._id || !token) return;
-                    try {
-                      await axios.post(
-                        `${API_BASE_URL}/api/prescriptions/reparse/${order._id}`,
-                        {},
-                        { headers: { Authorization: `Bearer ${token}` } }
-                      );
-                      onRefetched && onRefetched(); // optional external refresh
-                    } catch { /* ignore */ }
+                    // 1) run the new direct OCR (immediate UX)
+                    await scanFromImageDirect();
+
+                    // 2) also ask backend to refresh stored AI for the order
+                    if (order?._id && token) {
+                      try {
+                        await axios.post(
+                          `${API_BASE_URL}/api/prescriptions/reparse/${order._id}`,
+                          {},
+                          { headers: { Authorization: `Bearer ${token}` } }
+                        );
+                        onRefetched && onRefetched();
+                      } catch { /* ignore */ }
+                    }
                   }}
                   size="small"
                   variant="outlined"
