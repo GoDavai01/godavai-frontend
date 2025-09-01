@@ -82,16 +82,13 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
 
     load();
 
-    // one-shot fallback to direct scanner if still empty after first poll
-    (async () => {
-      await new Promise(r => setTimeout(r, 600));
-      if (!stop) {
-        const hasItems = (ai?.items || []).length > 0;
-        if (!hasItems) {
-          scanFromImageDirect().catch(() => {});
-        }
-      }
-    })();
+    // one-shot quality refresh using the strict scanner
+(async () => {
+  await new Promise(r => setTimeout(r, 600));
+  if (!stop) {
+    scanFromImageDirect().catch(() => {});
+  }
+})();
 
     const id = setInterval(load, 3000); // light polling while open
     return () => { stop = true; clearInterval(id); };
