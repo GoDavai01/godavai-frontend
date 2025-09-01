@@ -9,6 +9,13 @@ import RxAiSideBySideDialog from "./RxAiSideBySideDialog";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
+// Deep-green palette (matches GoDavaii)
+const DG_BG = "#0f3d2e";        // card/dialog background
+const DG_BG_SOFT = "#124735";   // subtle blocks
+const DG_BORDER = "#1b5642";    // borders/lines
+const DG_ACCENT = "#9fd7c4";    // light mint accent for outlines
+const WHITE = "#ffffff";
+
 // Helper: returns seconds left from now to expiry
 function getSecondsLeft(expiry) {
   if (!expiry) return 0;
@@ -231,8 +238,8 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
     0
   );
 
-  if (loading) return <Typography>Loading prescription orders…</Typography>;
-  if (!orders.length) return <Typography>No prescription orders yet.</Typography>;
+  if (loading) return <Typography sx={{ color: WHITE, fontWeight: 700 }}>Loading prescription orders…</Typography>;
+  if (!orders.length) return <Typography sx={{ color: WHITE, fontWeight: 700 }}>No prescription orders yet.</Typography>;
 
   return (
     <Box sx={{ mb: 4 }}>
@@ -242,14 +249,23 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
         const showActions = order.status === "waiting_for_quotes" && timer > 0 && !isRejected;
 
         return (
-          <Card key={order._id} sx={{ mb: 2, bgcolor: "background.paper", border: '1px solid', borderColor: 'divider' }}>
+          <Card
+            key={order._id}
+            sx={{
+              mb: 2,
+              bgcolor: DG_BG,
+              border: "1px solid",
+              borderColor: DG_BORDER,
+              borderRadius: 2,
+            }}
+          >
             <CardContent>
-              <Typography variant="subtitle1" fontWeight={600}>
+              <Typography variant="subtitle1" sx={{ color: WHITE, fontWeight: 800 }}>
                 Order #{order._id.slice(-5)} —{" "}
-                <span style={{ color: "#FFD43B" }}>{order.status || "pending"}</span>
+                <span style={{ color: WHITE, fontWeight: 800 }}>{order.status || "pending"}</span>
               </Typography>
 
-              <Typography sx={{ mt: 1 }}>
+              <Typography sx={{ mt: 1, color: WHITE, fontWeight: 600 }}>
                 Prescription:{" "}
                 {order.prescriptionUrl ? (
                   <a
@@ -260,12 +276,12 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                     }
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ color: "#FFD43B" }}
+                    style={{ color: WHITE, fontWeight: 800, textDecoration: "underline" }}
                   >
                     View
                   </a>
                 ) : (
-                  <span style={{ color: "#AAA" }}>Not Available</span>
+                  <span style={{ color: "#d2e7e1", fontWeight: 600 }}>Not Available</span>
                 )}
               </Typography>
 
@@ -275,7 +291,11 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                   size="small"
                   variant="outlined"
                   onClick={() => setPreviewOrder(order)}
-                  sx={{ color: "#8dd3c7", borderColor: "#2f3840", fontWeight: 700 }}
+                  sx={{
+                    color: WHITE,
+                    borderColor: DG_ACCENT,
+                    fontWeight: 800,
+                  }}
                 >
                   View Rx + AI
                 </Button>
@@ -283,11 +303,20 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
 
               {/* A) AI suggestions */}
               {(order.ai?.items?.length > 0) && (
-                <Box sx={{ mt: 1, bgcolor: "grey.50", borderRadius: 1.5, p: 1.5, border: "1px solid", borderColor: "divider" }}>
-                  <Typography sx={{ color: "#8dd3c7", fontWeight: 700, fontSize: 14 }}>
+                <Box
+                  sx={{
+                    mt: 1,
+                    bgcolor: DG_BG_SOFT,
+                    borderRadius: 1.5,
+                    p: 1.5,
+                    border: "1px solid",
+                    borderColor: DG_BORDER
+                  }}
+                >
+                  <Typography sx={{ color: WHITE, fontWeight: 800, fontSize: 14 }}>
                     AI suggestions (pharmacist must verify):
                   </Typography>
-                  <Typography sx={{ color: "#cfe9e5", fontSize: 14 }}>
+                  <Typography sx={{ color: WHITE, fontWeight: 600, fontSize: 14 }}>
                     {order.ai.items.map(i =>
                       `${i.name}${i.strength ? " " + i.strength : ""}${i.form ? " (" + i.form + ")" : ""} × ${i.quantity || 1}`
                     ).join(", ")}
@@ -297,58 +326,76 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
 
               {/* Already Fulfilled Items from Parent */}
               {order.alreadyFulfilledItems && order.alreadyFulfilledItems.length > 0 && (
-                <Box sx={{ mt: 1, mb: 1, bgcolor: "grey.50", borderRadius: 1.5, p: 1.5, border: "1.5px solid", borderColor: "warning.main" }}>
-                  <Typography sx={{ color: "#FFD43B", fontWeight: 700, fontSize: 14 }}>
+                <Box
+                  sx={{
+                    mt: 1,
+                    mb: 1,
+                    bgcolor: DG_BG_SOFT,
+                    borderRadius: 1.5,
+                    p: 1.5,
+                    border: "1px solid",
+                    borderColor: DG_BORDER
+                  }}
+                >
+                  <Typography sx={{ color: WHITE, fontWeight: 800, fontSize: 14 }}>
                     Already fulfilled in this order:
                   </Typography>
-                  <Typography sx={{ color: "#f18e1b", fontWeight: 600, fontSize: 15 }}>
+                  <Typography sx={{ color: WHITE, fontWeight: 700, fontSize: 15 }}>
                     {order.alreadyFulfilledItems.map(med =>
                       med.medicineName + (med.quantity ? ` (${med.quantity})` : '')
                     ).join(", ")}
                   </Typography>
-                  <Typography sx={{ color: "#bbb", fontSize: 13, mt: 1 }}>
+                  <Typography sx={{ color: WHITE, opacity: 0.8, fontSize: 13, mt: 1, fontWeight: 600 }}>
                     Please quote for the <b>remaining</b> medicines below.
                   </Typography>
                 </Box>
               )}
               {order.notes && (
-                <Typography sx={{ mt: 1, color: "#FFD43B" }}>
+                <Typography sx={{ mt: 1, color: WHITE, fontWeight: 700 }}>
                   User Message: {order.notes}
                 </Typography>
               )}
               {order.unavailableItems && order.unavailableItems.length > 0 && (
-                <Typography color="error">
+                <Typography sx={{ color: "#ff6b6b", fontWeight: 700 }}>
                   Unavailable: {order.unavailableItems.join(", ")}
                 </Typography>
               )}
 
-              <Typography variant="body2" color="#bbb" sx={{ mt: 0.5 }}>
+              <Typography variant="body2" sx={{ mt: 0.5, color: WHITE, opacity: 0.9, fontWeight: 600 }}>
                 Created: {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}
               </Typography>
 
               {/* Actions */}
               {showActions && (
                 <Box sx={{ mt: 2 }}>
-                  <Typography sx={{ mb: 1, color: "#FFD43B", fontWeight: 600 }}>
+                  <Typography sx={{ mb: 1, color: WHITE, fontWeight: 800 }}>
                     Select Action:
                   </Typography>
                   <Stack spacing={1}>
                     <Button
                       variant="contained"
-                      color="success"
                       size="large"
                       fullWidth
-                      sx={{ fontWeight: 700, letterSpacing: 0.5 }}
+                      sx={{
+                        fontWeight: 800,
+                        letterSpacing: 0.5,
+                        bgcolor: DG_BG_SOFT,
+                        "&:hover": { bgcolor: "#0e4232" }
+                      }}
                       onClick={() => handleAcceptOrder(order)}
                     >
                       ACCEPT (ALL AVAILABLE)
                     </Button>
                     <Button
                       variant="contained"
-                      color="warning"
                       size="large"
                       fullWidth
-                      sx={{ fontWeight: 700, letterSpacing: 0.5 }}
+                      sx={{
+                        fontWeight: 800,
+                        letterSpacing: 0.5,
+                        bgcolor: DG_BG_SOFT,
+                        "&:hover": { bgcolor: "#0e4232" }
+                      }}
                       onClick={() => handlePartialFulfill(order)}
                     >
                       PARTIAL FULFILL
@@ -358,14 +405,14 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                       color="error"
                       size="large"
                       fullWidth
-                      sx={{ fontWeight: 700, letterSpacing: 0.5 }}
+                      sx={{ fontWeight: 800, letterSpacing: 0.5 }}
                       onClick={() => handleRejectOrder(order)}
                     >
                       REJECT
                     </Button>
                   </Stack>
                   <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 2 }}>
-                    <Typography color="secondary" fontWeight={600}>
+                    <Typography sx={{ color: WHITE, fontWeight: 800 }}>
                       ⏳ {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")} left
                     </Typography>
                   </Stack>
@@ -376,31 +423,36 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
               {!showActions && !isRejected && (
                 <>
                   {order.status === "quoted" ? (
-                    <Typography color="success.main" fontWeight={600} sx={{ mt: 2 }}>
+                    <Typography sx={{ color: WHITE, fontWeight: 800, mt: 2 }}>
                       Quote submitted
                     </Typography>
                   ) : timer > 0 ? (
                     <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 2 }}>
-                      <Typography color="secondary" fontWeight={600}>
+                      <Typography sx={{ color: WHITE, fontWeight: 800 }}>
                         ⏳ {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")} left to quote
                       </Typography>
                       <Button
                         variant="outlined"
                         size="small"
                         onClick={() => handlePartialFulfill(order)}
+                        sx={{
+                          color: WHITE,
+                          borderColor: DG_ACCENT,
+                          fontWeight: 800
+                        }}
                       >
                         Submit Quote
                       </Button>
                     </Stack>
                   ) : (
-                    <Typography color="error" fontWeight={600} sx={{ mt: 2 }}>
+                    <Typography sx={{ color: "#ff6b6b", fontWeight: 900, mt: 2 }}>
                       Quote window expired
                     </Typography>
                   )}
                 </>
               )}
               {isRejected && (
-                <Typography color="error" fontWeight={700} sx={{ mt: 2 }}>
+                <Typography sx={{ color: "#ff6b6b", fontWeight: 900, mt: 2 }}>
                   Order rejected
                 </Typography>
               )}
@@ -410,23 +462,35 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
       })}
 
       {/* --- AcceptDialog (All Available) --- */}
-      <Dialog open={acceptDialogOpen} onClose={() => setAcceptDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Accept (All Available) - Specify Brands, Qty & Price</DialogTitle>
+      <Dialog
+        open={acceptDialogOpen}
+        onClose={() => setAcceptDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: { bgcolor: DG_BG, border: "1px solid", borderColor: DG_BORDER }
+        }}
+      >
+        <DialogTitle sx={{ color: WHITE, fontWeight: 900 }}>
+          Accept (All Available) - Specify Brands, Qty & Price
+        </DialogTitle>
         <DialogContent>
           <Box sx={{ overflowX: "auto" }}>
             <table
               style={{
                 width: "100%",
                 background: "transparent",
-                borderCollapse: "collapse"
+                borderCollapse: "collapse",
+                color: WHITE,
+                fontWeight: 700
               }}
             >
               <thead>
-                <tr style={{ background: "rgba(0,0,0,0.04)", fontWeight: 700 }}>
-                  <th style={{ padding: 8 }}>Medicine</th>
-                  <th style={{ padding: 8 }}>Brand</th>
-                  <th style={{ padding: 8 }}>Qty</th>
-                  <th style={{ padding: 8 }}>Price</th>
+                <tr style={{ background: DG_BG_SOFT, fontWeight: 900 }}>
+                  <th style={{ padding: 8, textAlign: "left" }}>Medicine</th>
+                  <th style={{ padding: 8, textAlign: "left" }}>Brand</th>
+                  <th style={{ padding: 8, textAlign: "left" }}>Qty</th>
+                  <th style={{ padding: 8, textAlign: "left" }}>Price</th>
                   <th></th>
                 </tr>
               </thead>
@@ -461,12 +525,11 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                           arr[i].medicineName = value;
                           setAcceptDialogData(arr);
                         }}
-                        // (optional) tiny UI nicety: Rx tag
                         renderOption={(props, option) => (
                           <li {...props}>
                             <span>{option.name}</span>
                             {!!option.prescriptionRequired && (
-                              <span style={{ marginLeft: 8, fontSize: 11, color: "#f87171" }}>Rx</span>
+                              <span style={{ marginLeft: 8, fontSize: 11, color: "#ff6b6b", fontWeight: 800 }}>Rx</span>
                             )}
                           </li>
                         )}
@@ -476,7 +539,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                             placeholder="Medicine"
                             size="small"
                             variant="standard"
-                            InputProps={{ ...params.InputProps, style: { color: "#fff" } }}
+                            InputProps={{ ...params.InputProps, style: { color: WHITE } }}
                           />
                         )}
                       />
@@ -492,7 +555,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                         }}
                         size="small"
                         variant="standard"
-                        InputProps={{ style: { color: "#fff" } }}
+                        InputProps={{ style: { color: WHITE } }}
                       />
                     </td>
                     <td style={{ padding: 6 }}>
@@ -507,7 +570,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                         }}
                         size="small"
                         variant="standard"
-                        InputProps={{ style: { color: "#fff" } }}
+                        InputProps={{ style: { color: WHITE } }}
                         sx={{ width: 60 }}
                       />
                     </td>
@@ -523,7 +586,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                         }}
                         size="small"
                         variant="standard"
-                        InputProps={{ style: { color: "#fff" } }}
+                        InputProps={{ style: { color: WHITE } }}
                         sx={{ width: 80 }}
                       />
                     </td>
@@ -536,6 +599,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                           onClick={() =>
                             setAcceptDialogData(acceptDialogData.filter((_, j) => j !== i))
                           }
+                          sx={{ fontWeight: 800 }}
                         >
                           ✖
                         </Button>
@@ -545,9 +609,14 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                 ))}
                 <tr>
                   <td colSpan={5} style={{ textAlign: "right", padding: 8 }}>
-                    <Button variant="outlined" onClick={() =>
-                      setAcceptDialogData([...acceptDialogData, { medicineName: "", brand: "", quantity: 1, price: "" }])
-                    } size="small">
+                    <Button
+                      variant="outlined"
+                      onClick={() =>
+                        setAcceptDialogData([...acceptDialogData, { medicineName: "", brand: "", quantity: 1, price: "" }])
+                      }
+                      size="small"
+                      sx={{ color: WHITE, borderColor: DG_ACCENT, fontWeight: 800 }}
+                    >
                       + Add Medicine
                     </Button>
                   </td>
@@ -555,12 +624,12 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
               </tbody>
             </table>
           </Box>
-          <Typography sx={{ mt: 2, fontWeight: 700, color: "#FFD43B", fontSize: 18 }}>
+          <Typography sx={{ mt: 2, fontWeight: 900, color: WHITE, fontSize: 18 }}>
             Total Price: ₹{acceptDialogTotal}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAcceptDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setAcceptDialogOpen(false)} sx={{ color: WHITE, fontWeight: 800 }}>Cancel</Button>
           <Button
             variant="contained"
             onClick={async () => {
@@ -590,6 +659,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
               timers[selectedOrder._id] <= 0 ||
               selectedOrder.status !== "waiting_for_quotes"
             }
+            sx={{ fontWeight: 900, bgcolor: DG_BG_SOFT, "&:hover": { bgcolor: "#0e4232" } }}
           >
             Submit
           </Button>
@@ -602,8 +672,11 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
         onClose={() => setShowQuoteDialog(false)}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: { bgcolor: DG_BG, border: "1px solid", borderColor: DG_BORDER }
+        }}
       >
-        <DialogTitle>
+        <DialogTitle sx={{ color: WHITE, fontWeight: 900 }}>
           {quoteMode === "accept"
             ? "Submit Quote (All Medicines Available)"
             : "Submit Partial Quote"}
@@ -614,16 +687,18 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
               style={{
                 width: "100%",
                 background: "transparent",
-                borderCollapse: "collapse"
+                borderCollapse: "collapse",
+                color: WHITE,
+                fontWeight: 700
               }}
             >
               <thead>
-                <tr style={{ background: "rgba(0,0,0,0.04)", fontWeight: 700 }}>
-                  <th style={{ padding: 8 }}>Medicine</th>
-                  <th style={{ padding: 8 }}>Brand</th>
-                  <th style={{ padding: 8 }}>Qty</th>
-                  <th style={{ padding: 8 }}>Price</th>
-                  <th style={{ padding: 8 }}>Available</th>
+                <tr style={{ background: DG_BG_SOFT, fontWeight: 900 }}>
+                  <th style={{ padding: 8, textAlign: "left" }}>Medicine</th>
+                  <th style={{ padding: 8, textAlign: "left" }}>Brand</th>
+                  <th style={{ padding: 8, textAlign: "left" }}>Qty</th>
+                  <th style={{ padding: 8, textAlign: "left" }}>Price</th>
+                  <th style={{ padding: 8, textAlign: "left" }}>Available</th>
                   <th></th>
                 </tr>
               </thead>
@@ -655,12 +730,11 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                         onInputChange={(_, value) =>
                           updateRow(i, "medicineName", value)
                         }
-                        // (optional) tiny UI nicety: Rx tag
                         renderOption={(props, option) => (
                           <li {...props}>
                             <span>{option.name}</span>
                             {!!option.prescriptionRequired && (
-                              <span style={{ marginLeft: 8, fontSize: 11, color: "#f87171" }}>Rx</span>
+                              <span style={{ marginLeft: 8, fontSize: 11, color: "#ff6b6b", fontWeight: 800 }}>Rx</span>
                             )}
                           </li>
                         )}
@@ -672,7 +746,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                             variant="standard"
                             InputProps={{
                               ...params.InputProps,
-                              style: { color: "#fff" }
+                              style: { color: WHITE }
                             }}
                           />
                         )}
@@ -687,7 +761,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                         }
                         size="small"
                         variant="standard"
-                        InputProps={{ style: { color: "#fff" } }}
+                        InputProps={{ style: { color: WHITE } }}
                       />
                     </td>
                     <td style={{ padding: 6 }}>
@@ -700,7 +774,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                         }
                         size="small"
                         variant="standard"
-                        InputProps={{ style: { color: "#fff" } }}
+                        InputProps={{ style: { color: WHITE } }}
                         sx={{ width: 60 }}
                       />
                     </td>
@@ -714,7 +788,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                         }
                         size="small"
                         variant="standard"
-                        InputProps={{ style: { color: "#fff" } }}
+                        InputProps={{ style: { color: WHITE } }}
                         sx={{ width: 80 }}
                       />
                     </td>
@@ -726,7 +800,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                         }
                         size="small"
                         variant="standard"
-                        sx={{ color: "#fff", width: 100 }}
+                        sx={{ color: WHITE, width: 100 }}
                         disabled={quoteMode === "accept"}
                       >
                         <MenuItem value="true">✓</MenuItem>
@@ -742,6 +816,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                           onClick={() =>
                             setQuote(quote.filter((_, j) => j !== i))
                           }
+                          sx={{ fontWeight: 800 }}
                         >
                           ✖
                         </Button>
@@ -751,7 +826,12 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                 ))}
                 <tr>
                   <td colSpan={6} style={{ textAlign: "right", padding: 8 }}>
-                    <Button variant="outlined" onClick={addRow} size="small">
+                    <Button
+                      variant="outlined"
+                      onClick={addRow}
+                      size="small"
+                      sx={{ color: WHITE, borderColor: DG_ACCENT, fontWeight: 800 }}
+                    >
                       + Add Medicine
                     </Button>
                   </td>
@@ -761,7 +841,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
           </Box>
         </DialogContent>
         <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ m: 2 }}>
-          <Button onClick={() => setShowQuoteDialog(false)}>Cancel</Button>
+          <Button onClick={() => setShowQuoteDialog(false)} sx={{ color: WHITE, fontWeight: 800 }}>Cancel</Button>
           <Button
             variant="contained"
             onClick={handleSubmitQuote}
@@ -771,6 +851,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
               selectedOrder.status !== "waiting_for_quotes" ||
               (quoteMode === "partial" && !isPartialQuoteValid(quote))
             }
+            sx={{ fontWeight: 900, bgcolor: DG_BG_SOFT, "&:hover": { bgcolor: "#0e4232" } }}
           >
             Submit Quote
           </Button>
@@ -778,16 +859,22 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
       </Dialog>
 
       {/* --- Reject Confirmation Dialog --- */}
-      <Dialog open={showRejectDialog} onClose={() => setShowRejectDialog(false)}>
-        <DialogTitle>Reject Order?</DialogTitle>
+      <Dialog
+        open={showRejectDialog}
+        onClose={() => setShowRejectDialog(false)}
+        PaperProps={{
+          sx: { bgcolor: DG_BG, border: "1px solid", borderColor: DG_BORDER }
+        }}
+      >
+        <DialogTitle sx={{ color: WHITE, fontWeight: 900 }}>Reject Order?</DialogTitle>
         <DialogContent>
-          <Typography>
-            Are you sure you want to <span style={{ color: "red", fontWeight: 600 }}>reject</span> this prescription order? This cannot be undone.
+          <Typography sx={{ color: WHITE, fontWeight: 700 }}>
+            Are you sure you want to <span style={{ color: "#ff6b6b", fontWeight: 800 }}>reject</span> this prescription order? This cannot be undone.
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowRejectDialog(false)}>Cancel</Button>
-          <Button variant="contained" color="error" onClick={confirmRejectOrder}>
+          <Button onClick={() => setShowRejectDialog(false)} sx={{ color: WHITE, fontWeight: 800 }}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={confirmRejectOrder} sx={{ fontWeight: 900 }}>
             Yes, Reject
           </Button>
         </DialogActions>

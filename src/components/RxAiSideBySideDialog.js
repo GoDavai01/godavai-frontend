@@ -60,40 +60,27 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
     }
   };
 
-  // fetch & poll AI while dialog is open (stored AI on the order),
-  // and fall back once to direct scan if nothing is available yet.
-  useEffect(() => {
+  // fetch AI ONCE when dialog opens (no auto-rescan / polling)
+  useEffect(() => { 
     if (!open || !order?._id || !token) return;
-    let stop = false;
+    let active = true;
 
-    const load = async () => {
+    (async () => {
       try {
         setLoadingAi(true);
         const res = await axios.get(`${API_BASE_URL}/api/prescriptions/ai/${order._id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!stop) setAi(res.data || { items: [] });
+        if (active) setAi(res.data || { items: [] });
       } catch {
-        if (!stop) setAi(order?.ai || { items: [] });
+        if (active) setAi(order?.ai || { items: [] });
       } finally {
-        if (!stop) setLoadingAi(false);
+        if (active) setLoadingAi(false);
       }
-    };
+    })();
 
-    load();
-
-    // one-shot quality refresh using the strict scanner
-(async () => {
-  await new Promise(r => setTimeout(r, 600));
-  if (!stop) {
-    scanFromImageDirect().catch(() => {});
-  }
-})();
-
-    const id = setInterval(load, 3000); // light polling while open
-    return () => { stop = true; clearInterval(id); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, order?._id, token]); // keep deps same as before
+    return () => { active = false; };
+  }, [open, order?._id, token]);
 
   useEffect(() => {
     if (!open) {
