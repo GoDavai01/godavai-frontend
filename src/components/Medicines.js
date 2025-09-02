@@ -68,7 +68,7 @@ export default function Medicines() {
   useEffect(() => {
     setLoading(true);
     axios
-      .get(`${API_BASE_URL}/api/medicines?pharmacyId=${pharmacyId}`)
+      .get(`${API_BASE_URL}/api/medicines?pharmacyId=${pharmacyId}&onlyAvailable=1`)
       .then((res) => setMedicines(res.data || []))
       .catch(() => setMedicines([]))
       .finally(() => setLoading(false));
@@ -88,9 +88,12 @@ export default function Medicines() {
   };
 
   const filteredMeds = useMemo(
-    () => medicines.filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType)),
-    [medicines, selectedCategory, selectedType]
-  );
+  () =>
+    medicines
+      .filter((m) => m.status !== "unavailable") // ensure unavailable items never show
+      .filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType)),
+  [medicines, selectedCategory, selectedType]
+);
 
   // Right column height; the page itself does not scroll.
   const columnHeight = `calc(100vh - ${TOP_OFFSET_PX}px)`;

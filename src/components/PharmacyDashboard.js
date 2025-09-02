@@ -616,6 +616,23 @@ export default function PharmacyDashboard() {
     });
   };
 
+  // mark a medicine available/unavailable
+const toggleAvailability = async (med) => {
+  const to = med.status === "unavailable" ? "active" : "unavailable";
+  setLoading(true);
+  try {
+    await axios.patch(
+      `${API_BASE_URL}/api/pharmacy/medicines/${med._id || med.id}`,
+      { status: to },
+      { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+    );
+    setMedMsg(`Marked as ${to}.`);
+  } catch {
+    setMedMsg("Failed to update availability.");
+  }
+  setLoading(false);
+};
+
   const handleSaveMedicine = async () => {
     if (!editMedForm.name || !editMedForm.price || !editMedForm.stock ||
         !editMedForm.category ||
@@ -1060,46 +1077,68 @@ export default function PharmacyDashboard() {
           <Box sx={{ mt: 1, mb: 10 }}>
             <Typography variant="h6" mb={1}>Medicines</Typography>
 
-            {medicines.map(med => (
-              <Card key={med.id || med._id} className="mb-2 bg-white border border-emerald-200 rounded-2xl">
-                <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                  <Typography sx={{ flex: 1 }}>
-                    <b>{med.name}</b>
-{med.brand && (<span style={{ color: "#059669", fontWeight: 400 }}> ({med.brand})</span>)}
+            {medicines
+  .slice()
+  .sort((a,b) => {
+    const ua = a.status === "unavailable" ? 1 : 0;
+    const ub = b.status === "unavailable" ? 1 : 0;
+    if (ua !== ub) return ua - ub;           // unavailable at bottom
+    return String(a.name).localeCompare(String(b.name));
+  })
+  .map(med => (
+    <Card key={med.id || med._id} className="mb-2 bg-white border border-emerald-200 rounded-2xl">
+      <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+        <Typography sx={{ flex: 1 }}>
+          <b>{med.name}</b>
+          {med.brand && (<span style={{ color: "#059669", fontWeight: 400 }}> ({med.brand})</span>)}
+          {med.status === "draft" && (
+            <Chip size="small" label="Draft" color="warning" className="ml-2 font-bold" />
+          )}
+          {med.status === "unavailable" && (
+            <Chip size="small" label="Unavailable" color="error" className="ml-2 font-bold" />
+          )}
+          {" — "}
+          <span style={{ color: "#047857" }}>
+            {(Array.isArray(med.category) ? med.category.join(', ') : med.category) || "Miscellaneous"}
+          </span>
+          <br />
+          {med.composition && (
+            <span style={{ display: "block", color: "#475569" }}>
+              Composition: {med.composition}
+            </span>
+          )}
+          {med.company && (
+            <span style={{ display: "block", color: "#475569" }}>
+              Company: {med.company}
+            </span>
+          )}
+          <b>Selling Price:</b> ₹{med.price} | <b>MRP:</b> ₹{med.mrp} | <b>Stock:</b> {med.stock}
+          <br />
+          <b>Type:</b> {med.type || "Tablet"}
+        </Typography>
 
-{med.status === "draft" && (
-  <Chip size="small" label="Draft" color="warning" className="ml-2 font-bold" />
-)}
+        {/* NEW: availability toggle */}
+        <Button
+          size="small"
+          variant={med.status === "unavailable" ? "contained" : "outlined"}
+          color={med.status === "unavailable" ? "success" : "error"}
+          onClick={() => toggleAvailability(med)}
+          disabled={loading}
+          className="rounded-xl"
+        >
+          {med.status === "unavailable" ? "Mark Available" : "Mark Unavailable"}
+        </Button>
 
-{" — "}
-<span style={{ color: "#047857" }}>
-  {(Array.isArray(med.category) ? med.category.join(', ') : med.category) || "Miscellaneous"}
-</span>
+        <IconButton color="primary" size="small" onClick={() => handleEditMedicine(med)} disabled={loading}>
+          <EditIcon />
+        </IconButton>
+        <IconButton color="error" size="small" onClick={() => handleDeleteMedicine(med.id || med._id)} disabled={loading}>
+          <DeleteIcon />
+        </IconButton>
+      </CardContent>
+    </Card>
+))}
 
-                    <br />
-                    {med.composition && (
-                      <span style={{ display: "block", color: "#475569" }}>
-                        Composition: {med.composition}
-                      </span>
-                    )}
-                    {med.company && (
-                      <span style={{ display: "block", color: "#475569" }}>
-                        Company: {med.company}
-                      </span>
-                    )}
-                    <b>Selling Price:</b> ₹{med.price} | <b>MRP:</b> ₹{med.mrp} | <b>Stock:</b> {med.stock}
-                    <br />
-                    <b>Type:</b> {med.type || "Tablet"}
-                  </Typography>
-                  <IconButton color="primary" size="small" onClick={() => handleEditMedicine(med)} disabled={loading}>
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton color="error" size="small" onClick={() => handleDeleteMedicine(med.id || med._id)} disabled={loading}>
-                    <DeleteIcon />
-                  </IconButton>
-                </CardContent>
-              </Card>
-            ))}
 
             {/* Edit Medicine Dialog (unchanged fields/logic) */}
             <Dialog open={!!editMedId} onClose={closeEditDialog} fullWidth maxWidth="xs">
