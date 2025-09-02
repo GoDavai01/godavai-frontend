@@ -616,22 +616,45 @@ export default function PharmacyDashboard() {
     });
   };
 
-  // mark a medicine available/unavailable
+// mark a medicine available/unavailable — optimistic + new endpoint
 const toggleAvailability = async (med) => {
-  const to = med.status === "unavailable" ? "active" : "unavailable";
-  setLoading(true);
+  const goingUnavailable = med.status !== "unavailable"; // if currently available → make unavailable
+  const newStatus = goingUnavailable ? "unavailable" : "active";
+
+  // optimistic UI update
+  setMedicines((ms) =>
+    ms.map((m) =>
+      (m._id || m.id) === (med._id || med.id)
+        ? { ...m, status: newStatus, available: !goingUnavailable }
+        : m
+    )
+  );
+
   try {
     await axios.patch(
-      `${API_BASE_URL}/api/pharmacy/medicines/${med._id || med.id}`,
-      { status: to },
-      { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+      `${API_BASE_URL}/api/pharmacy/medicines/${med._id || med.id}/availability`,
+      { status: newStatus },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
     );
-    setMedMsg(`Marked as ${to}.`);
-  } catch {
+    setMedMsg(`Marked as ${newStatus}.`);
+  } catch (e) {
+    // revert on failure
+    setMedicines((ms) =>
+      ms.map((m) =>
+        (m._id || m.id) === (med._id || med.id)
+          ? { ...m, status: med.status, available: med.available }
+          : m
+      )
+    );
     setMedMsg("Failed to update availability.");
   }
-  setLoading(false);
 };
+
 
   const handleSaveMedicine = async () => {
     if (!editMedForm.name || !editMedForm.price || !editMedForm.stock ||
@@ -1117,17 +1140,18 @@ const toggleAvailability = async (med) => {
           <b>Type:</b> {med.type || "Tablet"}
         </Typography>
 
-        {/* NEW: availability toggle */}
-        <Button
-          size="small"
-          variant={med.status === "unavailable" ? "contained" : "outlined"}
-          color={med.status === "unavailable" ? "success" : "error"}
-          onClick={() => toggleAvailability(med)}
-          disabled={loading}
-          className="rounded-xl"
-        >
-          {med.status === "unavailable" ? "Mark Available" : "Mark Unavailable"}
-        </Button>
+        <div className="flex items-center gap-2">
+  <Typography variant="caption" className="text-slate-500">Available</Typography>
+  <Switch
+    size="small"
+    color="success"
+    checked={med.status !== "unavailable"}
+    onChange={() => toggleAvailability(med)}
+    disabled={loading}
+    inputProps={{ 'aria-label': 'Toggle Availability' }}
+  />
+</div>
+
 
         <IconButton color="primary" size="small" onClick={() => handleEditMedicine(med)} disabled={loading}>
           <EditIcon />

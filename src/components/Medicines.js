@@ -87,13 +87,14 @@ export default function Medicines() {
     return med.type === selected;
   };
 
-  const filteredMeds = useMemo(
+const filteredMeds = useMemo(
   () =>
     medicines
-      .filter((m) => m.status !== "unavailable") // ensure unavailable items never show
+      .filter((m) => m.status !== "unavailable" && m.available !== false) // both checks
       .filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType)),
   [medicines, selectedCategory, selectedType]
 );
+
 
   // Right column height; the page itself does not scroll.
   const columnHeight = `calc(100vh - ${TOP_OFFSET_PX}px)`;
