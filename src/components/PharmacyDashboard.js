@@ -1109,59 +1109,96 @@ const toggleAvailability = async (med) => {
     return String(a.name).localeCompare(String(b.name));
   })
   .map(med => (
-    <Card key={med.id || med._id} className="mb-2 bg-white border border-emerald-200 rounded-2xl">
-      <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-        <Typography sx={{ flex: 1 }}>
-          <b>{med.name}</b>
-          {med.brand && (<span style={{ color: "#059669", fontWeight: 400 }}> ({med.brand})</span>)}
-          {med.status === "draft" && (
-            <Chip size="small" label="Draft" color="warning" className="ml-2 font-bold" />
-          )}
-          {med.status === "unavailable" && (
-            <Chip size="small" label="Unavailable" color="error" className="ml-2 font-bold" />
-          )}
-          {" — "}
-          <span style={{ color: "#047857" }}>
-            {(Array.isArray(med.category) ? med.category.join(', ') : med.category) || "Miscellaneous"}
+  <Card
+    key={med.id || med._id}
+    className="mb-2 bg-white border border-emerald-200 rounded-2xl"
+    sx={{ position: "relative" }}
+  >
+    <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+      <Typography sx={{ flex: 1 }}>
+        <b>{med.name}</b>
+        {med.brand && (
+          <span style={{ color: "#059669", fontWeight: 400 }}>
+            {" "}({med.brand})
           </span>
-          <br />
-          {med.composition && (
-            <span style={{ display: "block", color: "#475569" }}>
-              Composition: {med.composition}
-            </span>
-          )}
-          {med.company && (
-            <span style={{ display: "block", color: "#475569" }}>
-              Company: {med.company}
-            </span>
-          )}
-          <b>Selling Price:</b> ₹{med.price} | <b>MRP:</b> ₹{med.mrp} | <b>Stock:</b> {med.stock}
-          <br />
-          <b>Type:</b> {med.type || "Tablet"}
+        )}
+        {med.status === "draft" && (
+          <Chip size="small" label="Draft" color="warning" className="ml-2 font-bold" />
+        )}
+        {med.status === "unavailable" && (
+          <Chip size="small" label="Unavailable" color="error" className="ml-2 font-bold" />
+        )}
+        {" — "}
+        <span style={{ color: "#047857" }}>
+          {(Array.isArray(med.category) ? med.category.join(", ") : med.category) || "Miscellaneous"}
+        </span>
+        <br />
+        {med.composition && (
+          <span style={{ display: "block", color: "#475569" }}>
+            Composition: {med.composition}
+          </span>
+        )}
+        {med.company && (
+          <span style={{ display: "block", color: "#475569" }}>
+            Company: {med.company}
+          </span>
+        )}
+        <b>Selling Price:</b> ₹{med.price} | <b>MRP:</b> ₹{med.mrp} | <b>Stock:</b> {med.stock}
+        <br />
+        <b>Type:</b> {med.type || "Tablet"}
+      </Typography>
+
+      {/* Toggle moved to top-right */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          display: "flex",
+          alignItems: "center",
+          gap: 0.75,
+          bgcolor: "white",
+          px: 1,
+          py: 0.25,
+          borderRadius: 2,
+          boxShadow: 0.5,
+          border: "1px solid",
+          borderColor: "emerald.100",
+        }}
+      >
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
+          Available
         </Typography>
+        <Switch
+          size="small"
+          color="success"
+          checked={med.status !== "unavailable"}
+          onChange={() => toggleAvailability(med)}
+          disabled={loading}
+          inputProps={{ "aria-label": "Toggle Availability" }}
+        />
+      </Box>
 
-        <div className="flex items-center gap-2">
-  <Typography variant="caption" className="text-slate-500">Available</Typography>
-  <Switch
-    size="small"
-    color="success"
-    checked={med.status !== "unavailable"}
-    onChange={() => toggleAvailability(med)}
-    disabled={loading}
-    inputProps={{ 'aria-label': 'Toggle Availability' }}
-  />
-</div>
-
-
-        <IconButton color="primary" size="small" onClick={() => handleEditMedicine(med)} disabled={loading}>
-          <EditIcon />
-        </IconButton>
-        <IconButton color="error" size="small" onClick={() => handleDeleteMedicine(med.id || med._id)} disabled={loading}>
-          <DeleteIcon />
-        </IconButton>
-      </CardContent>
-    </Card>
+      <IconButton
+        color="primary"
+        size="small"
+        onClick={() => handleEditMedicine(med)}
+        disabled={loading}
+      >
+        <EditIcon />
+      </IconButton>
+      <IconButton
+        color="error"
+        size="small"
+        onClick={() => handleDeleteMedicine(med.id || med._id)}
+        disabled={loading}
+      >
+        <DeleteIcon />
+      </IconButton>
+    </CardContent>
+  </Card>
 ))}
+
 
 
             {/* Edit Medicine Dialog (unchanged fields/logic) */}
