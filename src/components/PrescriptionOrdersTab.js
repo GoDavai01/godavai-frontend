@@ -672,7 +672,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                         "&:hover": { borderColor: BRAND_GREEN_DARK, color: BRAND_GREEN_DARK },
                       }}
                     >
-                      + Add Composition
+                      + Add Medicine
                     </Button>
                   </td>
                 </tr>
