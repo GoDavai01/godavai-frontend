@@ -29,6 +29,16 @@ const getImageUrl = (img) => {
   return img;
 };
 
+// -- ensure a description exists (calls backend once and saves it) --
+async function ensureDescription(apiBase, medId) {
+  try {
+    const r = await axios.post(`${apiBase}/api/medicines/${medId}/ensure-description`);
+    return r.data?.description || "";
+  } catch {
+    return "";
+  }
+}
+
 const allCategories = ["All","Painkiller","Fever","Cough & Cold","Diabetes","Heart","Antibiotic","Ayurveda"];
 const medTypes      = ["All","Tablet","Syrup","Injection","Cream","Ointment","Drop","Spray","Inhaler"];
 
@@ -221,7 +231,17 @@ export default function Medicines() {
                           relative w-full aspect-square grid place-items-center rounded-xl
                           bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm overflow-hidden
                         "
-                        onClick={() => { setSelectedMed(med); setActiveImg(0); }}
+                        onClick={async () => {
+  setSelectedMed(med);
+  setActiveImg(0);
+  if (!med.description || !med.description.trim()) {
+    const desc = await ensureDescription(API_BASE_URL, med._id);
+    if (desc) {
+      setSelectedMed(prev => (prev ? { ...prev, description: desc } : prev));
+      setMedicines(ms => ms.map(m => (m._id === med._id ? { ...m, description: desc } : m)));
+    }
+  }
+}}
                         title="Know more"
                       >
                         <img
@@ -246,7 +266,17 @@ export default function Medicines() {
                       <div className="mt-2">
                         <div
                           className="text-[13px] font-extrabold text-emerald-800 leading-snug cursor-pointer"
-                          onClick={() => { setSelectedMed(med); setActiveImg(0); }}
+                          onClick={async () => {
+  setSelectedMed(med);
+  setActiveImg(0);
+  if (!med.description || !med.description.trim()) {
+    const desc = await ensureDescription(API_BASE_URL, med._id);
+    if (desc) {
+      setSelectedMed(prev => (prev ? { ...prev, description: desc } : prev));
+      setMedicines(ms => ms.map(m => (m._id === med._id ? { ...m, description: desc } : m)));
+    }
+  }
+}}
                           style={{
                             display: "-webkit-box",
                             WebkitLineClamp: 2,
