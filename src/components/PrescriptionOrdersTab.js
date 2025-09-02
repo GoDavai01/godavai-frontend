@@ -2,8 +2,9 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Box, Typography, Card, CardContent, Button, Stack, Dialog,
-  DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Select, Snackbar, Alert, Autocomplete
+  DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Select, Snackbar, Alert
 } from "@mui/material";
+import Autocomplete from "@mui/material/Autocomplete";
 import axios from "axios";
 import RxAiSideBySideDialog from "./RxAiSideBySideDialog";
 
@@ -28,13 +29,17 @@ function getSecondsLeft(expiry) {
   return t > 0 ? t : 0;
 }
 
-// --- Add this function ---
+/* ============================
+   Validation (updated)
+   Allow (Composition OR Brand) for available items
+============================ */
 function isPartialQuoteValid(quote) {
   if (!Array.isArray(quote) || !quote.length) return false;
   return quote.every(row =>
-    row.available !== false
-      ? (row.medicineName && row.brand && row.quantity && row.price)
-      : (row.medicineName)
+    row.available === false
+      ? (!!row.medicineName || !!row.brand)          // mark what's unavailable
+      : ((!!row.medicineName || !!row.brand) &&      // Composition OR Brand
+         !!row.quantity && !!row.price)
   );
 }
 
@@ -52,12 +57,20 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
   const [quoteMode, setQuoteMode] = useState(""); // "accept" or "partial"
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [acceptDialogOpen, setAcceptDialogOpen] = useState(false);
-  const [acceptDialogData, setAcceptDialogData] = useState([]); // [{ name, qty, brand, ... }]
+  const [acceptDialogData, setAcceptDialogData] = useState([]); // [{ medicineName, quantity, brand, price }]
+
+  // Quick Add dialog state
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAdd, setQuickAdd] = useState({ brand: "", composition: "", company: "" });
+  function openQuickAddDialog({ brandPrefill = "", compositionPrefill = "" }) {
+    setQuickAdd({ brand: brandPrefill, composition: compositionPrefill, company: "" });
+    setQuickAddOpen(true);
+  }
 
   // Viewer state
   const [previewOrder, setPreviewOrder] = useState(null);
 
-  // --- ADDED: fetchOrders helper ---
+  // --- fetchOrders helper ---
   const fetchOrders = useCallback(() => {
     if (!token) return;
     axios
@@ -107,7 +120,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
     return () => clearInterval(interval);
   }, [orders]);
 
-  // --- FIX: Auto-close quote dialog if timer runs out
+  // Auto-close quote dialog if timer runs out
   useEffect(() => {
     if (
       showQuoteDialog &&
@@ -119,7 +132,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
     }
   }, [timers, selectedOrder, showQuoteDialog]);
 
-  // Get all medicines available at this pharmacy
+  // Get all medicines available at this pharmacy (for autocomplete)
   useEffect(() => {
     if (!token) return;
     axios
@@ -130,15 +143,16 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
       .catch(() => setPharmacyMeds([]));
   }, [token]);
 
-  // --- QUOTE ACTIONS START ---
+  /* ---------------- QUOTE ACTIONS ---------------- */
 
   // For Accept: all medicines must be available
   const handleAcceptOrder = (order) => {
     setSelectedOrder(order);
     setQuoteMode("accept");
     const base = (order.ai?.items?.length ? order.ai.items : (order.medicinesRequested || []));
+    // Prefer composition if present
     setAcceptDialogData(base.map(med => ({
-      medicineName: med.name || med.medicineName,
+      medicineName: med.composition || med.name || med.medicineName,
       quantity: med.quantity || 1,
       brand: "",
       price: ""
@@ -153,7 +167,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
     const base = (order.ai?.items?.length ? order.ai.items : (order.medicinesRequested || []));
     const meds = base.length
       ? base.map((med) => ({
-          medicineName: med.name || med.medicineName,
+          medicineName: med.composition || med.name || med.medicineName,
           brand: "",
           price: "",
           quantity: med.quantity || 1,
@@ -187,7 +201,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
     }
   };
 
-  // Submit quote for this prescription order
+  // Submit quote for this prescription order (partial flow)
   const handleSubmitQuote = async () => {
     // Extra guard on frontend (backend also has a check!)
     if (
@@ -207,7 +221,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
       setMsg("All medicines must be available to accept the order!");
       return;
     }
-    // PATCH: Make sure every quote line has available as true/false (default true)
+    // Ensure each row has a boolean 'available'
     const cleanedQuote = quote.map(row => ({
       ...row,
       available: row.available === false ? false : true
@@ -237,7 +251,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
     setQuote(arr);
   };
 
-  // --- AcceptDialog total calculation ---
+  // AcceptDialog total calculation
   const acceptDialogTotal = acceptDialogData.reduce(
     (sum, row) => sum + ((Number(row.price) || 0) * (Number(row.quantity) || 1)),
     0
@@ -309,7 +323,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                 </Button>
               </Stack>
 
-              {/* A) AI suggestions */}
+              {/* AI suggestions */}
               {(order.ai?.items?.length > 0) && (
                 <Box
                   sx={{
@@ -461,48 +475,60 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
           Accept (All Available) - Specify Brands, Qty & Price
         </DialogTitle>
         <DialogContent>
+          {/* UPGRADED TABLE */}
           <Box sx={{ overflowX: "auto" }}>
             <table
               style={{
                 width: "100%",
-                background: "transparent",
                 borderCollapse: "collapse",
-                color: TEXT_PRIMARY,
-                fontWeight: 700
+                fontSize: "14px",
+                textAlign: "left",
               }}
             >
-              <thead>
-                <tr style={{ background: SURFACE_SOFT, fontWeight: 900 }}>
-                  <th style={{ padding: 8, textAlign: "left" }}>Medicine</th>
-                  <th style={{ padding: 8, textAlign: "left" }}>Brand</th>
-                  <th style={{ padding: 8, textAlign: "left" }}>Qty</th>
-                  <th style={{ padding: 8, textAlign: "left" }}>Price</th>
-                  <th></th>
+              <thead style={{ position: "sticky", top: 0, background: SURFACE_SOFT, zIndex: 1 }}>
+                <tr>
+                  <th style={{ padding: 10, fontWeight: 900, minWidth: 200 }}>Composition</th>
+                  <th style={{ padding: 10, fontWeight: 900, minWidth: 120 }}>Brand</th>
+                  <th style={{ padding: 10, fontWeight: 900, width: 70 }}>Qty</th>
+                  <th style={{ padding: 10, fontWeight: 900, width: 90 }}>Price</th>
+                  <th style={{ padding: 10, fontWeight: 900, width: 60 }}></th>
+                  <th style={{ padding: 10, fontWeight: 900, width: 160 }}></th>
                 </tr>
               </thead>
+
               <tbody>
                 {acceptDialogData.map((row, i) => (
-                  <tr key={i} style={{ background: "transparent" }}>
-                    <td style={{ padding: 6 }}>
+                  <tr
+                    key={i}
+                    style={{
+                      background: i % 2 === 0 ? "#fafafa" : "white",
+                      verticalAlign: "middle",
+                    }}
+                  >
+                    {/* Composition (with pharmacyMeds autocomplete) */}
+                    <td style={{ padding: 8 }}>
                       <Autocomplete
                         freeSolo
                         options={pharmacyMeds || []}
                         getOptionLabel={(option) =>
-                          typeof option === "string" ? option : option.name
+                          typeof option === "string"
+                            ? option
+                            : (option.composition || option.brand || option.name || "")
                         }
                         value={
                           pharmacyMeds.find(
-                            (med) => med.name === row.medicineName
+                            (med) =>
+                              (med.composition || med.brand || med.name || "") === row.medicineName
                           ) || { name: row.medicineName }
                         }
                         onChange={(_, value) => {
                           const arr = [...acceptDialogData];
                           if (typeof value === "string") {
-                            arr[i].medicineName = value;
-                          } else if (value && value.name) {
-                            arr[i].medicineName = value.name;
-                            arr[i].brand = value.brand || "";
-                            arr[i].price = value.price || "";
+                            arr[i].medicineName = value; // typed composition
+                          } else if (value) {
+                            arr[i].medicineName = value.composition || value.brand || value.name || "";
+                            arr[i].brand = value.brand || arr[i].brand || "";
+                            arr[i].price = value.price || arr[i].price || "";
                           }
                           setAcceptDialogData(arr);
                         }}
@@ -511,69 +537,86 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                           arr[i].medicineName = value;
                           setAcceptDialogData(arr);
                         }}
-                        // (optional) tiny UI nicety: Rx tag
                         renderOption={(props, option) => (
                           <li {...props}>
-                            <span>{option.name}</span>
+                            <span style={{ fontWeight: 600 }}>
+                              {option.composition || option.brand || option.name}
+                            </span>
                             {!!option.prescriptionRequired && (
-                              <span style={{ marginLeft: 8, fontSize: 11, color: "#f43f5e", fontWeight: 800 }}>Rx</span>
+                              <span style={{ marginLeft: 8, fontSize: 11, color: "#f43f5e", fontWeight: 800 }}>
+                                Rx
+                              </span>
                             )}
                           </li>
                         )}
                         renderInput={(params) => (
                           <TextField
                             {...params}
-                            placeholder="Medicine"
+                            fullWidth
+                            placeholder="Composition"
                             size="small"
-                            variant="standard"
+                            variant="outlined"
+                            InputProps={{
+                              ...params.InputProps,
+                              style: { fontWeight: 600 },
+                            }}
                           />
                         )}
                       />
                     </td>
-                    <td style={{ padding: 6 }}>
+
+                    {/* Brand */}
+                    <td style={{ padding: 8 }}>
                       <TextField
+                        fullWidth
                         placeholder="Brand"
                         value={row.brand}
-                        onChange={e => {
+                        onChange={(e) => {
                           const arr = [...acceptDialogData];
                           arr[i].brand = e.target.value;
                           setAcceptDialogData(arr);
                         }}
                         size="small"
-                        variant="standard"
+                        variant="outlined"
                       />
                     </td>
-                    <td style={{ padding: 6 }}>
+
+                    {/* Qty */}
+                    <td style={{ padding: 8 }}>
                       <TextField
-                        placeholder="Qty"
                         type="number"
                         value={row.quantity}
-                        onChange={e => {
+                        onChange={(e) => {
                           const arr = [...acceptDialogData];
                           arr[i].quantity = e.target.value;
                           setAcceptDialogData(arr);
                         }}
                         size="small"
-                        variant="standard"
-                        sx={{ width: 60 }}
+                        variant="outlined"
+                        sx={{ width: 70 }}
+                        inputProps={{ min: 1 }}
                       />
                     </td>
-                    <td style={{ padding: 6 }}>
+
+                    {/* Price */}
+                    <td style={{ padding: 8 }}>
                       <TextField
-                        placeholder="Price"
                         type="number"
                         value={row.price}
-                        onChange={e => {
+                        onChange={(e) => {
                           const arr = [...acceptDialogData];
                           arr[i].price = e.target.value;
                           setAcceptDialogData(arr);
                         }}
                         size="small"
-                        variant="standard"
-                        sx={{ width: 80 }}
+                        variant="outlined"
+                        sx={{ width: 90 }}
+                        inputProps={{ min: 0 }}
                       />
                     </td>
-                    <td>
+
+                    {/* Remove */}
+                    <td style={{ padding: 8 }}>
                       {acceptDialogData.length > 1 && (
                         <Button
                           variant="text"
@@ -583,30 +626,64 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                             setAcceptDialogData(acceptDialogData.filter((_, j) => j !== i))
                           }
                           sx={{ fontWeight: 800 }}
+                          aria-label="Remove row"
+                          title="Remove row"
                         >
                           ✖
                         </Button>
                       )}
                     </td>
+
+                    {/* Quick Add (draft) */}
+                    <td style={{ padding: 8 }}>
+                      <Button
+                        variant="text"
+                        size="small"
+                        sx={{ fontWeight: 800, color: BRAND_GREEN }}
+                        onClick={() =>
+                          openQuickAddDialog({
+                            brandPrefill: row.brand || "",
+                            compositionPrefill: row.medicineName || "",
+                          })
+                        }
+                      >
+                        + Add to Inventory (draft)
+                      </Button>
+                    </td>
                   </tr>
                 ))}
+
+                {/* Add row */}
                 <tr>
-                  <td colSpan={5} style={{ textAlign: "right", padding: 8 }}>
+                  <td colSpan={6} style={{ textAlign: "right", padding: 10 }}>
                     <Button
                       variant="outlined"
                       onClick={() =>
-                        setAcceptDialogData([...acceptDialogData, { medicineName: "", brand: "", quantity: 1, price: "" }])
+                        setAcceptDialogData([
+                          ...acceptDialogData,
+                          { medicineName: "", brand: "", quantity: 1, price: "" },
+                        ])
                       }
                       size="small"
-                      sx={{ color: BRAND_GREEN, borderColor: BRAND_GREEN, fontWeight: 800, "&:hover": { borderColor: BRAND_GREEN_DARK, color: BRAND_GREEN_DARK } }}
+                      sx={{
+                        color: BRAND_GREEN,
+                        borderColor: BRAND_GREEN,
+                        fontWeight: 800,
+                        "&:hover": { borderColor: BRAND_GREEN_DARK, color: BRAND_GREEN_DARK },
+                      }}
                     >
-                      + Add Medicine
+                      + Add Composition
                     </Button>
                   </td>
                 </tr>
               </tbody>
             </table>
           </Box>
+
+          <Typography sx={{ mt: 1, fontSize: 12, fontWeight: 700, color: TEXT_SECONDARY }}>
+            Fill either <b>Composition</b> or <b>Brand</b> (or both). <b>Company</b> is optional.
+          </Typography>
+
           <Typography sx={{ mt: 2, fontWeight: 900, color: TEXT_PRIMARY, fontSize: 18 }}>
             Total Price: ₹{acceptDialogTotal}
           </Typography>
@@ -639,7 +716,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
             }}
             disabled={
               acceptDialogData.length === 0 ||
-              acceptDialogData.some(row => !row.brand || !row.medicineName || !row.quantity || !row.price) ||
+              acceptDialogData.some(row => (!row.brand && !row.medicineName) || !row.quantity || !row.price) ||
               !selectedOrder ||
               timers[selectedOrder._id] <= 0 ||
               selectedOrder.status !== "waiting_for_quotes"
@@ -651,7 +728,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
         </DialogActions>
       </Dialog>
 
-      {/* --- Quote Submission Dialog --- */}
+      {/* --- Quote Submission Dialog (Partial) --- */}
       <Dialog
         open={showQuoteDialog}
         onClose={() => setShowQuoteDialog(false)}
@@ -664,157 +741,138 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
             : "Submit Partial Quote"}
         </DialogTitle>
         <DialogContent>
+          {/* UPGRADED TABLE */}
           <Box sx={{ overflowX: "auto" }}>
             <table
               style={{
                 width: "100%",
-                background: "transparent",
                 borderCollapse: "collapse",
-                color: TEXT_PRIMARY,
-                fontWeight: 700
+                fontSize: "14px",
+                textAlign: "left",
               }}
             >
-              <thead>
-                <tr style={{ background: SURFACE_SOFT, fontWeight: 900 }}>
-                  <th style={{ padding: 8, textAlign: "left" }}>Medicine</th>
-                  <th style={{ padding: 8, textAlign: "left" }}>Brand</th>
-                  <th style={{ padding: 8, textAlign: "left" }}>Qty</th>
-                  <th style={{ padding: 8, textAlign: "left" }}>Price</th>
-                  <th style={{ padding: 8, textAlign: "left" }}>Available</th>
+              <thead style={{ position: "sticky", top: 0, background: SURFACE_SOFT, zIndex: 1 }}>
+                <tr>
+                  <th style={{ padding: 10, fontWeight: 900, minWidth: 180 }}>Composition</th>
+                  <th style={{ padding: 10, fontWeight: 900, minWidth: 120 }}>Brand</th>
+                  <th style={{ padding: 10, fontWeight: 900, width: 70 }}>Qty</th>
+                  <th style={{ padding: 10, fontWeight: 900, width: 90 }}>Price</th>
+                  <th style={{ padding: 10, fontWeight: 900, width: 110 }}>Available</th>
                   <th></th>
+                  <th style={{ padding: 10, fontWeight: 900, width: 160 }}></th>
                 </tr>
               </thead>
               <tbody>
                 {quote.map((row, i) => (
-                  <tr key={i} style={{ background: "transparent" }}>
-                    <td style={{ padding: 6 }}>
-                      <Autocomplete
-                        freeSolo
-                        options={pharmacyMeds || []}
-                        getOptionLabel={(option) =>
-                          typeof option === "string" ? option : option.name
-                        }
-                        value={
-                          pharmacyMeds.find(
-                            (med) => med.name === row.medicineName
-                          ) || { name: row.medicineName }
-                        }
-                        onChange={(_, value) => {
-                          if (typeof value === "string") {
-                            updateRow(i, "medicineName", value);
-                          } else if (value && value.name) {
-                            updateRow(i, "medicineName", value.name);
-                            updateRow(i, "price", value.price || "");
-                            updateRow(i, "brand", value.brand || "");
-                            updateRow(i, "available", value.stock > 0);
-                          }
-                        }}
-                        onInputChange={(_, value) =>
-                          updateRow(i, "medicineName", value)
-                        }
-                        // (optional) tiny UI nicety: Rx tag
-                        renderOption={(props, option) => (
-                          <li {...props}>
-                            <span>{option.name}</span>
-                            {!!option.prescriptionRequired && (
-                              <span style={{ marginLeft: 8, fontSize: 11, color: "#f43f5e", fontWeight: 800 }}>Rx</span>
-                            )}
-                          </li>
-                        )}
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            placeholder="Medicine"
-                            size="small"
-                            variant="standard"
-                          />
-                        )}
-                      />
-                    </td>
-                    <td style={{ padding: 6 }}>
+                  <tr
+                    key={i}
+                    style={{
+                      background: i % 2 === 0 ? "#fafafa" : "white",
+                      verticalAlign: "middle",
+                    }}
+                  >
+                    {/* Composition */}
+                    <td style={{ padding: 8 }}>
                       <TextField
-                        placeholder="Brand"
-                        value={row.brand}
-                        onChange={(e) =>
-                          updateRow(i, "brand", e.target.value)
-                        }
+                        fullWidth
+                        value={row.medicineName}
+                        onChange={(e) => updateRow(i, "medicineName", e.target.value)}
+                        placeholder="Composition (e.g., Paracetamol 650 mg)"
                         size="small"
-                        variant="standard"
+                        variant="outlined"
+                        InputProps={{ style: { fontWeight: 600 } }}
                       />
                     </td>
-                    <td style={{ padding: 6 }}>
+
+                    {/* Brand */}
+                    <td style={{ padding: 8 }}>
                       <TextField
-                        placeholder="Qty"
+                        fullWidth
+                        value={row.brand}
+                        onChange={(e) => updateRow(i, "brand", e.target.value)}
+                        placeholder="Brand"
+                        size="small"
+                        variant="outlined"
+                      />
+                    </td>
+
+                    {/* Quantity */}
+                    <td style={{ padding: 8 }}>
+                      <TextField
                         type="number"
                         value={row.quantity}
-                        onChange={(e) =>
-                          updateRow(i, "quantity", e.target.value)
-                        }
+                        onChange={(e) => updateRow(i, "quantity", e.target.value)}
                         size="small"
-                        variant="standard"
-                        sx={{ width: 60 }}
+                        variant="outlined"
+                        sx={{ width: 70 }}
                       />
                     </td>
-                    <td style={{ padding: 6 }}>
+
+                    {/* Price */}
+                    <td style={{ padding: 8 }}>
                       <TextField
-                        placeholder="Price"
                         type="number"
                         value={row.price}
-                        onChange={(e) =>
-                          updateRow(i, "price", e.target.value)
-                        }
+                        onChange={(e) => updateRow(i, "price", e.target.value)}
                         size="small"
-                        variant="standard"
-                        sx={{ width: 80 }}
+                        variant="outlined"
+                        sx={{ width: 90 }}
                       />
                     </td>
-                    <td style={{ padding: 6 }}>
+
+                    {/* Availability */}
+                    <td style={{ padding: 8 }}>
                       <Select
                         value={String(row.available)}
-                        onChange={(e) =>
-                          updateRow(i, "available", e.target.value === "true")
-                        }
+                        onChange={(e) => updateRow(i, "available", e.target.value === "true")}
                         size="small"
-                        variant="standard"
-                        sx={{ width: 100 }}
-                        disabled={quoteMode === "accept"}
+                        variant="outlined"
+                        sx={{ width: 120 }}
                       >
-                        <MenuItem value="true">✓</MenuItem>
-                        <MenuItem value="false">✗</MenuItem>
+                        <MenuItem value="true">✅ Available</MenuItem>
+                        <MenuItem value="false">❌ Not Available</MenuItem>
                       </Select>
                     </td>
-                    <td>
+
+                    {/* Remove Button */}
+                    <td style={{ padding: 8 }}>
                       {quote.length > 1 && (
                         <Button
                           variant="text"
-                          size="small"
                           color="error"
-                          onClick={() =>
-                            setQuote(quote.filter((_, j) => j !== i))
-                          }
-                          sx={{ fontWeight: 800 }}
+                          size="small"
+                          onClick={() => setQuote(quote.filter((_, j) => j !== i))}
                         >
                           ✖
                         </Button>
                       )}
                     </td>
+
+                    {/* Quick Add (draft) */}
+                    <td style={{ padding: 8 }}>
+                      <Button
+                        variant="text"
+                        size="small"
+                        sx={{ fontWeight: 800, color: BRAND_GREEN }}
+                        onClick={() =>
+                          openQuickAddDialog({
+                            brandPrefill: row.brand || "",
+                            compositionPrefill: row.medicineName || "",
+                          })
+                        }
+                      >
+                        + Add to Inventory (draft)
+                      </Button>
+                    </td>
                   </tr>
                 ))}
-                <tr>
-                  <td colSpan={6} style={{ textAlign: "right", padding: 8 }}>
-                    <Button
-                      variant="outlined"
-                      onClick={addRow}
-                      size="small"
-                      sx={{ color: BRAND_GREEN, borderColor: BRAND_GREEN, fontWeight: 800, "&:hover": { borderColor: BRAND_GREEN_DARK, color: BRAND_GREEN_DARK } }}
-                    >
-                      + Add Medicine
-                    </Button>
-                  </td>
-                </tr>
               </tbody>
             </table>
           </Box>
+
+          <Typography sx={{ mt: 1, fontSize: 12, fontWeight: 700, color: TEXT_SECONDARY }}>
+            Fill either <b>Composition</b> or <b>Brand</b> (or both). <b>Company</b> is optional.
+          </Typography>
         </DialogContent>
         <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ m: 2 }}>
           <Button onClick={() => setShowQuoteDialog(false)} sx={{ fontWeight: 800 }}>Cancel</Button>
@@ -832,6 +890,70 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
             Submit Quote
           </Button>
         </Stack>
+      </Dialog>
+
+      {/* --- Quick Add to Inventory (Draft) Dialog --- */}
+      <Dialog open={quickAddOpen} onClose={() => setQuickAddOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 900, color: TEXT_PRIMARY }}>
+          Quick Add to Inventory (Draft)
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Brand (required)"
+              value={quickAdd.brand}
+              onChange={(e) => setQuickAdd(q => ({ ...q, brand: e.target.value }))}
+              required
+            />
+            <TextField
+              label="Composition (optional)"
+              placeholder="e.g., Paracetamol 650 mg"
+              value={quickAdd.composition}
+              onChange={(e) => setQuickAdd(q => ({ ...q, composition: e.target.value }))}
+            />
+            <TextField
+              label="Company (optional)"
+              value={quickAdd.company}
+              onChange={(e) => setQuickAdd(q => ({ ...q, company: e.target.value }))}
+            />
+            <Typography sx={{ fontSize: 12, color: TEXT_SECONDARY, fontWeight: 700 }}>
+              Drafts are hidden from customers. Add image/price later to activate.
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setQuickAddOpen(false)} sx={{ fontWeight: 800 }}>Cancel</Button>
+          <Button
+            variant="contained"
+            sx={{ fontWeight: 900, bgcolor: BRAND_GREEN, "&:hover": { bgcolor: BRAND_GREEN_DARK } }}
+            disabled={!quickAdd.brand}
+            onClick={async () => {
+              try {
+                await axios.post(
+                  `${API_BASE_URL}/api/pharmacy/medicines/quick-add-draft`,
+                  {
+                    name: quickAdd.brand || quickAdd.composition || "Draft",
+                    brand: quickAdd.brand,
+                    composition: quickAdd.composition || "",
+                    company: quickAdd.company || "",
+                  },
+                  { headers: { Authorization: `Bearer ${token}` } }
+                );
+                setMsg("Draft medicine added to your inventory.");
+                setQuickAddOpen(false);
+                // refresh local inventory for autocompletes
+                const res = await axios.get(`${API_BASE_URL}/api/pharmacy/medicines`, {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                setPharmacyMeds(res.data || []);
+              } catch {
+                setMsg("Failed to add draft medicine.");
+              }
+            }}
+          >
+            Add as Draft
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* --- Reject Confirmation Dialog --- */}
@@ -856,7 +978,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
         onClose={() => setPreviewOrder(null)}
         order={previewOrder}
         token={token}
-        onRefetched={() => fetchOrders()}   // already defined in that file
+        onRefetched={() => fetchOrders()}
       />
 
       <Snackbar

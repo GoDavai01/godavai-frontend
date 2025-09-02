@@ -640,6 +640,7 @@ export default function PharmacyDashboard() {
 
     try {
       let data, headers;
+      const makeActive = editMedForm.price > 0 && editMedForm.mrp > 0 && (editMedForm.stock ?? 0) >= 0;
       if (editMedImages && editMedImages.length) {
         data = new FormData();
         data.append("name", editMedForm.name);
@@ -655,6 +656,7 @@ export default function PharmacyDashboard() {
         // ⬇️ add prescription flag
         data.append("prescriptionRequired", editMedForm.prescriptionRequired);
         editMedImages.forEach(img => data.append("images", img));
+        if (makeActive) data.append("status", "active");
         headers = { Authorization: `Bearer ${token}` };
       } else {
         data = {
@@ -670,6 +672,7 @@ export default function PharmacyDashboard() {
           ...(editMedForm.type === "Other" && { customType: editMedForm.customType }),
           // ⬇️ add prescription flag
           prescriptionRequired: editMedForm.prescriptionRequired,
+          ...(makeActive ? { status: "active" } : {}),
         };
         headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
       }
@@ -1062,11 +1065,17 @@ export default function PharmacyDashboard() {
                 <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
                   <Typography sx={{ flex: 1 }}>
                     <b>{med.name}</b>
-                    {med.brand && (<span style={{ color: "#059669", fontWeight: 400 }}> ({med.brand})</span>)}
-                    {" — "}
-                    <span style={{ color: "#047857" }}>
-                      {(Array.isArray(med.category) ? med.category.join(', ') : med.category) || "Miscellaneous"}
-                    </span>
+{med.brand && (<span style={{ color: "#059669", fontWeight: 400 }}> ({med.brand})</span>)}
+
+{med.status === "draft" && (
+  <Chip size="small" label="Draft" color="warning" className="ml-2 font-bold" />
+)}
+
+{" — "}
+<span style={{ color: "#047857" }}>
+  {(Array.isArray(med.category) ? med.category.join(', ') : med.category) || "Miscellaneous"}
+</span>
+
                     <br />
                     {med.composition && (
                       <span style={{ display: "block", color: "#475569" }}>
