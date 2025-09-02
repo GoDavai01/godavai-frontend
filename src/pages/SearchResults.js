@@ -478,7 +478,7 @@ export default function SearchResults() {
                   )}
                 </div>
 
-                <div className="text-sm text-neutral-700 mb-4">
+                <div className="text-sm text-neutral-700 mb-4 whitespace-pre-line leading-relaxed">
                   {selectedMed.description ? (
                     selectedMed.description
                   ) : (
