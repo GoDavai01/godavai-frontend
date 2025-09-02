@@ -49,70 +49,88 @@ export default function Navbar({
 
   useEffect(() => setSearch(searchProp), [searchProp]);
 
-    useEffect(() => {
-    if (!search) {
-      setOptions([]);
-      setDropdownOpen(false);
-      return;
-    }
-    const controller = new AbortController();
+    // ⬇️ REPLACE the whole useEffect that loads suggestions with this one
+useEffect(() => {
+  if (!search) {
+    setOptions([]);
+    setDropdownOpen(false);
+    return;
+  }
+  const controller = new AbortController();
 
-    const load = async () => {
-      setLoading(true);
-      const type = routerLocation.pathname.startsWith("/medicines")
-        ? "medicine"
-        : routerLocation.pathname.startsWith("/doctors")
-        ? "doctor"
-        : routerLocation.pathname.startsWith("/labs")
-        ? "lab"
-        : "all";
+  const load = async () => {
+    setLoading(true);
+    const type = routerLocation.pathname.startsWith("/medicines")
+      ? "medicine"
+      : routerLocation.pathname.startsWith("/doctors")
+      ? "doctor"
+      : routerLocation.pathname.startsWith("/labs")
+      ? "lab"
+      : "all";
 
-      const tryReq = async (url, params) =>
-        axios.get(url, { params, signal: controller.signal }).then(r => r.data);
+    const tryReq = async (url, params) =>
+      axios.get(url, { params, signal: controller.signal }).then(r => r.data);
 
-      try {
-        // 1) correct route as mounted by backend
+    try {
+      // 1) Use richer medicines autocomplete first (matches name, brand, company, composition, category)
+      if (type === "medicine" || type === "all") {
         const city = (currentAddress?.city || "").trim();
-        let data = await tryReq(
-          `${API_BASE_URL}/api/search/search-autocomplete`,
-          { q: search, type, city }
-          );
+        const data = await tryReq(`${API_BASE_URL}/api/medicines/autocomplete`, {
+          q: search,
+          city,
+          limit: 12,
+        });
         setOptions(data || []);
         setDropdownOpen(true);
-      } catch (e1) {
-        try {
-          // 2) alt route with slash
-          let data = await tryReq(`${API_BASE_URL}/api/search/autocomplete`, { q: search, type });
-          setOptions(data || []);
-          setDropdownOpen(true);
-        } catch (e2) {
-          // 3) safe fallback for medicines
-          if ((type === "medicine" || type === "all")) {
-            try {
-              const meds = await tryReq(`${API_BASE_URL}/api/medicines/search`, { q: search });
-              const names = Array.from(new Set((meds || []).map(m => m.name))).slice(0, 10);
-              setOptions(names);
-              setDropdownOpen(true);
-            } catch {
-              setOptions([]);
-              setDropdownOpen(false);
-            }
-          } else {
+        return; // done for medicine/all
+      }
+
+      // 1b) Non-medicine routes: keep legacy search autocomplete
+      const city = (currentAddress?.city || "").trim();
+      const data = await tryReq(`${API_BASE_URL}/api/search/search-autocomplete`, {
+        q: search,
+        type,
+        city,
+      });
+      setOptions(data || []);
+      setDropdownOpen(true);
+    } catch (e1) {
+      try {
+        // 2) Alt legacy route with different path
+        const data = await tryReq(`${API_BASE_URL}/api/search/autocomplete`, {
+          q: search,
+          type,
+        });
+        setOptions(data || []);
+        setDropdownOpen(true);
+      } catch (e2) {
+        // 3) Final safe fallback for medicines: name-only from /medicines/search
+        if (type === "medicine" || type === "all") {
+          try {
+            const meds = await tryReq(`${API_BASE_URL}/api/medicines/search`, { q: search });
+            const names = Array.from(new Set((meds || []).map(m => m.name))).slice(0, 10);
+            setOptions(names);
+            setDropdownOpen(true);
+          } catch {
             setOptions([]);
             setDropdownOpen(false);
           }
+        } else {
+          setOptions([]);
+          setDropdownOpen(false);
         }
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
       }
-    };
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  };
 
-    const t = setTimeout(load, 160);
-    return () => {
-      controller.abort();
-      clearTimeout(t);
-    };
-  }, [search, routerLocation.pathname]);
+  const t = setTimeout(load, 160);
+  return () => {
+    controller.abort();
+    clearTimeout(t);
+  };
+}, [search, routerLocation.pathname]);
 
   useEffect(() => {
     const onDown = (e) => {
