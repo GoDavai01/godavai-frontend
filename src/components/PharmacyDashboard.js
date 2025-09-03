@@ -14,6 +14,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import PhotoCamera from "@mui/icons-material/PhotoCamera";
+import SearchIcon from "@mui/icons-material/Search";
 
 import { motion } from "framer-motion";
 import {
@@ -375,6 +376,11 @@ export default function PharmacyDashboard() {
   const editFileInputRef = useRef();
 
   const [payouts, setPayouts] = useState([]);
+
+  // ▼▼ ADDED: local search state for Medicines tab ▼▼
+  const [medSearchOpen, setMedSearchOpen] = useState(false);
+  const [medSearch, setMedSearch] = useState("");
+  // ▲▲ ADDED END ▲▲
 
   const today = todayString();
   const ordersToday = orders.filter(o => (o.createdAt || "").slice(0, 10) === today);
@@ -1098,9 +1104,50 @@ const toggleAvailability = async (med) => {
         {/* ================== MEDICINES TAB (moved from Overview toggle; logic unchanged) ================== */}
         {tab === 2 && (
           <Box sx={{ mt: 1, mb: 10 }}>
-            <Typography variant="h6" mb={1}>Medicines</Typography>
+            {/* ▼▼ REPLACED HEADER WITH SEARCH ICON + OPTIONAL INPUT ▼▼ */}
+            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+              <Typography variant="h6">Medicines</Typography>
+              <IconButton
+                aria-label="Search medicines"
+                size="small"
+                onClick={() => setMedSearchOpen(o => !o)}
+              >
+                <SearchIcon />
+              </IconButton>
+            </Box>
+            {medSearchOpen && (
+              <TextField
+                placeholder="Search your medicines…"
+                size="small"
+                fullWidth
+                value={medSearch}
+                onChange={(e) => setMedSearch(e.target.value)}
+                InputProps={{
+                  endAdornment: medSearch ? (
+                    <IconButton size="small" onClick={() => setMedSearch("")}>
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
+                  ) : null
+                }}
+                sx={{ mb: 1 }}
+              />
+            )}
+            {/* ▲▲ HEADER CHANGE END ▲▲ */}
 
-            {medicines
+            {(medSearch
+                ? medicines.filter(m => {
+                    const q = medSearch.toLowerCase().trim();
+                    if (!q) return true;
+                    const hay = [
+                      m.name,
+                      m.brand,
+                      m.composition,
+                      m.company,
+                      Array.isArray(m.category) ? m.category.join(" ") : m.category
+                    ].filter(Boolean).join(" ").toLowerCase();
+                    return hay.includes(q);
+                  })
+                : medicines)
   .slice()
   .sort((a,b) => {
     const ua = a.status === "unavailable" ? 1 : 0;
