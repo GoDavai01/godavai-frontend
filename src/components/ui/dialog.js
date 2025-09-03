@@ -47,6 +47,8 @@ export function Dialog({ open, onOpenChange, children }) {
       // must be higher than Sheet (overlay 2000, content 2001)
       style={{ zIndex: 3000 }}
       className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+      // Force light scheme inside the overlay (prevents iOS/Android dark inversion)
+      data-theme="light"
     >
       {/* Scroll container (full viewport). No padding-top/bottom so the modal sits OVER nav bars */}
       <div className="absolute inset-0 overflow-y-auto">
@@ -66,12 +68,25 @@ export function Dialog({ open, onOpenChange, children }) {
   return createPortal(node, document.body);
 }
 
+/**
+ * DialogContent
+ * - Remove `dark:*` backgrounds so system dark mode can't flip the panel.
+ * - Add `dark:!bg-white dark:!text-zinc-900` as a defensive override in case
+ *   a parent sets `.dark` (class-based theming).
+ * - Add `[color-scheme:light]` to hint the browser to render controls in light.
+ */
 export function DialogContent({ className = "", children, ...props }) {
   return (
     <div
       {...props}
       className={cn(
-        "relative z-[3001] bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl w-full max-w-md p-6 animate-in fade-in-90 scale-in-95 max-h-full",
+        // Force light theme visuals regardless of OS/browser dark mode
+        "relative z-[3001] rounded-3xl overflow-hidden shadow-2xl w-full max-w-md p-6 animate-in fade-in-90 scale-in-95 max-h-full",
+        "bg-white text-zinc-900",
+        // If the app uses class-based dark mode higher up, keep this panel light
+        "dark:!bg-white dark:!text-zinc-900",
+        // Tell the browser to treat this subtree as light (affects native controls)
+        "[color-scheme:light]",
         className
       )}
     >
