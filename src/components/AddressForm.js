@@ -6,7 +6,7 @@ import axios from "axios";
 import { MapPin, LocateFixed, X } from "lucide-react";
 import { useLocation } from "../context/LocationContext";
 // ✅ use the shared loader (no direct script tags, no hard-coded key)
-import { loadGoogleMaps } from "./Utils/googleMaps";
+import { loadGoogleMaps } from "../utils/googleMaps";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 

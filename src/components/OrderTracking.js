@@ -36,7 +36,7 @@ import ChatModal from "./ChatModal";
 import ChatSupportModal from "./ChatSupportModal";
 
 // ⭐ NEW: loader-based Maps util (replaces @react-google-maps/api)
-import { loadGoogleMaps } from "./Utils/googleMaps";
+import { loadGoogleMaps } from "../utils/googleMaps";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 

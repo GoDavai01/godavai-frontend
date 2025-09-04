@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import dayjs from "dayjs";
-import { loadGoogleMaps } from "./Utils/googleMaps";
+import { loadGoogleMaps } from "../utils/googleMaps";
 
 // shadcn/ui
 import { Button } from "../components/ui/button";
@@ -43,23 +43,35 @@ function formatOrderDate(dateStr) {
   return `${date}, ${hour}:${min}${ampm}`;
 }
 
+// replace the whole getRouteAndDistance() you have now
 const getRouteAndDistance = async (origin, destination) => {
-  const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&key=${GOOGLE_MAPS_API_KEY}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  let poly = [];
-  let distanceKm = null;
-
-  if (data.routes && data.routes[0]) {
-    if (data.routes[0].overview_polyline) {
-      poly = decodePolyline(data.routes[0].overview_polyline.points);
-    }
-    if (data.routes[0].legs && data.routes[0].legs[0] && data.routes[0].legs[0].distance) {
-      distanceKm = data.routes[0].legs[0].distance.value / 1000;
-    }
-  }
-  return { poly, distanceKm };
+  const google = await loadGoogleMaps(["marker"]); // ensure marker lib too
+  return new Promise((resolve) => {
+    const service = new google.maps.DirectionsService();
+    service.route(
+      {
+        origin: new google.maps.LatLng(origin.lat, origin.lng),
+        destination: new google.maps.LatLng(destination.lat, destination.lng),
+        travelMode: google.maps.TravelMode.DRIVING,
+        provideRouteAlternatives: false,
+      },
+      (result, status) => {
+        if (status !== "OK" || !result?.routes?.[0]) {
+          resolve({ poly: [], distanceKm: null });
+          return;
+        }
+        const r = result.routes[0];
+        const leg = r.legs && r.legs[0];
+        const path = (r.overview_path || []).map(p => ({ lat: p.lat(), lng: p.lng() }));
+        resolve({
+          poly: path,
+          distanceKm: leg?.distance ? leg.distance.value / 1000 : null,
+        });
+      }
+    );
+  });
 };
+
 
 function decodePolyline(encoded) {
   let points = [];
@@ -162,7 +174,7 @@ function OrderMiniMap({ center, pharmacyLoc, userLoc, path }) {
 
   useEffect(() => {
     let map, pharmMarker, userMarker, polyline;
-    loadGoogleMaps(["places"]).then((google) => {
+    loadGoogleMaps(["marker", "places"]).then((google) => {
       if (!ref.current) return;
 
       map = new google.maps.Map(ref.current, {
