@@ -214,7 +214,7 @@ export default function AddressForm({
   useEffect(() => {
     if (open && GOOGLE_MAPS_API_KEY && !scriptLoadedRef.current) {
       loadScript(
-        `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`,
+        `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&v=weekly`,
         () => setScriptReady(true)
       );
       scriptLoadedRef.current = true;
@@ -238,6 +238,10 @@ export default function AddressForm({
             zoom: 17,
             streetViewControl: false,
             mapTypeControl: false,
+            fullscreenControl: false,
+            zoomControl: true,
+            gestureHandling: "greedy",
+            clickableIcons: false,
           });
           mapRef.current = map;
         } else {
