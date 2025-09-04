@@ -1,4 +1,3 @@
-// AddressForm.js  (drop-in; logic unchanged)
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -7,9 +6,8 @@ import { MapPin, LocateFixed, X } from "lucide-react";
 import { useLocation } from "../context/LocationContext";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-
-// ❗️Fixed: remove hardcoded fallback key so nothing leaks if env var is missing
-const GOOGLE_MAPS_API_KEY = (process.env.REACT_APP_GOOGLE_MAPS_API_KEY ?? "").trim();
+const GOOGLE_MAPS_API_KEY =
+  process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "AIzaSyCd9Jkk_kd0SwaDLKwehdTpowiHEAnuy8Y";
 
 // Deep-green brand tone
 const DEEP = "#0f6e51";
@@ -214,7 +212,7 @@ export default function AddressForm({
   useEffect(() => {
     if (open && GOOGLE_MAPS_API_KEY && !scriptLoadedRef.current) {
       loadScript(
-        `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&v=weekly`,
+        `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`,
         () => setScriptReady(true)
       );
       scriptLoadedRef.current = true;
@@ -238,10 +236,6 @@ export default function AddressForm({
             zoom: 17,
             streetViewControl: false,
             mapTypeControl: false,
-            fullscreenControl: false,
-            zoomControl: true,
-            gestureHandling: "greedy",
-            clickableIcons: false,
           });
           mapRef.current = map;
         } else {
@@ -285,7 +279,7 @@ export default function AddressForm({
 
   return (
     <Modal open={open} onClose={onClose} zIndex={modalZIndex}>
-      <div className="px-5 pt-5 pb-3 border-b" style={{ borderColor: "#f1f59" }}>
+      <div className="px-5 pt-5 pb-3 border-b" style={{ borderColor: "#f1f5f9" }}>
         <h3 className="text-lg font-extrabold tracking-tight" style={{ color: DEEP }}>
           Add/Edit Address
         </h3>
@@ -387,10 +381,8 @@ export default function AddressForm({
             autoFocus
           />
           {loading && (
-            <div
-              className="absolute right-3 top-9 h-4 w-4 animate-spin rounded-full border-2"
-              style={{ borderColor: "#e5e7eb", borderTopColor: "#52525b" }}
-            />
+            <div className="absolute right-3 top-9 h-4 w-4 animate-spin rounded-full border-2"
+                 style={{ borderColor: "#e5e7eb", borderTopColor: "#52525b" }} />
           )}
 
           {options.length > 0 && (
