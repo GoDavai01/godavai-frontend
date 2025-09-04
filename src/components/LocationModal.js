@@ -1,30 +1,27 @@
+// src/components/LocationModal.jsx
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { MapPin, LocateFixed, X } from "lucide-react";
+// ✅ use the shared loader (no direct script tags, no hard-coded key)
+import { loadGoogleMaps } from "./Utils/googleMaps";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
 
-// Headless modal with top-right close + Back button support.
-// IMPORTANT: uses inline style zIndex so nested modal stacks above.
+/* ---------------- Modal (unchanged visuals/behavior) ---------------- */
 function Modal({ open, onClose, children, maxWidth = "max-w-sm", zIndex = 2600 }) {
   const pushedRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
-
     const onKey = (e) => e.key === "Escape" && safeClose();
     const onPop = () => onClose?.();
 
     document.addEventListener("keydown", onKey);
     window.addEventListener("popstate", onPop);
 
-    try {
-      window.history.pushState({ modal: "stack" }, "");
-      pushedRef.current = true;
-    } catch {}
+    try { window.history.pushState({ modal: "stack" }, ""); pushedRef.current = true; } catch {}
 
     return () => {
       document.removeEventListener("keydown", onKey);
@@ -36,9 +33,7 @@ function Modal({ open, onClose, children, maxWidth = "max-w-sm", zIndex = 2600 }
   const safeClose = () => {
     onClose?.();
     if (pushedRef.current) {
-      try {
-        window.history.back();
-      } catch {}
+      try { window.history.back(); } catch {}
       pushedRef.current = false;
     }
   };
@@ -46,7 +41,7 @@ function Modal({ open, onClose, children, maxWidth = "max-w-sm", zIndex = 2600 }
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0" style={{ zIndex: zIndex }}>
+    <div className="fixed inset-0" style={{ zIndex }}>
       <div className="absolute inset-0 pointer-events-none" />
       <div className="absolute inset-0 overflow-y-auto p-4 grid place-items-center">
         <AnimatePresence initial>
@@ -86,6 +81,7 @@ function Modal({ open, onClose, children, maxWidth = "max-w-sm", zIndex = 2600 }
   );
 }
 
+/* ----------------------------- Component ---------------------------- */
 export default function LocationModal({ open, onClose, onSelect }) {
   const [input, setInput] = useState("");
   const [options, setOptions] = useState([]);
@@ -97,6 +93,11 @@ export default function LocationModal({ open, onClose, onSelect }) {
 
   const inputTimer = useRef();
   const wasOpen = useRef(false);
+
+  // map refs for drop-pin dialog
+  const dropPinDivRef = useRef(null);
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
 
   useEffect(() => {
     if (open && !wasOpen.current) setInput("");
@@ -153,7 +154,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
           const lng = pos.coords.longitude;
           const url = `${API_BASE_URL}/api/geocode?lat=${lat}&lng=${lng}`;
           const res = await axios.get(url);
-          const place = res.data.results[0];
+          const place = res.data.results?.[0];
           if (place) {
             onSelect({
               formatted: place.formatted_address,
@@ -176,61 +177,70 @@ export default function LocationModal({ open, onClose, onSelect }) {
     );
   };
 
+  /* --------------------- Drop-pin map using loader --------------------- */
   useEffect(() => {
     if (!showPinDialog) return;
-    function renderMap() {
-      const mapDiv = document.getElementById("drop-pin-map");
-      if (!mapDiv) return;
-      const defaultCenter = manualLatLng || { lat: 28.6139, lng: 77.209 };
-      const map = new window.google.maps.Map(mapDiv, {
-        center: defaultCenter,
-        zoom: 16,
-        streetViewControl: false,
-        mapTypeControl: false,
-      });
-      let marker = new window.google.maps.Marker({
-        position: defaultCenter,
-        map,
-        draggable: true,
-        title: "Drag to your entrance",
-      });
-      setManualLatLng(defaultCenter);
 
-      marker.addListener("dragend", (e) => {
-        const { latLng } = e;
-        setManualLatLng({ lat: latLng.lat(), lng: latLng.lng() });
-      });
+    let map = mapRef.current;
+    let marker = markerRef.current;
 
-      map.addEventListener?.("click", (e) => {
-        marker.setPosition(e.latLng);
-        setManualLatLng({ lat: e.latLng.lat(), lng: e.latLng.lng() });
-      });
+    loadGoogleMaps()
+      .then((google) => {
+        const div = dropPinDivRef.current;
+        if (!div) return;
 
-      if (navigator.geolocation && !manualLatLng) {
-        navigator.geolocation.getCurrentPosition((pos) => {
-          const userLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          map.setCenter(userLoc);
-          marker.setPosition(userLoc);
-          setManualLatLng(userLoc);
+        const defaultCenter =
+          manualLatLng || { lat: 28.6139, lng: 77.209 }; // Delhi as default
+
+        // init / update map
+        if (!map) {
+          map = new google.maps.Map(div, {
+            center: defaultCenter,
+            zoom: 16,
+            streetViewControl: false,
+            mapTypeControl: false,
+          });
+          mapRef.current = map;
+        } else {
+          map.setCenter(defaultCenter);
+        }
+
+        // init / update draggable marker
+        if (!marker) {
+          marker = new google.maps.Marker({
+            position: defaultCenter,
+            map,
+            draggable: true,
+            title: "Drag to your entrance",
+          });
+          marker.addListener("dragend", (e) => {
+            const { latLng } = e;
+            setManualLatLng({ lat: latLng.lat(), lng: latLng.lng() });
+          });
+          markerRef.current = marker;
+        } else {
+          marker.setPosition(defaultCenter);
+        }
+
+        // click to move marker
+        google.maps.event.addListener(map, "click", (e) => {
+          marker.setPosition(e.latLng);
+          setManualLatLng({ lat: e.latLng.lat(), lng: e.latLng.lng() });
         });
-      }
-    }
 
-    if (!window.google || !window.google.maps) {
-      const scriptId = "gmapjs";
-      if (!document.getElementById(scriptId)) {
-        const script = document.createElement("script");
-        script.id = scriptId;
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}`;
-        script.async = true;
-        script.onload = renderMap;
-        document.body.appendChild(script);
-      } else {
-        document.getElementById(scriptId).addEventListener("load", renderMap);
-      }
-    } else {
-      renderMap();
-    }
+        // try geolocate if we don't already have a pin
+        if (navigator.geolocation && !manualLatLng) {
+          navigator.geolocation.getCurrentPosition((pos) => {
+            const userLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            map.setCenter(userLoc);
+            marker.setPosition(userLoc);
+            setManualLatLng(userLoc);
+          });
+        }
+      })
+      .catch((e) => {
+        console.error("Google Maps failed to load:", e);
+      });
   }, [showPinDialog, manualLatLng]);
 
   return (
@@ -298,13 +308,8 @@ export default function LocationModal({ open, onClose, onSelect }) {
         </div>
       </Modal>
 
-      {/* Drop-pin mini modal (zIndex HIGHER so it stacks above) */}
-      <Modal
-        open={showPinDialog}
-        onClose={() => setShowPinDialog(false)}
-        maxWidth="max-w-sm"
-        zIndex={2700}
-      >
+      {/* Drop-pin mini modal (higher zIndex) */}
+      <Modal open={showPinDialog} onClose={() => setShowPinDialog(false)} maxWidth="max-w-sm" zIndex={2700}>
         <div className="px-5 pt-5 pb-3 border-b border-zinc-100">
           <h3 className="text-lg font-bold tracking-tight flex items-center gap-2">
             <MapPin className="h-5 w-5 text-amber-500" />
@@ -314,7 +319,8 @@ export default function LocationModal({ open, onClose, onSelect }) {
 
         <div className="px-5 pb-4 pt-3 space-y-3">
           <div className="w-full h-72 rounded-xl border border-zinc-200 shadow-sm">
-            <div id="drop-pin-map" className="w-full h-72 rounded-xl" />
+            {/* 🔁 Target for Google Map */}
+            <div ref={dropPinDivRef} id="drop-pin-map" className="w-full h-72 rounded-xl" />
           </div>
           {manualLatLng && (
             <p className="text-xs text-zinc-600">

@@ -1,19 +1,19 @@
+// src/components/AddressForm.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { MapPin, LocateFixed, X } from "lucide-react";
 import { useLocation } from "../context/LocationContext";
+// ✅ use the shared loader (no direct script tags, no hard-coded key)
+import { loadGoogleMaps } from "./Utils/googleMaps";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-const GOOGLE_MAPS_API_KEY =
-  process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "AIzaSyCd9Jkk_kd0SwaDLKwehdTpowiHEAnuy8Y";
 
 // Deep-green brand tone
 const DEEP = "#0f6e51";
 
-// Headless modal (no backdrop). Includes close icon + Back-button-to-close.
-// IMPORTANT: uses inline style zIndex so it stacks above parent modals.
+/* --------------------------- Headless Modal --------------------------- */
 function Modal({ open, onClose, children, maxWidth = "max-w-md", zIndex = 2600 }) {
   const pushedRef = useRef(false);
 
@@ -94,12 +94,13 @@ function Modal({ open, onClose, children, maxWidth = "max-w-md", zIndex = 2600 }
   );
 }
 
+/* --------------------------- Address Form --------------------------- */
 export default function AddressForm({
   open,
   onClose,
   onSave,
   initial = {},
-  modalZIndex = 3300, // > Dialog overlay (3000) and content (3001)
+  modalZIndex = 3300,
 }) {
   const [type, setType] = useState(initial.type || "Home");
   const [name, setName] = useState(initial.name || "");
@@ -108,7 +109,6 @@ export default function AddressForm({
   const [input, setInput] = useState("");
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [scriptReady, setScriptReady] = useState(false);
   const { currentAddress } = useLocation();
   const [floor, setFloor] = useState(initial.floor || "");
 
@@ -129,8 +129,9 @@ export default function AddressForm({
   const inputTimer = useRef();
   const mapRef = useRef(null);
   const markerRef = useRef(null);
-  const scriptLoadedRef = useRef(false);
+  const mapDivRef = useRef(null);
 
+  // sync on open / initial
   useEffect(() => {
     setType(initial.type || "Home");
     setName(initial.name || "");
@@ -150,6 +151,7 @@ export default function AddressForm({
     setPin(initial.lat && initial.lng ? { lat: initial.lat, lng: initial.lng } : null);
   }, [open, initial]);
 
+  // search -> backend proxy (unchanged)
   const handleInput = (val) => {
     setInput(val);
     setSelectedPlace(null);
@@ -197,41 +199,22 @@ export default function AddressForm({
     setOptions([]);
   };
 
-  function loadScript(src, onLoad) {
-    if (document.querySelector(`script[src="${src}"]`)) {
-      if (window.google && window.google.maps) onLoad();
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.onload = onLoad;
-    document.body.appendChild(script);
-  }
-
+  // ✅ Map init/update using loader util
   useEffect(() => {
-    if (open && GOOGLE_MAPS_API_KEY && !scriptLoadedRef.current) {
-      loadScript(
-        `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`,
-        () => setScriptReady(true)
-      );
-      scriptLoadedRef.current = true;
-    } else if (window.google && window.google.maps) {
-      setScriptReady(true);
-    }
-  }, [open]);
+    if (!open || !pin) return;
 
-  useEffect(() => {
-    if (!open || !pin || !scriptReady) return;
-    let tries = 0;
-    const maxTries = 25;
-    const interval = setInterval(() => {
-      const mapDiv = document.getElementById("map-preview");
-      if (mapDiv && window.google && window.google.maps) {
-        clearInterval(interval);
-        let map = mapRef.current;
+    let googleCache;
+    let map = mapRef.current;
+    let marker = markerRef.current;
+
+    loadGoogleMaps() // default libraries include 'places'; fine here
+      .then((google) => {
+        googleCache = google;
+        const div = mapDivRef.current;
+        if (!div) return;
+
         if (!map) {
-          map = new window.google.maps.Map(mapDiv, {
+          map = new google.maps.Map(div, {
             center: pin,
             zoom: 17,
             streetViewControl: false,
@@ -241,26 +224,29 @@ export default function AddressForm({
         } else {
           map.setCenter(pin);
         }
-        if (!markerRef.current) {
-          markerRef.current = new window.google.maps.Marker({
+
+        if (!marker) {
+          marker = new google.maps.Marker({
             position: pin,
             map,
             draggable: true,
             title: "Move pin to exact location",
           });
-          markerRef.current.addListener("dragend", (e) => {
+          marker.addListener("dragend", (e) => {
             const { latLng } = e;
             setPin({ lat: latLng.lat(), lng: latLng.lng() });
           });
+          markerRef.current = marker;
         } else {
-          markerRef.current.setPosition(pin);
+          marker.setPosition(pin);
         }
-      }
-      tries++;
-      if (tries > maxTries) clearInterval(interval);
-    }, 80);
-    return () => clearInterval(interval);
-  }, [open, pin, scriptReady]);
+      })
+      .catch((e) => {
+        console.error("Google Maps failed to load:", e);
+      });
+
+    // no special cleanup needed beyond refs; component unmount will drop map
+  }, [open, pin]);
 
   const handleSave = () => {
     if (!name || !phone || !addressLine || !selectedPlace || !pin) return;
@@ -381,8 +367,10 @@ export default function AddressForm({
             autoFocus
           />
           {loading && (
-            <div className="absolute right-3 top-9 h-4 w-4 animate-spin rounded-full border-2"
-                 style={{ borderColor: "#e5e7eb", borderTopColor: "#52525b" }} />
+            <div
+              className="absolute right-3 top-9 h-4 w-4 animate-spin rounded-full border-2"
+              style={{ borderColor: "#e5e7eb", borderTopColor: "#52525b" }}
+            />
           )}
 
           {options.length > 0 && (
@@ -412,7 +400,13 @@ export default function AddressForm({
 
         {pin && (
           <div className="space-y-2">
-            <div id="map-preview" className="w-full h-64 rounded-xl border shadow-sm" style={{ borderColor: "#e5e7eb" }} />
+            {/* 🔁 map target */}
+            <div
+              ref={mapDivRef}
+              id="map-preview"
+              className="w-full h-64 rounded-xl border shadow-sm"
+              style={{ borderColor: "#e5e7eb" }}
+            />
             <p className="text-center text-xs" style={{ color: "#6b7280" }}>
               Drag the pin if needed to your exact entrance!
             </p>

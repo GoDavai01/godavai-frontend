@@ -1,8 +1,7 @@
 // src/components/OrderTracking.js
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { motion } from "framer-motion";
 
 // shadcn/ui
@@ -36,12 +35,14 @@ import {
 import ChatModal from "./ChatModal";
 import ChatSupportModal from "./ChatSupportModal";
 
+// ⭐ NEW: loader-based Maps util (replaces @react-google-maps/api)
+import { loadGoogleMaps } from "./Utils/googleMaps";
+
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
 // Theme tokens
 const DEEP = "#0f6e51";
-const PRIMARY = "#13C0A2"; // used across your app
+const PRIMARY = "#13C0A2";
 const AMBER = "#FFD43B";
 
 const steps = [
@@ -56,9 +57,15 @@ function formatAddress(address) {
   if (!address) return "";
   if (typeof address === "object") {
     if (address.formatted) {
-      return `${address.name ? address.name + ", " : ""}${address.formatted}${address.floor ? ", Floor: " + address.floor : ""}${address.landmark ? ", " + address.landmark : ""}${address.phone ? ", " + address.phone : ""}`;
+      return `${address.name ? address.name + ", " : ""}${address.formatted}${
+        address.floor ? ", Floor: " + address.floor : ""
+      }${address.landmark ? ", " + address.landmark : ""}${
+        address.phone ? ", " + address.phone : ""
+      }`;
     }
-    return `${address.name || ""}, ${address.addressLine || ""}${address.floor ? ", Floor: " + address.floor : ""}${address.landmark ? ", " + address.landmark : ""}, ${address.phone || ""}`;
+    return `${address.name || ""}, ${address.addressLine || ""}${
+      address.floor ? ", Floor: " + address.floor : ""
+    }${address.landmark ? ", " + address.landmark : ""}, ${address.phone || ""}`;
   }
   return address;
 }
@@ -69,7 +76,7 @@ function formatTimestamp(ts) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-// Lightweight inline toast (replaces MUI Snackbar)
+// Lightweight inline toast
 function InlineToast({ open, kind = "success", children, onClose }) {
   if (!open) return null;
   return (
@@ -83,7 +90,7 @@ function InlineToast({ open, kind = "success", children, onClose }) {
   );
 }
 
-// Simple controllable star rating (replaces MUI Rating)
+// Simple controllable star rating
 function Stars({ value = 0, onChange, disabled }) {
   return (
     <div className="flex items-center gap-1">
@@ -99,6 +106,46 @@ function Stars({ value = 0, onChange, disabled }) {
         </button>
       ))}
     </div>
+  );
+}
+
+/** ⭐ NEW: tiny inline map component using loader util */
+function MiniLiveMap({ center, driver }) {
+  const divRef = useRef(null);
+
+  useEffect(() => {
+    let map, driverMarker;
+    loadGoogleMaps().then((google) => {
+      if (!divRef.current) return;
+
+      map = new google.maps.Map(divRef.current, {
+        center,
+        zoom: 14,
+        mapId: "godavaii-map",
+        streetViewControl: false,
+        mapTypeControl: false,
+      });
+
+      if (driver?.lat && driver?.lng) {
+        driverMarker = new google.maps.marker.AdvancedMarkerElement({
+          map,
+          position: { lat: driver.lat, lng: driver.lng },
+          title: "Delivery Partner",
+        });
+      }
+    }).catch((e) => console.error("Google Maps failed to load:", e));
+
+    return () => {
+      map = null;
+      driverMarker = null;
+    };
+  }, [center?.lat, center?.lng, driver?.lat, driver?.lng]);
+
+  return (
+    <div
+      ref={divRef}
+      style={{ width: "100%", height: "230px", borderRadius: 18, marginTop: 4, overflow: "hidden" }}
+    />
   );
 }
 
@@ -132,11 +179,6 @@ export default function OrderTracking() {
 
   const [deliveryUnreadCount, setDeliveryUnreadCount] = useState(0);
   const getToken = () => localStorage.getItem("token") || "";
-
-  const { isLoaded } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY || "",
-  });
 
   // --- INITIAL LOAD (same logic) ---
   useEffect(() => {
@@ -527,7 +569,7 @@ export default function OrderTracking() {
               </div>
             )}
 
-            {/* ORDER SUMMARY */}
+            {/* ORDER SUMMARY (unchanged) */}
             <div className="rounded-xl bg-emerald-50/40 p-3">
               {order.__type === "prescription" ? (
                 <>
@@ -651,21 +693,18 @@ export default function OrderTracking() {
               )}
             </div>
 
-            {/* MAP */}
-            {isLoaded && order.driverLocation && currentStep >= 2 && currentStep < 3 && (
+            {/* MAP — now using the loader-based component */}
+            {order.driverLocation && currentStep >= 2 && currentStep < 3 && (
               <div className="mt-3">
                 <div className="text-sm text-emerald-700 mb-1">Live Delivery Location:</div>
                 <div className="rounded-2xl overflow-hidden">
-                  <GoogleMap
-                    mapContainerStyle={{ width: "100%", height: "230px", borderRadius: "18px", marginTop: "4px" }}
+                  <MiniLiveMap
                     center={{
                       lat: order.driverLocation.lat || 28.4595,
                       lng: order.driverLocation.lng || 77.0266,
                     }}
-                    zoom={14}
-                  >
-                    <Marker position={{ lat: order.driverLocation.lat, lng: order.driverLocation.lng }} />
-                  </GoogleMap>
+                    driver={order.driverLocation}
+                  />
                 </div>
                 <div className="text-sm font-bold text-emerald-700 mt-2">
                   Estimated time to delivery: {eta || "Calculating..."}
@@ -681,7 +720,7 @@ export default function OrderTracking() {
               </div>
             )}
 
-            {/* Ratings / Feedback */}
+            {/* Ratings / Feedback (unchanged) */}
             {isDelivered && (
               <div className="mt-4">
                 {feedbackSubmitted ? (
@@ -724,7 +763,7 @@ export default function OrderTracking() {
                     {/* Delivery card */}
                     <div className="rounded-2xl border border-emerald-100 bg-white p-3 shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
                       <div className="flex items-center gap-3">
-                        <div className="h-14 w-14 rounded-full border-2 border-amber-400 bg-amber-50 grid place-items-center overflow-hidden">
+                        <div className="h-14 w-14 rounded-full border-amber-400 bg-amber-50 grid place-items-center overflow-hidden">
                           <img
                             src={deliveryPartner.avatar || "/images/delivery-partner.png"}
                             alt="Partner"

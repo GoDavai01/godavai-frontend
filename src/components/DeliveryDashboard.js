@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import dayjs from "dayjs";
-import { GoogleMap, Marker, Polyline, useJsApiLoader } from "@react-google-maps/api";
+import { loadGoogleMaps } from "./Utils/googleMaps";
 
 // shadcn/ui
 import { Button } from "../components/ui/button";
@@ -27,7 +27,7 @@ import {
 import ChatModal from "./ChatModal";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+
 
 /* ------------------------- helpers (unchanged logic) ------------------------ */
 
@@ -156,6 +156,67 @@ function DeliveryPayoutsSection({ partner }) {
   );
 }
 
+/* ---- Inline, tiny map used per order (no logic change) ---- */
+function OrderMiniMap({ center, pharmacyLoc, userLoc, path }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    let map, pharmMarker, userMarker, polyline;
+    loadGoogleMaps(["places"]).then((google) => {
+      if (!ref.current) return;
+
+      map = new google.maps.Map(ref.current, {
+        center,
+        zoom: 13,
+        mapId: "godavaii-map",
+        streetViewControl: false,
+        mapTypeControl: false,
+      });
+
+      // Pharmacy marker (P)
+      if (pharmacyLoc?.lat && pharmacyLoc?.lng) {
+        pharmMarker = new google.maps.marker.AdvancedMarkerElement({
+          map,
+          position: { lat: pharmacyLoc.lat, lng: pharmacyLoc.lng },
+          title: "Pharmacy",
+        });
+      }
+
+      // User marker (U)
+      if (userLoc?.lat && userLoc?.lng) {
+        userMarker = new google.maps.marker.AdvancedMarkerElement({
+          map,
+          position: { lat: userLoc.lat, lng: userLoc.lng },
+          title: "Delivery Address",
+        });
+      }
+
+      // Route polyline (if available)
+      if (Array.isArray(path) && path.length > 1) {
+        polyline = new google.maps.Polyline({
+          map,
+          path,
+          strokeOpacity: 0.9,
+          strokeWeight: 4,
+          strokeColor: "#0ea5a4",
+        });
+      }
+    }).catch((e) => console.error("Google Maps failed to load:", e));
+
+    return () => {
+      // basic cleanup (GC will clear map elements when node is removed)
+      map = null; pharmMarker = null; userMarker = null; polyline = null;
+    };
+  }, [center, pharmacyLoc, userLoc, path]);
+
+  return (
+    <div
+      ref={ref}
+      style={{ width: "100%", height: "230px", borderRadius: 18, overflow: "hidden" }}
+    />
+  );
+}
+
 /* -------------------------------- component -------------------------------- */
 
 export default function DeliveryDashboard() {
@@ -189,7 +250,7 @@ export default function DeliveryDashboard() {
   const [todayEarnings, setTodayEarnings] = useState(null); // ₹
   const [cashDue, setCashDue] = useState(0); // UI-only stub
 
-  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: GOOGLE_MAPS_API_KEY });
+  
 
   // Auto-refresh orders (existing)
   useEffect(() => {
@@ -745,62 +806,43 @@ const handleResetPassword = async () => {
                       </div>
 
                       {/* map */}
-                      {isLoaded ? (
-                        !patchedPharmacyLoc?.lat ? (
-                          <div className="text-xs text-slate-400 mt-2">Pharmacy location missing</div>
-                        ) : !patchedUserLoc?.lat ? (
-                          <div className="text-xs text-slate-400 mt-2">Customer location missing</div>
-                        ) : (
-                          <div className="mt-3">
-                            <GoogleMap
-                              mapContainerStyle={{ width: "100%", height: "230px", borderRadius: 18 }}
-                              center={mapCenter}
-                              zoom={13}
-                              options={{ streetViewControl: false, mapTypeControl: false }}
-                            >
-                              <Marker
-                                position={{ lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }}
-                                label="P"
-                                title="Pharmacy"
-                                icon={{ url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png", scaledSize: { width: 40, height: 40 } }}
-                              />
-                              <Marker
-                                position={{ lat: patchedUserLoc.lat, lng: patchedUserLoc.lng }}
-                                label="U"
-                                title="Delivery Address"
-                                icon={{ url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png", scaledSize: { width: 40, height: 40 } }}
-                              />
-                              {poly.length > 0 && (
-                                <Polyline path={poly} options={{ strokeColor: "#0ea5a4", strokeOpacity: 0.9, strokeWeight: 4 }} />
-                              )}
-                            </GoogleMap>
+                      {!patchedPharmacyLoc?.lat ? (
+  <div className="text-xs text-slate-400 mt-2">Pharmacy location missing</div>
+) : !patchedUserLoc?.lat ? (
+  <div className="text-xs text-slate-400 mt-2">Customer location missing</div>
+) : (
+  <div className="mt-3">
+    <OrderMiniMap
+      center={mapCenter}
+      pharmacyLoc={patchedPharmacyLoc}
+      userLoc={patchedUserLoc}
+      path={poly}
+    />
 
-                            {/* Navigation picker */}
-<div className="mt-2 grid grid-cols-2 gap-2">
-  <Button asChild variant="outline" className="!font-bold h-9 w-full">
-    <a
-      target="_blank"
-      href={`https://www.google.com/maps/dir/?api=1&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
-      rel="noreferrer"
-    >
-      <Navigation className="h-4 w-4 mr-2" /> Google Maps
-    </a>
-  </Button>
-  <Button asChild variant="outline" className="!font-bold h-9 w-full">
-    <a
-      target="_blank"
-      href={`http://maps.apple.com/?saddr=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&daddr=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
-      rel="noreferrer"
-    >
-      <Navigation className="h-4 w-4 mr-2" /> Apple Maps
-    </a>
-  </Button>
-</div>
-                          </div>
-                        )
-                      ) : (
-                        <div className="text-xs text-slate-400 mt-2">Loading map...</div>
-                      )}
+    {/* Navigation picker (unchanged) */}
+    <div className="mt-2 grid grid-cols-2 gap-2">
+      <Button asChild variant="outline" className="!font-bold h-9 w-full">
+        <a
+          target="_blank"
+          href={`https://www.google.com/maps/dir/?api=1&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
+          rel="noreferrer"
+        >
+          <Navigation className="h-4 w-4 mr-2" /> Google Maps
+        </a>
+      </Button>
+      <Button asChild variant="outline" className="!font-bold h-9 w-full">
+        <a
+          target="_blank"
+          href={`http://maps.apple.com/?saddr=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&daddr=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
+          rel="noreferrer"
+        >
+          <Navigation className="h-4 w-4 mr-2" /> Apple Maps
+        </a>
+      </Button>
+    </div>
+  </div>
+)}
+
 
                       {/* actions */}
 <div className="mt-3 flex flex-wrap items-center gap-2">
