@@ -19,15 +19,24 @@ import { motion, AnimatePresence } from "framer-motion";
 
 // lucide-react
 import {
-  Bike, CheckCheck, Pill, LogOut, MessageSquare, MapPin, Map, Route, Loader2,
-  AlarmClock, ShieldAlert, TimerReset, Navigation, Gauge, DollarSign
+  Bike, CheckCheck, Pill, LogOut, MessageSquare, MapPin, Navigation, Gauge, DollarSign, AlarmClock, TimerReset, ShieldAlert, Loader2
 } from "lucide-react";
 
-// other components (existing logic)
+// other components
 import ChatModal from "./ChatModal";
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-const GOOGLE_MAPS_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+/** ENV: supports Vite, Next.js, CRA */
+const API_BASE_URL =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  process.env.REACT_APP_API_BASE_URL ||
+  "http://localhost:5000";
+
+const GOOGLE_MAPS_API_KEY =
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_GOOGLE_MAPS_API_KEY) ||
+  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+  process.env.REACT_APP_GOOGLE_MAPS_API_KEY ||
+  "";
 
 /* ------------------------- helpers (unchanged logic) ------------------------ */
 
@@ -43,22 +52,33 @@ function formatOrderDate(dateStr) {
   return `${date}, ${hour}:${min}${ampm}`;
 }
 
+/** Try Directions API only if a browser key exists. Otherwise return graceful empty result. */
 const getRouteAndDistance = async (origin, destination) => {
-  const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&key=${GOOGLE_MAPS_API_KEY}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  let poly = [];
-  let distanceKm = null;
-
-  if (data.routes && data.routes[0]) {
-    if (data.routes[0].overview_polyline) {
-      poly = decodePolyline(data.routes[0].overview_polyline.points);
-    }
-    if (data.routes[0].legs && data.routes[0].legs[0] && data.routes[0].legs[0].distance) {
-      distanceKm = data.routes[0].legs[0].distance.value / 1000;
-    }
+  if (!GOOGLE_MAPS_API_KEY || !origin?.lat || !origin?.lng || !destination?.lat || !destination?.lng) {
+    return { poly: [], distanceKm: null };
   }
-  return { poly, distanceKm };
+  const url =
+    `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}` +
+    `&destination=${destination.lat},${destination.lng}&key=${GOOGLE_MAPS_API_KEY}`;
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    let poly = [];
+    let distanceKm = null;
+
+    if (data.routes && data.routes[0]) {
+      if (data.routes[0].overview_polyline) {
+        poly = decodePolyline(data.routes[0].overview_polyline.points);
+      }
+      if (data.routes[0].legs && data.routes[0].legs[0] && data.routes[0].legs[0].distance) {
+        distanceKm = data.routes[0].legs[0].distance.value / 1000;
+      }
+    }
+    return { poly, distanceKm };
+  } catch {
+    return { poly: [], distanceKm: null };
+  }
 };
 
 function decodePolyline(encoded) {
@@ -94,7 +114,8 @@ function DeliveryPayoutsSection({ partner }) {
   useEffect(() => {
     if (!partner?._id) return;
     axios.get(`${API_BASE_URL}/api/payments?deliveryPartnerId=${partner._id}&status=paid`)
-      .then(res => setPayouts(res.data));
+      .then(res => setPayouts(res.data || []))
+      .catch(() => setPayouts([]));
   }, [partner]);
 
   const today = dayjs().format("YYYY-MM-DD");
@@ -145,7 +166,7 @@ function DeliveryPayoutsSection({ partner }) {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan="4" className="px-3 py-3 text-amber-600">No payouts yet.</td>
+                  <td colSpan={4} className="px-3 py-3 text-amber-600">No payouts yet.</td>
                 </tr>
               )}
             </tbody>
@@ -189,7 +210,11 @@ export default function DeliveryDashboard() {
   const [todayEarnings, setTodayEarnings] = useState(null); // ₹
   const [cashDue, setCashDue] = useState(0); // UI-only stub
 
-  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: GOOGLE_MAPS_API_KEY });
+  /** Only attempt loader if a key exists to avoid NoApiKeys noise */
+  const mapsEnabled = !!GOOGLE_MAPS_API_KEY;
+  const { isLoaded } = useJsApiLoader(
+    mapsEnabled ? { googleMapsApiKey: GOOGLE_MAPS_API_KEY } : { id: "no-key-skip" }
+  );
 
   // Auto-refresh orders (existing)
   useEffect(() => {
@@ -236,60 +261,57 @@ export default function DeliveryDashboard() {
     // eslint-disable-next-line
   }, [loggedIn]);
 
-  // Unread chat counts (existing)
+  // Unread chat counts (existing + 401 guard)
   useEffect(() => {
-  if (!loggedIn || !orders.length) return;
+    if (!loggedIn || !orders.length) return;
 
-  const token = localStorage.getItem("deliveryToken");
-  if (!token) return; // <-- avoid 401 spam when not logged in / token missing
+    const token = localStorage.getItem("deliveryToken");
+    if (!token) return;
 
-  let cancelled = false;
+    let cancelled = false;
 
-  const fetchUnread = async () => {
-    const counts = {};
-    await Promise.all(
-      orders.map(async (order) => {
-        try {
-          const res = await axios.get(
-            `${API_BASE_URL}/api/chat/${order._id}/user-unread-count`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          counts[order._id] = res.data.unreadCount || 0;
-        } catch (err) {
-          // If unauthorized, stop polling to avoid console flood
-          if (err?.response?.status === 401 && unreadTimerRef.current) {
-            clearInterval(unreadTimerRef.current);
-            unreadTimerRef.current = null;
+    const fetchUnread = async () => {
+      const counts = {};
+      await Promise.all(
+        orders.map(async (order) => {
+          try {
+            const res = await axios.get(
+              `${API_BASE_URL}/api/chat/${order._id}/user-unread-count`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            counts[order._id] = res.data.unreadCount || 0;
+          } catch (err) {
+            if (err?.response?.status === 401 && unreadTimerRef.current) {
+              clearInterval(unreadTimerRef.current);
+              unreadTimerRef.current = null;
+            }
+            counts[order._id] = 0;
           }
-          counts[order._id] = 0;
-        }
-      })
-    );
-    if (!cancelled) setOrderUnreadCounts(counts);
-  };
+        })
+      );
+      if (!cancelled) setOrderUnreadCounts(counts);
+    };
 
-  fetchUnread();
-  unreadTimerRef.current = setInterval(fetchUnread, 7000); // a bit lighter than 3s
-  return () => {
-    cancelled = true;
-    if (unreadTimerRef.current) clearInterval(unreadTimerRef.current);
-  };
-}, [orders, loggedIn]);
+    fetchUnread();
+    unreadTimerRef.current = setInterval(fetchUnread, 7000);
+    return () => {
+      cancelled = true;
+      if (unreadTimerRef.current) clearInterval(unreadTimerRef.current);
+    };
+  }, [orders, loggedIn]);
 
-
-  // NEW: Persist auto-accept toggle locally
+  // Persist auto-accept toggle locally
   useEffect(() => {
     localStorage.setItem("gd_auto_accept", autoAccept ? "1" : "0");
   }, [autoAccept]);
 
-  // NEW: Break timer countdown (UI only)
+  // Break timer countdown (UI only)
   useEffect(() => {
     if (!onBreak || breakRemaining <= 0) return;
     const t = setInterval(() => setBreakRemaining((s) => s - 1), 1000);
     return () => clearInterval(t);
   }, [onBreak, breakRemaining]);
 
-  // When break completes
   useEffect(() => {
     if (onBreak && breakRemaining <= 0) {
       setOnBreak(false);
@@ -297,7 +319,7 @@ export default function DeliveryDashboard() {
     }
   }, [onBreak, breakRemaining]);
 
-  // NEW: fetch today's earnings (UI glance)
+  // fetch today's earnings (UI glance)
   useEffect(() => {
     const fetchToday = async () => {
       try {
@@ -331,12 +353,26 @@ export default function DeliveryDashboard() {
       setOrders(activeOrders);
       setPastOrders(resProfile.data.pastOrders || []);
 
-      let newPolys = {};
-      let newDistances = {};
+      const newPolys = {};
+      const newDistances = {};
       for (const o of activeOrders) {
-        if (o.pharmacy?.location?.lat && o.pharmacy?.location?.lng && o.address?.lat && o.address?.lng) {
+        // tolerate GeoJSON
+        let pharm = o.pharmacy?.location;
+        let user = o.address;
+
+        if (pharm && Array.isArray(pharm.coordinates) && pharm.coordinates.length === 2) {
+          pharm = { ...pharm, lat: pharm.coordinates[1], lng: pharm.coordinates[0] };
+        }
+        if (user && Array.isArray(user.coordinates) && user.coordinates.length === 2) {
+          user = { ...user, lat: user.coordinates[1], lng: user.coordinates[0] };
+        }
+
+        if (pharm?.lat && pharm?.lng && user?.lat && user?.lng) {
           if (!polylines[o._id] || orderDistances[o._id] == null) {
-            const { poly, distanceKm } = await getRouteAndDistance(o.pharmacy.location, o.address);
+            const { poly, distanceKm } = await getRouteAndDistance(
+              { lat: pharm.lat, lng: pharm.lng },
+              { lat: user.lat, lng: user.lng }
+            );
             newPolys[o._id] = poly;
             newDistances[o._id] = distanceKm;
           } else {
@@ -393,34 +429,30 @@ export default function DeliveryDashboard() {
     setLoginDialog(true);
   };
 
-  // Forgot / Reset handlers (add back)
-const handleForgotStart = async () => {
-  try {
-    await axios.post(`${API_BASE_URL}/api/delivery/forgot-password`, {
-      mobile: forgotForm.mobile,
-    });
-    setSnackbar({ open: true, message: "OTP sent to mobile!", severity: "success" });
-    setResetPhase(1);
-  } catch {
-    setSnackbar({ open: true, message: "Mobile not found!", severity: "error" });
-  }
-};
+  // Forgot / Reset handlers
+  const handleForgotStart = async () => {
+    try {
+      await axios.post(`${API_BASE_URL}/api/delivery/forgot-password`, { mobile: forgotForm.mobile });
+      setSnackbar({ open: true, message: "OTP sent to mobile!", severity: "success" });
+      setResetPhase(1);
+    } catch {
+      setSnackbar({ open: true, message: "Mobile not found!", severity: "error" });
+    }
+  };
 
-const handleResetPassword = async () => {
-  try {
-    await axios.post(`${API_BASE_URL}/api/delivery/reset-password`, {
-      mobile: forgotForm.mobile,
-      otp: forgotForm.otp,
-      newPassword: forgotForm.newPassword,
-    });
-    setSnackbar({ open: true, message: "Password reset! Please log in.", severity: "success" });
-    setForgotOpen(false);
-    setResetPhase(0);
-    setForgotForm({ mobile: "", otp: "", newPassword: "" });
-  } catch {
-    setSnackbar({ open: true, message: "Invalid OTP or error", severity: "error" });
-  }
-};
+  const handleResetPassword = async () => {
+    try {
+      await axios.post(`${API_BASE_URL}/api/delivery/reset-password`, {
+        mobile: forgotForm.mobile, otp: forgotForm.otp, newPassword: forgotForm.newPassword,
+      });
+      setSnackbar({ open: true, message: "Password reset! Please log in.", severity: "success" });
+      setForgotOpen(false);
+      setResetPhase(0);
+      setForgotForm({ mobile: "", otp: "", newPassword: "" });
+    } catch {
+      setSnackbar({ open: true, message: "Invalid OTP or error", severity: "error" });
+    }
+  };
 
   /* ------------------------------ login dialog ------------------------------ */
   if (!loggedIn) {
@@ -507,7 +539,7 @@ const handleResetPassword = async () => {
   const deliveriesToday = (pastOrders || []).filter(o =>
     o.status === "delivered" && dayjs(o.createdAt).format("YYYY-MM-DD") === todayStr
   ).length;
-  const rph = null; // ₹/hr (needs backend session time) – showing as "—" below
+  const rph = null; // ₹/hr (needs backend session time)
 
   return (
     <div className="mx-auto max-w-[900px] px-3 pt-4 pb-16">
@@ -531,7 +563,7 @@ const handleResetPassword = async () => {
 
           {/* Live Ops & Availability row */}
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {/* Online/Offline (existing switch) */}
+            {/* Online/Offline */}
             <div className="flex items-center gap-2 rounded-xl border border-emerald-200/60 bg-white px-3 py-2">
               <Switch
                 checked={active}
@@ -555,7 +587,7 @@ const handleResetPassword = async () => {
               </span>
             </div>
 
-            {/* Auto-accept toggle (UI only) */}
+            {/* Auto-accept toggle */}
             <div className="flex items-center gap-2 rounded-xl border border-emerald-200/60 bg-white px-3 py-2">
               <span className="text-sm font-semibold text-emerald-900">Auto-accept</span>
               <Switch
@@ -567,26 +599,25 @@ const handleResetPassword = async () => {
                     message: v ? "Auto-accept enabled" : "Auto-accept disabled",
                     severity: v ? "success" : "error"
                   });
-                  // ⬇️ persist to backend (keeps your localStorage useEffect as-is)
                   try {
                     const token = localStorage.getItem("deliveryToken");
                     await axios.patch(
                       `${API_BASE_URL}/api/delivery/partner/${partner?._id}/active`,
                       { autoAccept: v },
                       { headers: { Authorization: `Bearer ${token}` } }
-                      );
-                      } catch {}
+                    );
+                  } catch {}
                 }}
               />
             </div>
 
-            {/* Cash due chip (UI stub) */}
+            {/* Cash due chip */}
             <Badge className="bg-amber-400 text-emerald-900 font-bold">
               Cash to deposit: ₹{cashDue ?? 0}
             </Badge>
           </div>
 
-          {/* Break timer (UI only) */}
+          {/* Break timer */}
           <div className="mt-2 flex items-center gap-2">
             {!onBreak ? (
               <Button size="sm" variant="outline" className="!font-bold"
@@ -689,7 +720,7 @@ const handleResetPassword = async () => {
                     ? { lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }
                     : { lat: 19.076, lng: 72.877 };
 
-                  // Navigation & Status: simple ETA from distance (UI only, assumes ~22 km/h)
+                  // ETA approx
                   const dist = orderDistances[order._id];
                   const etaMin = dist != null ? Math.max(3, Math.round((dist / 22) * 60)) : null;
 
@@ -745,7 +776,7 @@ const handleResetPassword = async () => {
                       </div>
 
                       {/* map */}
-                      {isLoaded ? (
+                      {mapsEnabled && isLoaded ? (
                         !patchedPharmacyLoc?.lat ? (
                           <div className="text-xs text-slate-400 mt-2">Pharmacy location missing</div>
                         ) : !patchedUserLoc?.lat ? (
@@ -758,148 +789,128 @@ const handleResetPassword = async () => {
                               zoom={13}
                               options={{ streetViewControl: false, mapTypeControl: false }}
                             >
-                              <Marker
-                                position={{ lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }}
-                                label="P"
-                                title="Pharmacy"
-                                icon={{ url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png", scaledSize: { width: 40, height: 40 } }}
-                              />
-                              <Marker
-                                position={{ lat: patchedUserLoc.lat, lng: patchedUserLoc.lng }}
-                                label="U"
-                                title="Delivery Address"
-                                icon={{ url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png", scaledSize: { width: 40, height: 40 } }}
-                              />
+                              {/* default markers (avoid Size class issues) */}
+                              <Marker position={{ lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }} label="P" title="Pharmacy" />
+                              <Marker position={{ lat: patchedUserLoc.lat, lng: patchedUserLoc.lng }} label="U" title="Delivery Address" />
                               {poly.length > 0 && (
                                 <Polyline path={poly} options={{ strokeColor: "#0ea5a4", strokeOpacity: 0.9, strokeWeight: 4 }} />
                               )}
                             </GoogleMap>
 
                             {/* Navigation picker */}
-<div className="mt-2 grid grid-cols-2 gap-2">
-  <Button asChild variant="outline" className="!font-bold h-9 w-full">
-    <a
-      target="_blank"
-      href={`https://www.google.com/maps/dir/?api=1&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
-      rel="noreferrer"
-    >
-      <Navigation className="h-4 w-4 mr-2" /> Google Maps
-    </a>
-  </Button>
-  <Button asChild variant="outline" className="!font-bold h-9 w-full">
-    <a
-      target="_blank"
-      href={`http://maps.apple.com/?saddr=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&daddr=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
-      rel="noreferrer"
-    >
-      <Navigation className="h-4 w-4 mr-2" /> Apple Maps
-    </a>
-  </Button>
-</div>
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                              <Button asChild variant="outline" className="!font-bold h-9 w-full">
+                                <a
+                                  target="_blank"
+                                  href={`https://www.google.com/maps/dir/?api=1&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
+                                  rel="noreferrer"
+                                >
+                                  <Navigation className="h-4 w-4 mr-2" /> Google Maps
+                                </a>
+                              </Button>
+                              <Button asChild variant="outline" className="!font-bold h-9 w-full">
+                                <a
+                                  target="_blank"
+                                  href={`https://maps.apple.com/?saddr=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&daddr=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
+                                  rel="noreferrer"
+                                >
+                                  <Navigation className="h-4 w-4 mr-2" /> Apple Maps
+                                </a>
+                              </Button>
+                            </div>
                           </div>
                         )
                       ) : (
-                        <div className="text-xs text-slate-400 mt-2">Loading map...</div>
+                        <div className="text-xs text-slate-400 mt-2">
+                          Map unavailable (no Google Maps key configured).
+                        </div>
                       )}
 
                       {/* actions */}
-<div className="mt-3 flex flex-wrap items-center gap-2">
-  {order.status === "assigned" && (
-    <>
-      <Button
-        className="btn-primary-emerald !font-extrabold"
-        onClick={() => handleUpdateStatus(order._id, "accepted")}
-      >
-        Accept Order
-      </Button>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {order.status === "assigned" && (
+                          <>
+                            <Button
+                              className="btn-primary-emerald !font-extrabold"
+                              onClick={() => handleUpdateStatus(order._id, "accepted")}
+                            >
+                              Accept Order
+                            </Button>
 
-      {/* REJECT — solid RED box, bold white text */}
-      <Button
-        onClick={() => handleUpdateStatus(order._id, "rejected")}
-        className="
-          !font-extrabold
-          bg-red-600 hover:bg-red-700 active:bg-red-800
-          text-white
-          border border-red-700/80
-          shadow-sm
-        "
-      >
-        Reject
-      </Button>
-    </>
-  )}
+                            {/* Reject — solid red */}
+                            <Button
+                              onClick={() => handleUpdateStatus(order._id, "rejected")}
+                              className="!font-extrabold bg-red-600 hover:bg-red-700 active:bg-red-800 text-white border border-red-700/80 shadow-sm"
+                            >
+                              Reject
+                            </Button>
+                          </>
+                        )}
 
-  {order.status === "accepted" && (
-    /* OUT FOR DELIVERY — bright AMBER so it's very visible */
-    <Button
-      onClick={() => handleUpdateStatus(order._id, "out_for_delivery")}
-      className="
-        !font-extrabold
-        bg-amber-400 hover:bg-amber-500 active:bg-amber-600
-        text-emerald-950
-        border border-amber-500/70
-        shadow-sm
-      "
-    >
-      <Bike className="h-4 w-4 mr-2" />
-      MARK AS OUT FOR DELIVERY
-    </Button>
-  )}
+                        {order.status === "accepted" && (
+                          <Button
+                            onClick={() => handleUpdateStatus(order._id, "out_for_delivery")}
+                            className="!font-extrabold bg-amber-400 hover:bg-amber-500 active:bg-amber-600 text-emerald-950 border border-amber-500/70 shadow-sm"
+                          >
+                            <Bike className="h-4 w-4 mr-2" />
+                            MARK AS OUT FOR DELIVERY
+                          </Button>
+                        )}
 
-  {order.status === "out_for_delivery" && (
-    <Button
-      onClick={() => handleUpdateStatus(order._id, "delivered")}
-      className="bg-emerald-600 hover:bg-emerald-700 !font-extrabold text-white"
-    >
-      <CheckCheck className="h-4 w-4 mr-2" /> Mark as Delivered
-    </Button>
-  )}
+                        {order.status === "out_for_delivery" && (
+                          <Button
+                            onClick={() => handleUpdateStatus(order._id, "delivered")}
+                            className="bg-emerald-600 hover:bg-emerald-700 !font-extrabold text-white"
+                          >
+                            <CheckCheck className="h-4 w-4 mr-2" /> Mark as Delivered
+                          </Button>
+                        )}
 
-  {order.status === "delivered" && <Badge className="bg-emerald-600">Delivered</Badge>}
+                        {order.status === "delivered" && <Badge className="bg-emerald-600">Delivered</Badge>}
 
-  {/* line break */}
-  <div className="basis-full h-0" />
+                        {/* line break */}
+                        <div className="basis-full h-0" />
 
-  {/* canned replies row */}
-  <div className="w-full flex flex-wrap gap-2">
-    {["Reaching in 5–7 mins","Outside your gate","Call me if needed"].map((txt) => (
-      <Button
-        key={txt}
-        size="sm"
-        variant="secondary"
-        className="rounded-full !font-bold"
-        onClick={async () => { try { await navigator.clipboard.writeText(txt); } catch {} ; setSnackbar({ open:true, message:"Canned reply copied", severity:"success" }); }}
-      >
-        {txt}
-      </Button>
-    ))}
-  </div>
+                        {/* canned replies row */}
+                        <div className="w-full flex flex-wrap gap-2">
+                          {["Reaching in 5–7 mins","Outside your gate","Call me if needed"].map((txt) => (
+                            <Button
+                              key={txt}
+                              size="sm"
+                              variant="secondary"
+                              className="rounded-full !font-bold"
+                              onClick={async () => { try { await navigator.clipboard.writeText(txt); } catch {} ; setSnackbar({ open:true, message:"Canned reply copied", severity:"success" }); }}
+                            >
+                              {txt}
+                            </Button>
+                          ))}
+                        </div>
 
-  {/* chat button on its own line on mobile */}
-  {order.status !== "delivered" && (
-    <div className="w-full sm:w-auto sm:ml-auto relative">
-      {!!(orderUnreadCounts[order._id]) && (
-        <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
-          {orderUnreadCounts[order._id]}
-        </span>
-      )}
-      <Button
-        className="bg-amber-300 text-slate-900 hover:bg-amber-400 !font-bold w-full sm:w-auto"
-        onClick={async () => {
-          setChatOrder(order);
-          setChatOpen(true);
-          const token = localStorage.getItem("deliveryToken");
-          try {
-            await axios.patch(`${API_BASE_URL}/api/chat/${order._id}/user-chat-seen`, {}, { headers: { Authorization: `Bearer ${token}` } });
-          } catch {}
-          setOrderUnreadCounts((c) => ({ ...c, [order._id]: 0 }));
-        }}
-      >
-        <MessageSquare className="h-4 w-4 mr-2" /> Chat
-      </Button>
-    </div>
-  )}
-</div>
+                        {/* chat button */}
+                        {order.status !== "delivered" && (
+                          <div className="w-full sm:w-auto sm:ml-auto relative">
+                            {!!(orderUnreadCounts[order._id]) && (
+                              <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
+                                {orderUnreadCounts[order._id]}
+                              </span>
+                            )}
+                            <Button
+                              className="bg-amber-300 text-slate-900 hover:bg-amber-400 !font-bold w-full sm:w-auto"
+                              onClick={async () => {
+                                setChatOrder(order);
+                                setChatOpen(true);
+                                const token = localStorage.getItem("deliveryToken");
+                                try {
+                                  await axios.patch(`${API_BASE_URL}/api/chat/${order._id}/user-chat-seen`, {}, { headers: { Authorization: `Bearer ${token}` } });
+                                } catch {}
+                                setOrderUnreadCounts((c) => ({ ...c, [order._id]: 0 }));
+                              }}
+                            >
+                              <MessageSquare className="h-4 w-4 mr-2" /> Chat
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </motion.div>
                   );
                 })}
@@ -947,7 +958,7 @@ const handleResetPassword = async () => {
         </Tabs>
       </div>
 
-      {/* CHAT MODAL (existing) */}
+      {/* CHAT MODAL */}
       <ChatModal
         open={chatOpen}
         onClose={() => setChatOpen(false)}
@@ -959,7 +970,7 @@ const handleResetPassword = async () => {
         currentRole="delivery"
       />
 
-      {/* Safety: SOS sticky (UI only) */}
+      {/* Safety: SOS sticky */}
       <Button
         className="fixed bottom-24 right-4 z-[2000] bg-red-600 hover:bg-red-700 font-extrabold shadow-lg"
         onClick={() => setSnackbar({ open: true, message: "SOS sent to support (demo)", severity: "error" })}
