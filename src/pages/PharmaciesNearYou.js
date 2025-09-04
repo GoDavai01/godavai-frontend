@@ -43,29 +43,37 @@ export default function PharmaciesNearYou() {
   const { currentAddress } = useLocation();
 
   useEffect(() => {
-    if (!currentAddress?.lat || !currentAddress?.lng) {
-      setLoading(false);
-      setPharmacies([]);
-      return;
-    }
-    setLoading(true);
-    fetch(`${API_BASE_URL}/api/pharmacies/nearby?lat=${currentAddress.lat}&lng=${currentAddress.lng}`)
-      .then((r) => r.json())
-      .then((d) => setPharmacies(Array.isArray(d) ? d : []))
-      .catch(() => setPharmacies([]))
-      .finally(() => setLoading(false));
-  }, [currentAddress]);
+  const lat = Number(currentAddress?.lat);
+  const lng = Number(currentAddress?.lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    setLoading(false);
+    setPharmacies([]);
+    return;
+  }
+
+  setLoading(true);
+  fetch(`${API_BASE_URL}/api/pharmacies/nearby?lat=${lat}&lng=${lng}`)
+    .then(r => r.json())
+    .then(d => setPharmacies(Array.isArray(d) ? d : []))
+    .catch(() => setPharmacies([]))
+    .finally(() => setLoading(false));
+}, [currentAddress]);
 
   useEffect(() => {
-    if (!currentAddress?.lat || !currentAddress?.lng) {
-      setCanDeliver(false);
-      return;
-    }
-    fetch(`${API_BASE_URL}/api/delivery/active-partner-nearby?lat=${currentAddress.lat}&lng=${currentAddress.lng}`)
-      .then((r) => r.json())
-      .then((d) => setCanDeliver(!!d.activePartnerExists))
-      .catch(() => setCanDeliver(false));
-  }, [currentAddress]);
+  const lat = Number(currentAddress?.lat);
+  const lng = Number(currentAddress?.lng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    setCanDeliver(false);
+    return;
+  }
+
+  fetch(`${API_BASE_URL}/api/delivery/active-partner-nearby?lat=${lat}&lng=${lng}`)
+    .then(r => r.json())
+    .then(d => setCanDeliver(!!d.activePartnerExists))
+    .catch(() => setCanDeliver(false));
+}, [currentAddress]);
 
   // Optional: auto-open to FULL when many pharmacies
   useEffect(() => {
