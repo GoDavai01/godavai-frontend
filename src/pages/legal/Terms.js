@@ -1,6 +1,5 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "../../components/Navbar";
 import { Button } from "../../components/ui/button";
 
 const DEEP = "#0f6e51";
@@ -9,7 +8,6 @@ export default function Terms() {
   const navigate = useNavigate();
   return (
     <div className="min-h-screen max-w-md mx-auto bg-white pb-24">
-      <Navbar />
       <div className="px-4 pt-4">
         <Button variant="ghost" className="btn-ghost-soft !font-bold mb-2" onClick={() => navigate(-1)}>
           ← Back
@@ -27,54 +25,16 @@ export default function Terms() {
           </p>
 
           <ol className="list-decimal pl-5 space-y-3">
-            <li>
-              <b>Nature of Services</b><br />
-              GoDavaii is a technology platform connecting users to local licensed pharmacies and, where applicable,
-              doctors and diagnostic labs. We are not a pharmacy or healthcare provider and do not sell or store medicines.
-            </li>
-            <li>
-              <b>Eligibility</b><br />
-              Prescription medicine ordering, doctor consultations, and lab services are for users 18+ or minors with
-              parental/guardian consent.
-            </li>
-            <li>
-              <b>Prescription Medicines</b><br />
-              Some medicines require a valid prescription. You may need to upload one; partner pharmacies verify
-              prescriptions. GoDavaii does not approve prescriptions.
-            </li>
-            <li>
-              <b>OTC Products</b><br />
-              OTC items may be ordered without a prescription, subject to availability.
-            </li>
-            <li>
-              <b>Role of Partners</b><br />
-              Medicines are sold/delivered by licensed pharmacies. Doctor and lab services are performed by qualified third parties.
-              GoDavaii is not responsible for professional advice, diagnosis, treatment, or outcomes by those parties.
-            </li>
-            <li>
-              <b>Payments & Refunds</b><br />
-              Payments go through secure gateways. Once an order is placed, no cancellation or refund is allowed,
-              unless required by law.
-            </li>
-            <li>
-              <b>Account & Data Deletion</b><br />
-              Delete anytime via in-app <b>Settings → Delete Account</b>. Personal data is removed except legally
-              required records.
-            </li>
-            <li>
-              <b>User Obligations</b><br />
-              Provide accurate information, use only for lawful purposes, and never upload fake prescriptions or
-              attempt to order restricted substances.
-            </li>
-            <li>
-              <b>Limitation of Liability</b><br />
-              We act as a facilitator. We are not liable for quality/safety/legality of medicines or services,
-              prescription errors, professional advice, or delivery delays caused by partners.
-            </li>
-            <li>
-              <b>Governing Law</b><br />
-              Indian law applies; courts in Noida, Uttar Pradesh have jurisdiction.
-            </li>
+            <li><b>Nature of Services</b><br />GoDavaii connects users to licensed pharmacies, doctors and labs. We are not a pharmacy or healthcare provider.</li>
+            <li><b>Eligibility</b><br />Prescription/consultation/lab services are for users 18+ or minors with guardian consent.</li>
+            <li><b>Prescription Medicines</b><br />Partner pharmacies verify prescriptions; GoDavaii does not approve them.</li>
+            <li><b>OTC Products</b><br />OTC items may be ordered without a prescription, subject to availability.</li>
+            <li><b>Role of Partners</b><br />Services are performed by licensed third parties; we’re not responsible for their advice or outcomes.</li>
+            <li><b>Payments & Refunds</b><br />Processed via secure gateways. No cancellations/refunds unless required by law.</li>
+            <li><b>Account & Data Deletion</b><br />Delete anytime via <b>Settings → Delete Account</b>; legally required records are retained.</li>
+            <li><b>User Obligations</b><br />Provide accurate info; don’t upload fake prescriptions or order restricted substances.</li>
+            <li><b>Limitation of Liability</b><br />We act as a facilitator and aren’t liable for quality, safety, or delivery delays by partners.</li>
+            <li><b>Governing Law</b><br />Laws of India; courts in Noida, Uttar Pradesh.</li>
           </ol>
 
           <div>

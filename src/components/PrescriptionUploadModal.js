@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
-import { AlertCircle, Home, Edit, Trash2, Plus, UploadCloud, Loader2, CheckCircle } from "lucide-react";
+import { AlertCircle, Home, Edit, Trash2, Plus, UploadCloud, Loader2, CheckCircle, Camera } from "lucide-react"; // ← NEW: Camera
 import AddressForm from "./AddressForm";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
@@ -20,6 +20,7 @@ export default function PrescriptionUploadModal({
   initialMode, initialNotes, initialFileUrl, initialAddress
 }) {
   const fileInputRef = useRef();
+  const cameraInputRef = useRef(); // ← NEW: camera input ref
   const { addresses, updateAddresses } = useAuth();
 
   const [selectedAddressId, setSelectedAddressId] = useState(addresses[0]?.id || null);
@@ -109,11 +110,12 @@ export default function PrescriptionUploadModal({
   }, [open, uploadType, addresses, selectedAddressId]);
 
   const handleFileChange = (e) => {
-    const f = e.target.files[0];
-    setFile(f);
+    const f = e.target.files?.[0];
+    setFile(f || null);
     setPreview(f ? URL.createObjectURL(f) : "");
   };
   const handleUploadClick = () => fileInputRef.current?.click();
+  const handleCameraClick = () => cameraInputRef.current?.click(); // ← NEW: trigger camera
 
   function sanitizeNotes(str) {
     return str.replace(/\d{10,}/g, "[blocked]");
@@ -225,11 +227,8 @@ export default function PrescriptionUploadModal({
           }}
         >
           {/* HEADER — white again, no subtitle */}
-          <DialogHeader className="p-5 pb-3 flex-shrink-0 bg-white z-10 rounded-t-3xl border-b"
-          >
-            <DialogTitle className="text-xl font-extrabold tracking-tight"
-              style={{ color: DEEP }}
-            >
+          <DialogHeader className="p-5 pb-3 flex-shrink-0 bg-white z-10 rounded-t-3xl border-b">
+            <DialogTitle className="text-xl font-extrabold tracking-tight" style={{ color: DEEP }}>
               Upload Prescription
             </DialogTitle>
           </DialogHeader>
@@ -318,56 +317,57 @@ export default function PrescriptionUploadModal({
                 </div>
 
                 {/* Upload Mode — clear selected state */}
-<div className="flex gap-2 justify-center mt-1 mb-1">
-  {/* AUTO */}
-  <button
-    type="button"
-    onClick={() => setUploadType("auto")}
-    aria-pressed={uploadType === "auto"}
-    className={`flex-1 rounded-lg px-3 py-3 font-semibold transition-all border
-      ${uploadType === "auto" ? "text-white" : "text-[#0b3f30]"}
-    `}
-    style={{
-      background: uploadType === "auto" ? DEEP : "#fff",
-      borderColor: uploadType === "auto" ? DEEP : `${DEEP}33`,
-      boxShadow: uploadType === "auto" ? "0 0 0 3px rgba(15,110,81,0.15)" : "none",
-    }}
-  >
-    <div className="font-bold">Let GoDavaii Handle</div>
-    <div
-      className="block text-xs mt-1"
-      style={{ color: uploadType === "auto" ? "rgba(255,255,255,.9)" : "#0b3f3099" }}
-    >
-      Fastest quote, best price!
-    </div>
-  </button>
+                <div className="flex gap-2 justify-center mt-1 mb-1">
+                  {/* AUTO */}
+                  <button
+                    type="button"
+                    onClick={() => setUploadType("auto")}
+                    aria-pressed={uploadType === "auto"}
+                    className={`flex-1 rounded-lg px-3 py-3 font-semibold transition-all border
+                      ${uploadType === "auto" ? "text-white" : "text-[#0b3f30]"}
+                    `}
+                    style={{
+                      background: uploadType === "auto" ? DEEP : "#fff",
+                      borderColor: uploadType === "auto" ? DEEP : `${DEEP}33`,
+                      boxShadow: uploadType === "auto" ? "0 0 0 3px rgba(15,110,81,0.15)" : "none",
+                    }}
+                  >
+                    <div className="font-bold">Let GoDavaii Handle</div>
+                    <div
+                      className="block text-xs mt-1"
+                      style={{ color: uploadType === "auto" ? "rgba(255,255,255,.9)" : "#0b3f3099" }}
+                    >
+                      Fastest quote, best price!
+                    </div>
+                  </button>
 
-  {/* MANUAL */}
-  <button
-    type="button"
-    onClick={() => setUploadType("manual")}
-    aria-pressed={uploadType === "manual"}
-    className={`flex-1 rounded-lg px-3 py-3 font-semibold transition-all border
-      ${uploadType === "manual" ? "text-white" : "text-[#0b3f30]"}
-    `}
-    style={{
-      background: uploadType === "manual" ? DEEP : "#fff",
-      borderColor: uploadType === "manual" ? DEEP : `${DEEP}33`,
-      boxShadow: uploadType === "manual" ? "0 0 0 3px rgba(15,110,81,0.15)" : "none",
-    }}
-  >
-    <div className="font-bold">Choose Pharmacy Yourself</div>
-    <div
-      className="block text-xs mt-1"
-      style={{ color: uploadType === "manual" ? "rgba(255,255,255,.9)" : "#0b3f3099" }}
-    >
-      Select pharmacy from list
-    </div>
-  </button>
-</div>
+                  {/* MANUAL */}
+                  <button
+                    type="button"
+                    onClick={() => setUploadType("manual")}
+                    aria-pressed={uploadType === "manual"}
+                    className={`flex-1 rounded-lg px-3 py-3 font-semibold transition-all border
+                      ${uploadType === "manual" ? "text-white" : "text-[#0b3f30]"}
+                    `}
+                    style={{
+                      background: uploadType === "manual" ? DEEP : "#fff",
+                      borderColor: uploadType === "manual" ? DEEP : `${DEEP}33`,
+                      boxShadow: uploadType === "manual" ? "0 0 0 3px rgba(15,110,81,0.15)" : "none",
+                    }}
+                  >
+                    <div className="font-bold">Choose Pharmacy Yourself</div>
+                    <div
+                      className="block text-xs mt-1"
+                      style={{ color: uploadType === "manual" ? "rgba(255,255,255,.9)" : "#0b3f3099" }}
+                    >
+                      Select pharmacy from list
+                    </div>
+                  </button>
+                </div>
 
-                {/* File Upload */}
+                {/* File Upload + Camera */}
                 <div>
+                  {/* existing file input (gallery/files/PDF) */}
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -375,15 +375,38 @@ export default function PrescriptionUploadModal({
                     hidden
                     onChange={handleFileChange}
                   />
-                  <Button
-                    className="w-full font-bold"
-                    variant="outline"
-                    onClick={handleUploadClick}
-                    style={{ borderColor: `${DEEP}40`, color: "#0b3f30" }}
-                  >
-                    <UploadCloud className="w-5 h-5 mr-2" />
-                    {file || preview ? "Change File" : "Choose File"}
-                  </Button>
+
+                  {/* NEW: camera input (rear camera hint on mobile) */}
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    hidden
+                    onChange={handleFileChange}
+                  />
+
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1 font-bold"
+                      variant="outline"
+                      onClick={handleUploadClick}
+                      style={{ borderColor: `${DEEP}40`, color: "#0b3f30" }}
+                    >
+                      <UploadCloud className="w-5 h-5 mr-2" />
+                      {file || preview ? "Change File" : "Choose File"}
+                    </Button>
+
+                    <Button
+                      className="flex-1 font-bold text-white"
+                      onClick={handleCameraClick}
+                      style={{ backgroundColor: DEEP }}
+                    >
+                      <Camera className="w-5 h-5 mr-2" />
+                      Take Photo
+                    </Button>
+                  </div>
+
                   {preview && (
                     <div className="mt-2 flex items-center justify-center">
                       <img
@@ -400,7 +423,7 @@ export default function PrescriptionUploadModal({
                 <Input
                   placeholder="Add a note for pharmacy"
                   value={notes}
-                  onChange={e => setNotes(e.target.value.replace(/\d{10,}/g, ""))}
+                  onChange={e => e && setNotes(e.target.value.replace(/\d{10,}/g, ""))}
                   maxLength={120}
                   className="mt-1"
                   style={{ borderColor: `${DEEP}33` }}
@@ -523,8 +546,7 @@ export default function PrescriptionUploadModal({
           </div>
 
           {/* FOOTER — Cancel white, Upload deep green */}
-          <DialogFooter className="bg-white p-4 pt-2 rounded-b-3xl flex gap-2 border-t mt-0 flex-shrink-0 z-10"
-          >
+          <DialogFooter className="bg-white p-4 pt-2 rounded-b-3xl flex gap-2 border-t mt-0 flex-shrink-0 z-10">
             {step === 1 && (
               <>
                 <Button
