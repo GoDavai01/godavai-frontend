@@ -53,7 +53,7 @@ export default function PharmaciesNearYou() {
   }
 
   setLoading(true);
-  fetch(`${API_BASE_URL}/api/pharmacies/nearby?lat=${lat}&lng=${lng}`)
+  fetch(`${API_BASE_URL}/api/pharmacies/nearby?lat=${lat}&lng=${lng}&maxDistance=8000`)
     .then(r => r.json())
     .then(d => setPharmacies(Array.isArray(d) ? d : []))
     .catch(() => setPharmacies([]))
@@ -121,6 +121,27 @@ function StarRating({ value = 0, size = 16, showNumber = false }) {
         <span className="ml-1 text-[11px] font-bold text-amber-600">{Number(value).toFixed(1)}</span>
       )}
     </div>
+  );
+}
+
+function kmBadge(pharmacy) {
+  const km =
+    typeof pharmacy?.distanceKm === "number"
+      ? pharmacy.distanceKm
+      : (typeof pharmacy?.distanceMeters === "number"
+          ? Math.round((pharmacy.distanceMeters / 1000) * 100) / 100
+          : null);
+
+  if (km == null || Number.isNaN(km)) return null;
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11.5px] font-bold"
+      style={{ color: DEEP }}
+      title={`${km.toFixed(2)} km away`}
+    >
+      {km.toFixed(2)} km away
+    </span>
   );
 }
 
@@ -250,7 +271,7 @@ function StarRating({ value = 0, size = 16, showNumber = false }) {
           {pharmacy.address?.area || pharmacy.area || "--"}
         </div>
 
-        {/* Badges row — time REMOVED, keep Verified only */}
+        {/* Badges row: Verified + Distance (if available) */}
         <div className="mt-1.5 flex items-center gap-3 flex-wrap">
   <Badge
     className="font-bold text-[11px] border"
@@ -259,6 +280,7 @@ function StarRating({ value = 0, size = 16, showNumber = false }) {
     <CheckCircle className="w-4 h-4 mr-1 inline-block" />
     Verified
   </Badge>
+  {kmBadge(pharmacy)}
 </div>
 
       </div>
