@@ -5,14 +5,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
-import { AlertCircle, Home, Edit, Trash2, Plus, UploadCloud, Loader2, CheckCircle, Camera } from "lucide-react"; // ← NEW: Camera
+import {
+  AlertCircle, Home, Edit, Trash2, Plus, UploadCloud, Loader2, CheckCircle, Camera, FileText, X
+} from "lucide-react";
 import AddressForm from "./AddressForm";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-
-// Deep green token (match navbar/bottom bar). If you already have one, swap to your CSS var.
 const DEEP = "#0f6e51";
 
 export default function PrescriptionUploadModal({
@@ -20,15 +20,19 @@ export default function PrescriptionUploadModal({
   initialMode, initialNotes, initialFileUrl, initialAddress
 }) {
   const fileInputRef = useRef();
-  const cameraInputRef = useRef(); // ← NEW: camera input ref
+  const cameraInputRef = useRef();
+
   const { addresses, updateAddresses } = useAuth();
 
   const [selectedAddressId, setSelectedAddressId] = useState(addresses[0]?.id || null);
   const [addressFormOpen, setAddressFormOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState(null);
+
   const [step, setStep] = useState(1);
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState("");
+
+  // MULTI-FILE: keep an array of files + previews
+  const [files, setFiles] = useState([]); // Array<File>
+  const [previews, setPreviews] = useState([]); // [{url, isPdf, name, size}]
   const [error, setError] = useState("");
   const [order, setOrder] = useState(null);
   const [quoteReady, setQuoteReady] = useState(false);
@@ -46,7 +50,12 @@ export default function PrescriptionUploadModal({
       if (initialMode) setUploadType(initialMode);
       if (initialNotes !== undefined) setNotes(initialNotes);
       if (initialAddress && initialAddress.id) setSelectedAddressId(initialAddress.id);
-      if (initialFileUrl) setPreview(initialFileUrl);
+
+      // Support legacy initial single URL as a pre-attached item
+      if (initialFileUrl) {
+        setPreviews([{ url: initialFileUrl, isPdf: /\.pdf(\?|$)/i.test(initialFileUrl), name: "existing", size: 0 }]);
+        setFiles([]); // not an actual File, but still shows in preview
+      }
     }
   }, [open, initialMode, initialNotes, initialFileUrl, initialAddress]);
 
@@ -109,13 +118,62 @@ export default function PrescriptionUploadModal({
     }
   }, [open, uploadType, addresses, selectedAddressId]);
 
-  const handleFileChange = (e) => {
-    const f = e.target.files?.[0];
-    setFile(f || null);
-    setPreview(f ? URL.createObjectURL(f) : "");
+  // --------- Multi-file helpers ----------
+  const MAX_FILES = 10;
+  const MAX_SIZE_MB = 20; // per-file
+
+  const addFiles = (fileList) => {
+    if (!fileList || fileList.length === 0) return;
+
+    const incoming = Array.from(fileList);
+    const currentCount = files.length + previews.filter(p => p.name === "existing").length;
+    const spaceLeft = MAX_FILES - currentCount;
+
+    const toAdd = incoming.slice(0, Math.max(0, spaceLeft));
+
+    const oversized = toAdd.find(f => f.size > MAX_SIZE_MB * 1024 * 1024);
+    if (oversized) {
+      setError(`Each file must be ≤ ${MAX_SIZE_MB}MB.`);
+      return;
+    }
+
+    const newPreviews = toAdd.map(f => ({
+      url: f.type?.startsWith("image/") ? URL.createObjectURL(f) : undefined,
+      isPdf: f.type === "application/pdf" || /\.pdf$/i.test(f.name),
+      name: f.name,
+      size: f.size
+    }));
+
+    setFiles(prev => [...prev, ...toAdd]);
+    setPreviews(prev => [...prev, ...newPreviews]);
   };
+
+  const handleFilePicker = (e) => addFiles(e.target.files);
+  const handleCameraCapture = (e) => addFiles(e.target.files);
+
+  const removeAttachment = (idx) => {
+    // If it was the “existing” preview (initialFileUrl), just remove from previews
+    const isExisting = previews[idx]?.name === "existing";
+    if (isExisting) {
+      setPreviews(prev => prev.filter((_, i) => i !== idx));
+      return;
+    }
+    // Otherwise remove both preview + matching file at same index among non-existing items
+    const nonExistingIndices = previews
+      .map((p, i) => ({ i, existing: p.name === "existing" }))
+      .filter(x => !x.existing)
+      .map(x => x.i);
+
+    const nonExistingIdx = nonExistingIndices.indexOf(idx);
+    if (nonExistingIdx >= 0) {
+      setFiles(prev => prev.filter((_, i) => i !== nonExistingIdx));
+    }
+    setPreviews(prev => prev.filter((_, i) => i !== idx));
+  };
+  // --------------------------------------
+
   const handleUploadClick = () => fileInputRef.current?.click();
-  const handleCameraClick = () => cameraInputRef.current?.click(); // ← NEW: trigger camera
+  const handleCameraClick = () => cameraInputRef.current?.click();
 
   function sanitizeNotes(str) {
     return str.replace(/\d{10,}/g, "[blocked]");
@@ -148,48 +206,65 @@ export default function PrescriptionUploadModal({
 
   const handleSubmit = async () => {
     if (!selectedAddressId) return setError("Please select or add a delivery address.");
-    if (!file && !preview) return setError("Upload a prescription file first.");
+    if (files.length === 0 && previews.filter(p => p.name === "existing").length === 0) {
+      return setError("Add at least one photo or PDF.");
+    }
     if (uploadType === "manual" && !selectedPharmacy) return setError("Select a pharmacy.");
     if (/\d{10,}/.test(notes)) return setError("Mobile numbers not allowed in notes.");
 
-    if (uploadType === "manual") {
-      const addr = addresses.find(a => a.id === selectedAddressId);
-      if (!addr || !addr.lat || !addr.lng) return setError("Please select a delivery address with location pin (use map).");
-    } else {
-      const addr = addresses.find(a => a.id === selectedAddressId);
-      if (!addr || !addr.lat || !addr.lng) return setError("Please select a location using the map.");
+    const addr = addresses.find(a => a.id === selectedAddressId);
+    if (!addr || !addr.lat || !addr.lng) {
+      return setError(uploadType === "manual"
+        ? "Please select a delivery address with location pin (use map)."
+        : "Please select a location using the map.");
     }
 
     setError("");
     setStep(2);
+
     try {
       const token = localStorage.getItem("token");
-      let prescriptionUrl = preview;
-      if (file) {
+
+      // Start with any existing URL (from initialFileUrl)
+      const existingUrls = previews
+        .filter(p => p.name === "existing" && p.url)
+        .map(p => p.url);
+
+      // Upload new files one-by-one to your existing endpoint
+      const uploadedUrls = [];
+      for (const f of files) {
         const data = new FormData();
-        data.append("prescription", file);
+        data.append("prescription", f);
         const uploadRes = await axios.post(
           `${API_BASE_URL}/api/prescriptions/upload`,
           data,
           { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } }
         );
-        prescriptionUrl = uploadRes.data.prescriptionUrl || uploadRes.data.url;
+        uploadedUrls.push(uploadRes.data.prescriptionUrl || uploadRes.data.url);
       }
+
+      const allUrls = [...existingUrls, ...uploadedUrls];
+
+      // Keep backward compatibility: still send prescriptionUrl (first)
+      const primaryUrl = allUrls[0];
+
       const orderRes = await axios.post(
         `${API_BASE_URL}/api/prescriptions/order`,
         {
-          prescriptionUrl,
+          prescriptionUrl: primaryUrl,        // ← legacy field (unchanged)
+          attachments: allUrls,               // ← NEW: full list (safe to add)
           city: userCity,
           area: userArea,
           notes: sanitizeNotes(notes),
           uploadType,
           chosenPharmacyId: uploadType === "manual" ? selectedPharmacy : undefined,
-          address: addresses.find(a => a.id === selectedAddressId) || {},
+          address: addr || {},
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
       setOrder(orderRes.data);
-    } catch {
+    } catch (e) {
       setError("Failed to submit. Try again.");
       setStep(1);
     }
@@ -197,8 +272,8 @@ export default function PrescriptionUploadModal({
 
   const handleClose = () => {
     setStep(1);
-    setFile(null);
-    setPreview("");
+    setFiles([]);
+    setPreviews([]);
     setError("");
     setOrder(null);
     setQuoteReady(false);
@@ -226,14 +301,12 @@ export default function PrescriptionUploadModal({
             flexDirection: "column",
           }}
         >
-          {/* HEADER — white again, no subtitle */}
           <DialogHeader className="p-5 pb-3 flex-shrink-0 bg-white z-10 rounded-t-3xl border-b">
             <DialogTitle className="text-xl font-extrabold tracking-tight" style={{ color: DEEP }}>
               Upload Prescription
             </DialogTitle>
           </DialogHeader>
 
-          {/* CONTENT */}
           <div className="flex-1 px-4 pt-3 pb-2 overflow-y-auto" style={{ minHeight: 180 }}>
             {step === 1 && (
               <div className="flex flex-col gap-4">
@@ -273,11 +346,7 @@ export default function PrescriptionUploadModal({
                               variant="ghost"
                               className="hover:bg-gray-50"
                               style={{ color: DEEP }}
-                              onClick={e => {
-                                e.stopPropagation();
-                                setEditingAddress(addr);
-                                setAddressFormOpen(true);
-                              }}
+                              onClick={e => { e.stopPropagation(); setEditingAddress(addr); setAddressFormOpen(true); }}
                             >
                               <Edit className="w-4 h-4 mr-1" /> Edit
                             </Button>
@@ -285,10 +354,7 @@ export default function PrescriptionUploadModal({
                               size="sm"
                               variant="ghost"
                               className="text-red-600 hover:bg-red-50"
-                              onClick={e => {
-                                e.stopPropagation();
-                                handleDeleteAddress(addr);
-                              }}
+                              onClick={e => { e.stopPropagation(); handleDeleteAddress(addr); }}
                             >
                               <Trash2 className="w-4 h-4 mr-1" /> Delete
                             </Button>
@@ -316,9 +382,8 @@ export default function PrescriptionUploadModal({
                   />
                 </div>
 
-                {/* Upload Mode — clear selected state */}
+                {/* Upload Mode */}
                 <div className="flex gap-2 justify-center mt-1 mb-1">
-                  {/* AUTO */}
                   <button
                     type="button"
                     onClick={() => setUploadType("auto")}
@@ -333,15 +398,11 @@ export default function PrescriptionUploadModal({
                     }}
                   >
                     <div className="font-bold">Let GoDavaii Handle</div>
-                    <div
-                      className="block text-xs mt-1"
-                      style={{ color: uploadType === "auto" ? "rgba(255,255,255,.9)" : "#0b3f3099" }}
-                    >
+                    <div className="block text-xs mt-1" style={{ color: uploadType === "auto" ? "rgba(255,255,255,.9)" : "#0b3f3099" }}>
                       Fastest quote, best price!
                     </div>
                   </button>
 
-                  {/* MANUAL */}
                   <button
                     type="button"
                     onClick={() => setUploadType("manual")}
@@ -356,34 +417,31 @@ export default function PrescriptionUploadModal({
                     }}
                   >
                     <div className="font-bold">Choose Pharmacy Yourself</div>
-                    <div
-                      className="block text-xs mt-1"
-                      style={{ color: uploadType === "manual" ? "rgba(255,255,255,.9)" : "#0b3f3099" }}
-                    >
+                    <div className="block text-xs mt-1" style={{ color: uploadType === "manual" ? "rgba(255,255,255,.9)" : "#0b3f3099" }}>
                       Select pharmacy from list
                     </div>
                   </button>
                 </div>
 
-                {/* File Upload + Camera */}
+                {/* File Upload + Camera (MULTI) */}
                 <div>
-                  {/* existing file input (gallery/files/PDF) */}
+                  {/* Pick from gallery/files (multi) */}
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept="image/*,application/pdf"
+                    multiple
                     hidden
-                    onChange={handleFileChange}
+                    onChange={handleFilePicker}
                   />
-
-                  {/* NEW: camera input (rear camera hint on mobile) */}
+                  {/* Camera (one shot at a time; tap multiple times to add many) */}
                   <input
                     ref={cameraInputRef}
                     type="file"
                     accept="image/*"
                     capture="environment"
                     hidden
-                    onChange={handleFileChange}
+                    onChange={handleCameraCapture}
                   />
 
                   <div className="flex gap-2">
@@ -394,7 +452,7 @@ export default function PrescriptionUploadModal({
                       style={{ borderColor: `${DEEP}40`, color: "#0b3f30" }}
                     >
                       <UploadCloud className="w-5 h-5 mr-2" />
-                      {file || preview ? "Change File" : "Choose File"}
+                      {previews.length ? "Add More" : "Choose Files"}
                     </Button>
 
                     <Button
@@ -407,29 +465,49 @@ export default function PrescriptionUploadModal({
                     </Button>
                   </div>
 
-                  {preview && (
-                    <div className="mt-2 flex items-center justify-center">
-                      <img
-                        src={preview}
-                        alt="Prescription Preview"
-                        className="max-h-36 max-w-[180px] rounded-lg border shadow-sm"
-                        style={{ borderColor: `${DEEP}33` }}
-                      />
+                  {/* Thumbnails / list */}
+                  {!!previews.length && (
+                    <div className="mt-2 grid grid-cols-4 gap-2">
+                      {previews.map((p, idx) => (
+                        <div
+                          key={`${p.url || p.name}-${idx}`}
+                          className="relative rounded-lg border shadow-sm overflow-hidden bg-white"
+                          style={{ borderColor: `${DEEP}22` }}
+                          title={p.name}
+                        >
+                          {/* Remove */}
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(idx)}
+                            className="absolute top-1 right-1 bg-white/90 rounded-full p-0.5 shadow"
+                            aria-label="Remove"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+
+                          {p.isPdf ? (
+                            <div className="flex flex-col items-center justify-center h-20 text-xs text-[#0b3f30]">
+                              <FileText className="w-7 h-7 mb-1" />
+                              <span className="px-1 truncate w-full text-center">PDF</span>
+                            </div>
+                          ) : (
+                            <img src={p.url} alt="Attachment" className="w-full h-20 object-cover" />
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
 
-                {/* Notes */}
                 <Input
                   placeholder="Add a note for pharmacy"
                   value={notes}
-                  onChange={e => e && setNotes(e.target.value.replace(/\d{10,}/g, ""))}
+                  onChange={e => setNotes(e.target.value.replace(/\d{10,}/g, ""))}
                   maxLength={120}
                   className="mt-1"
                   style={{ borderColor: `${DEEP}33` }}
                 />
 
-                {/* Pharmacy Dropdown (manual) */}
                 {uploadType === "manual" && (
                   <div data-pharmacy-dropdown style={{ position: "relative", zIndex: 50 }}>
                     <label className="block mb-1 text-sm font-semibold" style={{ color: DEEP }}>
@@ -478,10 +556,7 @@ export default function PrescriptionUploadModal({
                             <button
                               key={ph._id}
                               type="button"
-                              onClick={() => {
-                                setSelectedPharmacy(ph._id);
-                                setPhOpen(false);
-                              }}
+                              onClick={() => { setSelectedPharmacy(ph._id); setPhOpen(false); }}
                               className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                               style={{
                                 whiteSpace: "nowrap",
@@ -500,10 +575,9 @@ export default function PrescriptionUploadModal({
                   </div>
                 )}
 
-                {/* Helper text — bold as requested */}
                 <div className="mt-1">
                   <span className="text-sm font-semibold" style={{ color: "#0b3f30" }}>
-                    Upload a photo or PDF of your prescription to get a quote from pharmacy.
+                    Upload photos or PDF(s) of your prescription to get a quote from pharmacy.
                   </span>
                 </div>
 
@@ -545,7 +619,6 @@ export default function PrescriptionUploadModal({
             )}
           </div>
 
-          {/* FOOTER — Cancel white, Upload deep green */}
           <DialogFooter className="bg-white p-4 pt-2 rounded-b-3xl flex gap-2 border-t mt-0 flex-shrink-0 z-10">
             {step === 1 && (
               <>
