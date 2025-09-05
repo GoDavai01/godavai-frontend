@@ -69,6 +69,23 @@ const getImageUrl = (img) => {
 
 const DEEP = "#0f6e51";
 
+function formatPharmacyDistance(ph) {
+  // prefer distanceKm from API, else derive from distanceMeters,
+  // lastly support old shape { dist: { calculated } } for safety
+  const km = 
+    typeof ph?.distanceKm === "number"
+      ? ph.distanceKm
+      : typeof ph?.distanceMeters === "number"
+        ? ph.distanceMeters / 1000
+        : typeof ph?.dist?.calculated === "number"
+          ? ph.dist.calculated / 1000
+          : null;
+
+  if (km == null || Number.isNaN(km)) return "--";
+  return km < 1 ? "<1 km" : `${km.toFixed(1)} km`;
+}
+
+
 /* ---------- Horizontal medicine card (image left, details right) ---------- */
 function MedCard({ med, onAdd, onOpen }) {
   const [src, setSrc] = useState(
@@ -516,12 +533,9 @@ export default function Home() {
                 {ph.name}
               </div>
               <div className="text-xs text-neutral-400 mt-0.5">
-                {ph.dist?.calculated
-                  ? ph.dist.calculated > 1000
-                    ? `${(ph.dist.calculated / 1000).toFixed(1)} km`
-                    : `<1 km`
-                  : "--"}
-              </div>
+  {formatPharmacyDistance(ph)}
+</div>
+
             </div>
           ))}
         </div>
