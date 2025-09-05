@@ -110,34 +110,57 @@ function Stars({ value = 0, onChange, disabled }) {
 }
 
 /** ⭐ NEW: tiny inline map component using loader util */
+/** Tiny inline map (works even before first driver ping) */
 function MiniLiveMap({ center, driver }) {
   const divRef = useRef(null);
 
   useEffect(() => {
-    let map, driverMarker;
-    loadGoogleMaps().then((google) => {
-      if (!divRef.current) return;
+    let map = null;
+    let driverMarker = null;
 
-      map = new google.maps.Map(divRef.current, {
-        center,
-        zoom: 14,
-        mapId: "godavaii-map",
-        streetViewControl: false,
-        mapTypeControl: false,
-      });
+    loadGoogleMaps(["marker", "places"])
+      .then((google) => {
+        if (!divRef.current) return;
 
-      if (driver?.lat && driver?.lng) {
-        driverMarker = new google.maps.marker.AdvancedMarkerElement({
-          map,
-          position: { lat: driver.lat, lng: driver.lng },
-          title: "Delivery Partner",
+        map = new google.maps.Map(divRef.current, {
+          center: center || { lat: 28.4595, lng: 77.0266 },
+          zoom: 14,
+          mapId: "godavaii-map",
+          streetViewControl: false,
+          mapTypeControl: false,
+          gestureHandling: "greedy",
         });
-      }
-    }).catch((e) => console.error("Google Maps failed to load:", e));
+
+        // Put a marker only if we have driver coords; map still shows without it.
+        if (driver?.lat && driver?.lng) {
+          try {
+            // Prefer AdvancedMarker when available
+            const pill = document.createElement("div");
+            pill.style.cssText =
+              "background:#0ea5a4;color:#fff;font-weight:800;border-radius:9999px;padding:4px 8px;font-size:12px";
+            pill.textContent = "DP";
+            driverMarker = new google.maps.marker.AdvancedMarkerElement({
+              map,
+              position: { lat: driver.lat, lng: driver.lng },
+              title: "Delivery Partner",
+              content: pill,
+            });
+          } catch {
+            // Fallback to classic Marker
+            driverMarker = new google.maps.Marker({
+              map,
+              position: { lat: driver.lat, lng: driver.lng },
+              title: "Delivery Partner",
+              label: "D",
+            });
+          }
+        }
+      })
+      .catch((e) => console.error("Google Maps failed to load:", e));
 
     return () => {
-      map = null;
       driverMarker = null;
+      map = null;
     };
   }, [center?.lat, center?.lng, driver?.lat, driver?.lng]);
 
@@ -148,6 +171,7 @@ function MiniLiveMap({ center, driver }) {
     />
   );
 }
+
 
 export default function OrderTracking() {
   const { orderId } = useParams();
@@ -694,23 +718,25 @@ export default function OrderTracking() {
             </div>
 
             {/* MAP — now using the loader-based component */}
-            {order.driverLocation && currentStep >= 2 && currentStep < 3 && (
-              <div className="mt-3">
-                <div className="text-sm text-emerald-700 mb-1">Live Delivery Location:</div>
-                <div className="rounded-2xl overflow-hidden">
-                  <MiniLiveMap
-                    center={{
-                      lat: order.driverLocation.lat || 28.4595,
-                      lng: order.driverLocation.lng || 77.0266,
-                    }}
-                    driver={order.driverLocation}
-                  />
-                </div>
-                <div className="text-sm font-bold text-emerald-700 mt-2">
-                  Estimated time to delivery: {eta || "Calculating..."}
-                </div>
-              </div>
-            )}
+            {currentStep >= 2 && currentStep < 3 && (
+  <div className="mt-3">
+    <div className="text-sm text-emerald-700 mb-1">Live Delivery Location:</div>
+    <div className="rounded-2xl overflow-hidden">
+      <MiniLiveMap
+        center={{
+          // Prefer driver; fall back to user's address so the map still shows while we wait for the first ping
+          lat: (order.driverLocation?.lat ?? order.address?.lat ?? 28.4595),
+          lng: (order.driverLocation?.lng ?? order.address?.lng ?? 77.0266),
+        }}
+        driver={order.driverLocation}
+      />
+    </div>
+    <div className="text-sm font-bold text-emerald-700 mt-2">
+      Estimated time to delivery: {eta || "Calculating..."}
+    </div>
+  </div>
+)}
+
 
             {/* Delivered cheer */}
             {isDelivered && (
