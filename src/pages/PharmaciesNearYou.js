@@ -129,10 +129,17 @@ function kmBadge(pharmacy) {
     typeof pharmacy?.distanceKm === "number"
       ? pharmacy.distanceKm
       : (typeof pharmacy?.distanceMeters === "number"
-          ? Math.round((pharmacy.distanceMeters / 1000) * 100) / 100
+          ? pharmacy.distanceMeters / 1000
           : null);
 
   if (km == null || Number.isNaN(km)) return null;
+
+  let label;
+  if (km < 1) {
+    label = "<1 km";
+  } else {
+    label = `${km.toFixed(1)} km`; // always 1 decimal place
+  }
 
   return (
     <span
@@ -140,7 +147,7 @@ function kmBadge(pharmacy) {
       style={{ color: DEEP }}
       title={`${km.toFixed(2)} km away`}
     >
-      {km.toFixed(2)} km away
+      {label}
     </span>
   );
 }
