@@ -14,17 +14,27 @@ export default function PrescriptionQuoteModal({ open, onClose, quote, token, re
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
 
-  // Razorpay payment handler
+  // Normalize shape: accept either order or quote object
+  const items =
+    (quote?.quote?.items && Array.isArray(quote.quote.items) && quote.quote.items) ||
+    (quote?.items && Array.isArray(quote.items) && quote.items) ||
+    [];
+
+  const computedTotal = typeof quote?.quote?.price === "number"
+    ? quote.quote.price
+    : items
+        .filter(it => it.available !== false)
+        .reduce((sum, it) => sum + ((Number(it.price) || 0) * (Number(it.quantity) || 1)), 0);
+
   const payNow = async () => {
     setLoading(true);
     try {
-      // 1. Create Razorpay backend order
       const razorpayOrder = await axios.post(
         `${API_BASE_URL}/api/payment/razorpay/order`,
-        { amount: Math.round(quote.quotePrice * 100), currency: "INR", receipt: "quote_" + quote._id }
+        { amount: Math.round(computedTotal * 100), currency: "INR", receipt: "quote_" + quote._id }
       );
       const options = {
-        key: "rzp_test_GAXFOxUCCrxVvr", // Your Razorpay Key
+        key: "rzp_test_GAXFOxUCCrxVvr",
         amount: razorpayOrder.data.amount,
         currency: "INR",
         name: "GoDavaii - Medicine Delivery",
@@ -32,49 +42,37 @@ export default function PrescriptionQuoteModal({ open, onClose, quote, token, re
         order_id: razorpayOrder.data.id,
         handler: async function (response) {
           try {
-            // 2. On payment success, mark paid
             await axios.post(
               `${API_BASE_URL}/api/orders/${quote._id}/payment-success`,
               { paymentDetails: response },
               { headers: { Authorization: `Bearer ${token}` } }
             );
-            // 3. Convert prescription to normal order
             const convertRes = await axios.post(
               `${API_BASE_URL}/api/prescriptions/${quote._id}/convert-to-order`,
               {},
               { headers: { Authorization: `Bearer ${token}` } }
             );
             if (convertRes.data && convertRes.data.orderId) {
-              // 4. Redirect to the new normal order tracking page
               window.location.href = `/orders/${convertRes.data.orderId}`;
               return;
             } else {
               setSnackbar({ open: true, message: "Payment done, but failed to update order!", severity: "error" });
             }
-          } catch (error) {
+          } catch {
             setSnackbar({ open: true, message: "Payment succeeded but order update failed!", severity: "error" });
           }
           setLoading(false);
           onClose();
           refreshOrders && refreshOrders();
         },
-        prefill: {
-          name: quote.user?.name || "",
-          email: quote.user?.email || "",
-        },
+        prefill: { name: quote.user?.name || "", email: quote.user?.email || "" },
         theme: { color: "#13c7ae" },
         modal: { ondismiss: () => setLoading(false) },
       };
       setLoading(false);
-
-      // PRODUCTION SAFETY: check Razorpay loaded (optional, but best practice)
-      if (window.Razorpay) {
-        const rzp = new window.Razorpay(options);
-        rzp.open();
-      } else {
-        setSnackbar({ open: true, message: "Payment gateway not loaded.", severity: "error" });
-      }
-    } catch (err) {
+      if (window.Razorpay) new window.Razorpay(options).open();
+      else setSnackbar({ open: true, message: "Payment gateway not loaded.", severity: "error" });
+    } catch {
       setSnackbar({ open: true, message: "Failed to initiate payment.", severity: "error" });
       setLoading(false);
     }
@@ -92,19 +90,37 @@ export default function PrescriptionQuoteModal({ open, onClose, quote, token, re
           <Typography variant="subtitle1" sx={{ mb: 2 }}>
             The pharmacy has sent a quote for your prescription.
           </Typography>
-          <Stack spacing={1} sx={{ mb: 2 }}>
-            {quote.items.map((item, i) => (
-              <Chip
-                key={i}
-                label={`${item.name} × ${item.quantity} (${item.status === "available" ? "Available" : "Unavailable"})`}
-                color={item.status === "available" ? "success" : "error"}
-                sx={{ mb: 1, fontWeight: 600 }}
-              />
-            ))}
-          </Stack>
-          <Divider sx={{ my: 1 }} />
-          <Typography variant="h6" sx={{ color: "#17879c", fontWeight: 700, mb: 2 }}>
-            Total Quoted Price: ₹{quote.quotePrice}
+
+          {/* New table that matches the quote shape */}
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+              <thead style={{ background: "#f6faf8" }}>
+                <tr>
+                  <th style={{ textAlign: "left", padding: 8, fontWeight: 800 }}>Composition</th>
+                  <th style={{ textAlign: "left", padding: 8, fontWeight: 800 }}>Brand</th>
+                  <th style={{ textAlign: "left", padding: 8, fontWeight: 800, width: 70 }}>Qty</th>
+                  <th style={{ textAlign: "left", padding: 8, fontWeight: 800, width: 90 }}>Price</th>
+                  <th style={{ textAlign: "left", padding: 8, fontWeight: 800, width: 120 }}>Available</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it, i) => (
+                  <tr key={i} style={{ background: i % 2 ? "#fff" : "#fafafa" }}>
+                    <td style={{ padding: 8, fontWeight: 700 }}>{it.medicineName || it.name || "-"}</td>
+                    <td style={{ padding: 8 }}>{it.brand || "-"}</td>
+                    <td style={{ padding: 8 }}>{it.quantity ?? "-"}</td>
+                    <td style={{ padding: 8 }}>₹{Number(it.price || 0)}</td>
+                    <td style={{ padding: 8 }}>{it.available === false ? "❌ Not Available" : "✅ Available"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="h6" sx={{ color: "#17879c", fontWeight: 700 }}>
+            Total Quoted Price: ₹{computedTotal}
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -124,7 +140,7 @@ export default function PrescriptionQuoteModal({ open, onClose, quote, token, re
                   onClose();
                   refreshOrders && refreshOrders();
                 }, 1200);
-              } catch (err) {
+              } catch {
                 setSnackbar({ open: true, message: "Rejection failed!", severity: "error" });
                 setLoading(false);
               }
@@ -139,10 +155,11 @@ export default function PrescriptionQuoteModal({ open, onClose, quote, token, re
             disabled={loading}
             sx={{ bgcolor: "#13c7ae", fontWeight: 700 }}
           >
-            {loading ? "Processing..." : `Accept & Pay ₹${quote.quotePrice}`}
+            {loading ? "Processing..." : `Accept & Pay ₹${computedTotal}`}
           </Button>
         </DialogActions>
       </Dialog>
+
       <Snackbar
         open={snackbar.open}
         autoHideDuration={1800}
@@ -156,3 +173,4 @@ export default function PrescriptionQuoteModal({ open, onClose, quote, token, re
     </>
   );
 }
+

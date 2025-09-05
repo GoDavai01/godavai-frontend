@@ -26,6 +26,54 @@ import {
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
+// --- Rx helpers: open/download all attachments in one click ---
+const toAbsUrl = (u = "") =>
+  u.startsWith("/uploads/") ? `${API_BASE_URL}${u}` : u;
+
+function collectRxUrls(order) {
+  const urls = [];
+  if (Array.isArray(order.attachments) && order.attachments.length) {
+    urls.push(...order.attachments.map(toAbsUrl));
+  } else if (Array.isArray(order.prescriptionUrls) && order.prescriptionUrls.length) {
+    urls.push(...order.prescriptionUrls.map(toAbsUrl));
+  } else if (order.prescriptionUrl || order.prescription) {
+    urls.push(toAbsUrl(order.prescriptionUrl || order.prescription));
+  }
+  return urls.filter(Boolean);
+}
+
+async function openOrDownloadAllRx(order) {
+  const urls = collectRxUrls(order);
+  if (!urls.length) return;
+
+  // Try true file downloads; if CORS blocks, open in new tabs.
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    try {
+      const resp = await fetch(url, { credentials: "include" });
+      if (!resp.ok) throw new Error("fetch failed");
+      const blob = await resp.blob();
+      const a = document.createElement("a");
+      const nameFromUrl = url.split("/").pop()?.split("?")[0] || `prescription_${i + 1}`;
+      const extFromType = blob.type?.split("/").pop() || "";
+      const filename = nameFromUrl.includes(".")
+        ? nameFromUrl
+        : `${nameFromUrl}${extFromType ? "." + extFromType : ""}`;
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(a.href);
+        a.remove();
+      }, 0);
+    } catch {
+      // Fallback: open if download blocked
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  }
+}
+
 /* ------------------- utils (UNCHANGED LOGIC) ------------------- */
 function getHiddenRejectionIds() {
   try {
@@ -348,20 +396,23 @@ export default function MyOrdersPage() {
         {o.orderType === "prescription" ? (
           <>
             <div className="text-[14px] mt-2">
-              <b>Prescription:</b>{" "}
-              {o.prescriptionUrl || o.prescription ? (
-                <a
-                  href={o.prescriptionUrl || o.prescription}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-blue-600 underline font-semibold"
-                >
-                  View
-                </a>
-              ) : (
-                "Not Available"
-              )}
-            </div>
+  <b>Prescription:</b>{" "}
+  {collectRxUrls(o).length ? (
+    <a
+      href={collectRxUrls(o)[0]}
+      onClick={(e) => { e.preventDefault(); openOrDownloadAllRx(o); }}
+      target="_blank"
+      rel="noreferrer"
+      className="text-blue-600 underline font-semibold"
+      title="Open/Download all prescription files"
+    >
+      View
+    </a>
+  ) : (
+    "Not Available"
+  )}
+</div>
+
 
             {(o.status === "quoted" || o.status === "pending_user_confirm") && (
               <div className="mt-3 mb-1.5 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
