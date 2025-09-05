@@ -50,8 +50,8 @@ const getRouteAndDistance = async (origin, destination) => {
       {
         origin: new google.maps.LatLng(origin.lat, origin.lng),
         destination: new google.maps.LatLng(destination.lat, destination.lng),
-        // DirectionsService doesn't expose TWO_WHEELER; use DRIVING for preview
-        // (we open Google Maps with two_wheeler for real navigation below)
+        // TWO_WHEELER isn't exposed here; use DRIVING for preview.
+        // We open Google Maps with travelmode=two_wheeler for real nav.
         travelMode: google.maps.TravelMode.DRIVING,
         provideRouteAlternatives: false,
       },
@@ -71,6 +71,15 @@ const getRouteAndDistance = async (origin, destination) => {
     );
   });
 };
+
+// Obfuscate a coordinate by ~400m (privacy circle center)
+// deterministic-enough per render by caching per order id
+function jitterLatLng(lat, lng, meters = 400) {
+  const earth = 111320; // meters per degree latitude
+  const dLat = (meters / earth) * (Math.random() < 0.5 ? -1 : 1);
+  const dLng = (meters / (earth * Math.cos((lat * Math.PI) / 180))) * (Math.random() < 0.5 ? -1 : 1);
+  return { lat: lat + dLat * 0.4, lng: lng + dLng * 0.4 }; // pull it in a bit
+}
 
 const mmss = (secs) => {
   const m = Math.floor(secs / 60).toString().padStart(2, "0");
@@ -139,80 +148,189 @@ function DeliveryPayoutsSection({ partner }) {
   );
 }
 
-/* ---- Tiny per-order map: 2 pins + route + fitBounds ---- */
-function OrderMiniMap({ center, pharmacyLoc, userLoc, path }) {
-  const ref = useRef(null);
+/* ---- Tiny per-order map: supports pharmacy pin / user pin / approx drop circle ---- */
+function OrderMiniMap({ center, pharmacyLoc, userLoc, path, showPharmacy = true, showUser = true, approxDrop = null }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const pharmMarkerRef = useRef(null);
+  const userMarkerRef = useRef(null);
+  const circleRef = useRef(null);
+  const polyRef = useRef(null);
+  const fitTimeoutRef = useRef(null);
+  const lastSigRef = useRef("");
 
+  // Create map once
   useEffect(() => {
-    let map, pharmMarker, userMarker, polyline;
-    loadGoogleMaps(["marker", "places"])
-      .then((google) => {
-        if (!ref.current) return;
+    let mounted = true;
+    (async () => {
+      const google = await loadGoogleMaps(["marker", "places"]);
+      if (!mounted || !containerRef.current || mapRef.current) return;
 
-        map = new google.maps.Map(ref.current, {
-          center,
-          zoom: 13,
-          mapId: "godavaii-map",
-          streetViewControl: false,
-          mapTypeControl: false,
-        });
+      mapRef.current = new google.maps.Map(containerRef.current, {
+        center: center || { lat: 19.076, lng: 72.877 },
+        zoom: 14,
+        mapId: "godavaii-map",
+        streetViewControl: false,
+        mapTypeControl: false,
+        gestureHandling: "greedy",
+      });
 
-        const bounds = new google.maps.LatLngBounds();
-
-        const addMarker = (pos, title, label) => {
-          // Prefer AdvancedMarker; fall back to classic Marker
-          try {
-            const adv = new google.maps.marker.AdvancedMarkerElement({ map, position: pos, title });
-            const pill = document.createElement("div");
-            pill.style.cssText =
-              "background:#0ea5a4;color:#fff;font-weight:800;border-radius:9999px;padding:4px 8px;font-size:12px";
-            pill.textContent = label;
-            adv.content = pill;
-            return adv;
-          } catch {
-            return new google.maps.Marker({ map, position: pos, title, label });
-          }
-        };
-
-        if (pharmacyLoc?.lat && pharmacyLoc?.lng) {
-          const pos = { lat: pharmacyLoc.lat, lng: pharmacyLoc.lng };
-          pharmMarker = addMarker(pos, "Pharmacy", "P");
-          bounds.extend(pos);
-        }
-        if (userLoc?.lat && userLoc?.lng) {
-          const pos = { lat: userLoc.lat, lng: userLoc.lng };
-          userMarker = addMarker(pos, "Delivery Address", "U");
-          bounds.extend(pos);
-        }
-
-        if (Array.isArray(path) && path.length > 1) {
-          polyline = new google.maps.Polyline({
-            map,
-            path,
-            strokeOpacity: 0.9,
-            strokeWeight: 4,
-            strokeColor: "#0ea5a4",
-          });
-          path.forEach(p => bounds.extend(p));
-        }
-
-        if (!bounds.isEmpty()) {
-          map.fitBounds(bounds, { top: 20, right: 20, bottom: 20, left: 20 });
-          const once = google.maps.event.addListenerOnce(map, "idle", () => {
-            if (map.getZoom() > 16) map.setZoom(16);
-          });
-          // cleanup the listener
-          return () => google.maps.event.removeListener(once);
-        }
-      })
-      .catch((e) => console.error("Google Maps failed to load:", e));
+      // pre-create polyline
+      polyRef.current = new google.maps.Polyline({
+        map: mapRef.current,
+        strokeOpacity: 0.9,
+        strokeWeight: 4,
+        strokeColor: "#0ea5a4",
+        path: [],
+      });
+    })();
 
     return () => {
-      map = null; pharmMarker = null; userMarker = null; polyline = null;
+      mounted = false;
+      if (fitTimeoutRef.current) {
+        clearTimeout(fitTimeoutRef.current);
+        fitTimeoutRef.current = null;
+      }
+      polyRef.current = null;
+      pharmMarkerRef.current = null;
+      userMarkerRef.current = null;
+      circleRef.current = null;
+      mapRef.current = null;
     };
-  }, [center, pharmacyLoc, userLoc, path]);
+    // eslint-disable-next-line
+  }, []);
 
-  return <div ref={ref} style={{ width: "100%", height: "230px", borderRadius: 18, overflow: "hidden" }} />;
+  // Update markers / path / circle only when inputs change
+  useEffect(() => {
+    const gmap = mapRef.current;
+    if (!gmap) return;
+
+    const pLat = showPharmacy ? pharmacyLoc?.lat : null;
+    const pLng = showPharmacy ? pharmacyLoc?.lng : null;
+    const uLat = showUser ? userLoc?.lat : null;
+    const uLng = showUser ? userLoc?.lng : null;
+    const pathLen = Array.isArray(path) ? path.length : 0;
+    const cLat = approxDrop?.lat ?? null;
+    const cLng = approxDrop?.lng ?? null;
+    const cRad = approxDrop?.radius ?? null;
+
+    const sig = [pLat, pLng, uLat, uLng, pathLen, cLat, cLng, cRad]
+      .map(v => (v == null ? "x" : String(+Number(v).toFixed(6))))
+      .join("|");
+    if (sig === lastSigRef.current) return;
+    lastSigRef.current = sig;
+
+    const google = window.google;
+
+    const addOrMove = (ref, pos, title, label) => {
+      if (!pos?.lat || !pos?.lng) return;
+      if (ref.current && "position" in ref.current) {
+        ref.current.setPosition(pos);
+        return;
+      }
+      if (ref.current && "map" in ref.current) {
+        ref.current.position = pos;
+        return;
+      }
+      try {
+        const pill = document.createElement("div");
+        pill.style.cssText =
+          "background:#0ea5a4;color:#fff;font-weight:800;border-radius:9999px;padding:4px 8px;font-size:12px";
+        pill.textContent = label;
+        ref.current = new google.maps.marker.AdvancedMarkerElement({
+          map: gmap,
+          position: pos,
+          title,
+          content: pill,
+        });
+      } catch {
+        ref.current = new google.maps.Marker({
+          map: gmap,
+          position: pos,
+          title,
+          label,
+        });
+      }
+    };
+
+    // Pharmacy marker
+    if (pLat && pLng) {
+      addOrMove(pharmMarkerRef, { lat: pLat, lng: pLng }, "Pharmacy", "P");
+    } else if (pharmMarkerRef.current) {
+      pharmMarkerRef.current.map = null;
+      pharmMarkerRef.current = null;
+    }
+
+    // User marker
+    if (uLat && uLng) {
+      addOrMove(userMarkerRef, { lat: uLat, lng: uLng }, "Delivery Address", "U");
+    } else if (userMarkerRef.current) {
+      userMarkerRef.current.map = null;
+      userMarkerRef.current = null;
+    }
+
+    // Approximate drop circle
+    if (cLat && cLng && cRad) {
+      if (!circleRef.current) {
+        circleRef.current = new google.maps.Circle({
+          map: gmap,
+          center: { lat: cLat, lng: cLng },
+          radius: cRad,
+          strokeColor: "#0ea5a4",
+          strokeOpacity: 0.55,
+          strokeWeight: 2,
+          fillColor: "#0ea5a4",
+          fillOpacity: 0.15,
+        });
+      } else {
+        circleRef.current.setCenter({ lat: cLat, lng: cLng });
+        circleRef.current.setRadius(cRad);
+      }
+    } else if (circleRef.current) {
+      circleRef.current.setMap(null);
+      circleRef.current = null;
+    }
+
+    // Polyline
+    if (polyRef.current) {
+      polyRef.current.setPath(Array.isArray(path) ? path : []);
+    }
+
+    // Fit bounds softly
+    if (fitTimeoutRef.current) clearTimeout(fitTimeoutRef.current);
+    fitTimeoutRef.current = setTimeout(() => {
+      const bounds = new google.maps.LatLngBounds();
+      if (pLat && pLng) bounds.extend({ lat: pLat, lng: pLng });
+      if (uLat && uLng) bounds.extend({ lat: uLat, lng: uLng });
+      (Array.isArray(path) ? path : []).forEach(pt => bounds.extend(pt));
+      // extend around the circle
+      if (cLat && cLng && cRad) {
+        const lat = cLat, lng = cLng;
+        const dLat = cRad / 111320;
+        const dLng = cRad / (111320 * Math.cos((lat * Math.PI) / 180));
+        bounds.extend({ lat: lat + dLat, lng });
+        bounds.extend({ lat: lat - dLat, lng });
+        bounds.extend({ lat, lng: lng + dLng });
+        bounds.extend({ lat, lng: lng - dLng });
+      }
+
+      if (!bounds.isEmpty()) {
+        gmap.fitBounds(bounds, { top: 20, right: 20, bottom: 20, left: 20 });
+        const once = google.maps.event.addListenerOnce(gmap, "idle", () => {
+          const z = gmap.getZoom();
+          if (z > 16) gmap.setZoom(16);
+        });
+        setTimeout(() => google.maps.event.removeListener(once), 0);
+      }
+    }, 120);
+  }, [center, pharmacyLoc, userLoc, path, showPharmacy, showUser, approxDrop]);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{ width: "100%", height: "230px", borderRadius: 18, overflow: "hidden" }}
+    />
+  );
 }
 
 /* -------------------------------- component -------------------------------- */
@@ -238,6 +356,12 @@ export default function DeliveryDashboard() {
   const [orderDistances, setOrderDistances] = useState({});
   const [orderUnreadCounts, setOrderUnreadCounts] = useState({});
 
+  // NEW: driver live location (for pre-OFD nav to pickup)
+  const [driverLoc, setDriverLoc] = useState(null); // {lat, lng}
+
+  // NEW: masked approximate drop centers per order (privacy)
+  const [maskedDrops, setMaskedDrops] = useState({}); // { [orderId]: {lat, lng, radius} }
+
   // Live Ops UI
   const [autoAccept, setAutoAccept] = useState(() => localStorage.getItem("gd_auto_accept") === "1");
   const [onBreak, setOnBreak] = useState(false);
@@ -254,12 +378,13 @@ export default function DeliveryDashboard() {
     return () => clearInterval(interval);
   }, [loggedIn, tab, loading]);
 
-  // Send driver location while ACTIVE
+  // Send driver location while ACTIVE + keep local copy for routing to pickup
   useEffect(() => {
     if (!loggedIn || !partner?._id || !active) return;
     let watchId;
     const send = async (coords) => {
       const { latitude, longitude } = coords;
+      setDriverLoc({ lat: latitude, lng: longitude }); // local
       try {
         await axios.post(`${API_BASE_URL}/api/delivery/update-location`, {
           partnerId: partner._id, lat: latitude, lng: longitude,
@@ -380,18 +505,50 @@ export default function DeliveryDashboard() {
       setOrders(activeOrders);
       setPastOrders(resProfile.data.pastOrders || []);
 
+      // build masked drop cache once per order
+      const nextMasked = { ...maskedDrops };
+      for (const o of activeOrders) {
+        const user = o.address;
+        if (!nextMasked[o._id] && user?.lat && user?.lng) {
+          const j = jitterLatLng(user.lat, user.lng, 400);
+          nextMasked[o._id] = { lat: j.lat, lng: j.lng, radius: 400 };
+        }
+      }
+      setMaskedDrops(nextMasked);
+
+      // build polylines per phase
       let newPolys = {};
       let newDistances = {};
       for (const o of activeOrders) {
-        if (o.pharmacy?.location?.lat && o.pharmacy?.location?.lng && o.address?.lat && o.address?.lng) {
-          if (!polylines[o._id] || orderDistances[o._id] == null) {
-            const { poly, distanceKm } = await getRouteAndDistance(o.pharmacy.location, o.address);
-            newPolys[o._id] = poly;
-            newDistances[o._id] = distanceKm;
-          } else {
-            newPolys[o._id] = polylines[o._id];
-            newDistances[o._id] = orderDistances[o._id];
+        const pharm = o.pharmacy?.location;
+        const user  = o.address;
+        const hasPharm = pharm?.lat && pharm?.lng;
+        const hasUser  = user?.lat && user?.lng;
+
+        let origin = null;
+        let destination = null;
+
+        if (o.status === "out_for_delivery") {
+          // AFTER OFD: pharmacy -> user
+          if (hasPharm && hasUser) {
+            origin = pharm;
+            destination = user;
           }
+        } else {
+          // BEFORE OFD (assigned/accepted): driver -> pharmacy (fallback to pharmacy self)
+          if (hasPharm) {
+            origin = driverLoc || pharm;
+            destination = pharm;
+          }
+        }
+
+        if (origin && destination && (!polylines[o._id] || orderDistances[o._id] == null)) {
+          const { poly, distanceKm } = await getRouteAndDistance(origin, destination);
+          newPolys[o._id] = poly;
+          newDistances[o._id] = distanceKm;
+        } else {
+          if (polylines[o._id]) newPolys[o._id] = polylines[o._id];
+          if (orderDistances[o._id] != null) newDistances[o._id] = orderDistances[o._id];
         }
       }
       setPolylines(newPolys);
@@ -661,19 +818,43 @@ export default function DeliveryDashboard() {
                   }
 
                   const poly = polylines[order._id] || [];
-                  const mapCenter = patchedPharmacyLoc?.lat && patchedPharmacyLoc?.lng
-                    ? { lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }
-                    : { lat: 19.076, lng: 72.877 };
 
-                  // ETA estimate (~22 km/h)
+                  // Phase flags
+                  const isOFD = order.status === "out_for_delivery";
+                  const showPharmacy = !isOFD && order.status !== "delivered";
+                  const showUser     = isOFD; // exact pin only after OFD
+
+                  // Approximate drop (privacy) before OFD
+                  const approxDrop = !isOFD ? maskedDrops[order._id] : null;
+
+                  // Map center preference
+                  const mapCenter =
+                    (showPharmacy && patchedPharmacyLoc?.lat && patchedPharmacyLoc?.lng)
+                      ? { lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }
+                      : (showUser && patchedUserLoc?.lat && patchedUserLoc?.lng)
+                        ? { lat: patchedUserLoc.lat, lng: patchedUserLoc.lng }
+                        : { lat: 19.076, lng: 72.877 };
+
+                  // ETA estimate (~22 km/h) — same as before
                   const dist = orderDistances[order._id];
                   const etaMin = dist != null ? Math.max(3, Math.round((dist / 22) * 60)) : null;
+
+                  // Navigation targets:
+                  const navOrigin = isOFD
+                    ? `${patchedPharmacyLoc?.lat},${patchedPharmacyLoc?.lng}`
+                    : (driverLoc ? `${driverLoc.lat},${driverLoc.lng}` : `${patchedPharmacyLoc?.lat},${patchedPharmacyLoc?.lng}`);
+
+                  const navDestination = isOFD
+                    ? `${patchedUserLoc?.lat},${patchedUserLoc?.lng}`
+                    : `${patchedPharmacyLoc?.lat},${patchedPharmacyLoc?.lng}`;
 
                   return (
                     <motion.div key={order._id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-emerald-200/60 bg-white p-4 shadow-sm">
                       <div className="flex items-center gap-2">
                         <Pill className="h-5 w-5 text-emerald-600" />
-                        <div className="font-semibold">Pharmacy: <span className="text-emerald-700 font-extrabold">{order.pharmacy?.name || order.pharmacy}</span></div>
+                        <div className="font-semibold">
+                          Pharmacy: <span className="text-emerald-700 font-extrabold">{order.pharmacy?.name || order.pharmacy}</span>
+                        </div>
                         <div className="ml-auto flex items-center gap-2">
                           {dist != null && <Badge className="bg-emerald-100 text-emerald-800 font-bold">{dist.toFixed(2)} km</Badge>}
                           {etaMin != null && <Badge className="bg-emerald-600">ETA ~ {etaMin} min</Badge>}
@@ -690,9 +871,11 @@ export default function DeliveryDashboard() {
                           <MapPin className="h-4 w-4 mt-0.5 text-slate-500" />
                           <span>
                             Deliver to: <b>
-                              {order.address?.formatted || order.address?.fullAddress ||
-                                [order.address?.addressLine, order.address?.floor, order.address?.landmark, order.address?.area, order.address?.city, order.address?.state, order.address?.pin]
-                                  .filter(Boolean).join(", ")}
+                              {isOFD
+                                ? (order.address?.formatted || order.address?.fullAddress ||
+                                  [order.address?.addressLine, order.address?.floor, order.address?.landmark, order.address?.area, order.address?.city, order.address?.state, order.address?.pin]
+                                    .filter(Boolean).join(", "))
+                                : (order.address?.area || order.address?.city || "Nearby area")} {/* masked before OFD */}
                             </b>
                           </span>
                         </div>
@@ -709,9 +892,17 @@ export default function DeliveryDashboard() {
                         <div className="text-xs text-slate-400 mt-2">Customer location missing</div>
                       ) : (
                         <div className="mt-3">
-                          <OrderMiniMap center={mapCenter} pharmacyLoc={patchedPharmacyLoc} userLoc={patchedUserLoc} path={poly} />
+                          <OrderMiniMap
+                            center={mapCenter}
+                            pharmacyLoc={patchedPharmacyLoc}
+                            userLoc={patchedUserLoc}
+                            path={poly}
+                            showPharmacy={showPharmacy}
+                            showUser={showUser}
+                            approxDrop={approxDrop}
+                          />
 
-                          {/* Navigation: Google set to two_wheeler by default */}
+                          {/* Navigation: default two_wheeler */}
                           <div className="mt-2 grid grid-cols-2 gap-2">
                             <Button asChild variant="outline" className="!font-bold h-9 w-full">
                               <a
@@ -719,8 +910,8 @@ export default function DeliveryDashboard() {
                                 rel="noreferrer"
                                 href={
                                   `https://www.google.com/maps/dir/?api=1` +
-                                  `&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}` +
-                                  `&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}` +
+                                  `&origin=${navOrigin}` +
+                                  `&destination=${navDestination}` +
                                   `&travelmode=two_wheeler`
                                 }
                               >
@@ -731,7 +922,7 @@ export default function DeliveryDashboard() {
                               <a
                                 target="_blank"
                                 rel="noreferrer"
-                                href={`http://maps.apple.com/?saddr=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&daddr=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
+                                href={`http://maps.apple.com/?saddr=${navOrigin}&daddr=${navDestination}`}
                               >
                                 <Navigation className="h-4 w-4 mr-2" /> Apple Maps
                               </a>
