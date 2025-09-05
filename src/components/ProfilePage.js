@@ -20,6 +20,7 @@ import { Switch } from "../components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Badge } from "../components/ui/badge";
+import { ChevronRight, Shield, FileText, ScrollText, Cookie, UserX } from "lucide-react";
 
 // framer-motion
 import { motion, AnimatePresence } from "framer-motion";
@@ -58,6 +59,7 @@ export default function ProfilePage() {
     delivery: false,
     support: false,
     refer: false,
+    legal: false,
   });
   const toggleSection = (key) => setOpenSections((p) => ({ ...p, [key]: !p[key] }));
 
@@ -825,6 +827,67 @@ useEffect(() => {
           </div>
         </div>
       </Section>
+
+      {/* Legal & Policies */}
+<Section
+  icon={<Shield className="h-5 w-5 text-emerald-700" />}
+  title="Legal & Policies"
+  expanded={openSections.legal}
+  onToggle={() => toggleSection("legal")}
+>
+  <div className="mt-1 grid gap-2">
+    <button
+      className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
+      onClick={() => navigate("/privacy")}
+    >
+      <span className="font-semibold text-slate-900 inline-flex items-center gap-2">
+        <FileText className="h-4 w-4 text-emerald-700" /> Privacy Policy
+      </span>
+      <ChevronRight className="h-4 w-4 text-slate-400" />
+    </button>
+
+    <button
+      className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
+      onClick={() => navigate("/terms")}
+    >
+      <span className="font-semibold text-slate-900 inline-flex items-center gap-2">
+        <ScrollText className="h-4 w-4 text-emerald-700" /> Terms & Conditions
+      </span>
+      <ChevronRight className="h-4 w-4 text-slate-400" />
+    </button>
+
+    <button
+      className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
+      onClick={() => navigate("/refunds")}
+    >
+      <span className="font-semibold text-slate-900 inline-flex items-center gap-2">
+        <FileText className="h-4 w-4 text-emerald-700" /> Refunds & Cancellations
+      </span>
+      <ChevronRight className="h-4 w-4 text-slate-400" />
+    </button>
+
+    <button
+      className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
+      onClick={() => navigate("/cookies")}
+    >
+      <span className="font-semibold text-slate-900 inline-flex items-center gap-2">
+        <Cookie className="h-4 w-4 text-emerald-700" /> Cookie & Tracking Notice
+      </span>
+      <ChevronRight className="h-4 w-4 text-slate-400" />
+    </button>
+
+    <button
+      className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
+      onClick={() => navigate("/delete-account")}
+    >
+      <span className="font-semibold text-slate-900 inline-flex items-center gap-2">
+        <UserX className="h-4 w-4 text-emerald-700" /> Delete Account (How-to)
+      </span>
+      <ChevronRight className="h-4 w-4 text-slate-400" />
+    </button>
+  </div>
+</Section>
+
 
       <div className="flex justify-center mt-6">
         <Button

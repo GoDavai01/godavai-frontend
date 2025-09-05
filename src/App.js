@@ -41,11 +41,18 @@ import { LocationProvider } from "./context/LocationContext";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
+// === NEW: legal pages ===
+import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
+import Terms from "./pages/legal/Terms";
+import Refunds from "./pages/legal/Refunds";
+import Cookies from "./pages/legal/Cookies";
+import DeleteAccount from "./pages/legal/DeleteAccount";
+
 function AppContent() {
   const location = useLocation();
   const hideNavbar = location.pathname === "/" || location.pathname === "/home";
 
-    // FORCE deep green when you're on "/"
+  // FORCE deep green when you're on "/"
   React.useEffect(() => {
     const isWelcome = location.pathname === "/";
     document.documentElement.classList.toggle("gd-welcome", isWelcome);
@@ -66,17 +73,25 @@ function AppContent() {
     <>
       {!hideNavbar && <Navbar />}
       <Routes>
-  <Route path="/" element={<WelcomePage />} />
-   <Route path="/otp-login" element={<OtpLogin />} />
-  <Route path="/pharmacy/login" element={<PharmacyLogin />} />
-  <Route path="/order/:orderId" element={<OrderTracking />} />
-  <Route path="/order-tracking/:orderId" element={<OrderTracking />} />
-  <Route path="/orders/:orderId" element={<OrderTracking />} />
-  <Route path="/test-standalone" element={<StepperStandalone />} />
-  <Route path="*" element={<NotFound />} />
+        <Route path="/" element={<WelcomePage />} />
+        <Route path="/otp-login" element={<OtpLogin />} />
+        <Route path="/pharmacy/login" element={<PharmacyLogin />} />
+        <Route path="/order/:orderId" element={<OrderTracking />} />
+        <Route path="/order-tracking/:orderId" element={<OrderTracking />} />
+        <Route path="/orders/:orderId" element={<OrderTracking />} />
+        <Route path="/test-standalone" element={<StepperStandalone />} />
 
-  {/* Protected routes - user must be logged in */}
-<Route element={<MainLayout />}>
+        {/* === NEW: public legal routes (no auth) === */}
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/refunds" element={<Refunds />} />
+        <Route path="/cookies" element={<Cookies />} />
+        <Route path="/delete-account" element={<DeleteAccount />} />
+
+        <Route path="*" element={<NotFound />} />
+
+        {/* Protected routes - user must be logged in */}
+        <Route element={<MainLayout />}>
           <Route
             path="/home"
             element={
@@ -93,7 +108,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
- <Route
+          <Route
             path="/cart"
             element={
               <ProtectedRoute>
@@ -234,14 +249,14 @@ function App() {
     <ThemeProvider>
       <CssBaseline />
       <LocationProvider>
-      <AuthProvider>
-        <CartProvider>
-          <Router>
-            <AppContent />
-          </Router>
-        </CartProvider>
-      </AuthProvider>
-    </LocationProvider>
+        <AuthProvider>
+          <CartProvider>
+            <Router>
+              <AppContent />
+            </Router>
+          </CartProvider>
+        </AuthProvider>
+      </LocationProvider>
     </ThemeProvider>
   );
 }
