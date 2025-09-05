@@ -286,25 +286,53 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                 </Box>
               </Typography>
 
-              <Typography sx={{ mt: 1, color: TEXT_PRIMARY, fontWeight: 600 }}>
-                Prescription:{" "}
-                {order.prescriptionUrl ? (
-                  <a
-                    href={
-                      order.prescriptionUrl.startsWith("/uploads/")
-                        ? `${API_BASE_URL}${order.prescriptionUrl}`
-                        : order.prescriptionUrl
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: BRAND_GREEN, fontWeight: 800, textDecoration: "underline" }}
-                  >
-                    View
-                  </a>
-                ) : (
-                  <span style={{ color: TEXT_SECONDARY, fontWeight: 600 }}>Not Available</span>
-                )}
-              </Typography>
+              <Box sx={{ mt: 1 }}>
+  <Typography sx={{ color: TEXT_PRIMARY, fontWeight: 800 }}>Prescription:</Typography>
+  {Array.isArray(order.attachments) && order.attachments.length > 0 ? (
+    <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: "wrap" }}>
+      {order.attachments.map((url, idx) => {
+        const abs = url.startsWith("/uploads/") ? `${API_BASE_URL}${url}` : url;
+        const isPdf = /\.pdf(\?|$)/i.test(abs);
+        return (
+          <Button
+            key={idx}
+            size="small"
+            variant="outlined"
+            component="a"
+            href={abs}
+            target="_blank"
+            rel="noopener noreferrer"
+            sx={{
+              fontWeight: 800,
+              borderColor: BRAND_GREEN,
+              color: BRAND_GREEN,
+              "&:hover": { borderColor: BRAND_GREEN_DARK, color: BRAND_GREEN_DARK }
+            }}
+          >
+            {isPdf ? "View PDF" : `View Image ${idx + 1}`}
+          </Button>
+        );
+      })}
+    </Stack>
+  ) : order.prescriptionUrl ? (
+    <Typography sx={{ mt: 0.5 }}>
+      <a
+        href={
+          order.prescriptionUrl.startsWith("/uploads/")
+            ? `${API_BASE_URL}${order.prescriptionUrl}`
+            : order.prescriptionUrl
+        }
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: BRAND_GREEN, fontWeight: 800, textDecoration: "underline" }}
+      >
+        View
+      </a>
+    </Typography>
+  ) : (
+    <Typography sx={{ color: TEXT_SECONDARY, fontWeight: 600 }}>Not Available</Typography>
+  )}
+</Box>
 
               {/* Quick viewer launch */}
               <Stack direction="row" spacing={1} sx={{ mt: 1 }}>

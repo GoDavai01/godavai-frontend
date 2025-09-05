@@ -9,6 +9,8 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import ZoomInIcon from "@mui/icons-material/ZoomIn";
 import ZoomOutIcon from "@mui/icons-material/ZoomOut";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DARK_BG = "#181d23";
@@ -19,13 +21,19 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
   const containerRef = useRef(null);
   const imgRef = useRef(null);
 
-  const imgUrl = useMemo(() => {
-    if (!order?.prescriptionUrl) return "";
-    return order.prescriptionUrl.startsWith("/uploads/")
-      ? `${API_BASE_URL}${order.prescriptionUrl}`
-      : order.prescriptionUrl;
+  // attachments list (fallback to single)
+  const attachments = useMemo(() => {
+    const list = Array.isArray(order?.attachments) && order.attachments.length
+      ? order.attachments
+      : (order?.prescriptionUrl ? [order.prescriptionUrl] : []);
+    return list.map(u =>
+      u.startsWith("/uploads/") ? `${API_BASE_URL}${u}` : u
+    );
   }, [order]);
 
+  const [pageIdx, setPageIdx] = useState(0);
+
+  const imgUrl = attachments[pageIdx] || "";
   const isPDF = /\.pdf($|\?)/i.test(imgUrl);
 
   // zoom/pan state
@@ -192,6 +200,30 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
                   Open Original
                 </Button>
               )}
+
+              {/* Pager (attachments) */}
+              <Box sx={{ ml: 1, display: "flex", alignItems: "center", gap: 0.5 }}>
+                <IconButton
+                  size="small"
+                  disabled={pageIdx <= 0}
+                  onClick={() => setPageIdx(i => Math.max(0, i - 1))}
+                  sx={{ color: "#cfe9e5" }}
+                >
+                  <ChevronLeftIcon fontSize="small" />
+                </IconButton>
+                <Typography variant="caption" sx={{ color: "#cfe9e5" }}>
+                  {attachments.length ? `${pageIdx + 1} / ${attachments.length}` : "0 / 0"}
+                </Typography>
+                <IconButton
+                  size="small"
+                  disabled={pageIdx >= attachments.length - 1}
+                  onClick={() => setPageIdx(i => Math.min(attachments.length - 1, i + 1))}
+                  sx={{ color: "#cfe9e5" }}
+                >
+                  <ChevronRightIcon fontSize="small" />
+                </IconButton>
+              </Box>
+
               <Box sx={{ ml: "auto", display: "flex", gap: 0.5 }}>
                 <IconButton size="small" onClick={() => zoomBy(-0.2)} sx={{ color: "#cfe9e5" }}><ZoomOutIcon fontSize="small" /></IconButton>
                 <IconButton size="small" onClick={() => zoomBy(+0.2)} sx={{ color: "#cfe9e5" }}><ZoomInIcon fontSize="small" /></IconButton>
@@ -270,6 +302,8 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
               <Typography variant="body2" sx={{ color: "#9cc9c2" }}>
                 (You must verify. AI can miss or misread.)
               </Typography>
+
+              {/* ACTION BUTTONS (Copy / Re-scan active / Scan All) */}
               <Box sx={{ ml: "auto" }}>
                 <Button
                   onClick={copyAiList}
@@ -279,12 +313,21 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
                 >
                   Copy list
                 </Button>
+
+                {/* Re-scan active page/file */}
                 <Button
                   onClick={async () => {
-                    // 1) run the new direct OCR (immediate UX)
-                    await scanFromImageDirect();
+                    // 1) ad-hoc scan for current file → show immediately
+                    if (imgUrl) {
+                      try {
+                        setLoadingAi(true);
+                        const res = await axios.get(`${API_BASE_URL}/api/prescriptions/ai-scan`, { params: { url: imgUrl } });
+                        setAi(res.data || { items: [] });
+                      } catch {}
+                      finally { setLoadingAi(false); }
+                    }
 
-                    // 2) also ask backend to refresh stored AI for the order
+                    // 2) also refresh & persist on server
                     if (order?._id && token) {
                       try {
                         await axios.post(
@@ -293,7 +336,7 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
                           { headers: { Authorization: `Bearer ${token}` } }
                         );
                         onRefetched && onRefetched();
-                      } catch { /* ignore */ }
+                      } catch {}
                     }
                   }}
                   size="small"
@@ -302,6 +345,44 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
                   startIcon={<RestartAltIcon fontSize="small" />}
                 >
                   Re-scan
+                </Button>
+
+                {/* NEW: scan ALL attachments at once and merge */}
+                <Button
+                  onClick={async () => {
+                    if (!attachments.length) return;
+                    try {
+                      setLoadingAi(true);
+                      const res = await axios.get(`${API_BASE_URL}/api/prescriptions/ai-scan-multi`, {
+                        params: { urls: attachments }, // backend supports repeated ?urls=
+                        paramsSerializer: params => {
+                          // force ?urls=a&urls=b style
+                          const qs = [];
+                          (params.urls || []).forEach(u => qs.push(`urls=${encodeURIComponent(u)}`));
+                          return qs.join("&");
+                        }
+                      });
+                      setAi(res.data || { items: [] });
+                    } catch {}
+                    finally { setLoadingAi(false); }
+
+                    // also ask server to persist a full multi-parse on the order
+                    if (order?._id && token) {
+                      try {
+                        await axios.post(
+                          `${API_BASE_URL}/api/prescriptions/reparse/${order._id}`,
+                          {},
+                          { headers: { Authorization: `Bearer ${token}` } }
+                        );
+                        onRefetched && onRefetched();
+                      } catch {}
+                    }
+                  }}
+                  size="small"
+                  variant="outlined"
+                  sx={{ ml: 1, color: "#8dd3c7", borderColor: "#3a4a55" }}
+                >
+                  Scan All
                 </Button>
               </Box>
             </Stack>
