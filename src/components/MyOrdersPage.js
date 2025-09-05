@@ -30,6 +30,14 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:500
 const toAbsUrl = (u = "") =>
   u.startsWith("/uploads/") ? `${API_BASE_URL}${u}` : u;
 
+const isSameOriginUrl = (url) => {
+  try {
+    return new URL(url, window.location.origin).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+};
+
 function collectRxUrls(order) {
   const urls = [];
   if (Array.isArray(order.attachments) && order.attachments.length) {
@@ -39,40 +47,63 @@ function collectRxUrls(order) {
   } else if (order.prescriptionUrl || order.prescription) {
     urls.push(toAbsUrl(order.prescriptionUrl || order.prescription));
   }
-  return urls.filter(Boolean);
+  // de-dupe
+  return [...new Set(urls.filter(Boolean))];
 }
 
 async function openOrDownloadAllRx(order) {
   const urls = collectRxUrls(order);
   if (!urls.length) return;
 
-  // Try true file downloads; if CORS blocks, open in new tabs.
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
-    try {
-      const resp = await fetch(url, { credentials: "include" });
-      if (!resp.ok) throw new Error("fetch failed");
-      const blob = await resp.blob();
+
+    if (isSameOriginUrl(url)) {
+      // Same-origin: safe to fetch as blob (no CORS noise)
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error("fetch failed");
+        const blob = await resp.blob();
+        const a = document.createElement("a");
+        const nameFromUrl = url.split("/").pop()?.split("?")[0] || `prescription_${i + 1}`;
+        const extFromType = blob.type?.split("/").pop() || "";
+        const filename = nameFromUrl.includes(".")
+          ? nameFromUrl
+          : `${nameFromUrl}${extFromType ? "." + extFromType : ""}`;
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          URL.revokeObjectURL(a.href);
+          a.remove();
+        }, 0);
+      } catch {
+        // if something odd happens, fall back to opening
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+    } else {
+      // Cross-origin (e.g., S3): open without fetch -> no CORS errors
       const a = document.createElement("a");
-      const nameFromUrl = url.split("/").pop()?.split("?")[0] || `prescription_${i + 1}`;
-      const extFromType = blob.type?.split("/").pop() || "";
-      const filename = nameFromUrl.includes(".")
-        ? nameFromUrl
-        : `${nameFromUrl}${extFromType ? "." + extFromType : ""}`;
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
       document.body.appendChild(a);
       a.click();
-      setTimeout(() => {
-        URL.revokeObjectURL(a.href);
-        a.remove();
-      }, 0);
-    } catch {
-      // Fallback: open if download blocked
-      window.open(url, "_blank", "noopener,noreferrer");
+      a.remove();
+      // tiny delay helps some popup blockers treat all as user-initiated
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, 120));
     }
   }
 }
+
 
 /* ------------------- utils (UNCHANGED LOGIC) ------------------- */
 function getHiddenRejectionIds() {
