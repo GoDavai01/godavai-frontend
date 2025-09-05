@@ -17,20 +17,18 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs"
 // framer-motion
 import { motion, AnimatePresence } from "framer-motion";
 
-// lucide-react
+// icons
 import {
-  Bike, CheckCheck, Pill, LogOut, MessageSquare, MapPin, Map, Route, Loader2,
+  Bike, CheckCheck, Pill, LogOut, MessageSquare, MapPin, Loader2,
   AlarmClock, ShieldAlert, TimerReset, Navigation, Gauge, DollarSign
 } from "lucide-react";
 
-// other components (existing logic)
+// other components
 import ChatModal from "./ChatModal";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
-
 /* ------------------------- helpers (unchanged logic) ------------------------ */
-
 function formatOrderDate(dateStr) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -43,15 +41,17 @@ function formatOrderDate(dateStr) {
   return `${date}, ${hour}:${min}${ampm}`;
 }
 
-// replace the whole getRouteAndDistance() you have now
+// Directions using Maps JS SDK (future-friendly; no REST fetch)
 const getRouteAndDistance = async (origin, destination) => {
-  const google = await loadGoogleMaps(["marker"]); // ensure marker lib too
+  const google = await loadGoogleMaps(["marker"]);
   return new Promise((resolve) => {
-    const service = new google.maps.DirectionsService();
-    service.route(
+    const svc = new google.maps.DirectionsService();
+    svc.route(
       {
         origin: new google.maps.LatLng(origin.lat, origin.lng),
         destination: new google.maps.LatLng(destination.lat, destination.lng),
+        // DirectionsService doesn't expose TWO_WHEELER; use DRIVING for preview
+        // (we open Google Maps with two_wheeler for real navigation below)
         travelMode: google.maps.TravelMode.DRIVING,
         provideRouteAlternatives: false,
       },
@@ -61,7 +61,7 @@ const getRouteAndDistance = async (origin, destination) => {
           return;
         }
         const r = result.routes[0];
-        const leg = r.legs && r.legs[0];
+        const leg = r.legs?.[0];
         const path = (r.overview_path || []).map(p => ({ lat: p.lat(), lng: p.lng() }));
         resolve({
           poly: path,
@@ -72,25 +72,6 @@ const getRouteAndDistance = async (origin, destination) => {
   });
 };
 
-
-function decodePolyline(encoded) {
-  let points = [];
-  let index = 0, len = encoded.length;
-  let lat = 0, lng = 0;
-  while (index < len) {
-    let b, shift = 0, result = 0;
-    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-    let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
-    lat += dlat;
-    shift = 0; result = 0;
-    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-    let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
-    lng += dlng;
-    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
-  }
-  return points;
-}
-
 const mmss = (secs) => {
   const m = Math.floor(secs / 60).toString().padStart(2, "0");
   const s = Math.floor(secs % 60).toString().padStart(2, "0");
@@ -98,10 +79,9 @@ const mmss = (secs) => {
 };
 
 /* --------------------------- payouts sub-section --------------------------- */
-
 function DeliveryPayoutsSection({ partner }) {
   const [payouts, setPayouts] = useState([]);
-  const [tab, setTab] = useState(0); // 0 today, 1 yesterday
+  const [tab, setTab] = useState(0);
 
   useEffect(() => {
     if (!partner?._id) return;
@@ -111,31 +91,24 @@ function DeliveryPayoutsSection({ partner }) {
 
   const today = dayjs().format("YYYY-MM-DD");
   const yesterday = dayjs().subtract(1, "day").format("YYYY-MM-DD");
-
   const filtered = payouts.filter(pay => {
     const payDay = dayjs(pay.createdAt).format("YYYY-MM-DD");
     return tab === 0 ? payDay === today : payDay === yesterday;
   });
-
   const total = filtered.reduce((sum, p) => sum + (p.deliveryAmount || 0), 0);
-
   if (!partner?._id) return null;
 
   return (
     <div className="space-y-3">
       <div className="rounded-2xl border border-emerald-200/60 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <h3 className="text-emerald-900 font-extrabold text-lg">
-            Your Delivery Earnings {tab === 0 ? "Today" : "Yesterday"}
-          </h3>
+          <h3 className="text-emerald-900 font-extrabold text-lg">Your Delivery Earnings {tab === 0 ? "Today" : "Yesterday"}</h3>
           <div className="flex gap-2">
             <Button size="sm" variant={tab === 0 ? "default" : "outline"} className="!font-bold" onClick={() => setTab(0)}>Today</Button>
             <Button size="sm" variant={tab === 1 ? "default" : "outline"} className="!font-bold" onClick={() => setTab(1)}>Yesterday</Button>
           </div>
         </div>
-
         <div className="mt-3 text-3xl font-extrabold text-emerald-700">₹{total.toLocaleString("en-IN")}</div>
-
         <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-700">
@@ -156,9 +129,7 @@ function DeliveryPayoutsSection({ partner }) {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr>
-                  <td colSpan="4" className="px-3 py-3 text-amber-600">No payouts yet.</td>
-                </tr>
+                <tr><td colSpan="4" className="px-3 py-3 text-amber-600">No payouts yet.</td></tr>
               )}
             </tbody>
           </table>
@@ -168,69 +139,83 @@ function DeliveryPayoutsSection({ partner }) {
   );
 }
 
-/* ---- Inline, tiny map used per order (no logic change) ---- */
+/* ---- Tiny per-order map: 2 pins + route + fitBounds ---- */
 function OrderMiniMap({ center, pharmacyLoc, userLoc, path }) {
   const ref = useRef(null);
 
   useEffect(() => {
     let map, pharmMarker, userMarker, polyline;
-    loadGoogleMaps(["marker", "places"]).then((google) => {
-      if (!ref.current) return;
+    loadGoogleMaps(["marker", "places"])
+      .then((google) => {
+        if (!ref.current) return;
 
-      map = new google.maps.Map(ref.current, {
-        center,
-        zoom: 13,
-        mapId: "godavaii-map",
-        streetViewControl: false,
-        mapTypeControl: false,
-      });
-
-      // Pharmacy marker (P)
-      if (pharmacyLoc?.lat && pharmacyLoc?.lng) {
-        pharmMarker = new google.maps.marker.AdvancedMarkerElement({
-          map,
-          position: { lat: pharmacyLoc.lat, lng: pharmacyLoc.lng },
-          title: "Pharmacy",
+        map = new google.maps.Map(ref.current, {
+          center,
+          zoom: 13,
+          mapId: "godavaii-map",
+          streetViewControl: false,
+          mapTypeControl: false,
         });
-      }
 
-      // User marker (U)
-      if (userLoc?.lat && userLoc?.lng) {
-        userMarker = new google.maps.marker.AdvancedMarkerElement({
-          map,
-          position: { lat: userLoc.lat, lng: userLoc.lng },
-          title: "Delivery Address",
-        });
-      }
+        const bounds = new google.maps.LatLngBounds();
 
-      // Route polyline (if available)
-      if (Array.isArray(path) && path.length > 1) {
-        polyline = new google.maps.Polyline({
-          map,
-          path,
-          strokeOpacity: 0.9,
-          strokeWeight: 4,
-          strokeColor: "#0ea5a4",
-        });
-      }
-    }).catch((e) => console.error("Google Maps failed to load:", e));
+        const addMarker = (pos, title, label) => {
+          // Prefer AdvancedMarker; fall back to classic Marker
+          try {
+            const adv = new google.maps.marker.AdvancedMarkerElement({ map, position: pos, title });
+            const pill = document.createElement("div");
+            pill.style.cssText =
+              "background:#0ea5a4;color:#fff;font-weight:800;border-radius:9999px;padding:4px 8px;font-size:12px";
+            pill.textContent = label;
+            adv.content = pill;
+            return adv;
+          } catch {
+            return new google.maps.Marker({ map, position: pos, title, label });
+          }
+        };
+
+        if (pharmacyLoc?.lat && pharmacyLoc?.lng) {
+          const pos = { lat: pharmacyLoc.lat, lng: pharmacyLoc.lng };
+          pharmMarker = addMarker(pos, "Pharmacy", "P");
+          bounds.extend(pos);
+        }
+        if (userLoc?.lat && userLoc?.lng) {
+          const pos = { lat: userLoc.lat, lng: userLoc.lng };
+          userMarker = addMarker(pos, "Delivery Address", "U");
+          bounds.extend(pos);
+        }
+
+        if (Array.isArray(path) && path.length > 1) {
+          polyline = new google.maps.Polyline({
+            map,
+            path,
+            strokeOpacity: 0.9,
+            strokeWeight: 4,
+            strokeColor: "#0ea5a4",
+          });
+          path.forEach(p => bounds.extend(p));
+        }
+
+        if (!bounds.isEmpty()) {
+          map.fitBounds(bounds, { top: 20, right: 20, bottom: 20, left: 20 });
+          const once = google.maps.event.addListenerOnce(map, "idle", () => {
+            if (map.getZoom() > 16) map.setZoom(16);
+          });
+          // cleanup the listener
+          return () => google.maps.event.removeListener(once);
+        }
+      })
+      .catch((e) => console.error("Google Maps failed to load:", e));
 
     return () => {
-      // basic cleanup (GC will clear map elements when node is removed)
       map = null; pharmMarker = null; userMarker = null; polyline = null;
     };
   }, [center, pharmacyLoc, userLoc, path]);
 
-  return (
-    <div
-      ref={ref}
-      style={{ width: "100%", height: "230px", borderRadius: 18, overflow: "hidden" }}
-    />
-  );
+  return <div ref={ref} style={{ width: "100%", height: "230px", borderRadius: 18, overflow: "hidden" }} />;
 }
 
 /* -------------------------------- component -------------------------------- */
-
 export default function DeliveryDashboard() {
   const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem("deliveryToken"));
   const [partner, setPartner] = useState(null);
@@ -253,28 +238,25 @@ export default function DeliveryDashboard() {
   const [orderDistances, setOrderDistances] = useState({});
   const [orderUnreadCounts, setOrderUnreadCounts] = useState({});
 
-  // NEW: Live Ops & Availability (UI only)
+  // Live Ops UI
   const [autoAccept, setAutoAccept] = useState(() => localStorage.getItem("gd_auto_accept") === "1");
   const [onBreak, setOnBreak] = useState(false);
-  const [breakRemaining, setBreakRemaining] = useState(0); // seconds
+  const [breakRemaining, setBreakRemaining] = useState(0);
 
-  // NEW: Performance glance (UI only; fetch payments for today)
-  const [todayEarnings, setTodayEarnings] = useState(null); // ₹
-  const [cashDue, setCashDue] = useState(0); // UI-only stub
+  // glance UI
+  const [todayEarnings, setTodayEarnings] = useState(null);
+  const [cashDue, setCashDue] = useState(0);
 
-  
-
-  // Auto-refresh orders (existing)
+  // Auto-refresh orders
   useEffect(() => {
     if (!loggedIn || loading) return;
     const interval = setInterval(() => { fetchProfileAndOrders(); }, 3000);
     return () => clearInterval(interval);
   }, [loggedIn, tab, loading]);
 
-  // Send driver location while ACTIVE (existing)
+  // Send driver location while ACTIVE
   useEffect(() => {
     if (!loggedIn || !partner?._id || !active) return;
-
     let watchId;
     const send = async (coords) => {
       const { latitude, longitude } = coords;
@@ -284,7 +266,6 @@ export default function DeliveryDashboard() {
         });
       } catch {}
     };
-
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => send(pos.coords), () => {},
@@ -309,60 +290,55 @@ export default function DeliveryDashboard() {
     // eslint-disable-next-line
   }, [loggedIn]);
 
-  // Unread chat counts (existing)
+  // Unread chat counts
   useEffect(() => {
-  if (!loggedIn || !orders.length) return;
+    if (!loggedIn || !orders.length) return;
+    const token = localStorage.getItem("deliveryToken");
+    if (!token) return;
+    let cancelled = false;
 
-  const token = localStorage.getItem("deliveryToken");
-  if (!token) return; // <-- avoid 401 spam when not logged in / token missing
-
-  let cancelled = false;
-
-  const fetchUnread = async () => {
-    const counts = {};
-    await Promise.all(
-      orders.map(async (order) => {
-        try {
-          const res = await axios.get(
-            `${API_BASE_URL}/api/chat/${order._id}/user-unread-count`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          counts[order._id] = res.data.unreadCount || 0;
-        } catch (err) {
-          // If unauthorized, stop polling to avoid console flood
-          if (err?.response?.status === 401 && unreadTimerRef.current) {
-            clearInterval(unreadTimerRef.current);
-            unreadTimerRef.current = null;
+    const fetchUnread = async () => {
+      const counts = {};
+      await Promise.all(
+        orders.map(async (order) => {
+          try {
+            const res = await axios.get(
+              `${API_BASE_URL}/api/chat/${order._id}/user-unread-count`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            counts[order._id] = res.data.unreadCount || 0;
+          } catch (err) {
+            if (err?.response?.status === 401 && unreadTimerRef.current) {
+              clearInterval(unreadTimerRef.current);
+              unreadTimerRef.current = null;
+            }
+            counts[order._id] = 0;
           }
-          counts[order._id] = 0;
-        }
-      })
-    );
-    if (!cancelled) setOrderUnreadCounts(counts);
-  };
+        })
+      );
+      if (!cancelled) setOrderUnreadCounts(counts);
+    };
 
-  fetchUnread();
-  unreadTimerRef.current = setInterval(fetchUnread, 7000); // a bit lighter than 3s
-  return () => {
-    cancelled = true;
-    if (unreadTimerRef.current) clearInterval(unreadTimerRef.current);
-  };
-}, [orders, loggedIn]);
+    fetchUnread();
+    unreadTimerRef.current = setInterval(fetchUnread, 7000);
+    return () => {
+      cancelled = true;
+      if (unreadTimerRef.current) clearInterval(unreadTimerRef.current);
+    };
+  }, [orders, loggedIn]);
 
-
-  // NEW: Persist auto-accept toggle locally
+  // Persist auto-accept
   useEffect(() => {
     localStorage.setItem("gd_auto_accept", autoAccept ? "1" : "0");
   }, [autoAccept]);
 
-  // NEW: Break timer countdown (UI only)
+  // Break timer
   useEffect(() => {
     if (!onBreak || breakRemaining <= 0) return;
     const t = setInterval(() => setBreakRemaining((s) => s - 1), 1000);
     return () => clearInterval(t);
   }, [onBreak, breakRemaining]);
 
-  // When break completes
   useEffect(() => {
     if (onBreak && breakRemaining <= 0) {
       setOnBreak(false);
@@ -370,7 +346,7 @@ export default function DeliveryDashboard() {
     }
   }, [onBreak, breakRemaining]);
 
-  // NEW: fetch today's earnings (UI glance)
+  // Today earnings glance
   useEffect(() => {
     const fetchToday = async () => {
       try {
@@ -440,7 +416,7 @@ export default function DeliveryDashboard() {
     }
   };
 
-  // Auth (existing)
+  // Auth
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -466,43 +442,35 @@ export default function DeliveryDashboard() {
     setLoginDialog(true);
   };
 
-  // Forgot / Reset handlers (add back)
-const handleForgotStart = async () => {
-  try {
-    await axios.post(`${API_BASE_URL}/api/delivery/forgot-password`, {
-      mobile: forgotForm.mobile,
-    });
-    setSnackbar({ open: true, message: "OTP sent to mobile!", severity: "success" });
-    setResetPhase(1);
-  } catch {
-    setSnackbar({ open: true, message: "Mobile not found!", severity: "error" });
-  }
-};
+  // Forgot / Reset
+  const handleForgotStart = async () => {
+    try {
+      await axios.post(`${API_BASE_URL}/api/delivery/forgot-password`, { mobile: forgotForm.mobile });
+      setSnackbar({ open: true, message: "OTP sent to mobile!", severity: "success" });
+      setResetPhase(1);
+    } catch {
+      setSnackbar({ open: true, message: "Mobile not found!", severity: "error" });
+    }
+  };
+  const handleResetPassword = async () => {
+    try {
+      await axios.post(`${API_BASE_URL}/api/delivery/reset-password`, {
+        mobile: forgotForm.mobile, otp: forgotForm.otp, newPassword: forgotForm.newPassword,
+      });
+      setSnackbar({ open: true, message: "Password reset! Please log in.", severity: "success" });
+      setForgotOpen(false);
+      setResetPhase(0);
+      setForgotForm({ mobile: "", otp: "", newPassword: "" });
+    } catch {
+      setSnackbar({ open: true, message: "Invalid OTP or error", severity: "error" });
+    }
+  };
 
-const handleResetPassword = async () => {
-  try {
-    await axios.post(`${API_BASE_URL}/api/delivery/reset-password`, {
-      mobile: forgotForm.mobile,
-      otp: forgotForm.otp,
-      newPassword: forgotForm.newPassword,
-    });
-    setSnackbar({ open: true, message: "Password reset! Please log in.", severity: "success" });
-    setForgotOpen(false);
-    setResetPhase(0);
-    setForgotForm({ mobile: "", otp: "", newPassword: "" });
-  } catch {
-    setSnackbar({ open: true, message: "Invalid OTP or error", severity: "error" });
-  }
-};
-
-  /* ------------------------------ login dialog ------------------------------ */
   if (!loggedIn) {
     return (
       <Dialog open={loginDialog} onOpenChange={() => {}}>
         <DialogContent className="force-light sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-emerald-800 font-extrabold">Delivery Partner Login</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-emerald-800 font-extrabold">Delivery Partner Login</DialogTitle></DialogHeader>
           <form onSubmit={handleLogin} className="space-y-3">
             <div className="grid gap-1.5">
               <Label>Mobile Number</Label>
@@ -513,12 +481,9 @@ const handleResetPassword = async () => {
               <Input type="password" value={loginForm.password} onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))} required className="gd-input" />
             </div>
             <Button type="submit" className="w-full btn-primary-emerald !font-bold mt-1">Login</Button>
-            <Button type="button" variant="ghost" className="w-full btn-ghost-soft !font-bold" onClick={() => setForgotOpen(true)}>
-              Forgot Password?
-            </Button>
+            <Button type="button" variant="ghost" className="w-full btn-ghost-soft !font-bold" onClick={() => setForgotOpen(true)}>Forgot Password?</Button>
           </form>
 
-          {/* Forgot / Reset Modal */}
           <Dialog open={forgotOpen} onOpenChange={(open) => { setForgotOpen(open); if (!open) setResetPhase(0); }}>
             <DialogContent className="force-light sm:max-w-md">
               <DialogHeader><DialogTitle>Forgot Password</DialogTitle></DialogHeader>
@@ -528,9 +493,7 @@ const handleResetPassword = async () => {
                     <Label>Registered Mobile</Label>
                     <Input value={forgotForm.mobile} onChange={e => setForgotForm(f => ({ ...f, mobile: e.target.value }))} />
                   </div>
-                  <DialogFooter>
-                    <Button onClick={handleForgotStart} className="btn-primary-emerald !font-bold">Send OTP</Button>
-                  </DialogFooter>
+                  <DialogFooter><Button onClick={handleForgotStart} className="btn-primary-emerald !font-bold">Send OTP</Button></DialogFooter>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -542,21 +505,16 @@ const handleResetPassword = async () => {
                     <Label>New Password</Label>
                     <Input type="password" value={forgotForm.newPassword} onChange={e => setForgotForm(f => ({ ...f, newPassword: e.target.value }))} />
                   </div>
-                  <DialogFooter>
-                    <Button onClick={handleResetPassword} className="btn-primary-emerald !font-bold">Reset Password</Button>
-                  </DialogFooter>
+                  <DialogFooter><Button onClick={handleResetPassword} className="btn-primary-emerald !font-bold">Reset Password</Button></DialogFooter>
                 </div>
               )}
             </DialogContent>
           </Dialog>
 
-          {/* Snackbar mimic */}
           <AnimatePresence>
             {snackbar.open && (
               <motion.div
-                initial={{ y: 30, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 30, opacity: 0 }}
+                initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 30, opacity: 0 }}
                 transition={{ type: "spring", stiffness: 320, damping: 24 }}
                 className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[2000] rounded-full px-4 py-2 font-semibold shadow-lg ${
                   snackbar.severity === "error" ? "bg-red-600 text-white" : "bg-emerald-600 text-white"
@@ -572,39 +530,26 @@ const handleResetPassword = async () => {
     );
   }
 
-  /* -------------------------------- dashboard ------------------------------- */
   const tabsValue = tab === 0 ? "active" : tab === 1 ? "past" : "earnings";
-
-  // glance metrics (UI only)
   const todayStr = dayjs().format("YYYY-MM-DD");
-  const deliveriesToday = (pastOrders || []).filter(o =>
-    o.status === "delivered" && dayjs(o.createdAt).format("YYYY-MM-DD") === todayStr
-  ).length;
-  const rph = null; // ₹/hr (needs backend session time) – showing as "—" below
+  const deliveriesToday = (pastOrders || []).filter(o => o.status === "delivered" && dayjs(o.createdAt).format("YYYY-MM-DD") === todayStr).length;
+  const rph = null;
 
   return (
     <div className="mx-auto max-w-[900px] px-3 pt-4 pb-16">
       {/* header */}
       <div className="flex items-center gap-3 rounded-2xl border border-emerald-200/60 bg-white p-3 shadow-sm">
         <Avatar className="h-14 w-14 ring-2 ring-emerald-100">
-          {partner?.avatar ? (
-            <AvatarImage src={partner.avatar} alt={partner?.name || "Partner"} />
-          ) : (
-            <AvatarFallback className="bg-emerald-600 text-white font-bold">
-              {(partner?.name || "D").charAt(0).toUpperCase()}
-            </AvatarFallback>
-          )}
+          {partner?.avatar ? <AvatarImage src={partner.avatar} alt={partner?.name || "Partner"} /> :
+            <AvatarFallback className="bg-emerald-600 text-white font-bold">{(partner?.name || "D").charAt(0).toUpperCase()}</AvatarFallback>}
         </Avatar>
 
         <div className="min-w-0 flex-1">
           <div className="text-lg font-extrabold text-emerald-900 truncate">{partner?.name}</div>
-          <div className="text-sm text-slate-600 truncate">
-            {partner?.mobile} <span className="mx-2">|</span> {partner?.city}, {partner?.area}
-          </div>
+          <div className="text-sm text-slate-600 truncate">{partner?.mobile} <span className="mx-2">|</span> {partner?.city}, {partner?.area}</div>
 
-          {/* Live Ops & Availability row */}
+          {/* Live Ops & Availability */}
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {/* Online/Offline (existing switch) */}
             <div className="flex items-center gap-2 rounded-xl border border-emerald-200/60 bg-white px-3 py-2">
               <Switch
                 checked={active}
@@ -613,9 +558,9 @@ const handleResetPassword = async () => {
                   const token = localStorage.getItem("deliveryToken");
                   if (navigator.geolocation && next) {
                     navigator.geolocation.getCurrentPosition((pos) => {
-                      axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`, {
-                        active: next, lat: pos.coords.latitude, lng: pos.coords.longitude,
-                      }, { headers: { Authorization: `Bearer ${token}` } });
+                      axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
+                        { active: next, lat: pos.coords.latitude, lng: pos.coords.longitude },
+                        { headers: { Authorization: `Bearer ${token}` } });
                     });
                   } else {
                     await axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
@@ -623,54 +568,37 @@ const handleResetPassword = async () => {
                   }
                 }}
               />
-              <span className={`text-sm font-bold ${active ? "text-emerald-600" : "text-red-600"}`}>
-                {active ? "Active" : "Inactive"}
-              </span>
+              <span className={`text-sm font-bold ${active ? "text-emerald-600" : "text-red-600"}`}>{active ? "Active" : "Inactive"}</span>
             </div>
 
-            {/* Auto-accept toggle (UI only) */}
             <div className="flex items-center gap-2 rounded-xl border border-emerald-200/60 bg-white px-3 py-2">
               <span className="text-sm font-semibold text-emerald-900">Auto-accept</span>
               <Switch
                 checked={autoAccept}
                 onCheckedChange={async (v) => {
                   setAutoAccept(v);
-                  setSnackbar({
-                    open: true,
-                    message: v ? "Auto-accept enabled" : "Auto-accept disabled",
-                    severity: v ? "success" : "error"
-                  });
-                  // ⬇️ persist to backend (keeps your localStorage useEffect as-is)
+                  setSnackbar({ open: true, message: v ? "Auto-accept enabled" : "Auto-accept disabled", severity: v ? "success" : "error" });
                   try {
                     const token = localStorage.getItem("deliveryToken");
-                    await axios.patch(
-                      `${API_BASE_URL}/api/delivery/partner/${partner?._id}/active`,
-                      { autoAccept: v },
-                      { headers: { Authorization: `Bearer ${token}` } }
-                      );
-                      } catch {}
+                    await axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner?._id}/active`,
+                      { autoAccept: v }, { headers: { Authorization: `Bearer ${token}` } });
+                  } catch {}
                 }}
               />
             </div>
 
-            {/* Cash due chip (UI stub) */}
-            <Badge className="bg-amber-400 text-emerald-900 font-bold">
-              Cash to deposit: ₹{cashDue ?? 0}
-            </Badge>
+            <Badge className="bg-amber-400 text-emerald-900 font-bold">Cash to deposit: ₹{cashDue ?? 0}</Badge>
           </div>
 
-          {/* Break timer (UI only) */}
           <div className="mt-2 flex items-center gap-2">
             {!onBreak ? (
-              <Button size="sm" variant="outline" className="!font-bold"
-                onClick={() => { setOnBreak(true); setBreakRemaining(10 * 60); }}>
+              <Button size="sm" variant="outline" className="!font-bold" onClick={() => { setOnBreak(true); setBreakRemaining(10 * 60); }}>
                 <AlarmClock className="h-4 w-4 mr-1" /> Start 10-min Break
               </Button>
             ) : (
               <div className="flex items-center gap-2">
                 <Badge className="bg-emerald-600"><TimerReset className="h-3.5 w-3.5 mr-1" /> {mmss(breakRemaining)}</Badge>
-                <Button size="sm" variant="outline" className="!font-bold"
-                  onClick={() => { setOnBreak(false); setBreakRemaining(0); }}>
+                <Button size="sm" variant="outline" className="!font-bold" onClick={() => { setOnBreak(false); setBreakRemaining(0); }}>
                   Resume Now
                 </Button>
               </div>
@@ -683,26 +611,18 @@ const handleResetPassword = async () => {
         </Button>
       </div>
 
-      {/* Performance / Earnings at a glance */}
+      {/* glance */}
       <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
         <div className="rounded-xl border border-emerald-200/60 bg-white p-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-            <DollarSign className="h-4 w-4 text-emerald-600" /> Today
-          </div>
-          <div className="mt-1 text-2xl font-extrabold text-emerald-700">
-            {todayEarnings == null ? "—" : `₹${todayEarnings.toLocaleString("en-IN")}`}
-          </div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600"><DollarSign className="h-4 w-4 text-emerald-600" /> Today</div>
+          <div className="mt-1 text-2xl font-extrabold text-emerald-700">{todayEarnings == null ? "—" : `₹${todayEarnings.toLocaleString("en-IN")}`}</div>
         </div>
         <div className="rounded-xl border border-emerald-200/60 bg-white p-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-            <CheckCheck className="h-4 w-4 text-emerald-600" /> Deliveries (Today)
-          </div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600"><CheckCheck className="h-4 w-4 text-emerald-600" /> Deliveries (Today)</div>
           <div className="mt-1 text-2xl font-extrabold text-emerald-700">{deliveriesToday}</div>
         </div>
         <div className="rounded-xl border border-emerald-200/60 bg-white p-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-            <Gauge className="h-4 w-4 text-emerald-600" /> ₹ / hr
-          </div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600"><Gauge className="h-4 w-4 text-emerald-600" /> ₹ / hr</div>
           <div className="mt-1 text-2xl font-extrabold text-emerald-700">{rph == null ? "—" : rph}</div>
         </div>
       </div>
@@ -711,24 +631,9 @@ const handleResetPassword = async () => {
       <div className="mt-4">
         <Tabs value={tabsValue} onValueChange={(v) => setTab(v === "active" ? 0 : v === "past" ? 1 : 2)}>
           <TabsList className="grid w-full grid-cols-3 rounded-xl bg-transparent p-0">
-            <TabsTrigger
-              value="active"
-              className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white
-                         data-[state=active]:shadow-none data-[state=inactive]:text-slate-600 !font-extrabold">
-              Active Orders
-            </TabsTrigger>
-            <TabsTrigger
-              value="past"
-              className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white
-                         data-[state=active]:shadow-none data-[state=inactive]:text-slate-600 !font-extrabold">
-              Past Orders
-            </TabsTrigger>
-            <TabsTrigger
-              value="earnings"
-              className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white
-                         data-[state=active]:shadow-none data-[state=inactive]:text-slate-600 !font-extrabold">
-              Earnings
-            </TabsTrigger>
+            <TabsTrigger value="active" className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 !font-extrabold">Active Orders</TabsTrigger>
+            <TabsTrigger value="past" className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 !font-extrabold">Past Orders</TabsTrigger>
+            <TabsTrigger value="earnings" className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 !font-extrabold">Earnings</TabsTrigger>
           </TabsList>
 
           {/* ACTIVE */}
@@ -739,15 +644,13 @@ const handleResetPassword = async () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {orders.length === 0 && (
-                  <div className="text-center text-slate-500">No active orders assigned to you.</div>
-                )}
+                {orders.length === 0 && <div className="text-center text-slate-500">No active orders assigned to you.</div>}
 
                 {orders.map((order) => {
                   const pharmacyLoc = order.pharmacy?.location;
                   const userLoc = order.address;
 
-                  // GeoJSON safeguard -> lat/lng
+                  // GeoJSON safeguard
                   let patchedPharmacyLoc = pharmacyLoc;
                   if (pharmacyLoc && Array.isArray(pharmacyLoc.coordinates) && pharmacyLoc.coordinates.length === 2) {
                     patchedPharmacyLoc = { ...pharmacyLoc, lat: pharmacyLoc.coordinates[1], lng: pharmacyLoc.coordinates[0] };
@@ -762,33 +665,18 @@ const handleResetPassword = async () => {
                     ? { lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }
                     : { lat: 19.076, lng: 72.877 };
 
-                  // Navigation & Status: simple ETA from distance (UI only, assumes ~22 km/h)
+                  // ETA estimate (~22 km/h)
                   const dist = orderDistances[order._id];
                   const etaMin = dist != null ? Math.max(3, Math.round((dist / 22) * 60)) : null;
 
                   return (
-                    <motion.div
-                      key={order._id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="rounded-2xl border border-emerald-200/60 bg-white p-4 shadow-sm"
-                    >
+                    <motion.div key={order._id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-emerald-200/60 bg-white p-4 shadow-sm">
                       <div className="flex items-center gap-2">
                         <Pill className="h-5 w-5 text-emerald-600" />
-                        <div className="font-semibold">
-                          Pharmacy: <span className="text-emerald-700 font-extrabold">{order.pharmacy?.name || order.pharmacy}</span>
-                        </div>
-
-                        {/* Distance & ETA pills */}
+                        <div className="font-semibold">Pharmacy: <span className="text-emerald-700 font-extrabold">{order.pharmacy?.name || order.pharmacy}</span></div>
                         <div className="ml-auto flex items-center gap-2">
-                          {dist != null && (
-                            <Badge className="bg-emerald-100 text-emerald-800 font-bold">
-                              {dist.toFixed(2)} km
-                            </Badge>
-                          )}
-                          {etaMin != null && (
-                            <Badge className="bg-emerald-600">ETA ~ {etaMin} min</Badge>
-                          )}
+                          {dist != null && <Badge className="bg-emerald-100 text-emerald-800 font-bold">{dist.toFixed(2)} km</Badge>}
+                          {etaMin != null && <Badge className="bg-emerald-600">ETA ~ {etaMin} min</Badge>}
                           <Badge className="bg-emerald-600">{order.status}</Badge>
                         </div>
                       </div>
@@ -802,8 +690,7 @@ const handleResetPassword = async () => {
                           <MapPin className="h-4 w-4 mt-0.5 text-slate-500" />
                           <span>
                             Deliver to: <b>
-                              {order.address?.formatted ||
-                                order.address?.fullAddress ||
+                              {order.address?.formatted || order.address?.fullAddress ||
                                 [order.address?.addressLine, order.address?.floor, order.address?.landmark, order.address?.area, order.address?.city, order.address?.state, order.address?.pin]
                                   .filter(Boolean).join(", ")}
                             </b>
@@ -811,149 +698,105 @@ const handleResetPassword = async () => {
                         </div>
                         <div className="mt-1">Amount: ₹{order.total || order.amount || 0}</div>
                         <div className="mt-1">
-                          Items: {order.items.map((item, i) => (
-                            <span key={i} className="text-slate-800">{item.name} x{item.qty || item.quantity}; </span>
-                          ))}
+                          Items: {order.items.map((item, i) => (<span key={i} className="text-slate-800">{item.name} x{item.qty || item.quantity}; </span>))}
                         </div>
                       </div>
 
                       {/* map */}
                       {!patchedPharmacyLoc?.lat ? (
-  <div className="text-xs text-slate-400 mt-2">Pharmacy location missing</div>
-) : !patchedUserLoc?.lat ? (
-  <div className="text-xs text-slate-400 mt-2">Customer location missing</div>
-) : (
-  <div className="mt-3">
-    <OrderMiniMap
-      center={mapCenter}
-      pharmacyLoc={patchedPharmacyLoc}
-      userLoc={patchedUserLoc}
-      path={poly}
-    />
+                        <div className="text-xs text-slate-400 mt-2">Pharmacy location missing</div>
+                      ) : !patchedUserLoc?.lat ? (
+                        <div className="text-xs text-slate-400 mt-2">Customer location missing</div>
+                      ) : (
+                        <div className="mt-3">
+                          <OrderMiniMap center={mapCenter} pharmacyLoc={patchedPharmacyLoc} userLoc={patchedUserLoc} path={poly} />
 
-    {/* Navigation picker (unchanged) */}
-    <div className="mt-2 grid grid-cols-2 gap-2">
-      <Button asChild variant="outline" className="!font-bold h-9 w-full">
-        <a
-          target="_blank"
-          href={`https://www.google.com/maps/dir/?api=1&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
-          rel="noreferrer"
-        >
-          <Navigation className="h-4 w-4 mr-2" /> Google Maps
-        </a>
-      </Button>
-      <Button asChild variant="outline" className="!font-bold h-9 w-full">
-        <a
-          target="_blank"
-          href={`http://maps.apple.com/?saddr=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&daddr=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
-          rel="noreferrer"
-        >
-          <Navigation className="h-4 w-4 mr-2" /> Apple Maps
-        </a>
-      </Button>
-    </div>
-  </div>
-)}
-
+                          {/* Navigation: Google set to two_wheeler by default */}
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <Button asChild variant="outline" className="!font-bold h-9 w-full">
+                              <a
+                                target="_blank"
+                                rel="noreferrer"
+                                href={
+                                  `https://www.google.com/maps/dir/?api=1` +
+                                  `&origin=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}` +
+                                  `&destination=${patchedUserLoc.lat},${patchedUserLoc.lng}` +
+                                  `&travelmode=two_wheeler`
+                                }
+                              >
+                                <Navigation className="h-4 w-4 mr-2" /> Google Maps
+                              </a>
+                            </Button>
+                            <Button asChild variant="outline" className="!font-bold h-9 w-full">
+                              <a
+                                target="_blank"
+                                rel="noreferrer"
+                                href={`http://maps.apple.com/?saddr=${patchedPharmacyLoc.lat},${patchedPharmacyLoc.lng}&daddr=${patchedUserLoc.lat},${patchedUserLoc.lng}`}
+                              >
+                                <Navigation className="h-4 w-4 mr-2" /> Apple Maps
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* actions */}
-<div className="mt-3 flex flex-wrap items-center gap-2">
-  {order.status === "assigned" && (
-    <>
-      <Button
-        className="btn-primary-emerald !font-extrabold"
-        onClick={() => handleUpdateStatus(order._id, "accepted")}
-      >
-        Accept Order
-      </Button>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {order.status === "assigned" && (
+                          <>
+                            <Button className="btn-primary-emerald !font-extrabold" onClick={() => handleUpdateStatus(order._id, "accepted")}>Accept Order</Button>
+                            <Button onClick={() => handleUpdateStatus(order._id, "rejected")}
+                              className="!font-extrabold bg-red-600 hover:bg-red-700 active:bg-red-800 text-white border border-red-700/80 shadow-sm">
+                              Reject
+                            </Button>
+                          </>
+                        )}
+                        {order.status === "accepted" && (
+                          <Button onClick={() => handleUpdateStatus(order._id, "out_for_delivery")}
+                            className="!font-extrabold bg-amber-400 hover:bg-amber-500 active:bg-amber-600 text-emerald-950 border border-amber-500/70 shadow-sm">
+                            <Bike className="h-4 w-4 mr-2" /> MARK AS OUT FOR DELIVERY
+                          </Button>
+                        )}
+                        {order.status === "out_for_delivery" && (
+                          <Button onClick={() => handleUpdateStatus(order._id, "delivered")}
+                            className="bg-emerald-600 hover:bg-emerald-700 !font-extrabold text-white">
+                            <CheckCheck className="h-4 w-4 mr-2" /> Mark as Delivered
+                          </Button>
+                        )}
+                        {order.status === "delivered" && <Badge className="bg-emerald-600">Delivered</Badge>}
 
-      {/* REJECT — solid RED box, bold white text */}
-      <Button
-        onClick={() => handleUpdateStatus(order._id, "rejected")}
-        className="
-          !font-extrabold
-          bg-red-600 hover:bg-red-700 active:bg-red-800
-          text-white
-          border border-red-700/80
-          shadow-sm
-        "
-      >
-        Reject
-      </Button>
-    </>
-  )}
+                        <div className="basis-full h-0" />
+                        <div className="w-full flex flex-wrap gap-2">
+                          {["Reaching in 5–7 mins","Outside your gate","Call me if needed"].map((txt) => (
+                            <Button key={txt} size="sm" variant="secondary" className="rounded-full !font-bold"
+                              onClick={async () => { try { await navigator.clipboard.writeText(txt); } catch {} ; setSnackbar({ open:true, message:"Canned reply copied", severity:"success" }); }}>
+                              {txt}
+                            </Button>
+                          ))}
+                        </div>
 
-  {order.status === "accepted" && (
-    /* OUT FOR DELIVERY — bright AMBER so it's very visible */
-    <Button
-      onClick={() => handleUpdateStatus(order._id, "out_for_delivery")}
-      className="
-        !font-extrabold
-        bg-amber-400 hover:bg-amber-500 active:bg-amber-600
-        text-emerald-950
-        border border-amber-500/70
-        shadow-sm
-      "
-    >
-      <Bike className="h-4 w-4 mr-2" />
-      MARK AS OUT FOR DELIVERY
-    </Button>
-  )}
-
-  {order.status === "out_for_delivery" && (
-    <Button
-      onClick={() => handleUpdateStatus(order._id, "delivered")}
-      className="bg-emerald-600 hover:bg-emerald-700 !font-extrabold text-white"
-    >
-      <CheckCheck className="h-4 w-4 mr-2" /> Mark as Delivered
-    </Button>
-  )}
-
-  {order.status === "delivered" && <Badge className="bg-emerald-600">Delivered</Badge>}
-
-  {/* line break */}
-  <div className="basis-full h-0" />
-
-  {/* canned replies row */}
-  <div className="w-full flex flex-wrap gap-2">
-    {["Reaching in 5–7 mins","Outside your gate","Call me if needed"].map((txt) => (
-      <Button
-        key={txt}
-        size="sm"
-        variant="secondary"
-        className="rounded-full !font-bold"
-        onClick={async () => { try { await navigator.clipboard.writeText(txt); } catch {} ; setSnackbar({ open:true, message:"Canned reply copied", severity:"success" }); }}
-      >
-        {txt}
-      </Button>
-    ))}
-  </div>
-
-  {/* chat button on its own line on mobile */}
-  {order.status !== "delivered" && (
-    <div className="w-full sm:w-auto sm:ml-auto relative">
-      {!!(orderUnreadCounts[order._id]) && (
-        <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
-          {orderUnreadCounts[order._id]}
-        </span>
-      )}
-      <Button
-        className="bg-amber-300 text-slate-900 hover:bg-amber-400 !font-bold w-full sm:w-auto"
-        onClick={async () => {
-          setChatOrder(order);
-          setChatOpen(true);
-          const token = localStorage.getItem("deliveryToken");
-          try {
-            await axios.patch(`${API_BASE_URL}/api/chat/${order._id}/user-chat-seen`, {}, { headers: { Authorization: `Bearer ${token}` } });
-          } catch {}
-          setOrderUnreadCounts((c) => ({ ...c, [order._id]: 0 }));
-        }}
-      >
-        <MessageSquare className="h-4 w-4 mr-2" /> Chat
-      </Button>
-    </div>
-  )}
-</div>
+                        {order.status !== "delivered" && (
+                          <div className="w-full sm:w-auto sm:ml-auto relative">
+                            {!!(orderUnreadCounts[order._id]) && (
+                              <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
+                                {orderUnreadCounts[order._id]}
+                              </span>
+                            )}
+                            <Button
+                              className="bg-amber-300 text-slate-900 hover:bg-amber-400 !font-bold w-full sm:w-auto"
+                              onClick={async () => {
+                                setChatOrder(order);
+                                setChatOpen(true);
+                                const token = localStorage.getItem("deliveryToken");
+                                try { await axios.patch(`${API_BASE_URL}/api/chat/${order._id}/user-chat-seen`, {}, { headers: { Authorization: `Bearer ${token}` } }); } catch {}
+                                setOrderUnreadCounts((c) => ({ ...c, [order._id]: 0 }));
+                              }}
+                            >
+                              <MessageSquare className="h-4 w-4 mr-2" /> Chat
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </motion.div>
                   );
                 })}
@@ -969,16 +812,9 @@ const handleResetPassword = async () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {pastOrders.length === 0 && (
-                  <div className="text-center text-slate-500">No past orders delivered yet.</div>
-                )}
+                {pastOrders.length === 0 && <div className="text-center text-slate-500">No past orders delivered yet.</div>}
                 {pastOrders.map((order) => (
-                  <motion.div
-                    key={order._id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="rounded-2xl border border-emerald-200/60 bg-white p-4 shadow-sm"
-                  >
+                  <motion.div key={order._id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-emerald-200/60 bg-white p-4 shadow-sm">
                     <div className="flex items-center gap-2">
                       <CheckCheck className="h-5 w-5 text-emerald-600" />
                       <div className="font-semibold">Delivered #{order._id?.slice(-5)}</div>
@@ -1001,7 +837,7 @@ const handleResetPassword = async () => {
         </Tabs>
       </div>
 
-      {/* CHAT MODAL (existing) */}
+      {/* CHAT MODAL */}
       <ChatModal
         open={chatOpen}
         onClose={() => setChatOpen(false)}
@@ -1013,7 +849,7 @@ const handleResetPassword = async () => {
         currentRole="delivery"
       />
 
-      {/* Safety: SOS sticky (UI only) */}
+      {/* SOS */}
       <Button
         className="fixed bottom-24 right-4 z-[2000] bg-red-600 hover:bg-red-700 font-extrabold shadow-lg"
         onClick={() => setSnackbar({ open: true, message: "SOS sent to support (demo)", severity: "error" })}
@@ -1021,13 +857,11 @@ const handleResetPassword = async () => {
         <ShieldAlert className="h-4 w-4 mr-2" /> SOS
       </Button>
 
-      {/* Snackbar mimic */}
+      {/* Snackbar */}
       <AnimatePresence>
         {snackbar.open && (
           <motion.div
-            initial={{ y: 30, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 30, opacity: 0 }}
+            initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 30, opacity: 0 }}
             transition={{ type: "spring", stiffness: 320, damping: 24 }}
             className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[2000] rounded-full px-4 py-2 font-semibold shadow-lg ${
               snackbar.severity === "error" ? "bg-red-600 text-white" : "bg-emerald-600 text-white"
