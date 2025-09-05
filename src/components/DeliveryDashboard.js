@@ -222,52 +222,61 @@ function OrderMiniMap({ center, pharmacyLoc, userLoc, path, showPharmacy = true,
 
     const google = window.google;
 
-    const addOrMove = (ref, pos, title, label) => {
-      if (!pos?.lat || !pos?.lng) return;
-      if (ref.current && "position" in ref.current) {
-        ref.current.setPosition(pos);
-        return;
-      }
-      if (ref.current && "map" in ref.current) {
-        ref.current.position = pos;
-        return;
-      }
-      try {
-        const pill = document.createElement("div");
-        pill.style.cssText =
-          "background:#0ea5a4;color:#fff;font-weight:800;border-radius:9999px;padding:4px 8px;font-size:12px";
-        pill.textContent = label;
-        ref.current = new google.maps.marker.AdvancedMarkerElement({
-          map: gmap,
-          position: pos,
-          title,
-          content: pill,
-        });
-      } catch {
-        ref.current = new google.maps.Marker({
-          map: gmap,
-          position: pos,
-          title,
-          label,
-        });
-      }
-    };
+    // FIXED
+const addOrMove = (ref, pos, title, label) => {
+  if (!pos?.lat || !pos?.lng || !mapRef.current) return;
+  const google = window.google;
+
+  // If marker already exists, update it
+  if (ref.current) {
+    // Classic Marker has setPosition; AdvancedMarkerElement does not.
+    if ("setPosition" in ref.current) {
+      ref.current.setPosition(pos);            // classic Marker
+    } else {
+      ref.current.position = pos;              // AdvancedMarkerElement
+    }
+    return;
+  }
+
+  // Create marker
+  try {
+    const pill = document.createElement("div");
+    pill.style.cssText =
+      "background:#0ea5a4;color:#fff;font-weight:800;border-radius:9999px;padding:4px 8px;font-size:12px";
+    pill.textContent = label;
+    ref.current = new google.maps.marker.AdvancedMarkerElement({
+      map: mapRef.current,
+      position: pos,
+      title,
+      content: pill,
+    });
+  } catch {
+    ref.current = new google.maps.Marker({
+      map: mapRef.current,
+      position: pos,
+      title,
+      label,
+    });
+  }
+};
 
     // Pharmacy marker
     if (pLat && pLng) {
       addOrMove(pharmMarkerRef, { lat: pLat, lng: pLng }, "Pharmacy", "P");
     } else if (pharmMarkerRef.current) {
-      pharmMarkerRef.current.map = null;
-      pharmMarkerRef.current = null;
-    }
+  if ("setMap" in pharmMarkerRef.current) pharmMarkerRef.current.setMap(null);
+  else pharmMarkerRef.current.map = null; // AdvancedMarkerElement
+  pharmMarkerRef.current = null;
+}
 
     // User marker
     if (uLat && uLng) {
       addOrMove(userMarkerRef, { lat: uLat, lng: uLng }, "Delivery Address", "U");
     } else if (userMarkerRef.current) {
-      userMarkerRef.current.map = null;
-      userMarkerRef.current = null;
-    }
+  if ("setMap" in userMarkerRef.current) userMarkerRef.current.setMap(null);
+  else userMarkerRef.current.map = null; // AdvancedMarkerElement
+  userMarkerRef.current = null;
+}
 
     // Approximate drop circle
     if (cLat && cLng && cRad) {
