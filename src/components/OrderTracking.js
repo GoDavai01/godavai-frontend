@@ -35,7 +35,7 @@ import {
 import ChatModal from "./ChatModal";
 import ChatSupportModal from "./ChatSupportModal";
 
-// ⭐ NEW: loader-based Maps util (replaces @react-google-maps/api)
+// ⭐ loader-based Maps util
 import { loadGoogleMaps } from "../utils/googleMaps";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -109,20 +109,20 @@ function Stars({ value = 0, onChange, disabled }) {
   );
 }
 
-/** ⭐ NEW: tiny inline map component using loader util */
-/** Tiny inline map (works even before first driver ping) */
+/** ⭐ Animated inline map: keeps one map instance & smoothly moves driver marker */
 function MiniLiveMap({ center, driver }) {
   const divRef = useRef(null);
+  const mapRef = useRef(null);
+  const driverRef = useRef(null);
+  const animRef = useRef(null);
 
+  // init once
   useEffect(() => {
-    let map = null;
-    let driverMarker = null;
-
+    let mounted = true;
     loadGoogleMaps(["marker", "places"])
       .then((google) => {
-        if (!divRef.current) return;
-
-        map = new google.maps.Map(divRef.current, {
+        if (!mounted || mapRef.current || !divRef.current) return;
+        mapRef.current = new google.maps.Map(divRef.current, {
           center: center || { lat: 28.4595, lng: 77.0266 },
           zoom: 14,
           mapId: "godavaii-map",
@@ -130,48 +130,88 @@ function MiniLiveMap({ center, driver }) {
           mapTypeControl: false,
           gestureHandling: "greedy",
         });
-
-        // Put a marker only if we have driver coords; map still shows without it.
-        if (driver?.lat && driver?.lng) {
-          try {
-            // Prefer AdvancedMarker when available
-            const pill = document.createElement("div");
-            pill.style.cssText =
-              "background:#0ea5a4;color:#fff;font-weight:800;border-radius:9999px;padding:4px 8px;font-size:12px";
-            pill.textContent = "DP";
-            driverMarker = new google.maps.marker.AdvancedMarkerElement({
-              map,
-              position: { lat: driver.lat, lng: driver.lng },
-              title: "Delivery Partner",
-              content: pill,
-            });
-          } catch {
-            // Fallback to classic Marker
-            driverMarker = new google.maps.Marker({
-              map,
-              position: { lat: driver.lat, lng: driver.lng },
-              title: "Delivery Partner",
-              label: "D",
-            });
-          }
-        }
       })
       .catch((e) => console.error("Google Maps failed to load:", e));
-
     return () => {
-      driverMarker = null;
-      map = null;
+      mounted = false;
+      if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [center?.lat, center?.lng, driver?.lat, driver?.lng]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // follow center when it changes (first render + if fallback changes)
+  useEffect(() => {
+    if (!mapRef.current || !center?.lat || !center?.lng) return;
+    mapRef.current.setCenter(center);
+  }, [center?.lat, center?.lng]);
+
+  // animate driver to new position
+  useEffect(() => {
+    const gmap = mapRef.current;
+    if (!gmap || !driver?.lat || !driver?.lng) return;
+
+    const google = window.google;
+
+    // create marker if missing
+    if (!driverRef.current) {
+      try {
+        const dot = document.createElement("div");
+        dot.style.cssText = "width:14px;height:14px;background:#222;border:3px solid #FFD43B;border-radius:50%";
+        driverRef.current = new google.maps.marker.AdvancedMarkerElement({
+          map: gmap,
+          position: driver,
+          title: "Delivery Partner",
+          content: dot,
+        });
+      } catch {
+        driverRef.current = new google.maps.Marker({
+          map: gmap,
+          position: driver,
+          title: "Delivery Partner",
+          label: "🛵",
+        });
+      }
+      gmap.panTo(driver);
+      return;
+    }
+
+    // smooth interpolate from current -> new
+    const from =
+      driverRef.current.position && typeof driverRef.current.position.lat === "number"
+        ? { lat: driverRef.current.position.lat, lng: driverRef.current.position.lng }
+        : {
+            lat: driverRef.current.getPosition().lat(),
+            lng: driverRef.current.getPosition().lng(),
+          };
+
+    const to = { lat: driver.lat, lng: driver.lng };
+    const duration = 900;
+    const start = performance.now();
+
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const lat = from.lat + (to.lat - from.lat) * t;
+      const lng = from.lng + (to.lng - from.lng) * t;
+      if ("position" in driverRef.current) driverRef.current.position = { lat, lng };
+      else driverRef.current.setPosition({ lat, lng });
+      if (t < 1) {
+        animRef.current = requestAnimationFrame(step);
+      }
+    };
+    if (animRef.current) cancelAnimationFrame(animRef.current);
+    animRef.current = requestAnimationFrame(step);
+
+    // keep driver in view
+    gmap.panTo(to);
+  }, [driver?.lat, driver?.lng]);
 
   return (
     <div
       ref={divRef}
-      style={{ width: "100%", height: "230px", borderRadius: 18, marginTop: 4, overflow: "hidden" }}
+      style={{ width: "100%", height: 230, borderRadius: 18, marginTop: 4, overflow: "hidden" }}
     />
   );
 }
-
 
 export default function OrderTracking() {
   const { orderId } = useParams();
@@ -203,6 +243,9 @@ export default function OrderTracking() {
 
   const [deliveryUnreadCount, setDeliveryUnreadCount] = useState(0);
   const getToken = () => localStorage.getItem("token") || "";
+
+  // ⭐ NEW: live driver point maintained locally (polled from order only)
+  const [liveDriverLoc, setLiveDriverLoc] = useState(null);
 
   // --- INITIAL LOAD (same logic) ---
   useEffect(() => {
@@ -242,7 +285,7 @@ export default function OrderTracking() {
     };
   }, [orderId, quoteActionLoading]);
 
-  // --- POLLING (same logic) ---
+  // --- POLLING (same logic for order doc) ---
   useEffect(() => {
     if (!order || order.status === "rejected" || order.status === "cancelled") return;
     let cancelled = false;
@@ -266,6 +309,35 @@ export default function OrderTracking() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId, order && order.status]);
 
+  // ⭐ NEW: poll ONLY when accepted / out_for_delivery / picked_up to keep live point fresh
+  useEffect(() => {
+    if (!order) return;
+    const s = String(order.status || "").toLowerCase();
+    const trackable = ["accepted", "out_for_delivery", "picked_up"].includes(s);
+    if (!trackable) {
+      setLiveDriverLoc(null);
+      return;
+    }
+
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const { data } = await axios.get(`${API_BASE_URL}/api/orders/${order._id}`);
+        const dl = data?.driverLocation;
+        if (!cancelled && dl && typeof dl.lat === "number" && typeof dl.lng === "number") {
+          setLiveDriverLoc({ lat: dl.lat, lng: dl.lng });
+        }
+      } catch {}
+    };
+
+    tick();
+    const id = setInterval(tick, 3000); // 3s feels smooth
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [order?._id, order?.status]);
+
   // unread count
   useEffect(() => {
     if (!order) return;
@@ -275,25 +347,36 @@ export default function OrderTracking() {
       .catch(() => setDeliveryUnreadCount(0));
   }, [order, refreshTick, chatOpen]);
 
-  // ETA
+  // ⭐ ETA (gate on having a live point and valid status)
   useEffect(() => {
-    let interval;
+    const s = String(order?.status || "").toLowerCase();
+    const canEta =
+      order &&
+      ["accepted", "out_for_delivery", "picked_up"].includes(s) &&
+      (liveDriverLoc || order?.driverLocation);
+
+    if (!canEta) {
+      setEta("");
+      return;
+    }
+
+    let cancelled = false;
     const fetchETA = async () => {
-      if (order && order.driverLocation && order.address && order.status === "out_for_delivery") {
-        try {
-          const res = await axios.get(`${API_BASE_URL}/api/orders/${order._id}/eta`);
-          setEta(res.data.eta || "N/A");
-        } catch {
-          setEta("N/A");
-        }
-      } else {
-        setEta("");
+      try {
+        const res = await axios.get(`${API_BASE_URL}/api/orders/${order._id}/eta`);
+        if (!cancelled) setEta(res.data.eta || "N/A");
+      } catch {
+        if (!cancelled) setEta("N/A");
       }
     };
+
     fetchETA();
-    interval = setInterval(fetchETA, 3000);
-    return () => clearInterval(interval);
-  }, [order]);
+    const interval = setInterval(fetchETA, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [order?._id, order?.status, liveDriverLoc?.lat, liveDriverLoc?.lng]);
 
   // quote modal toggle
   useEffect(() => {
@@ -717,26 +800,25 @@ export default function OrderTracking() {
               )}
             </div>
 
-            {/* MAP — now using the loader-based component */}
+            {/* MAP — uses animated MiniLiveMap and the live point */}
             {currentStep >= 2 && currentStep < 3 && (
-  <div className="mt-3">
-    <div className="text-sm text-emerald-700 mb-1">Live Delivery Location:</div>
-    <div className="rounded-2xl overflow-hidden">
-      <MiniLiveMap
-        center={{
-          // Prefer driver; fall back to user's address so the map still shows while we wait for the first ping
-          lat: (order.driverLocation?.lat ?? order.address?.lat ?? 28.4595),
-          lng: (order.driverLocation?.lng ?? order.address?.lng ?? 77.0266),
-        }}
-        driver={order.driverLocation}
-      />
-    </div>
-    <div className="text-sm font-bold text-emerald-700 mt-2">
-      Estimated time to delivery: {eta || "Calculating..."}
-    </div>
-  </div>
-)}
-
+              <div className="mt-3">
+                <div className="text-sm text-emerald-700 mb-1">Live Delivery Location:</div>
+                <div className="rounded-2xl overflow-hidden">
+                  <MiniLiveMap
+                    center={{
+                      // Prefer driver; fall back to user's address so map shows while waiting for first ping
+                      lat: (liveDriverLoc?.lat ?? order.driverLocation?.lat ?? order.address?.lat ?? 28.4595),
+                      lng: (liveDriverLoc?.lng ?? order.driverLocation?.lng ?? order.address?.lng ?? 77.0266),
+                    }}
+                    driver={liveDriverLoc || order.driverLocation}
+                  />
+                </div>
+                <div className="text-sm font-bold text-emerald-700 mt-2">
+                  Estimated time to delivery: {eta || "Calculating..."}
+                </div>
+              </div>
+            )}
 
             {/* Delivered cheer */}
             {isDelivered && (
