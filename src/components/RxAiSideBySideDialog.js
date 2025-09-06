@@ -47,10 +47,6 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
   const pinchStart = useRef({ dist: 0, scale: 1, center: { x: 0, y: 0 }, offset: { x: 0, y: 0 } });
   const [isPinching, setIsPinching] = useState(false);
 
-  // swipe to change page (one-finger flick when not zoomed)
-  const swipeStartX = useRef(null);
-  const swipeStartT = useRef(0);
-
   // --- AI state/polling ---
   const [ai, setAi] = useState(order?.ai || null);
   const [loadingAi, setLoadingAi] = useState(false);
@@ -100,6 +96,7 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
 
     if (containerRef.current && imgRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
+      theCenter(center, rect);
       const cx = center?.x ?? rect.width / 2;
       const cy = center?.y ?? rect.height / 2;
 
@@ -111,6 +108,8 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
     }
     setScale(newScale);
   };
+
+  const theCenter = (c, rect) => c; // no-op helper (kept to avoid accidental edits)
 
   const handleWheel = (e) => {
     e.preventDefault();
@@ -124,12 +123,6 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
   const onPointerDown = (e) => {
     e.currentTarget.setPointerCapture?.(e.pointerId);
     touchesRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-    // record for swipe (single finger, scale==1)
-    if (touchesRef.current.size === 1 && scale <= 1.0001) {
-      swipeStartX.current = e.clientX;
-      swipeStartT.current = Date.now();
-    }
 
     if (touchesRef.current.size === 2) {
       const pts = Array.from(touchesRef.current.values());
@@ -187,22 +180,6 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
   };
 
   const onPointerUpOrLeave = (e) => {
-    // swipe page change (single finger, not zoomed)
-    if (scale <= 1.0001 && swipeStartX.current != null && touchesRef.current.size <= 1) {
-      const dx = (e.clientX ?? swipeStartX.current) - swipeStartX.current;
-      const dt = Date.now() - swipeStartT.current;
-      const THRESH = 60; // px
-      const SPEED_OK = dt < 500;
-      if (Math.abs(dx) > THRESH && SPEED_OK) {
-        if (dx < 0 && pageIdx < attachments.length - 1) {
-          setPageIdx(i => Math.min(attachments.length - 1, i + 1));
-        } else if (dx > 0 && pageIdx > 0) {
-          setPageIdx(i => Math.max(0, i - 1));
-        }
-      }
-    }
-    swipeStartX.current = null;
-
     touchesRef.current.delete(e.pointerId);
     if (touchesRef.current.size < 2 && isPinching) {
       setIsPinching(false);
