@@ -374,6 +374,8 @@ export default function PharmacyDashboard() {
   const [medImages, setMedImages] = useState([]);
   const fileInputRef = useRef();
   const editFileInputRef = useRef();
+  const cameraEditInputRef = useRef();
+  const cameraInputRef = useRef();
 
   const [payouts, setPayouts] = useState([]);
 
@@ -1383,18 +1385,44 @@ const toggleAvailability = async (med) => {
                     />
                   </Stack>
 
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <input type="file" accept="image/*" multiple hidden ref={editFileInputRef} onChange={handleEditImagesChange} />
-                    <Button
-                      startIcon={<PhotoCamera />}
-                      variant={editMedImages && editMedImages.length ? "contained" : "outlined"}
-                      onClick={() => editFileInputRef.current && editFileInputRef.current.click()}
-                      color={editMedImages && editMedImages.length ? "success" : "primary"}
-                      sx={{ minWidth: 120 }}
-                    >
-                      {editMedImages && editMedImages.length ? `${editMedImages.length} Image${editMedImages.length > 1 ? "s" : ""} Ready` : "Upload Images"}
-                    </Button>
-                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center">
+  {/* Gallery Upload */}
+  <input
+    type="file"
+    accept="image/*"
+    multiple
+    hidden
+    ref={editFileInputRef}
+    onChange={handleEditImagesChange}
+  />
+  <Button
+    startIcon={<PhotoCamera />}
+    variant={editMedImages && editMedImages.length ? "contained" : "outlined"}
+    onClick={() => editFileInputRef.current && editFileInputRef.current.click()}
+    color={editMedImages && editMedImages.length ? "success" : "primary"}
+    sx={{ minWidth: 120 }}
+  >
+    {editMedImages && editMedImages.length ? `${editMedImages.length} Image${editMedImages.length > 1 ? "s" : ""} Ready` : "Upload"}
+  </Button>
+
+  {/* Camera Capture */}
+  <input
+    type="file"
+    accept="image/*"
+    multiple
+    capture="environment"
+    hidden
+    ref={cameraEditInputRef}
+    onChange={handleEditImagesChange}
+  />
+  <IconButton
+    color="primary"
+    onClick={() => cameraEditInputRef.current && cameraEditInputRef.current.click()}
+  >
+    <PhotoCamera />
+  </IconButton>
+</Stack>
+
 
                   {editMedId && medicines.find(m => (m._id || m.id) === editMedId)?.images?.length > 0 && (
                     <Stack direction="row" spacing={1} sx={{ my: 1 }}>
@@ -1572,16 +1600,45 @@ const toggleAvailability = async (med) => {
                 </Stack>
 
                 <Stack direction="row" spacing={2} alignItems="center">
-                  <input type="file" accept="image/*" multiple hidden ref={fileInputRef} onChange={handleImagesChange} />
-                  <Button
-                    startIcon={<PhotoCamera />}
-                    variant={medImages && medImages.length ? "contained" : "outlined"}
-                    onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                    color={medImages && medImages.length ? "success" : "primary"}
-                    sx={{ minWidth: 120 }}
-                  >
-                    {medImages && medImages.length ? `${medImages.length} Image${medImages.length > 1 ? "s" : ""} Ready` : "Upload Images"}
-                  </Button>
+                  {/* Hidden file inputs */}
+<input
+  type="file"
+  accept="image/*"
+  multiple
+  hidden
+  ref={fileInputRef}
+  onChange={handleImagesChange}
+/>
+<input
+  type="file"
+  accept="image/*"
+  multiple
+  capture="environment"
+  hidden
+  ref={cameraInputRef}
+  onChange={handleImagesChange}
+/>
+
+<Stack direction="row" spacing={1}>
+  {/* Gallery Upload */}
+  <Button
+    startIcon={<PhotoCamera />}
+    variant={medImages && medImages.length ? "contained" : "outlined"}
+    onClick={() => fileInputRef.current && fileInputRef.current.click()}
+    color={medImages && medImages.length ? "success" : "primary"}
+    sx={{ minWidth: 120 }}
+  >
+    {medImages && medImages.length ? `${medImages.length} Image${medImages.length > 1 ? "s" : ""}` : "Upload"}
+  </Button>
+
+  {/* Camera Capture */}
+  <IconButton
+    color="primary"
+    onClick={() => cameraInputRef.current && cameraInputRef.current.click()}
+  >
+    <PhotoCamera />
+  </IconButton>
+</Stack>
                 </Stack>
                 {medImages && medImages.length > 0 && (
                   <Stack direction="row" spacing={1} sx={{ my: 1 }}>
