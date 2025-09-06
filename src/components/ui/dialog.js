@@ -2,15 +2,17 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 
+// tiny classNames helper
 function cn(...args) {
   return args.filter(Boolean).join(" ");
 }
 
 export function Dialog({ open, onOpenChange, children }) {
   const [mounted, setMounted] = React.useState(false);
+
   React.useEffect(() => setMounted(true), []);
 
-  // Lock body scroll when open
+  // Lock body scroll while dialog is open (we portal to <body>)
   React.useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -23,13 +25,16 @@ export function Dialog({ open, onOpenChange, children }) {
   // Close on ESC
   React.useEffect(() => {
     if (!open) return;
-    const onKey = (e) => e.key === "Escape" && onOpenChange?.(false);
+    const onKey = (e) => {
+      if (e.key === "Escape") onOpenChange?.(false);
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onOpenChange]);
 
   if (!open || !mounted) return null;
 
+  // Close when clicking the dimmed backdrop (but not the content)
   const handleBackdropMouseDown = (e) => {
     if (e.target === e.currentTarget) onOpenChange?.(false);
   };
@@ -39,11 +44,20 @@ export function Dialog({ open, onOpenChange, children }) {
       role="dialog"
       aria-modal="true"
       onMouseDown={handleBackdropMouseDown}
-      className="fixed inset-0 z-[10040] bg-black/60 backdrop-blur-sm"
+      // must be higher than Sheet (overlay 2000, content 2001)
+      style={{ zIndex: 3000 }}
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+      // Force light scheme inside the overlay (prevents iOS/Android dark inversion)
+      data-theme="light"
     >
+      {/* Scroll container (full viewport). No padding-top/bottom so the modal sits OVER nav bars */}
       <div className="absolute inset-0 overflow-y-auto">
         <div className="min-h-full w-full flex items-center justify-center px-3 py-4">
-          <div className="pointer-events-auto" onMouseDown={(e) => e.stopPropagation()}>
+          {/* Stop propagation so clicks inside content don't close */}
+          <div
+            className="pointer-events-auto"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             {children}
           </div>
         </div>
@@ -56,26 +70,23 @@ export function Dialog({ open, onOpenChange, children }) {
 
 /**
  * DialogContent
- * appearance:
- *  - "light"  (default): white panel
- *  - "dark"             : dark preset
- *  - "custom"           : no bg/text classes; you style via className
+ * - Remove `dark:*` backgrounds so system dark mode can't flip the panel.
+ * - Add `dark:!bg-white dark:!text-zinc-900` as a defensive override in case
+ *   a parent sets `.dark` (class-based theming).
+ * - Add `[color-scheme:light]` to hint the browser to render controls in light.
  */
-export function DialogContent({ className = "", appearance = "light", children, ...props }) {
-  const palette =
-    appearance === "dark"
-      ? "bg-[#0b1114] text-emerald-100"
-      : appearance === "custom"
-      ? "" // caller fully controls styling
-      : "bg-white text-zinc-900"; // light default
-
+export function DialogContent({ className = "", children, ...props }) {
   return (
     <div
       {...props}
       className={cn(
-        "relative z-[10050] w-full max-w-md max-h-full rounded-3xl overflow-hidden shadow-2xl",
-        "p-6 animate-in fade-in-90 scale-in-95",
-        palette,
+        // Force light theme visuals regardless of OS/browser dark mode
+        "relative z-[3001] rounded-3xl overflow-hidden shadow-2xl w-full max-w-md p-6 animate-in fade-in-90 scale-in-95 max-h-full",
+        "bg-white text-zinc-900",
+        // If the app uses class-based dark mode higher up, keep this panel light
+        "dark:!bg-white dark:!text-zinc-900",
+        // Tell the browser to treat this subtree as light (affects native controls)
+        "[color-scheme:light]",
         className
       )}
     >
