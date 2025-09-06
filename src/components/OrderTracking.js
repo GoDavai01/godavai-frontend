@@ -76,6 +76,69 @@ function formatTimestamp(ts) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+// URL + file-type helpers
+const toAbsoluteUrl = (u) =>
+  !u ? "" : u.startsWith("http") ? u : `${API_BASE_URL}${u}`;
+const isPdf = (u = "") => /\.pdf($|\?)/i.test(u);
+const isImage = (u = "") => /\.(png|jpe?g|gif|webp|bmp|tiff|svg)($|\?)/i.test(u);
+
+/** Renders a compact grid of prescription files (images + PDFs). */
+function PrescriptionFiles({ files = [] }) {
+  if (!files.length) return null;
+  const list = [...new Set(files.filter(Boolean))];
+
+  return (
+    <div className="mt-2 grid grid-cols-3 gap-2">
+      {list.map((raw, idx) => {
+        const href = toAbsoluteUrl(raw);
+        if (!href) return null;
+
+        if (isImage(href) && !isPdf(href)) {
+          return (
+            <a
+              key={idx}
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="block"
+              title="Open image"
+            >
+              <img
+                src={href}
+                alt={`Prescription ${idx + 1}`}
+                className="h-24 w-full object-cover rounded-lg border border-emerald-100 shadow-sm"
+                loading="lazy"
+              />
+            </a>
+          );
+        }
+
+        // PDF (or unknown) → tile link
+        return (
+          <a
+            key={idx}
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            title="Open document"
+            className="flex items-center justify-center h-24 w-full rounded-lg border border-emerald-200 bg-emerald-50/60 shadow-sm"
+          >
+            <div className="text-center px-2">
+              <div className="text-emerald-800 font-extrabold text-xs">Document</div>
+              <div className="text-[10px] text-emerald-700/80 truncate max-w-[80px] mx-auto">
+                {href.split("/").pop()}
+              </div>
+              <div className="mt-1 text-[10px] font-semibold text-emerald-700">
+                {isPdf(href) ? "PDF" : "File"}
+              </div>
+            </div>
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
 // Lightweight inline toast
 function InlineToast({ open, kind = "success", children, onClose }) {
   if (!open) return null;
@@ -708,23 +771,22 @@ export default function OrderTracking() {
                       <span className="text-gray-400"> Quote not received yet</span>
                     )}
                   </div>
-                  {order.prescriptionUrl && (
-                    <div className="mt-3">
-                      <div className="text-sm text-emerald-700 font-semibold mb-1 flex items-center gap-1">
-                        <FileText className="h-4 w-4" />
-                        Prescription Uploaded:
-                      </div>
-                      <img
-                        src={
-                          order.prescriptionUrl.startsWith("http")
-                            ? order.prescriptionUrl
-                            : `${API_BASE_URL}${order.prescriptionUrl}`
-                        }
-                        alt="Prescription"
-                        className="w-[90%] max-h-[190px] rounded-lg shadow"
-                      />
-                    </div>
-                  )}
+                  {(order.prescriptionUrl || (Array.isArray(order.attachments) && order.attachments.length)) && (
+  <div className="mt-3">
+    <div className="text-sm text-emerald-700 font-semibold mb-1 flex items-center gap-1">
+      <FileText className="h-4 w-4" />
+      Prescription Uploaded:
+    </div>
+
+    <PrescriptionFiles
+      files={[
+        ...(Array.isArray(order.attachments) ? order.attachments : []),
+        ...(order.prescriptionUrl ? [order.prescriptionUrl] : []),
+      ]}
+    />
+  </div>
+)}
+
                   <div className="flex gap-2 mt-3">
                     <Button
                       variant="outline"
@@ -784,18 +846,22 @@ export default function OrderTracking() {
                     </div>
                   )}
                   {order.prescription && (
-                    <div className="mt-3">
-                      <div className="text-sm text-emerald-700 font-semibold mb-1 flex items-center gap-1">
-                        <FileText className="h-4 w-4" />
-                        Prescription Uploaded:
-                      </div>
-                      <img
-                        src={order.prescription.startsWith("http") ? order.prescription : `${API_BASE_URL}${order.prescription}`}
-                        alt="Prescription"
-                        className="w-[90%] max-h-[190px] rounded-lg shadow"
-                      />
-                    </div>
-                  )}
+  <div className="mt-3">
+    <div className="text-sm text-emerald-700 font-semibold mb-1 flex items-center gap-1">
+      <FileText className="h-4 w-4" />
+      Prescription Uploaded:
+    </div>
+
+    <PrescriptionFiles
+      files={
+        Array.isArray(order.prescription)
+          ? order.prescription
+          : [order.prescription]
+      }
+    />
+  </div>
+)}
+
                 </>
               )}
             </div>

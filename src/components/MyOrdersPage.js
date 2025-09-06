@@ -329,7 +329,7 @@ export default function MyOrdersPage() {
       setCart(
         order.quote.items.filter(i => i.available !== false).map(i => ({
           _id: i._id || i.medicineId || Math.random().toString(),
-          name: i.medicineName,
+          name: i.composition || i.medicineName || i.name || i.brand || "Medicine",
           brand: i.brand,
           price: i.price,
           quantity: i.quantity,
@@ -479,7 +479,7 @@ export default function MyOrdersPage() {
 
                 {o.quote && o.quote.items && o.quote.items.some(i => i.available === false) && (
                   <div className="mt-1 text-[13px] text-red-600">
-                    Unavailable: {o.quote.items.filter(i => i.available === false).map(i => i.medicineName).join(", ")}
+                    Unavailable: {o.quote.items.filter(i => i.available === false).map(i => i.composition || i.medicineName || i.name || i.brand).join(", ")}
                   </div>
                 )}
 

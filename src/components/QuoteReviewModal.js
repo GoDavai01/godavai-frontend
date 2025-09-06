@@ -17,55 +17,43 @@ import {
 } from "@mui/material";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 
-export default function QuoteReviewModal({ open, order, onClose }) {
+export default function QuoteReviewModal({ open, order, onClose, onAccept }) {
   if (!order) return null;
 
-  let quoteObj = null;
-  const isPrescriptionOrder = order.orderType === "prescription" || !!order.prescriptionUrl;
+  // ---- normalize to a single quote shape (items + total + message) ----
+  let items = [];
+  let message = "";
+  let total = 0;
 
-  if (isPrescriptionOrder) {
-    if (order.tempQuote && order.tempQuote.items && order.tempQuote.items.length) {
-      quoteObj = {
-        items: order.tempQuote.items,
-        total: order.tempQuote.items.filter(i => i.available !== false).reduce((sum, i) => sum + ((i.price || 0) * (i.quantity || 1)), 0),
-        message: order.tempQuote.message,
-      };
-    } else if (order.quote && order.quote.items && order.quote.items.length) {
-      quoteObj = {
-        items: order.quote.items,
-        total: order.quote.items.filter(i => i.available !== false).reduce((sum, i) => sum + ((i.price || 0) * (i.quantity || 1)), 0),
-        message: order.quote.message,
-      };
-    } else if (Array.isArray(order.quote) && order.quote.length) {
-      quoteObj = {
-        items: order.quote,
-        total: order.quote.filter(i => i.available !== false).reduce(
-          (sum, i) => sum + ((i.price || 0) * (i.quantity || 1)), 0
-        ),
-      };
-    } else if (Array.isArray(order.quotes) && order.quotes.length) {
-      const latest = order.quotes[order.quotes.length - 1];
-      quoteObj = {
-        items: latest.items || [],
-        total: (latest.items || []).filter(i => i.available !== false).reduce(
-          (sum, i) => sum + ((i.price || 0) * (i.quantity || 1)), 0
-        ),
-        message: latest.message || "",
-      };
-    }
-  } else if (order.quote && order.quote.items && order.quote.items.length) {
-    quoteObj = {
-      items: order.quote.items,
-      total: order.quote.items.filter(i => i.available !== false).reduce(
-        (sum, i) => sum + ((i.price || 0) * (i.quantity || 1)), 0
-      ),
-      message: order.quote.message,
-    };
+  // prefer tempQuote.items > quote.items > quote[] > quotes[last].items
+  if (order?.tempQuote?.items?.length) {
+    items = order.tempQuote.items;
+    message = order.tempQuote.message || "";
+  } else if (order?.quote?.items?.length) {
+    items = order.quote.items;
+    message = order.quote.message || "";
+  } else if (Array.isArray(order?.quote) && order.quote.length) {
+    items = order.quote;
+  } else if (Array.isArray(order?.quotes) && order.quotes.length) {
+    const latest = order.quotes[order.quotes.length - 1] || {};
+    items = latest.items || [];
+    message = latest.message || "";
   }
 
-  const items = quoteObj?.items || [];
-  const total = quoteObj?.total || 0;
-  const message = quoteObj?.message || "";
+  // total: use explicit price when provided, else sum of available rows
+  if (typeof order?.quote?.price === "number") {
+    total = order.quote.price;
+  } else {
+    total = items
+      .filter((i) => i.available !== false)
+      .reduce(
+        (sum, i) => sum + ((Number(i.price) || 0) * (Number(i.quantity) || 1)),
+        0
+      );
+  }
+
+  const compositionOf = (it) =>
+    it.composition ?? it.medicineName ?? it.name ?? "-";
 
   const dialogTitle = (
     <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -75,14 +63,20 @@ export default function QuoteReviewModal({ open, order, onClose }) {
   );
 
   return (
-    <Dialog open={open} maxWidth="sm" fullWidth onClose={onClose} PaperProps={{
-      style: { borderRadius: 16, boxShadow: "0px 8px 32px #13C0A229" }
-    }}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{ style: { borderRadius: 16, boxShadow: "0px 8px 32px #13C0A229" } }}
+    >
       <DialogTitle sx={{ fontWeight: 700, fontSize: 20 }}>{dialogTitle}</DialogTitle>
+
       <DialogContent>
         <Typography sx={{ mb: 2, color: "#13C0A2", fontWeight: 700 }}>
           Pharmacy: {order.pharmacy?.name || order.pharmacyName || ""}
         </Typography>
+
         <Box
           sx={{
             mb: 2,
@@ -97,37 +91,51 @@ export default function QuoteReviewModal({ open, order, onClose }) {
           <Table size="small" sx={{ minWidth: 530 }}>
             <TableHead>
               <TableRow style={{ background: "#13C0A2" }}>
-                <TableCell sx={{ color: "#fff", fontWeight: 700, minWidth: 110 }}>Medicine</TableCell>
-                <TableCell sx={{ color: "#fff", fontWeight: 700, minWidth: 90 }}>Brand</TableCell>
-                <TableCell sx={{ color: "#fff", fontWeight: 700, minWidth: 65 }}>Price</TableCell>
-                <TableCell sx={{ color: "#fff", fontWeight: 700, minWidth: 65 }}>Qty</TableCell>
-                <TableCell sx={{ color: "#fff", fontWeight: 700, minWidth: 100 }}>Status</TableCell>
+                <TableCell sx={{ color: "#fff", fontWeight: 700, minWidth: 140 }}>
+                  Composition
+                </TableCell>
+                <TableCell sx={{ color: "#fff", fontWeight: 700, minWidth: 100 }}>
+                  Brand
+                </TableCell>
+                <TableCell sx={{ color: "#fff", fontWeight: 700, minWidth: 70 }}>
+                  Price
+                </TableCell>
+                <TableCell sx={{ color: "#fff", fontWeight: 700, minWidth: 65 }}>
+                  Qty
+                </TableCell>
+                <TableCell sx={{ color: "#fff", fontWeight: 700, minWidth: 100 }}>
+                  Status
+                </TableCell>
               </TableRow>
             </TableHead>
+
             <TableBody>
-              {items.length === 0 ? (
+              {!items.length ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" style={{ color: "#999" }}>
+                  <TableCell colSpan={5} align="center" sx={{ color: "#999" }}>
                     No quote details found.
                   </TableCell>
                 </TableRow>
               ) : (
-                items.map((item, idx) => (
+                items.map((it, idx) => (
                   <TableRow key={idx}>
-                    <TableCell>{item.medicineName || item.name}</TableCell>
-                    <TableCell>{item.brand || "-"}</TableCell>
-                    <TableCell>
-                      {item.available === false ? "-" : `₹${item.price ?? ""}`}
+                    {/* Composition-first; never fall back to Brand here */}
+                    <TableCell sx={{ fontWeight: 700 }}>
+                      {compositionOf(it)}
                     </TableCell>
-                    <TableCell>{item.quantity}</TableCell>
+                    <TableCell>{it.brand || "-"}</TableCell>
+                    <TableCell>
+                      {it.available === false ? "-" : `₹${Number(it.price || 0)}`}
+                    </TableCell>
+                    <TableCell>{it.quantity ?? "-"}</TableCell>
                     <TableCell
-                      style={{
-                        color: item.available === false ? "#d32f2f" : "#198754",
+                      sx={{
+                        color: it.available === false ? "#d32f2f" : "#198754",
                         fontWeight: 600,
-                        letterSpacing: 0.5
+                        letterSpacing: 0.5,
                       }}
                     >
-                      {item.available === false ? "Unavailable" : "Available"}
+                      {it.available === false ? "Unavailable" : "Available"}
                     </TableCell>
                   </TableRow>
                 ))
@@ -135,42 +143,51 @@ export default function QuoteReviewModal({ open, order, onClose }) {
             </TableBody>
           </Table>
         </Box>
+
         <Divider sx={{ my: 2 }} />
+
         <Typography
           sx={{
             fontWeight: 800,
             fontSize: 20,
             color: "#13C0A2",
             textAlign: "right",
-            letterSpacing: 0.5
+            letterSpacing: 0.5,
           }}
         >
           Total Price: <span style={{ color: "#0c725f" }}>₹{total}</span>
         </Typography>
-        {message && (
-          <Typography sx={{ mt: 1, color: "#888" }}>
-            Note: {message}
-          </Typography>
+
+        {!!message && (
+          <Typography sx={{ mt: 1, color: "#888" }}>Note: {message}</Typography>
         )}
       </DialogContent>
+
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button
           onClick={onClose}
-          variant="contained"
-          color="primary"
-          sx={{
-            minWidth: 100,
-            bgcolor: "#13C0A2",
-            borderRadius: 3,
-            fontWeight: 700,
-            fontSize: 16,
-            letterSpacing: 0.4,
-            boxShadow: "0px 2px 8px #13C0A229",
-            "&:hover": { bgcolor: "#0e9c87" }
-          }}
+          variant="outlined"
+          sx={{ minWidth: 100, borderRadius: 3, fontWeight: 700 }}
         >
-          CLOSE
+          Close
         </Button>
+
+        {typeof onAccept === "function" && (
+          <Button
+            onClick={onAccept}
+            variant="contained"
+            sx={{
+              minWidth: 140,
+              bgcolor: "#13C0A2",
+              borderRadius: 3,
+              fontWeight: 800,
+              "&:hover": { bgcolor: "#0e9c87" },
+            }}
+            disabled={Number(total) <= 0}
+          >
+            Accept &amp; Pay ₹{total}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );
