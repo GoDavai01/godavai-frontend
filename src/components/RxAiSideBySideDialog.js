@@ -162,6 +162,12 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
     setScale(next);
   };
 
+  // (B) Re-clamp whenever scale/container/image changes
+  useEffect(() => {
+    setOffset((o) => clampOffset(o));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scale, ctrSize.w, ctrSize.h, imgNat.w, imgNat.h]);
+
   // wheel zoom (desktop)
   const onWheel = (e) => {
     e.preventDefault();
@@ -187,6 +193,9 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
       setDragging(false);
       return;
     }
+
+    // (A) ⛔ no panning when scale is 1 (fit-to-screen)
+    if (scale <= 1.0001) return;
 
     setDragging(true);
     dragStart.current = { x: e.clientX, y: e.clientY };
@@ -351,7 +360,7 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
             const rect = e.currentTarget.getBoundingClientRect();
             zoomBy(scale < 2 ? +0.9 : -0.9, { x: e.clientX - rect.left, y: e.clientY - rect.top });
           }}
-          className={`relative h-[70vh] md:h-[520px] overflow-hidden cursor-${dragging?"grabbing":"grab"} select-none touch-none ${BG}`}
+          className={`relative h-[70vh] md:h-[520px] overflow-hidden ${scale > 1 ? "cursor-grab" : "cursor-default"} select-none touch-none ${BG}`}
           style={{
             backgroundImage:
               "linear-gradient(45deg, #0a1013 25%, transparent 25%),linear-gradient(-45deg, #0a1013 25%, transparent 25%),linear-gradient(45deg, transparent 75%, #0a1013 75%),linear-gradient(-45deg, transparent 75%, #0a1013 75%)",
@@ -461,7 +470,10 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
   return (
     <Dialog open={open} onOpenChange={onClose}>
       {/* High z-index to ensure it’s above everything */}
-      <DialogContent className={`z-[10050] sm:max-w-[1000px] p-0 ${BORDER} ${BG}`}>
+      <DialogContent
+        appearance="custom"
+        className={`z-[10050] sm:max-w-[1000px] p-0 ${BORDER} !bg-[#0b1114] !text-emerald-100`}
+      >
         <DialogHeader className="px-4 pt-4">
           <DialogTitle className="text-teal-300">Rx & AI Viewer</DialogTitle>
           <p className={`text-xs ${TXT_WEAK}`}>Compare the original prescription with AI suggestions before quoting.</p>
