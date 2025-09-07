@@ -1,4 +1,4 @@
-import React from "react";
+import React from "react"; 
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -183,16 +183,8 @@ export default function CartBody({
         </div>
       )}
 
-      {/* CTAs: stack on mobile, row on wider */}
+      {/* CTAs: Proceed first, Clear Cart below */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 pb-1">
-        <Button
-          variant="ghost"
-          onClick={onClearCart}
-          className="text-red-600 hover:text-red-700 !font-black w-full sm:w-auto"
-        >
-          <span className="font-black tracking-wide">CLEAR CART</span>
-        </Button>
-
         <Button
           onClick={onCheckout}
           disabled={multiPharmacy}
@@ -200,6 +192,14 @@ export default function CartBody({
           style={{ backgroundColor: DEEP }}
         >
           PROCEED TO CHECKOUT
+        </Button>
+
+        <Button
+          variant="ghost"
+          onClick={onClearCart}
+          className="text-red-600 hover:text-red-700 !font-black w-full sm:w-auto"
+        >
+          <span className="font-black tracking-wide">CLEAR CART</span>
         </Button>
       </div>
     </div>
