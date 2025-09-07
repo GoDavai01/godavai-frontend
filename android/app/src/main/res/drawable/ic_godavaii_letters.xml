@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="96dp"
+    android:viewportWidth="288"
+    android:viewportHeight="96">
+
+    <!-- Deep green -->
+    <!-- We draw with white letters so they pop on deep green background -->
+    <!-- Letter target X positions (left-to-right) -->
+    <!-- G(16), o(48), D(80), a(120), v(152), a(184), i(216), i2(236) -->
+    <!-- Start each letter off-screen with alpha 0; the AVD will animate them in -->
+
+    <!-- G -->
+    <group
+        android:name="letter_G"
+        android:pivotX="0"
+        android:pivotY="0"
+        android:translateX="-120"
+        android:translateY="24"
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:alpha="0">
+        <!-- Outer circle -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M32,24
+                              m-20,0
+                              a20,20 0 1,0 40,0
+                              a20,20 0 1,0 -40,0" />
+        <!-- Inner cutout -->
+        <path
+            android:fillColor="#FF0E5E43"
+            android:pathData="M32,24
+                              m-12,0
+                              a12,12 0 1,0 24,0
+                              a12,12 0 1,0 -24,0" />
+        <!-- Horizontal bar to make 'G' -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M32,24 h12 v6 h-18 v-6 z" />
+    </group>
+
+    <!-- o -->
+    <group
+        android:name="letter_o"
+        android:translateX="-120"
+        android:translateY="24"
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:alpha="0">
+        <group android:translateX="48">
+            <path
+                android:fillColor="#FFFFFFFF"
+                android:pathData="M16,24 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0"/>
+            <path
+                android:fillColor="#FF0E5E43"
+                android:pathData="M16,24 m-6.5,0 a6.5,6.5 0 1,0 13,0 a6.5,6.5 0 1,0 -13,0"/>
+        </group>
+    </group>
+
+    <!-- D -->
+    <group
+        android:name="letter_D"
+        android:translateX="-120"
+        android:translateY="24"
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:alpha="0">
+        <group android:translateX="80">
+            <!-- Vertical spine -->
+            <path android:fillColor="#FFFFFFFF" android:pathData="M0,6 h8 v36 h-8 z"/>
+            <!-- Semi circle body -->
+            <path android:fillColor="#FFFFFFFF"
+                android:pathData="M8,6 h10 a18,18 0 0,1 0,36 h-10 z"/>
+            <!-- Inner cut (deep green) -->
+            <path android:fillColor="#FF0E5E43"
+                android:pathData="M10,12 h7 a12,12 0 0,1 0,24 h-7 z"/>
+        </group>
+    </group>
+
+    <!-- a -->
+    <group
+        android:name="letter_a1"
+        android:translateX="-120"
+        android:translateY="24"
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:alpha="0">
+        <group android:translateX="120">
+            <!-- Circle bowl -->
+            <path android:fillColor="#FFFFFFFF"
+                android:pathData="M16,24 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0"/>
+            <!-- Inner cut -->
+            <path android:fillColor="#FF0E5E43"
+                android:pathData="M16,24 m-6.5,0 a6.5,6.5 0 1,0 13,0 a6.5,6.5 0 1,0 -13,0"/>
+            <!-- Stem (right) -->
+            <path android:fillColor="#FFFFFFFF" android:pathData="M25,12 h6 v30 h-6 z"/>
+        </group>
+    </group>
+
+    <!-- v -->
+    <group
+        android:name="letter_v"
+        android:translateX="-120"
+        android:translateY="24"
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:alpha="0">
+        <group android:translateX="152">
+            <path android:fillColor="#FFFFFFFF"
+                android:pathData="M0,12 l6,0 l10,24 l10,-24 l6,0 l-14,36 h-4 z"/>
+        </group>
+    </group>
+
+    <!-- a -->
+    <group
+        android:name="letter_a2"
+        android:translateX="-120"
+        android:translateY="24"
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:alpha="0">
+        <group android:translateX="184">
+            <path android:fillColor="#FFFFFFFF"
+                android:pathData="M16,24 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0"/>
+            <path android:fillColor="#FF0E5E43"
+                android:pathData="M16,24 m-6.5,0 a6.5,6.5 0 1,0 13,0 a6.5,6.5 0 1,0 -13,0"/>
+            <path android:fillColor="#FFFFFFFF" android:pathData="M25,12 h6 v30 h-6 z"/>
+        </group>
+    </group>
+
+    <!-- i -->
+    <group
+        android:name="letter_i1"
+        android:translateX="-120"
+        android:translateY="24"
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:alpha="0">
+        <group android:translateX="216">
+            <!-- stem -->
+            <path android:fillColor="#FFFFFFFF" android:pathData="M4,16 h8 v28 h-8 z"/>
+            <!-- dot -->
+            <path android:fillColor="#FFFFFFFF" android:pathData="M8,8 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"/>
+        </group>
+    </group>
+
+    <!-- i (second) -->
+    <group
+        android:name="letter_i2"
+        android:translateX="-120"
+        android:translateY="24"
+        android:scaleX="0.8"
+        android:scaleY="0.8"
+        android:alpha="0">
+        <group android:translateX="236">
+            <path android:fillColor="#FFFFFFFF" android:pathData="M4,16 h8 v28 h-8 z"/>
+            <path android:fillColor="#FFFFFFFF" android:pathData="M8,8 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"/>
+        </group>
+    </group>
+
+</vector>
