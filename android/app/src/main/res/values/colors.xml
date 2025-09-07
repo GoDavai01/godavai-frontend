@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="gd_deep_green">#0E5E43</color>
-    <color name="ic_launcher_background">#0E5E43</color>
+    <!-- GoDavaii deep green -->
+    <color name="gd_deep_green">#0F6E51</color>
+
+    <!-- Keep existing launcher bg ref if you use it elsewhere -->
+    <color name="ic_launcher_background">#0F6E51</color>
 </resources>
