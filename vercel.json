@@ -1,16 +1,19 @@
 {
-  "routes": [
-    { "src": "/static/(.*)", "dest": "/static/$1" },
-    { "src": "/images/(.*)", "dest": "/images/$1" },
-    { "src": "/favicon.ico", "dest": "/favicon.ico" },
-    { "src": "/pharmacy-icon.png", "dest": "/pharmacy-icon.png" },
-    { "src": "/logo192.png", "dest": "/logo192.png" },
-    { "src": "/logo512.png", "dest": "/logo512.png" },
-    { "src": "/manifest.json", "dest": "/manifest.json" },
-    { "src": "/asset-manifest.json", "dest": "/asset-manifest.json" },
-    { "src": "/robots.txt", "dest": "/robots.txt" },
-    { "src": "/service-worker.js", "dest": "/service-worker.js" },
-    { "src": "/(.*\\.(png|jpg|jpeg|gif|svg|webp))", "dest": "/$1" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ],
+  "headers": [
+    {
+      "source": "/static/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    }
   ]
 }
