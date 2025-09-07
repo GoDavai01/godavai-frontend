@@ -1,7 +1,13 @@
 // src/App.js
 import React, { useEffect } from "react";
 import axios from "axios";
-import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  useLocation,
+  useNavigate, // ⬅ added
+} from "react-router-dom";
 import "./i18n";
 import { ThemeProvider } from "./context/ThemeContext";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -9,7 +15,7 @@ import CssBaseline from "@mui/material/CssBaseline";
 import { CartProvider } from "./context/CartContext";
 import { AuthProvider } from "./context/AuthContext";
 
-import Navbar from "./components/Navbar"; 
+import Navbar from "./components/Navbar";
 import BottomNavBar from "./components/BottomNavBar";
 import MainLayout from "./components/MainLayout";
 import Home from "./components/Home";
@@ -21,14 +27,14 @@ import WelcomePage from "./components/WelcomePage";
 import OtpLogin from "./components/OtpLogin";
 import PharmacyDashboard from "./components/PharmacyDashboard";
 import AdminDashboard from "./components/AdminDashboard";
-import DeliveryDashboard from './components/DeliveryDashboard';
-import RegisterDeliveryPartner from './components/RegisterDeliveryPartner';
+import DeliveryDashboard from "./components/DeliveryDashboard";
+import RegisterDeliveryPartner from "./components/RegisterDeliveryPartner";
 import DriverSimulator from "./components/DriverSimulator";
 import PharmacyRegistrationStepper from "./components/PharmacyRegistrationStepper";
 import StepperStandalone from "./components/StepperStandalone";
 import AdminRegistration from "./components/AdminRegistration";
 import ProfilePage from "./components/ProfilePage";
-import PharmaciesNearYou from './pages/PharmaciesNearYou';
+import PharmaciesNearYou from "./pages/PharmaciesNearYou";
 import CheckoutPage from "./components/CheckoutPage";
 import PaymentPage from "./components/PaymentPage";
 import PaymentSuccess from "./components/PaymentSuccess";
@@ -36,7 +42,7 @@ import MyOrdersPage from "./components/MyOrdersPage";
 import OrderTracking from "./components/OrderTracking";
 import NotFound from "./components/NotFound";
 import SearchResults from "./pages/SearchResults";
-import AllMedicines from './pages/AllMedicines';
+import AllMedicines from "./pages/AllMedicines";
 import { LocationProvider } from "./context/LocationContext";
 
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -47,6 +53,32 @@ import Terms from "./pages/legal/Terms";
 import Refunds from "./pages/legal/Refunds";
 import Cookies from "./pages/legal/Cookies";
 import DeleteAccount from "./pages/legal/DeleteAccount";
+
+// === NEW: Android hardware Back support ===
+import { App as CapApp } from "@capacitor/app";
+import { useAndroidBack } from "./hooks/useAndroidBack";
+
+// Root routes where Back should offer "double-back to exit"
+const ROOT_ROUTES = new Set(["/", "/home", "/otp-login"]);
+
+// Shell that attaches global hardware-Back behavior
+function AppShell({ children }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useAndroidBack({
+    onBack: () => {
+      // If not on a root route, go back in history
+      if (!ROOT_ROUTES.has(location.pathname)) {
+        navigate(-1);
+      }
+      // else: fall through — the hook will handle double-back to exit
+    },
+    onExit: () => CapApp.exitApp(),
+  });
+
+  return children;
+}
 
 function AppContent() {
   const location = useLocation();
@@ -252,7 +284,10 @@ function App() {
         <AuthProvider>
           <CartProvider>
             <Router>
-              <AppContent />
+              {/* Attach hardware-Back handling around your whole app */}
+              <AppShell>
+                <AppContent />
+              </AppShell>
             </Router>
           </CartProvider>
         </AuthProvider>

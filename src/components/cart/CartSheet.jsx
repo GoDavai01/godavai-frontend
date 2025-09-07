@@ -49,7 +49,19 @@ export default function CartSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="bg-white max-h-[75vh] overflow-hidden rounded-t-2xl">
+      {/* Use small viewport units so mobile browser UI doesn’t cut content */}
+      <SheetContent
+        side="bottom"
+        className="
+          bg-white
+          max-h-[90svh]
+          h-auto
+          overflow-hidden
+          rounded-t-2xl
+          px-0
+        "
+      >
+        {/* Inner container centers and pads content; width locked to mobile */}
         <div className="mx-auto w-full max-w-md px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0)+8px)]">
           <SheetHeader className="mb-2">
             <SheetTitle className="text-lg font-black" style={{ color: DEEP }}>
@@ -57,7 +69,9 @@ export default function CartSheet({
             </SheetTitle>
           </SheetHeader>
 
-          <div className="max-h-[65vh] overflow-y-auto pr-1">
+          {/* Scroll area: takes available height inside the sheet */}
+          <div className="overflow-y-auto pr-1"
+               style={{ maxHeight: "calc(90svh - 72px)" }}>
             <CartBody
               onChangePharmacy={() => setSelectOpen(true)}
               onClearCart={onClearCart}
@@ -73,7 +87,7 @@ export default function CartSheet({
 
         {/* Inline Select Pharmacy dialog */}
         <Dialog open={selectOpen} onOpenChange={setSelectOpen}>
-          <DialogContent className="max-w-sm rounded-2xl">
+          <DialogContent className="max-w-[92vw] sm:max-w-sm rounded-2xl">
             <DialogHeader>
               <DialogTitle className="font-extrabold" style={{ color: DEEP }}>
                 Select a Pharmacy
@@ -100,11 +114,15 @@ export default function CartSheet({
                       className="w-full text-left px-3 py-2 rounded-lg transition flex items-center justify-between hover:bg-gray-50"
                       style={{ border: "1px solid rgba(15,110,81,0.25)" }}
                     >
-                      <span className="font-medium" style={{ color: "#0b3f30" }}>
+                      <span
+                        className="font-medium truncate pr-2"
+                        style={{ color: "#0b3f30", maxWidth: "70vw" }}
+                        title={ph.name}
+                      >
                         {ph.name}
                       </span>
                       {selectedPharmacy?._id === ph._id && (
-                        <Badge className="text-white" style={{ backgroundColor: DEEP }}>
+                        <Badge className="text-white shrink-0" style={{ backgroundColor: DEEP }}>
                           Selected
                         </Badge>
                       )}

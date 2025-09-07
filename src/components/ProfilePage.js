@@ -1,4 +1,3 @@
-// src/components/ProfilePage.js
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -217,46 +216,43 @@ export default function ProfilePage() {
   }
 
   // --- Orders (logic unchanged) ---
-const [orders, setOrders] = useState([]);
-const [orderDetail, setOrderDetail] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [orderDetail, setOrderDetail] = useState(null);
 
-// Fetch the logged-in user's orders with a fallback (same as MyOrdersPage)
-useEffect(() => {
-  if (!user?._id || !token) return;
+  useEffect(() => {
+    if (!user?._id || !token) return;
 
-  const ac = new AbortController();
+    const ac = new AbortController();
 
-  const load = async () => {
-    try {
-      const res = await axios.get(`${API_BASE_URL}/api/orders/myorders`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: ac.signal,
-      });
-      const sorted = [...res.data].sort(
-        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-      );
-      setOrders(sorted);
-    } catch {
-      // Fallback to userId-based route used on MyOrdersPage
+    const load = async () => {
       try {
-        const res2 = await axios.get(
-          `${API_BASE_URL}/api/allorders/myorders-userid/${user._id}`,
-          { signal: ac.signal }
-        );
-        const sorted2 = [...res2.data].sort(
+        const res = await axios.get(`${API_BASE_URL}/api/orders/myorders`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: ac.signal,
+        });
+        const sorted = [...res.data].sort(
           (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
         );
-        setOrders(sorted2);
+        setOrders(sorted);
       } catch {
-        setOrders([]);
+        try {
+          const res2 = await axios.get(
+            `${API_BASE_URL}/api/allorders/myorders-userid/${user._id}`,
+            { signal: ac.signal }
+          );
+          const sorted2 = [...res2.data].sort(
+            (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+          );
+          setOrders(sorted2);
+        } catch {
+          setOrders([]);
+        }
       }
-    }
-  };
+    };
 
-  load();
-
-  return () => ac.abort();
-}, [user?._id, token]);
+    load();
+    return () => ac.abort();
+  }, [user?._id, token]);
 
   const handleOrderAgain = (order) => {
     const pharmacyId =
@@ -312,11 +308,18 @@ useEffect(() => {
   const canEditMobile = !mobileLocked;
 
   return (
-    <div className="profile-page mx-auto w-full max-w-[520px] md:max-w-[680px] px-4 md:px-6 pb-28 pt-4 bg-white">
+    <div
+      className="
+        profile-page mx-auto w-full
+        max-w-[520px] md:max-w-[680px] lg:max-w-[820px]
+        px-4 sm:px-5 md:px-6
+        pb-28 pt-4 bg-white
+      "
+    >
       {/* Top: Profile Summary */}
-      <div className="flex items-center gap-4 py-3 md:py-4 border-b border-slate-100 mb-4">
-        <div className="relative">
-          <Avatar className="h-16 w-16 ring-2 ring-emerald-100">
+      <div className="flex items-center gap-3 sm:gap-4 py-3 md:py-4 border-b border-slate-100 mb-4">
+        <div className="relative shrink-0">
+          <Avatar className="h-14 w-14 sm:h-16 sm:w-16 ring-2 ring-emerald-100">
             <AvatarImage
               src={
                 user?.avatar ||
@@ -340,12 +343,18 @@ useEffect(() => {
 
         {/* Text column */}
         <div className="min-w-0 flex-1">
-          <h1 className="h1-strong truncate">{user?.name || "New User"}</h1>
+          <h1 className="h1-strong truncate text-[18px] sm:text-[20px] md:text-[22px]">
+            {user?.name || "New User"}
+          </h1>
           <div className="body mt-0.5 flex items-center gap-2 text-slate-700">
             <Mail className="h-4 w-4 shrink-0" />
-            <span className="truncate">{user?.email}</span>
+            <span className="truncate text-[13px] sm:text-[14px]">{user?.email}</span>
           </div>
-          {user?.mobile && <div className="body text-slate-700 truncate">{user.mobile}</div>}
+          {user?.mobile && (
+            <div className="body text-slate-700 truncate text-[13px] sm:text-[14px]">
+              {user.mobile}
+            </div>
+          )}
         </div>
       </div>
 
@@ -385,18 +394,20 @@ useEffect(() => {
                   setShowAddressForm(true);
                 }}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="font-semibold text-slate-900">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-slate-900 truncate">
                       {addr.type}
                       {addr.addressLine ? ` — ${addr.addressLine}` : ""}
                     </div>
-                    <div className="text-sm text-slate-600">{addr.formatted || addr.addressLine}</div>
+                    <div className="text-sm text-slate-600 truncate">
+                      {addr.formatted || addr.addressLine}
+                    </div>
                     {addr.isDefault && (
                       <Badge className="mt-2 bg-emerald-600 hover:bg-emerald-700">Default</Badge>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                     <Button
                       size="icon"
                       variant="ghost"
@@ -454,17 +465,17 @@ useEffect(() => {
                 key={card.id}
                 className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
               >
-                <div className="flex items-center gap-3">
-                  {cardIcons[card.brand] && <img src={cardIcons[card.brand]} alt={card.brand} className="w-8" />}
-                  <div className="text-sm">
-                    <div className="font-semibold text-slate-900">
+                <div className="flex items-center gap-3 min-w-0">
+                  {cardIcons[card.brand] && <img src={cardIcons[card.brand]} alt={card.brand} className="w-8 shrink-0" />}
+                  <div className="text-sm min-w-0">
+                    <div className="font-semibold text-slate-900 truncate">
                       {card.brand} •••• {card.last4}
                       <span className="ml-2 font-normal text-slate-600">{card.name}</span>
                       <span className="ml-3 text-slate-500">Exp: {card.expiry}</span>
                     </div>
                   </div>
                 </div>
-                <Button size="icon" variant="ghost" className="btn-ghost-soft" onClick={() => handleCardEdit(card)}>
+                <Button size="icon" variant="ghost" className="btn-ghost-soft shrink-0" onClick={() => handleCardEdit(card)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
               </div>
@@ -647,32 +658,31 @@ useEffect(() => {
       >
         <div className="mt-1 space-y-4">
           {/* Language */}
-<Row label={t("Language")}>
-  <Select value={language} onValueChange={handleLanguageChange}>
-  <SelectTrigger center className="gd-input h-10 w-full rounded-xl !font-bold">
-    <SelectValue placeholder="Choose" />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value="en">English</SelectItem>
-    <SelectItem value="hi">Hindi</SelectItem>
-  </SelectContent>
-</Select>
-</Row>
+          <Row label={t("Language")}>
+            <Select value={language} onValueChange={handleLanguageChange}>
+              <SelectTrigger center className="gd-input h-10 w-full rounded-xl !font-bold">
+                <SelectValue placeholder="Choose" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="hi">Hindi</SelectItem>
+              </SelectContent>
+            </Select>
+          </Row>
 
-{/* Theme */}
-<Row label={t("Theme")}>
-  <Select value={mode} onValueChange={handleThemeChange}>
-  <SelectTrigger center className="gd-input h-10 w-full rounded-xl !font-bold">
-    <SelectValue placeholder="Choose" />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value="Light">Light</SelectItem>
-    <SelectItem value="Dark">Dark</SelectItem>
-    <SelectItem value="System">System</SelectItem>
-  </SelectContent>
-</Select>
-</Row>
-
+          {/* Theme */}
+          <Row label={t("Theme")}>
+            <Select value={mode} onValueChange={handleThemeChange}>
+              <SelectTrigger center className="gd-input h-10 w-full rounded-xl !font-bold">
+                <SelectValue placeholder="Choose" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Light">Light</SelectItem>
+                <SelectItem value="Dark">Dark</SelectItem>
+                <SelectItem value="System">System</SelectItem>
+              </SelectContent>
+            </Select>
+          </Row>
         </div>
       </Section>
 
@@ -737,7 +747,7 @@ useEffect(() => {
       >
         <div className="mt-1 flex flex-col sm:flex-row gap-2">
           <Button
-            className="min-w-[220px] btn-primary-emerald !font-bold"
+            className="min-w-[220px] btn-primary-emerald !font-bold w-full sm:w-auto"
             onClick={() => {
               if (localStorage.getItem("pharmacyToken")) {
                 navigate("/pharmacy/dashboard");
@@ -750,7 +760,7 @@ useEffect(() => {
           </Button>
           <Button
             variant="outline"
-            className="min-w-[220px] btn-outline-soft !font-bold"
+            className="min-w-[220px] btn-outline-soft !font-bold w-full sm:w-auto"
             onClick={() => navigate("/pharmacy/register")}
           >
             {t("Register as Pharmacist")}
@@ -766,7 +776,7 @@ useEffect(() => {
       >
         <div className="mt-1 flex flex-col sm:flex-row gap-2">
           <Button
-            className="min-w-[220px] btn-primary-emerald !font-bold"
+            className="min-w-[220px] btn-primary-emerald !font-bold w-full sm:w-auto"
             onClick={() => {
               if (localStorage.getItem("deliveryToken")) {
                 navigate("/delivery/dashboard");
@@ -779,7 +789,7 @@ useEffect(() => {
           </Button>
           <Button
             variant="outline"
-            className="min-w-[220px] btn-outline-soft !font-bold"
+            className="min-w-[220px] btn-outline-soft !font-bold w-full sm:w-auto"
             onClick={() => navigate("/delivery/register")}
           >
             Register as Delivery Partner
@@ -793,11 +803,11 @@ useEffect(() => {
         expanded={openSections.support}
         onToggle={() => toggleSection("support")}
       >
-        <div className="mt-1 flex items-center gap-2">
-          <Button variant="outline" className="btn-outline-soft !font-bold" onClick={() => setSupportDialog(true)}>
+        <div className="mt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <Button variant="outline" className="btn-outline-soft !font-bold w-full sm:w-auto" onClick={() => setSupportDialog(true)}>
             Raise Ticket
           </Button>
-          <Button variant="ghost" className="btn-ghost-soft !font-bold" onClick={() => setChatSupportOpen(true)}>
+          <Button variant="ghost" className="btn-ghost-soft !font-bold w-full sm:w-auto" onClick={() => setChatSupportOpen(true)}>
             Contact Support
           </Button>
         </div>
@@ -813,10 +823,10 @@ useEffect(() => {
           <div className="mb-2 font-semibold text-slate-900">
             Refer friends and earn ₹50 GoDavaii Money on their first order!
           </div>
-          <div className="flex items-center gap-2">
-            <Input className="w-[260px] gd-input" value={referralCode} readOnly />
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <Input className="gd-input w-full sm:w-[260px]" value={referralCode} readOnly />
             <Button
-              className="btn-primary-emerald !font-bold"
+              className="btn-primary-emerald !font-bold w-full sm:w-auto"
               onClick={() => {
                 navigator.clipboard.writeText(referralCode);
                 setSnackbar({ open: true, message: "Referral link copied!", severity: "success" });
@@ -829,65 +839,64 @@ useEffect(() => {
       </Section>
 
       {/* Legal & Policies */}
-<Section
-  icon={<Shield className="h-5 w-5 text-emerald-700" />}
-  title="Legal & Policies"
-  expanded={openSections.legal}
-  onToggle={() => toggleSection("legal")}
->
-  <div className="mt-1 grid gap-2">
-    <button
-      className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
-      onClick={() => navigate("/privacy")}
-    >
-      <span className="font-semibold text-slate-900 inline-flex items-center gap-2">
-        <FileText className="h-4 w-4 text-emerald-700" /> Privacy Policy
-      </span>
-      <ChevronRight className="h-4 w-4 text-slate-400" />
-    </button>
+      <Section
+        icon={<Shield className="h-5 w-5 text-emerald-700" />}
+        title="Legal & Policies"
+        expanded={openSections.legal}
+        onToggle={() => toggleSection("legal")}
+      >
+        <div className="mt-1 grid gap-2">
+          <button
+            className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
+            onClick={() => navigate("/privacy")}
+          >
+            <span className="font-semibold text-slate-900 inline-flex items-center gap-2 truncate">
+              <FileText className="h-4 w-4 text-emerald-700 shrink-0" /> Privacy Policy
+            </span>
+            <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+          </button>
 
-    <button
-      className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
-      onClick={() => navigate("/terms")}
-    >
-      <span className="font-semibold text-slate-900 inline-flex items-center gap-2">
-        <ScrollText className="h-4 w-4 text-emerald-700" /> Terms & Conditions
-      </span>
-      <ChevronRight className="h-4 w-4 text-slate-400" />
-    </button>
+          <button
+            className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
+            onClick={() => navigate("/terms")}
+          >
+            <span className="font-semibold text-slate-900 inline-flex items-center gap-2 truncate">
+              <ScrollText className="h-4 w-4 text-emerald-700 shrink-0" /> Terms & Conditions
+            </span>
+            <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+          </button>
 
-    <button
-      className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
-      onClick={() => navigate("/refunds")}
-    >
-      <span className="font-semibold text-slate-900 inline-flex items-center gap-2">
-        <FileText className="h-4 w-4 text-emerald-700" /> Refunds & Cancellations
-      </span>
-      <ChevronRight className="h-4 w-4 text-slate-400" />
-    </button>
+          <button
+            className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
+            onClick={() => navigate("/refunds")}
+          >
+            <span className="font-semibold text-slate-900 inline-flex items-center gap-2 truncate">
+              <FileText className="h-4 w-4 text-emerald-700 shrink-0" /> Refunds & Cancellations
+            </span>
+            <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+          </button>
 
-    <button
-      className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
-      onClick={() => navigate("/cookies")}
-    >
-      <span className="font-semibold text-slate-900 inline-flex items-center gap-2">
-        <Cookie className="h-4 w-4 text-emerald-700" /> Cookie & Tracking Notice
-      </span>
-      <ChevronRight className="h-4 w-4 text-slate-400" />
-    </button>
+          <button
+            className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
+            onClick={() => navigate("/cookies")}
+          >
+            <span className="font-semibold text-slate-900 inline-flex items-center gap-2 truncate">
+              <Cookie className="h-4 w-4 text-emerald-700 shrink-0" /> Cookie & Tracking Notice
+            </span>
+            <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+          </button>
 
-    <button
-      className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
-      onClick={() => navigate("/delete-account")}
-    >
-      <span className="font-semibold text-slate-900 inline-flex items-center gap-2">
-        <UserX className="h-4 w-4 text-emerald-700" /> Delete Account (How-to)
-      </span>
-      <ChevronRight className="h-4 w-4 text-slate-400" />
-    </button>
-  </div>
-</Section>
-
+          <button
+            className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm"
+            onClick={() => navigate("/delete-account")}
+          >
+            <span className="font-semibold text-slate-900 inline-flex items-center gap-2 truncate">
+              <UserX className="h-4 w-4 text-emerald-700 shrink-0" /> Delete Account (How-to)
+            </span>
+            <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+          </button>
+        </div>
+      </Section>
 
       <div className="flex justify-center mt-6">
         <Button
@@ -933,7 +942,7 @@ useEffect(() => {
 
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <Avatar className="h-20 w-20">
+              <Avatar className="h-16 w-16 sm:h-20 sm:w-20">
                 <AvatarImage src={avatarPreview} />
                 <AvatarFallback>{(user?.name || "NU").slice(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
@@ -983,11 +992,11 @@ useEffect(() => {
             </Field>
           </div>
 
-          <DialogFooter>
-            <Button variant="ghost" className="btn-ghost-soft !font-bold" onClick={() => setEditDialog(false)} disabled={!editData.name || !editData.email || !editData.dob}>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
+            <Button variant="ghost" className="btn-ghost-soft !font-bold w-full sm:w-auto" onClick={() => setEditDialog(false)} disabled={!editData.name || !editData.email || !editData.dob}>
               Cancel
             </Button>
-            <Button className="btn-primary-emerald !font-bold" onClick={handleProfileSave} disabled={!editData.name || !editData.email || !editData.dob}>
+            <Button className="btn-primary-emerald !font-bold w-full sm:w-auto" onClick={handleProfileSave} disabled={!editData.name || !editData.email || !editData.dob}>
               Save
             </Button>
           </DialogFooter>
@@ -1003,10 +1012,10 @@ useEffect(() => {
           <Field label="Message">
             <Input className="gd-input" value={supportMsg} onChange={(e) => setSupportMsg(e.target.value)} placeholder="Type your issue..." />
           </Field>
-          <DialogFooter>
-            <Button variant="ghost" className="btn-ghost-soft !font-bold" onClick={() => setSupportDialog(false)}>Cancel</Button>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
+            <Button variant="ghost" className="btn-ghost-soft !font-bold w-full sm:w-auto" onClick={() => setSupportDialog(false)}>Cancel</Button>
             <Button
-              className="btn-primary-emerald !font-bold"
+              className="btn-primary-emerald !font-bold w-full sm:w-auto"
               onClick={() => {
                 if (!supportMsg.trim()) {
                   setSnackbar({ open: true, message: "Please enter a message.", severity: "error" });
@@ -1034,12 +1043,21 @@ function Section({ icon, title, expanded, onToggle, action, children }) {
   return (
     <div className="section">
       {/* Header (outside card) */}
-      <button onClick={onToggle} className="w-full group section-head">
+      <button
+        onClick={onToggle}
+        className="
+          w-full group section-head
+          flex items-center justify-between gap-2 sm:gap-3 flex-wrap text-left
+        "
+      >
         <div className="icon-tile">{icon}</div>
-        <div className="flex-1 text-left">
-          <div className="h2-strong">{title}</div>
+        <div className="flex-1 min-w-[160px] sm:min-w-[220px] text-left">
+          <div className="h2-strong text-[15px] sm:text-[16px]">{title}</div>
         </div>
-        {action}
+        {/* action (like Add New) can be wide; allow wrapping below on small screens */}
+        <div className="ml-auto order-3 sm:order-none w-full sm:w-auto flex justify-end">
+          {action}
+        </div>
         <ChevronDown className={`h-5 w-5 text-slate-500 transition-transform ${expanded ? "rotate-180" : ""}`} />
       </button>
 
@@ -1074,7 +1092,7 @@ function ToggleRow({ label, checked, onChange }) {
 /** Grid row so labels and controls align perfectly */
 function Row({ label, children }) {
   return (
-    <div className="grid grid-cols-[120px_1fr] items-center gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] items-start sm:items-center gap-2 sm:gap-3">
       <div className="text-sm font-semibold text-slate-900">{label}</div>
       <div className="w-full">{children}</div>
     </div>

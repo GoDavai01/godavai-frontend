@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+    <!-- group so we can rotate the whole pill -->
+    <group
+        android:name="pill_group"
+        android:pivotX="144"
+        android:pivotY="144">
+        <!-- pill background (white) -->
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M72,120
+                              a48,48 0 0 1 48,-48
+                              h48
+                              a48,48 0 0 1 48,48
+                              v48
+                              a48,48 0 0 1 -48,48
+                              h-48
+                              a48,48 0 0 1 -48,-48
+                              z"/>
+        <!-- pill split line (deep green tint) -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#0E5E43"
+            android:strokeWidth="8"
+            android:pathData="M96,144h96"/>
+        <!-- small cross (medical plus) in center -->
+        <path
+            android:fillColor="#0E5E43"
+            android:pathData="M140,124h8v16h16v8h-16v16h-8v-16h-16v-8h16z"/>
+    </group>
+</vector>

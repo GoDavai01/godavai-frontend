@@ -27,8 +27,8 @@ export default function AddressSelector({
   onDelete,
 }) {
   return (
-    <div className="mb-3">
-      <h3 className="text-base font-bold mb-2">Delivery Address</h3>
+    <div className="mb-3 w-full max-w-full">
+      <h3 className="text-base sm:text-lg font-bold mb-2">Delivery Address</h3>
 
       <div className="rounded-2xl bg-zinc-50/60 p-2">
         {addresses.length === 0 && (
@@ -55,28 +55,49 @@ export default function AddressSelector({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 6 }}
                 transition={{ duration: 0.15 }}
-                className={`relative mb-2 last:mb-0 rounded-2xl border p-3 cursor-pointer
-                ${selected
-                    ? "bg-amber-50 border-amber-300 shadow-sm"
-                    : "bg-white border-zinc-200 hover:bg-zinc-50"
+                className={`relative mb-2 last:mb-0 rounded-2xl border p-3 cursor-pointer max-w-full
+                  ${
+                    selected
+                      ? "bg-amber-50 border-amber-300 shadow-sm"
+                      : "bg-white border-zinc-200 hover:bg-zinc-50"
                   }`}
                 onClick={() => onSelect(address.id)}
               >
-                {/* Chip */}
-                <div className="flex items-start gap-3 pr-16">
-                  <div className="inline-flex items-center gap-1 rounded-full bg-teal-50 text-teal-700 border border-teal-200 px-2 py-1 text-[11px] font-semibold">
+                {/* Content row */}
+                <div className="flex items-start gap-2.5 sm:gap-3 pr-2 sm:pr-16 flex-wrap">
+                  {/* Type chip */}
+                  <div className="inline-flex items-center gap-1 rounded-full bg-teal-50 text-teal-700 border border-teal-200 px-2 py-1 text-[11px] font-semibold shrink-0">
                     {TYPE_ICONS[address.type] || TYPE_ICONS.Other}
                     <span className="ml-1">{address.type || "Other"}</span>
                   </div>
 
-                  <div className="flex-1">
-                    <div className="text-[15px] font-bold leading-snug">
+                  {/* Texts */}
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className="text-[14.5px] sm:text-[15px] font-bold leading-snug break-words"
+                      title={[
+                        address.name,
+                        address.addressLine,
+                        address.floor && `Floor: ${address.floor}`,
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    >
                       {address.name}
                       {address.addressLine ? `, ${address.addressLine}` : ""}
                       {address.floor ? `, Floor: ${address.floor}` : ""}
                     </div>
 
-                    <div className="mt-0.5 text-[13px] text-zinc-600 leading-snug line-clamp-2">
+                    <div
+                      className="mt-0.5 text-[12.5px] sm:text-[13px] text-zinc-600 leading-snug line-clamp-2 sm:line-clamp-3 break-words"
+                      title={[
+                        address.formatted || address.addressLine,
+                        address.landmark && `Landmark: ${address.landmark}`,
+                        address.phone,
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    >
                       {address.formatted ? address.formatted : address.addressLine}
                       {address.landmark ? `, Landmark: ${address.landmark}` : ""}
                       {address.phone ? `, ${address.phone}` : ""}
@@ -85,7 +106,8 @@ export default function AddressSelector({
                 </div>
 
                 {/* Actions */}
-                <div className="absolute right-2 top-2 flex items-center gap-1.5">
+                {/* On small screens, show actions inline below content; on >=sm keep absolute top-right */}
+                <div className="mt-2 sm:mt-0 sm:absolute sm:right-2 sm:top-2 flex items-center gap-1.5 justify-end">
                   <button
                     type="button"
                     aria-label="Edit Address"

@@ -50,14 +50,22 @@ export function Dialog({ open, onOpenChange, children }) {
       // Force light scheme inside the overlay (prevents iOS/Android dark inversion)
       data-theme="light"
     >
-      {/* Scroll container (full viewport). No padding-top/bottom so the modal sits OVER nav bars */}
-      <div className="absolute inset-0 overflow-y-auto">
-        <div className="min-h-full w-full flex items-center justify-center px-3 py-4">
+      {/* Full-viewport scroll container with modern viewport units */}
+      <div className="absolute inset-0 overflow-auto overscroll-contain">
+        <div
+          className="
+            min-h-[100svh] w-full
+            flex items-center justify-center
+            px-3 py-4 sm:py-6
+          "
+          // Respect notches / system bars
+          style={{
+            paddingTop: "max(0.75rem, env(safe-area-inset-top, 0px))",
+            paddingBottom: "max(0.75rem, env(safe-area-inset-bottom, 0px))",
+          }}
+        >
           {/* Stop propagation so clicks inside content don't close */}
-          <div
-            className="pointer-events-auto"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
+          <div className="pointer-events-auto max-w-full" onMouseDown={(e) => e.stopPropagation()}>
             {children}
           </div>
         </div>
@@ -70,23 +78,28 @@ export function Dialog({ open, onOpenChange, children }) {
 
 /**
  * DialogContent
- * - Remove `dark:*` backgrounds so system dark mode can't flip the panel.
- * - Add `dark:!bg-white dark:!text-zinc-900` as a defensive override in case
- *   a parent sets `.dark` (class-based theming).
- * - Add `[color-scheme:light]` to hint the browser to render controls in light.
+ * - Fits on every device: uses svh/dvh clamps and internal scroll.
+ * - Keeps light color scheme regardless of OS theme.
+ * - API unchanged; consumer className still augments/overrides.
  */
 export function DialogContent({ className = "", children, ...props }) {
   return (
     <div
       {...props}
       className={cn(
-        // Force light theme visuals regardless of OS/browser dark mode
-        "relative z-[3001] rounded-3xl overflow-hidden shadow-2xl w-full max-w-md p-6 animate-in fade-in-90 scale-in-95 max-h-full",
-        "bg-white text-zinc-900",
-        // If the app uses class-based dark mode higher up, keep this panel light
-        "dark:!bg-white dark:!text-zinc-900",
-        // Tell the browser to treat this subtree as light (affects native controls)
-        "[color-scheme:light]",
+        // Sizing: fill width up to a sensible max; never exceed viewport height
+        "relative z-[3001] w-full",
+        "max-w-[min(96vw,740px)] md:max-w-[min(92vw,920px)]",
+        // Height clamp with modern viewport units + fallback
+        "max-h-[min(92svh,calc(100dvh-32px))] md:max-h-[min(92svh,calc(100dvh-64px))]",
+        // Rounded and shadow; allow internal scrolling if content is long
+        "rounded-2xl sm:rounded-3xl shadow-2xl overflow-auto",
+        // Default padding (callers can override with className)
+        "p-6",
+        // Force light visuals
+        "bg-white text-zinc-900 dark:!bg-white dark:!text-zinc-900 [color-scheme:light]",
+        // Entry animation
+        "animate-in fade-in-90 scale-in-95",
         className
       )}
     >

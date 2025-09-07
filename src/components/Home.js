@@ -1,4 +1,3 @@
-// src/components/Home.js
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
@@ -62,7 +61,10 @@ const getImageUrl = (img) => {
     return "https://img.freepik.com/free-vector/medicine-bottle-pills-isolated_1284-42391.jpg?w=400";
   if (typeof img === "string" && img.startsWith("/uploads/"))
     return `${API_BASE_URL}${img}`;
-  if (typeof img === "string" && (img.startsWith("http://") || img.startsWith("https://")))
+  if (
+    typeof img === "string" &&
+    (img.startsWith("http://") || img.startsWith("https://"))
+  )
     return img;
   return img;
 };
@@ -70,24 +72,24 @@ const getImageUrl = (img) => {
 const DEEP = "#0f6e51";
 
 function formatPharmacyDistance(ph) {
-  // prefer distanceKm from API, else derive from distanceMeters,
-  // lastly support old shape { dist: { calculated } } for safety
-  const km = 
+  const km =
     typeof ph?.distanceKm === "number"
       ? ph.distanceKm
       : typeof ph?.distanceMeters === "number"
-        ? ph.distanceMeters / 1000
-        : typeof ph?.dist?.calculated === "number"
-          ? ph.dist.calculated / 1000
-          : null;
+      ? ph.distanceMeters / 1000
+      : typeof ph?.dist?.calculated === "number"
+      ? ph.dist.calculated / 1000
+      : null;
 
   if (km == null || Number.isNaN(km)) return "--";
   return km < 1 ? "<1 km" : `${km.toFixed(1)} km`;
 }
 
-
 /* ---------- Horizontal medicine card (image left, details right) ---------- */
 function MedCard({ med, onAdd, onOpen }) {
+  // allow parent to disable add
+  const disabled =
+    typeof onAdd?.disabled === "boolean" ? onAdd.disabled : false;
   const [src, setSrc] = useState(
     getImageUrl(med.img || med.image || med.imageUrl) || ICONS.medicine
   );
@@ -97,7 +99,7 @@ function MedCard({ med, onAdd, onOpen }) {
 
   return (
     <div
-      className="min-w-[260px] max-w-[260px] h-[106px] rounded-2xl bg-white/95 ring-1 ring-[var(--pillo-surface-border)] shadow-sm flex items-center p-3 gap-3 cursor-pointer active:scale-[0.99] transition"
+      className="min-w-[240px] max-w-[240px] sm:min-w-[260px] sm:max-w-[260px] h-[106px] rounded-2xl bg-white/95 ring-1 ring-[var(--pillo-surface-border)] shadow-sm flex items-center p-3 gap-3 cursor-pointer active:scale-[0.99] transition"
       onClick={() => onOpen?.(med)}
     >
       {/* BIG thumbnail */}
@@ -114,7 +116,7 @@ function MedCard({ med, onAdd, onOpen }) {
       {/* Details */}
       <div className="flex-1 min-w-0">
         <div
-          className="text-[14.5px] font-bold text-[var(--pillo-active-text)]"
+          className="text-[13.5px] sm:text-[14.5px] font-bold text-[var(--pillo-active-text)] break-words"
           style={{
             display: "-webkit-box",
             WebkitLineClamp: 2,
@@ -123,7 +125,6 @@ function MedCard({ med, onAdd, onOpen }) {
           }}
           title={med.brand || med.name || med.medicineName}
         >
-          {/* BRAND first (fallback to name) */}
           {med.brand || med.name || med.medicineName || "Medicine"}
         </div>
 
@@ -138,9 +139,16 @@ function MedCard({ med, onAdd, onOpen }) {
           <button
             onClick={(e) => {
               e.stopPropagation();
+              if (disabled) return;
               onAdd(med);
             }}
-            className="rounded-full bg-[var(--pillo-active-text)] text-white text-[12px] font-bold px-3 py-1.5 shadow hover:brightness-105"
+            disabled={disabled}
+            className={`rounded-full text-white text-[12px] font-bold px-3 py-1.5 shadow
+              ${
+                disabled
+                  ? "bg-gray-300 cursor-not-allowed"
+                  : "bg-[var(--pillo-active-text)] hover:brightness-105"
+              }`}
           >
             Add
           </button>
@@ -168,6 +176,7 @@ export default function Home() {
     cart.length > 0 ? 144 : 72
   }px + env(safe-area-inset-bottom, 0px) + 12px)`;
   const [allMedsByPharmacy, setAllMedsByPharmacy] = useState({});
+  const [canDeliver, setCanDeliver] = useState(true);
 
   // Dialog state (reuse Medicines.js UI)
   const [selectedMed, setSelectedMed] = useState(null);
@@ -232,6 +241,19 @@ export default function Home() {
       );
     }
   }, [currentAddress]);
+
+  // check delivery partner availability near the user
+  useEffect(() => {
+    const lat = Number(currentAddress?.lat ?? userCoords?.lat);
+    const lng = Number(currentAddress?.lng ?? userCoords?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    fetch(
+      `${API_BASE_URL}/api/delivery/active-partner-nearby?lat=${lat}&lng=${lng}`
+    )
+      .then((r) => r.json())
+      .then((d) => setCanDeliver(!!d.activePartnerExists))
+      .catch(() => setCanDeliver(false));
+  }, [currentAddress, userCoords]);
 
   useEffect(() => {
     async function fetchLastOrder() {
@@ -352,6 +374,10 @@ export default function Home() {
   }, [selectedCategory, pharmaciesNearby]);
 
   const handleAddToCart = (med) => {
+    if (!canDeliver) {
+      alert("Sorry, delivery isn’t available at your location right now.");
+      return;
+    }
     if ((cart?.length || 0) > 0) {
       const cartPharmacyId = cart[0]?.pharmacy?._id || cart[0]?.pharmacy;
       if (
@@ -427,7 +453,18 @@ export default function Home() {
     .sort((a, b) => b.medCount - a.medCount);
 
   return (
-    <div className="min-h-screen max-w-md mx-auto bg-[var(--pillo-page-bg,linear-gradient(180deg,#f9fbff,white))] pb-32 relative">
+    <div
+      className="
+        min-h-screen
+        w-full
+        mx-auto
+        bg-[var(--pillo-page-bg,linear-gradient(180deg,#f9fbff,white))]
+        pb-32
+        relative
+        overflow-x-hidden
+        max-w-[420px] md:max-w-[720px] lg:max-w-[980px]
+      "
+    >
       {/* TOP NAV */}
       <Navbar />
 
@@ -481,6 +518,12 @@ export default function Home() {
             <span>≤ 30 min delivery</span>
           </div>
         </div>
+        {!canDeliver && (
+          <div className="mt-2 bg-red-50 text-red-700 font-bold text-[13.5px] px-3 py-2 rounded-xl text-center">
+            ⛔ Sorry, no delivery partner is available at your location right
+            now. Please try again soon.
+          </div>
+        )}
       </div>
 
       {/* Track Order CTA */}
@@ -529,13 +572,15 @@ export default function Home() {
               <span className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-white ring-1 ring-[var(--pillo-surface-border)] mb-2 shadow">
                 <img src={ICONS.pharmacy} className="w-7 h-7" alt="Pharmacy" />
               </span>
-              <div className="font-semibold text-[15px] truncate text-center text-[var(--pillo-active-text)]">
+              <div
+                className="font-semibold text-[15px] truncate text-center text-[var(--pillo-active-text)]"
+                title={ph.name}
+              >
                 {ph.name}
               </div>
               <div className="text-xs text-neutral-400 mt-0.5">
-  {formatPharmacyDistance(ph)}
-</div>
-
+                {formatPharmacyDistance(ph)}
+              </div>
             </div>
           ))}
         </div>
@@ -563,7 +608,7 @@ export default function Home() {
       {selectedCategory &&
         !showFallbackMeds &&
         filteredPharmacies.every((ph) => ph.medicines.length === 0) && (
-          <div className="text-center text-gray-400 mt-8 text-lg font-semibold">
+          <div className="text-center text-gray-400 mt-8 text-lg font-semibold px-4">
             No medicines available in "{selectedCategory}" category.
             <br />
             <span className="text-sm text-gray-400">
@@ -582,7 +627,8 @@ export default function Home() {
               <div className="flex items-center justify-between mb-2">
                 <button
                   onClick={() => navigate(`/medicines/${ph._id}`)}
-                  className="font-extrabold text-lg text-[var(--pillo-active-text)] inline-flex items-center gap-2"
+                  className="font-extrabold text-lg text-[var(--pillo-active-text)] inline-flex items-center gap-2 truncate"
+                  title={`Medicines at ${ph.name}`}
                 >
                   Medicines at {ph.name}
                 </button>
@@ -597,10 +643,12 @@ export default function Home() {
               <div className="flex gap-3 pb-2 snap-x overflow-x-auto">
                 {ph.medicines.map((med, mi) => (
                   <div key={med._id || mi} className="snap-center">
-                    {/* OPEN dialog (not redirect) */}
                     <MedCard
                       med={med}
-                      onAdd={handleAddToCart}
+                      onAdd={Object.assign(
+                        (m) => handleAddToCart(m),
+                        { disabled: !canDeliver }
+                      )}
                       onOpen={(m) => {
                         setSelectedMed(m);
                         setActiveImg(0);
@@ -668,7 +716,7 @@ export default function Home() {
           <div className="font-extrabold text-[17px] text-[var(--pillo-active-text)] mb-1 text-center">
             Your last order
           </div>
-          <div className="text-[14px] text-neutral-500 text-center">
+          <div className="text-[14px] text-neutral-500 text-center break-words">
             {lastOrder && Array.isArray(lastOrder.items) && lastOrder.items.length
               ? lastOrder.items
                   .map(
@@ -781,9 +829,7 @@ export default function Home() {
                     <>
                       <button
                         className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5"
-                        onClick={() =>
-                          setActiveImg((i) => Math.max(0, i - 1))
-                        }
+                        onClick={() => setActiveImg((i) => Math.max(0, i - 1))}
                       >
                         ‹
                       </button>
@@ -808,7 +854,9 @@ export default function Home() {
                           key={i}
                           onClick={() => setActiveImg(i)}
                           className={`h-1.5 rounded-full cursor-pointer transition-all ${
-                            i === activeImg ? "w-5 bg-emerald-600" : "w-2.5 bg-emerald-200"
+                            i === activeImg
+                              ? "w-5 bg-emerald-600"
+                              : "w-2.5 bg-emerald-200"
                           }`}
                         />
                       ))}
@@ -897,9 +945,14 @@ export default function Home() {
                   className="flex-1 font-bold"
                   style={{ backgroundColor: DEEP, color: "white" }}
                   onClick={() => {
+                    if (!canDeliver) {
+                      alert("Delivery isn’t available right now.");
+                      return;
+                    }
                     handleAddToCart(selectedMed);
                     setSelectedMed(null);
                   }}
+                  disabled={!canDeliver}
                 >
                   Add to Cart
                 </Button>

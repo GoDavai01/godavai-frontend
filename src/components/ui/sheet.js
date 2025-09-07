@@ -10,27 +10,52 @@ export const SheetTrigger = Dialog.Trigger;
 export const SheetClose   = Dialog.Close;
 
 function getSideClasses(side = "right") {
+  // Responsive, viewport-safe dimensions:
+  // - Left/Right: full height (100svh), internal scroll, width adapts by device
+  // - Top/Bottom: full width, max height capped to viewport (svh), internal scroll
   switch (side) {
     case "left":
       return {
-        content:
-          "fixed inset-y-0 left-0 w-3/4 max-w-sm rounded-r-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
+        content: [
+          "fixed inset-y-0 left-0",
+          "h-[100svh] max-h-[100svh] overflow-y-auto overscroll-contain",
+          "w-[92vw] sm:w-[420px] md:w-[480px] lg:w-[520px]",
+          "rounded-r-xl",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out",
+          "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
+        ].join(" "),
       };
     case "right":
       return {
-        content:
-          "fixed inset-y-0 right-0 w-3/4 max-w-sm rounded-l-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+        content: [
+          "fixed inset-y-0 right-0",
+          "h-[100svh] max-h-[100svh] overflow-y-auto overscroll-contain",
+          "w-[92vw] sm:w-[420px] md:w-[480px] lg:w-[520px]",
+          "rounded-l-xl",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out",
+          "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+        ].join(" "),
       };
     case "top":
       return {
-        content:
-          "fixed inset-x-0 top-0 w-full rounded-b-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+        content: [
+          "fixed inset-x-0 top-0 w-full",
+          "max-h-[92svh] md:max-h-[88svh] overflow-y-auto overscroll-contain",
+          "rounded-b-2xl",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out",
+          "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+       ].join(" "),
       };
     case "bottom":
     default:
       return {
-        content:
-          "fixed inset-x-0 bottom-0 w-full rounded-t-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+        content: [
+          "fixed inset-x-0 bottom-0 w-full",
+          "max-h-[92svh] md:max-h-[88svh] overflow-y-auto overscroll-contain",
+          "rounded-t-2xl",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out",
+          "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+        ].join(" "),
       };
   }
 }

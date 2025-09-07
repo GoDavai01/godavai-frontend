@@ -1,20 +1,27 @@
-// src/components/AddressForm.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { MapPin, LocateFixed, X } from "lucide-react";
 import { useLocation } from "../context/LocationContext";
-// ✅ use the shared loader (no direct script tags, no hard-coded key)
 import { loadGoogleMaps } from "../utils/googleMaps";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-
-// Deep-green brand tone
 const DEEP = "#0f6e51";
 
 /* --------------------------- Headless Modal --------------------------- */
-function Modal({ open, onClose, children, maxWidth = "max-w-md", zIndex = 2600 }) {
+/** Responsive modal: centers on large screens, fills viewport on phones.
+ *  - Uses svh so the content isn't cut by mobile browser chrome
+ *  - Inner body scrolls; header/footer stay visible
+ */
+function Modal({
+  open,
+  onClose,
+  children,
+  // responsive width: tight on phones, wider on larger screens
+  maxWidth = "max-w-[92vw] sm:max-w-md md:max-w-lg",
+  zIndex = 2600,
+}) {
   const pushedRef = useRef(false);
 
   useEffect(() => {
@@ -52,8 +59,19 @@ function Modal({ open, onClose, children, maxWidth = "max-w-md", zIndex = 2600 }
 
   return createPortal(
     <div className="fixed inset-0" style={{ zIndex }}>
+      {/* Transparent backdrop to keep your current look */}
       <div className="absolute inset-0 pointer-events-none" />
-      <div className="absolute inset-0 overflow-y-auto p-4 grid place-items-center">
+      {/* Viewport container (flex so tall content naturally anchors to top on phones) */}
+      <div
+        className="
+          absolute inset-0 overflow-y-auto
+          px-3 sm:px-4
+          pt-3 sm:pt-6
+          pb-[max(12px,env(safe-area-inset-bottom))]
+          flex items-start sm:items-center justify-center
+        "
+        style={{ minHeight: "100svh" }}
+      >
         <AnimatePresence initial>
           <motion.div
             key="address-modal"
@@ -64,7 +82,11 @@ function Modal({ open, onClose, children, maxWidth = "max-w-md", zIndex = 2600 }
             className={`relative w-full ${maxWidth}`}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="bg-white rounded-2xl shadow-2xl border" style={{ borderColor: "#e5e7eb" }}>
+            <div
+              className="bg-white rounded-2xl shadow-2xl border flex flex-col"
+              style={{ borderColor: "#e5e7eb", maxHeight: "92svh" }}
+            >
+              {/* Close */}
               <button
                 type="button"
                 aria-label="Close"
@@ -74,17 +96,10 @@ function Modal({ open, onClose, children, maxWidth = "max-w-md", zIndex = 2600 }
               >
                 <X className="h-5 w-5" style={{ color: "#6b7280" }} />
               </button>
+
+              {/* Content from children will include header/body/footer.
+                  Make body scrollable while header/footer stay fixed inside card. */}
               {children}
-              <div className="px-5 pb-4 -mt-2">
-                <button
-                  type="button"
-                  onClick={safeClose}
-                  className="w-full rounded-xl bg-white py-2 text-sm font-bold hover:bg-gray-50"
-                  style={{ color: DEEP, border: `1px solid ${DEEP}66` }}
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
           </motion.div>
         </AnimatePresence>
@@ -199,17 +214,15 @@ export default function AddressForm({
     setOptions([]);
   };
 
-  // ✅ Map init/update using loader util
+  // Map init/update using loader util
   useEffect(() => {
     if (!open || !pin) return;
 
-    let googleCache;
     let map = mapRef.current;
     let marker = markerRef.current;
 
-    loadGoogleMaps() // default libraries include 'places'; fine here
+    loadGoogleMaps()
       .then((google) => {
-        googleCache = google;
         const div = mapDivRef.current;
         if (!div) return;
 
@@ -244,8 +257,6 @@ export default function AddressForm({
       .catch((e) => {
         console.error("Google Maps failed to load:", e);
       });
-
-    // no special cleanup needed beyond refs; component unmount will drop map
   }, [open, pin]);
 
   const handleSave = () => {
@@ -265,13 +276,21 @@ export default function AddressForm({
 
   return (
     <Modal open={open} onClose={onClose} zIndex={modalZIndex}>
-      <div className="px-5 pt-5 pb-3 border-b" style={{ borderColor: "#f1f5f9" }}>
-        <h3 className="text-lg font-extrabold tracking-tight" style={{ color: DEEP }}>
+      {/* Header */}
+      <div
+        className="px-5 pt-5 pb-3 border-b shrink-0"
+        style={{ borderColor: "#f1f5f9" }}
+      >
+        <h3 className="text-base sm:text-lg font-extrabold tracking-tight" style={{ color: DEEP }}>
           Add/Edit Address
         </h3>
       </div>
 
-      <div className="px-5 pb-3 pt-3 space-y-3">
+      {/* Body: make it scrollable within the card */}
+      <div
+        className="px-5 pt-3 pb-3 space-y-3 overflow-y-auto"
+        style={{ maxHeight: "calc(92svh - 120px)" }} // header + footer area
+      >
         <button
           type="button"
           onClick={() => {
@@ -294,7 +313,8 @@ export default function AddressForm({
           Use My Current Location
         </button>
 
-        <div className="flex gap-2">
+        {/* Type chips: wrap on small screens */}
+        <div className="flex gap-2 flex-wrap">
           {["Home", "Work", "Other"].map((t) => {
             const selected = type === t;
             return (
@@ -348,6 +368,7 @@ export default function AddressForm({
             onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, ""))}
             maxLength={15}
             placeholder="+91…"
+            inputMode="tel"
           />
         </div>
 
@@ -375,8 +396,8 @@ export default function AddressForm({
 
           {options.length > 0 && (
             <div
-              className="absolute z-10 mt-1 w-full rounded-xl bg-white shadow-lg max-h-56 overflow-auto border"
-              style={{ borderColor: "#e5e7eb" }}
+              className="absolute z-10 mt-1 w-full rounded-xl bg-white shadow-lg overflow-auto border"
+              style={{ borderColor: "#e5e7eb", maxHeight: "40svh" }}
             >
               {options.map((o) => (
                 <button
@@ -400,12 +421,16 @@ export default function AddressForm({
 
         {pin && (
           <div className="space-y-2">
-            {/* 🔁 map target */}
             <div
               ref={mapDivRef}
               id="map-preview"
-              className="w-full h-64 rounded-xl border shadow-sm"
-              style={{ borderColor: "#e5e7eb" }}
+              className="w-full rounded-xl border shadow-sm"
+              /* Responsive map height: comfortable on phones, capped on large screens */
+              style={{
+                borderColor: "#e5e7eb",
+                height: "min(38svh, 320px)",
+                minHeight: "220px",
+              }}
             />
             <p className="text-center text-xs" style={{ color: "#6b7280" }}>
               Drag the pin if needed to your exact entrance!
@@ -427,7 +452,10 @@ export default function AddressForm({
             placeholder="E.g., Ground, Flat 2B"
           />
         </div>
+      </div>
 
+      {/* Footer (sticks inside card), plus a dedicated Cancel to keep spacing consistent */}
+      <div className="px-5 pb-4 -mt-2 space-y-2 shrink-0">
         <button
           type="button"
           onClick={handleSave}
@@ -436,6 +464,14 @@ export default function AddressForm({
           style={{ backgroundColor: DEEP }}
         >
           Save Address
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full rounded-xl bg-white py-2 text-sm font-bold hover:bg-gray-50"
+          style={{ color: DEEP, border: `1px solid ${DEEP}66` }}
+        >
+          Cancel
         </button>
       </div>
     </Modal>
