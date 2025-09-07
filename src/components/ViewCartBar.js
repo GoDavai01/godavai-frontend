@@ -9,8 +9,9 @@ import CartSheet from "./cart/CartSheet";
 const HIDDEN_ROUTES = ["/profile", "/checkout", "/cart"];
 
 // Also hide on welcome & auth entry points.
+// If your welcome route is "/", this covers it. If you use "/welcome", that’s covered too.
 const HIDE_EXACT = ["/", "/otp-login", "/login", "/register"];
-const HIDE_PREFIXES = ["/welcome"];
+const HIDE_PREFIXES = ["/welcome"]; // add more prefixes if needed, e.g., "/onboarding"
 
 const BOTTOM_NAV_HEIGHT = 72;
 const GAP_ABOVE_NAV = 8;
@@ -82,52 +83,40 @@ export default function ViewCartBar() {
             className="fixed left-0 right-0 z-[1200]"
             style={{ bottom: BOTTOM_OFFSET }}
           >
-            {/* Container scales to device: full width on mobile, centered on larger screens */}
-            <div className="mx-auto w-full max-w-[800px] px-3 sm:px-4">
+            <div className="mx-auto w-full max-w-[520px] px-3">
               <div
-                className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5 sm:py-3 backdrop-blur-xl bg-white/90 shadow-[0_-6px_24px_rgba(16,24,40,0.12)] flex-wrap sm:flex-nowrap"
+                className="flex items-center justify-between rounded-2xl px-3 py-3 backdrop-blur-xl bg-white/90 shadow-[0_-6px_24px_rgba(16,24,40,0.12)]"
                 style={{ border: "1px solid rgba(15,110,81,0.14)" }}
               >
-                {/* Left block (shrinks gracefully) */}
-                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                  <div className="relative shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
                     <div
                       className="rounded-2xl p-2"
                       style={{ background: "rgba(15,110,81,0.10)" }}
                     >
-                      <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6" style={{ color: DEEP }} />
+                      <ShoppingCart className="h-6 w-6" style={{ color: DEEP }} />
                     </div>
                     <span
                       className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-bold text-white"
                       style={{ background: DEEP }}
-                      aria-live="polite"
                     >
                       {cart.length}
                     </span>
                   </div>
-
-                  <div className="leading-tight min-w-0">
-                    <div
-                      className="text-[14px] sm:text-[15px] font-extrabold text-[#0b3f30] truncate"
-                      title={`${cart.length} ${cart.length === 1 ? "item" : "items"}`}
-                    >
+                  <div className="leading-tight">
+                    <div className="text-[15px] font-extrabold" style={{ color: "#0b3f30" }}>
                       {cart.length} {cart.length === 1 ? "item" : "items"}
                     </div>
-                    <div
-                      className="text-[13px] sm:text-sm font-semibold truncate"
-                      style={{ color: DEEP }}
-                      title={`₹${total}`}
-                    >
+                    <div className="text-sm font-semibold" style={{ color: DEEP }}>
                       ₹{total}
                     </div>
                   </div>
                 </div>
 
-                {/* CTA: full-width on phones, auto on larger */}
                 <Button
                   size="lg"
                   onClick={() => setOpen(true)}
-                  className="rounded-full px-4 sm:px-5 font-extrabold tracking-wide text-white text-[14px] sm:text-[15px] hover:brightness-105 shadow-lg w-full sm:w-auto"
+                  className="rounded-full px-5 font-extrabold tracking-wide text-white text-[15px] hover:brightness-105 shadow-lg"
                   style={{ backgroundColor: DEEP }}
                 >
                   VIEW CART
