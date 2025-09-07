@@ -50,9 +50,7 @@ const getRouteAndDistance = async (origin, destination) => {
       {
         origin: new google.maps.LatLng(origin.lat, origin.lng),
         destination: new google.maps.LatLng(destination.lat, destination.lng),
-        // TWO_WHEELER isn't exposed here; use DRIVING for preview.
-        // We open Google Maps with travelmode=two_wheeler for real nav.
-        travelMode: google.maps.TravelMode.DRIVING,
+        travelMode: google.maps.TravelMode.DRIVING, // preview; we open 2-wheeler for real nav
         provideRouteAlternatives: false,
       },
       (result, status) => {
@@ -73,7 +71,6 @@ const getRouteAndDistance = async (origin, destination) => {
 };
 
 // Obfuscate a coordinate by ~400m (privacy circle center)
-// deterministic-enough per render by caching per order id
 function jitterLatLng(lat, lng, meters = 400) {
   const earth = 111320; // meters per degree latitude
   const dLat = (meters / earth) * (Math.random() < 0.5 ? -1 : 1);
@@ -95,7 +92,8 @@ function DeliveryPayoutsSection({ partner }) {
   useEffect(() => {
     if (!partner?._id) return;
     axios.get(`${API_BASE_URL}/api/payments?deliveryPartnerId=${partner._id}&status=paid`)
-      .then(res => setPayouts(res.data));
+      .then(res => setPayouts(res.data))
+      .catch(() => setPayouts([]));
   }, [partner]);
 
   const today = dayjs().format("YYYY-MM-DD");
@@ -148,7 +146,7 @@ function DeliveryPayoutsSection({ partner }) {
   );
 }
 
-/* ---- Tiny per-order map: supports pharmacy pin / user pin / approx drop circle ---- */
+/* ---- Tiny per-order map (unchanged UI; safe updates) ---- */
 function OrderMiniMap({ center, pharmacyLoc, userLoc, path, showPharmacy = true, showUser = true, approxDrop = null }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -222,61 +220,57 @@ function OrderMiniMap({ center, pharmacyLoc, userLoc, path, showPharmacy = true,
 
     const google = window.google;
 
-    // FIXED
-const addOrMove = (ref, pos, title, label) => {
-  if (!pos?.lat || !pos?.lng || !mapRef.current) return;
-  const google = window.google;
+    // FIXED (marker update safe for both classic and AdvancedMarker)
+    const addOrMove = (ref, pos, title, label) => {
+      if (!pos?.lat || !pos?.lng || !mapRef.current) return;
 
-  // If marker already exists, update it
-  if (ref.current) {
-    // Classic Marker has setPosition; AdvancedMarkerElement does not.
-    if ("setPosition" in ref.current) {
-      ref.current.setPosition(pos);            // classic Marker
-    } else {
-      ref.current.position = pos;              // AdvancedMarkerElement
-    }
-    return;
-  }
+      if (ref.current) {
+        if ("setPosition" in ref.current) {
+          ref.current.setPosition(pos); // classic Marker
+        } else {
+          ref.current.position = pos;   // AdvancedMarkerElement
+        }
+        return;
+      }
 
-  // Create marker
-  try {
-    const pill = document.createElement("div");
-    pill.style.cssText =
-      "background:#0ea5a4;color:#fff;font-weight:800;border-radius:9999px;padding:4px 8px;font-size:12px";
-    pill.textContent = label;
-    ref.current = new google.maps.marker.AdvancedMarkerElement({
-      map: mapRef.current,
-      position: pos,
-      title,
-      content: pill,
-    });
-  } catch {
-    ref.current = new google.maps.Marker({
-      map: mapRef.current,
-      position: pos,
-      title,
-      label,
-    });
-  }
-};
+      try {
+        const pill = document.createElement("div");
+        pill.style.cssText =
+          "background:#0ea5a4;color:#fff;font-weight:800;border-radius:9999px;padding:4px 8px;font-size:12px";
+        pill.textContent = label;
+        ref.current = new google.maps.marker.AdvancedMarkerElement({
+          map: mapRef.current,
+          position: pos,
+          title,
+          content: pill,
+        });
+      } catch {
+        ref.current = new google.maps.Marker({
+          map: mapRef.current,
+          position: pos,
+          title,
+          label,
+        });
+      }
+    };
 
     // Pharmacy marker
     if (pLat && pLng) {
       addOrMove(pharmMarkerRef, { lat: pLat, lng: pLng }, "Pharmacy", "P");
     } else if (pharmMarkerRef.current) {
-  if ("setMap" in pharmMarkerRef.current) pharmMarkerRef.current.setMap(null);
-  else pharmMarkerRef.current.map = null; // AdvancedMarkerElement
-  pharmMarkerRef.current = null;
-}
+      if ("setMap" in pharmMarkerRef.current) pharmMarkerRef.current.setMap(null);
+      else pharmMarkerRef.current.map = null;
+      pharmMarkerRef.current = null;
+    }
 
     // User marker
     if (uLat && uLng) {
       addOrMove(userMarkerRef, { lat: uLat, lng: uLng }, "Delivery Address", "U");
     } else if (userMarkerRef.current) {
-  if ("setMap" in userMarkerRef.current) userMarkerRef.current.setMap(null);
-  else userMarkerRef.current.map = null; // AdvancedMarkerElement
-  userMarkerRef.current = null;
-}
+      if ("setMap" in userMarkerRef.current) userMarkerRef.current.setMap(null);
+      else userMarkerRef.current.map = null;
+      userMarkerRef.current = null;
+    }
 
     // Approximate drop circle
     if (cLat && cLng && cRad) {
@@ -312,7 +306,6 @@ const addOrMove = (ref, pos, title, label) => {
       if (pLat && pLng) bounds.extend({ lat: pLat, lng: pLng });
       if (uLat && uLng) bounds.extend({ lat: uLat, lng: uLng });
       (Array.isArray(path) ? path : []).forEach(pt => bounds.extend(pt));
-      // extend around the circle
       if (cLat && cLng && cRad) {
         const lat = cLat, lng = cLng;
         const dLat = cRad / 111320;
@@ -344,7 +337,11 @@ const addOrMove = (ref, pos, title, label) => {
 
 /* -------------------------------- component -------------------------------- */
 export default function DeliveryDashboard() {
-  const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem("deliveryToken"));
+  const [loggedIn, setLoggedIn] = useState(() => {
+    const t = localStorage.getItem("deliveryToken");
+    const id = localStorage.getItem("deliveryPartnerId");
+    return !!(t && id);
+  });
   const [partner, setPartner] = useState(null);
   const [active, setActive] = useState(false);
   const [tab, setTab] = useState(0);
@@ -355,6 +352,7 @@ export default function DeliveryDashboard() {
   const [loading, setLoading] = useState(false);
   const firstLoad = useRef(true);
   const unreadTimerRef = useRef(null);
+  const inflightRef = useRef(false); // <<< prevent overlapping polls
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [loginDialog, setLoginDialog] = useState(!loggedIn);
   const [loginForm, setLoginForm] = useState({ mobile: "", password: "" });
@@ -365,7 +363,7 @@ export default function DeliveryDashboard() {
   const [orderDistances, setOrderDistances] = useState({});
   const [orderUnreadCounts, setOrderUnreadCounts] = useState({});
 
-  // NEW: driver live location (for pre-OFD nav to pickup)
+  // NEW: driver live location
   const [driverLoc, setDriverLoc] = useState(null); // {lat, lng}
 
   // NEW: masked approximate drop centers per order (privacy)
@@ -380,12 +378,24 @@ export default function DeliveryDashboard() {
   const [todayEarnings, setTodayEarnings] = useState(null);
   const [cashDue, setCashDue] = useState(0);
 
-  // Auto-refresh orders
+  // Auto-refresh orders (poll)
   useEffect(() => {
-    if (!loggedIn || loading) return;
-    const interval = setInterval(() => { fetchProfileAndOrders(); }, 3000);
+    if (!loggedIn) return;
+    const tick = async () => {
+      if (inflightRef.current) return;
+      inflightRef.current = true;
+      try {
+        await fetchProfileAndOrders();
+      } finally {
+        inflightRef.current = false;
+      }
+    };
+    // run immediately, then every 3s
+    tick();
+    const interval = setInterval(tick, 3000);
     return () => clearInterval(interval);
-  }, [loggedIn, tab, loading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loggedIn, tab]);
 
   // Send driver location while ACTIVE + keep local copy for routing to pickup
   useEffect(() => {
@@ -441,12 +451,8 @@ export default function DeliveryDashboard() {
               { headers: { Authorization: `Bearer ${token}` } }
             );
             counts[order._id] = res.data.unreadCount || 0;
-          } catch (err) {
-            if (err?.response?.status === 401 && unreadTimerRef.current) {
-              clearInterval(unreadTimerRef.current);
-              unreadTimerRef.current = null;
-            }
-            counts[order._id] = 0;
+          } catch {
+            counts[order._id] = 0; // don't logout on chat errors
           }
         })
       );
@@ -497,24 +503,43 @@ export default function DeliveryDashboard() {
     fetchToday();
   }, [partner?._id]);
 
+  // central fetch (SAFE: only logout on 401/403 or missing creds)
   const fetchProfileAndOrders = async () => {
+    const token = localStorage.getItem("deliveryToken");
+    const partnerId = localStorage.getItem("deliveryPartnerId");
+    if (!token || !partnerId) {
+      hardLogout("Session missing. Please login again.");
+      return;
+    }
+
+    let resProfile, resOrders;
     try {
-      const token = localStorage.getItem("deliveryToken");
-      const partnerId = localStorage.getItem("deliveryPartnerId");
-      const resProfile = await axios.get(`${API_BASE_URL}/api/delivery/partner/${partnerId}`, {
+      resProfile = await axios.get(`${API_BASE_URL}/api/delivery/partner/${partnerId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setPartner(resProfile.data.partner || {});
-      setActive(resProfile.data.partner?.active || false);
-
-      const resOrders = await axios.get(`${API_BASE_URL}/api/delivery/orders`, {
+      resOrders = await axios.get(`${API_BASE_URL}/api/delivery/orders`, {
         headers: { Authorization: `Bearer ${token}`, deliverypartnerid: partnerId }
       });
-      const activeOrders = resOrders.data || [];
-      setOrders(activeOrders);
-      setPastOrders(resProfile.data.pastOrders || []);
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) {
+        hardLogout("Session expired. Please login again.");
+      } else {
+        // transient/server error — DO NOT logout
+        setSnackbar({ open: true, message: "Network issue. Retrying…", severity: "error" });
+      }
+      return;
+    }
 
-      // build masked drop cache once per order
+    // basic state set from API
+    setPartner(resProfile.data.partner || {});
+    setActive(resProfile.data.partner?.active || false);
+    const activeOrders = resOrders.data || [];
+    setOrders(activeOrders);
+    setPastOrders(resProfile.data.pastOrders || []);
+
+    // Build masked drop cache once per order (non-fatal)
+    try {
       const nextMasked = { ...maskedDrops };
       for (const o of activeOrders) {
         const user = o.address;
@@ -524,10 +549,12 @@ export default function DeliveryDashboard() {
         }
       }
       setMaskedDrops(nextMasked);
+    } catch {}
 
-      // build polylines per phase
-      let newPolys = {};
-      let newDistances = {};
+    // Build polylines & distances (non-fatal; isolated try so errors cannot log out)
+    try {
+      const newPolys = {};
+      const newDistances = {};
       for (const o of activeOrders) {
         const pharm = o.pharmacy?.location;
         const user  = o.address;
@@ -538,17 +565,13 @@ export default function DeliveryDashboard() {
         let destination = null;
 
         if (o.status === "out_for_delivery") {
-          // AFTER OFD: pharmacy -> user
           if (hasPharm && hasUser) {
             origin = pharm;
             destination = user;
           }
-        } else {
-          // BEFORE OFD (assigned/accepted): driver -> pharmacy (fallback to pharmacy self)
-          if (hasPharm) {
-            origin = driverLoc || pharm;
-            destination = pharm;
-          }
+        } else if (hasPharm) {
+          origin = driverLoc || pharm;
+          destination = pharm;
         }
 
         if (origin && destination && (!polylines[o._id] || orderDistances[o._id] == null)) {
@@ -562,12 +585,21 @@ export default function DeliveryDashboard() {
       }
       setPolylines(newPolys);
       setOrderDistances(newDistances);
-    } catch (err) {
-      setSnackbar({ open: true, message: "Failed to load profile/orders", severity: "error" });
-      setLoggedIn(false);
-      setLoginDialog(true);
+    } catch {
+      // Maps/route errors should not affect session
     }
   };
+
+  function hardLogout(message) {
+    localStorage.removeItem("deliveryToken");
+    localStorage.removeItem("deliveryPartnerId");
+    setLoggedIn(false);
+    setPartner(null);
+    setOrders([]);
+    setPastOrders([]);
+    setLoginDialog(true);
+    setSnackbar({ open: true, message: message || "Logged out", severity: "error" });
+  }
 
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
@@ -576,8 +608,10 @@ export default function DeliveryDashboard() {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSnackbar({ open: true, message: `Order marked as ${newStatus}`, severity: "success" });
-      fetchProfileAndOrders();
-    } catch {
+      await fetchProfileAndOrders();
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) return hardLogout("Session expired. Please login again.");
       setSnackbar({ open: true, message: "Failed to update order status", severity: "error" });
     }
   };
@@ -599,13 +633,7 @@ export default function DeliveryDashboard() {
     }
   };
   const handleLogout = () => {
-    localStorage.removeItem("deliveryToken");
-    localStorage.removeItem("deliveryPartnerId");
-    setLoggedIn(false);
-    setPartner(null);
-    setOrders([]);
-    setPastOrders([]);
-    setLoginDialog(true);
+    hardLogout("Logged out");
   };
 
   // Forgot / Reset
@@ -726,11 +754,11 @@ export default function DeliveryDashboard() {
                     navigator.geolocation.getCurrentPosition((pos) => {
                       axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
                         { active: next, lat: pos.coords.latitude, lng: pos.coords.longitude },
-                        { headers: { Authorization: `Bearer ${token}` } });
+                        { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
                     });
                   } else {
                     await axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
-                      { active: next }, { headers: { Authorization: `Bearer ${token}` } });
+                      { active: next }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
                   }
                 }}
               />
@@ -789,7 +817,7 @@ export default function DeliveryDashboard() {
         </div>
         <div className="rounded-xl border border-emerald-200/60 bg-white p-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-600"><Gauge className="h-4 w-4 text-emerald-600" /> ₹ / hr</div>
-          <div className="mt-1 text-2xl font-extrabold text-emerald-700">{rph == null ? "—" : rph}</div>
+          <div className="mt-1 text-2xl font-extrabold text-emerald-700">—</div>
         </div>
       </div>
 
@@ -844,7 +872,7 @@ export default function DeliveryDashboard() {
                         ? { lat: patchedUserLoc.lat, lng: patchedUserLoc.lng }
                         : { lat: 19.076, lng: 72.877 };
 
-                  // ETA estimate (~22 km/h) — same as before
+                  // ETA estimate (~22 km/h)
                   const dist = orderDistances[order._id];
                   const etaMin = dist != null ? Math.max(3, Math.round((dist / 22) * 60)) : null;
 
@@ -884,7 +912,7 @@ export default function DeliveryDashboard() {
                                 ? (order.address?.formatted || order.address?.fullAddress ||
                                   [order.address?.addressLine, order.address?.floor, order.address?.landmark, order.address?.area, order.address?.city, order.address?.state, order.address?.pin]
                                     .filter(Boolean).join(", "))
-                                : (order.address?.area || order.address?.city || "Nearby area")} {/* masked before OFD */}
+                                : (order.address?.area || order.address?.city || "Nearby area")}
                             </b>
                           </span>
                         </div>

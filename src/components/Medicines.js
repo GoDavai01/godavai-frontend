@@ -1,3 +1,4 @@
+// src/pages/Medicines.js
 import React, { useEffect, useMemo, useState } from "react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -39,27 +40,8 @@ async function ensureDescription(apiBase, medId) {
   }
 }
 
-const allCategories = [
-  "All",
-  "Painkiller",
-  "Fever",
-  "Cough & Cold",
-  "Diabetes",
-  "Heart",
-  "Antibiotic",
-  "Ayurveda",
-];
-const medTypes = [
-  "All",
-  "Tablet",
-  "Syrup",
-  "Injection",
-  "Cream",
-  "Ointment",
-  "Drop",
-  "Spray",
-  "Inhaler",
-];
+const allCategories = ["All","Painkiller","Fever","Cough & Cold","Diabetes","Heart","Antibiotic","Ayurveda"];
+const medTypes      = ["All","Tablet","Syrup","Injection","Cream","Ointment","Drop","Spray","Inhaler"];
 
 export default function Medicines() {
   const { pharmacyId } = useParams();
@@ -83,19 +65,17 @@ export default function Medicines() {
     const lng = Number(currentAddress?.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     fetch(`${API_BASE_URL}/api/delivery/active-partner-nearby?lat=${lat}&lng=${lng}`)
-      .then((r) => r.json())
-      .then((d) => setCanDeliver(!!d.activePartnerExists))
-      .catch(() => setCanDeliver(false));
-  }, [currentAddress]);
+    .then(r => r.json())
+    .then(d => setCanDeliver(!!d.activePartnerExists))
+    .catch(() => setCanDeliver(false));
+    }, [currentAddress]);
 
   useEffect(() => {
     (async () => {
       try {
         const r = await axios.get(`${API_BASE_URL}/api/pharmacies?id=${pharmacyId}`);
         if (Array.isArray(r.data)) setPharmacy(r.data[0]);
-      } catch {
-        setPharmacy(null);
-      }
+      } catch { setPharmacy(null); }
     })();
   }, [pharmacyId]);
 
@@ -121,16 +101,17 @@ export default function Medicines() {
     return med.type === selected;
   };
 
-  const filteredMeds = useMemo(
-    () =>
-      medicines
-        .filter((m) => m.status !== "unavailable" && m.available !== false) // both checks
-        .filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType)),
-    [medicines, selectedCategory, selectedType]
-  );
+const filteredMeds = useMemo(
+  () =>
+    medicines
+      .filter((m) => m.status !== "unavailable" && m.available !== false) // both checks
+      .filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType)),
+  [medicines, selectedCategory, selectedType]
+);
 
-  // Use small viewport units so mobile browser UI doesn’t squash content.
-  const columnHeight = `calc(100svh - ${TOP_OFFSET_PX}px)`;
+
+  // Right column height; the page itself does not scroll.
+  const columnHeight = `calc(100vh - ${TOP_OFFSET_PX}px)`;
   const rightPaddingBottom = 120;
 
   // ===== gallery state (no zoom overlay) =====
@@ -147,9 +128,7 @@ export default function Medicines() {
   return (
     <div
       className="
-        relative min-h-[100svh] w-full
-        max-w-[420px] sm:max-w-[640px] md:max-w-[900px]
-        mx-auto overflow-hidden
+        relative h-screen w-full max-w-[420px] mx-auto overflow-hidden
         bg-[var(--pillo-page-bg,linear-gradient(180deg,#f9fbff,white))]
       "
     >
@@ -166,53 +145,19 @@ export default function Medicines() {
             {!canDeliver && (
               <div className="mt-2 bg-red-50 text-red-700 font-bold text-[13.5px] px-3 py-2 rounded-xl">
                 ⛔ Sorry, no delivery partner is available at your location right now. Please try again soon.
-              </div>
-            )}
+                </div>
+                )}
           </div>
         ) : (
           <div className="h-6 w-40 rounded bg-neutral-100 animate-pulse mb-2" />
         )}
       </div>
 
-      {/* Mobile categories as horizontal chips */}
-      <div className="px-4 md:hidden">
-        <div
-          className="flex gap-2 overflow-x-auto no-scrollbar pb-2"
-          style={{
-            WebkitMaskImage:
-              "linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent)",
-            maskImage:
-              "linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 16px), transparent)",
-          }}
-        >
-          {allCategories.map((c) => {
-            const active = c === selectedCategory;
-            return (
-              <button
-                key={c}
-                onClick={() => setSelectedCategory(c)}
-                className={[
-                  "whitespace-nowrap rounded-full px-3.5 py-2 text-[14px] font-semibold ring-1 transition",
-                  active
-                    ? "bg-white text-emerald-700 ring-emerald-300 shadow-sm"
-                    : "bg-white/90 text-neutral-700 ring-[var(--pillo-surface-border)] hover:bg-white",
-                ].join(" ")}
-              >
-                {c}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Two columns */}
       <div className="pl-0 pr-3">
-        <div className="grid grid-cols-1 md:grid-cols-[120px,1fr] gap-3 items-start">
-          {/* LEFT rail (hidden on mobile) */}
-          <aside
-            className="hidden md:block sticky self-start"
-            style={{ top: TOP_OFFSET_PX, height: columnHeight }}
-          >
+        <div className="grid grid-cols-[100px,1fr] gap-3 items-start">
+          {/* LEFT rail */}
+          <aside className="sticky self-start" style={{ top: TOP_OFFSET_PX, height: columnHeight }}>
             <div
               className="
                 h-full rounded-2xl p-2.5 flex flex-col
@@ -247,7 +192,7 @@ export default function Medicines() {
 
           {/* RIGHT rail */}
           <section
-            className="min-w-0 md:overflow-y-auto no-scrollbar"
+            className="min-w-0 overflow-y-auto no-scrollbar"
             style={{ height: columnHeight, paddingBottom: rightPaddingBottom }}
           >
             {/* Type chips */}
@@ -289,7 +234,7 @@ export default function Medicines() {
             ) : filteredMeds.length === 0 ? (
               <div className="mt-8 text-center text-neutral-400">No medicines found.</div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 {filteredMeds.map((med) => {
                   const hasDiscount = med.mrp && Number(med.price) < Number(med.mrp);
                   const discountPct = hasDiscount
@@ -310,20 +255,16 @@ export default function Medicines() {
                           bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm overflow-hidden
                         "
                         onClick={async () => {
-                          setSelectedMed(med);
-                          setActiveImg(0);
-                          if (!med.description || !med.description.trim()) {
-                            const desc = await ensureDescription(API_BASE_URL, med._id);
-                            if (desc) {
-                              setSelectedMed((prev) =>
-                                prev ? { ...prev, description: desc } : prev
-                              );
-                              setMedicines((ms) =>
-                                ms.map((m) => (m._id === med._id ? { ...m, description: desc } : m))
-                              );
-                            }
-                          }
-                        }}
+  setSelectedMed(med);
+  setActiveImg(0);
+  if (!med.description || !med.description.trim()) {
+    const desc = await ensureDescription(API_BASE_URL, med._id);
+    if (desc) {
+      setSelectedMed(prev => (prev ? { ...prev, description: desc } : prev));
+      setMedicines(ms => ms.map(m => (m._id === med._id ? { ...m, description: desc } : m)));
+    }
+  }
+}}
                         title="Know more"
                       >
                         <img
@@ -333,38 +274,32 @@ export default function Medicines() {
                         />
                         {med.prescriptionRequired && (
                           <span
-                            className="
-                              absolute top-2 left-2 rounded-full
-                              bg-white text-red-600 border border-red-200
-                              text-[10px] font-semibold px-2 py-0.5 shadow-sm
-                            "
-                            title="Prescription required"
-                          >
+                           className="
+                           absolute top-2 left-2 rounded-full
+                           bg-white text-red-600 border border-red-200
+                           text-[10px] font-semibold px-2 py-0.5 shadow-sm
+                           "
+                           title="Prescription required"
+                           >
                             Rx
-                          </span>
-                        )}
+                           </span>
+                           )}
                       </button>
 
                       <div className="mt-2">
                         <div
                           className="text-[13px] font-extrabold text-emerald-800 leading-snug cursor-pointer"
                           onClick={async () => {
-                            setSelectedMed(med);
-                            setActiveImg(0);
-                            if (!med.description || !med.description.trim()) {
-                              const desc = await ensureDescription(API_BASE_URL, med._id);
-                              if (desc) {
-                                setSelectedMed((prev) =>
-                                  prev ? { ...prev, description: desc } : prev
-                                );
-                                setMedicines((ms) =>
-                                  ms.map((m) =>
-                                    m._id === med._id ? { ...m, description: desc } : m
-                                  )
-                                );
-                              }
-                            }
-                          }}
+  setSelectedMed(med);
+  setActiveImg(0);
+  if (!med.description || !med.description.trim()) {
+    const desc = await ensureDescription(API_BASE_URL, med._id);
+    if (desc) {
+      setSelectedMed(prev => (prev ? { ...prev, description: desc } : prev));
+      setMedicines(ms => ms.map(m => (m._id === med._id ? { ...m, description: desc } : m)));
+    }
+  }
+}}
                           style={{
                             display: "-webkit-box",
                             WebkitLineClamp: 2,
@@ -406,6 +341,7 @@ export default function Medicines() {
                                 {med.category[0]}
                               </Badge>
                             )}
+                            
                           </div>
 
                           {/* RIGHT: Add button */}
@@ -415,12 +351,9 @@ export default function Medicines() {
                             style={{ backgroundColor: canDeliver ? DEEP : "#d1d5db", color: "white" }}
                             disabled={!canDeliver}
                             onClick={() => {
-                              if (!canDeliver) {
-                                alert("Delivery isn’t available right now.");
-                                return;
-                              }
+                              if (!canDeliver) { alert("Delivery isn’t available right now."); return; }
                               addToCart(med);
-                            }}
+                              }}
                           >
                             Add
                           </Button>
@@ -439,10 +372,7 @@ export default function Medicines() {
       <Dialog
         open={!!selectedMed}
         onOpenChange={(open) => {
-          if (!open) {
-            setSelectedMed(null);
-            setActiveImg(0);
-          }
+          if (!open) { setSelectedMed(null); setActiveImg(0); }
         }}
       >
         <DialogContent
@@ -472,16 +402,19 @@ export default function Medicines() {
                   <div
                     className="h-full flex transition-transform duration-300"
                     style={{ transform: `translateX(-${activeImg * 100}%)` }}
-                    onTouchStart={(e) => (e.currentTarget.dataset.sx = e.touches[0].clientX)}
-                    onTouchEnd={(e) => {
+                    onTouchStart={(e)=> (e.currentTarget.dataset.sx = e.touches[0].clientX)}
+                    onTouchEnd={(e)=> {
                       const sx = Number(e.currentTarget.dataset.sx || 0);
                       const dx = e.changedTouches[0].clientX - sx;
-                      if (dx < -40 && activeImg < images.length - 1) setActiveImg((i) => i + 1);
-                      if (dx > 40 && activeImg > 0) setActiveImg((i) => i - 1);
+                      if (dx < -40 && activeImg < images.length - 1) setActiveImg(i => i + 1);
+                      if (dx >  40 && activeImg > 0)               setActiveImg(i => i - 1);
                     }}
                   >
                     {images.map((src, i) => (
-                      <div key={i} className="min-w-full h-full grid place-items-center select-none">
+                      <div
+                        key={i}
+                        className="min-w-full h-full grid place-items-center select-none"
+                      >
                         <img
                           src={getImageUrl(src)}
                           alt={selectedMed.name}
@@ -497,13 +430,13 @@ export default function Medicines() {
                     <>
                       <button
                         className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5"
-                        onClick={() => setActiveImg((i) => Math.max(0, i - 1))}
+                        onClick={() => setActiveImg(i => Math.max(0, i - 1))}
                       >
                         ‹
                       </button>
                       <button
                         className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5"
-                        onClick={() => setActiveImg((i) => Math.min(images.length - 1, i + 1))}
+                        onClick={() => setActiveImg(i => Math.min(images.length - 1, i + 1))}
                       >
                         ›
                       </button>
@@ -516,7 +449,7 @@ export default function Medicines() {
                       {images.map((_, i) => (
                         <span
                           key={i}
-                          onClick={() => setActiveImg(i)}
+                          onClick={()=>setActiveImg(i)}
                           className={`h-1.5 rounded-full cursor-pointer transition-all ${
                             i === activeImg ? "w-5 bg-emerald-600" : "w-2.5 bg-emerald-200"
                           }`}
@@ -591,13 +524,10 @@ export default function Medicines() {
                   style={{ backgroundColor: canDeliver ? DEEP : "#d1d5db", color: "white" }}
                   disabled={!canDeliver}
                   onClick={() => {
-                    if (!canDeliver) {
-                      alert("Delivery isn’t available right now.");
-                      return;
-                    }
+                    if (!canDeliver) { alert("Delivery isn’t available right now."); return; }
                     addToCart(selectedMed);
                     setSelectedMed(null);
-                  }}
+                    }}
                 >
                   Add to Cart
                 </Button>
