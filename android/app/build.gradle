@@ -16,6 +16,13 @@ android {
         }
     }
 
+    // ✅ Enforce Java 17 for this module
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    // If you ever add Kotlin here, also set: kotlinOptions { jvmTarget = '17' }
+
     signingConfigs {
         release {
             storeFile file(MYAPP_UPLOAD_STORE_FILE)
@@ -36,7 +43,7 @@ android {
 }
 
 repositories {
-    flatDir{
+    flatDir {
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
 }
