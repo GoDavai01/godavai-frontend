@@ -100,6 +100,8 @@ async function handlePlaceOrder(
     setToast,
     clearCart,
     setLoading,
+    // NEW: forward platform fee so invoice can split GST (18%) internally
+    platformFee,
   },
   paymentStatus,
   paymentDetails = {},
@@ -127,6 +129,11 @@ async function handlePlaceOrder(
       deliveryInstructions,
       paymentStatus,
       paymentDetails,
+      // NEW: keep platform fee inclusive and provide a fees object for backend/invoice
+      platformFee,
+      fees: {
+        platform: { gross: platformFee, rate: 18 },
+      },
     };
 
     const res = await axios.post(`${API_BASE_URL}/api/orders`, payload, {
@@ -302,7 +309,7 @@ export default function CheckoutPage() {
   const deliveryFee = itemTotal >= FREE_DELIVERY_MIN ? 0 : DELIVERY_FEE;
   const gst = Math.round(itemTotal * 0.05 * 100) / 100;
   const discount = couponApplied ? Math.round(itemTotal * 0.1) : 0;
-  const platformFee = 6;
+  const platformFee = 8;
   const fullTotal =
     itemTotal +
     deliveryFee +
@@ -510,6 +517,8 @@ useEffect(() => {
           setToast,
           clearCart,
           setLoading,
+          // NEW
+          platformFee,
         },
         "COD",
         {},
@@ -581,6 +590,8 @@ useEffect(() => {
             setToast,
             clearCart,
             setLoading,
+            // NEW
+            platformFee,
           },
           "PAID",
           response,
