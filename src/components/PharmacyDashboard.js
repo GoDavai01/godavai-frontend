@@ -15,6 +15,9 @@ import CloseIcon from "@mui/icons-material/Close";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import PhotoCamera from "@mui/icons-material/PhotoCamera";
 import SearchIcon from "@mui/icons-material/Search";
+import BrandAutocomplete from "./fields/BrandAutocomplete";
+import CompositionAutocomplete from "./fields/CompositionAutocomplete";
+import { postSuggestLearn } from "../api/suggest";
 
 import { motion } from "framer-motion";
 import {
@@ -637,6 +640,14 @@ export default function PharmacyDashboard() {
       }
 
       await axios.post(`${API_BASE_URL}/api/pharmacy/medicines`, data, { headers });
+      // ✳️ teach the suggester from this add
+await postSuggestLearn({
+  brand: medForm.brand || undefined,
+  composition: medForm.composition || undefined,
+  type: medForm.type || undefined,
+  packUnit: medForm.packUnit || undefined,
+  packCount: medForm.packCount || undefined,
+});
       setMedMsg("Medicine added!");
       setMedForm({
         name: "", brand: "", composition: "", company: "",
@@ -802,6 +813,14 @@ export default function PharmacyDashboard() {
       }
 
       await axios.patch(`${API_BASE_URL}/api/pharmacy/medicines/${editMedId}`, data, { headers });
+      // ✳️ teach the suggester from this edit
+await postSuggestLearn({
+  brand: editMedForm.brand || undefined,
+  composition: editMedForm.composition || undefined,
+  type: editMedForm.type || undefined,
+  packUnit: editMedForm.packUnit || undefined,
+  packCount: editMedForm.packCount || undefined,
+});
       setMedMsg("Medicine updated!");
       setEditMedId(null);
       setEditMedImages([]);
@@ -1355,26 +1374,42 @@ export default function PharmacyDashboard() {
 
                   {/* BRAND (hidden for Generic) */}
                   {editMedForm.productKind === "branded" && (
-                    <TextField
-                      label="Brand"
-                      fullWidth
-                      value={editMedForm.brand}
-                      onChange={e =>
-                        setEditMedForm(f => ({
-                          ...f,
-                          brand: e.target.value,
-                          name: f.name || linkBrandToName(e.target.value)
-                        }))
-                      }
-                    />
-                  )}
+  <BrandAutocomplete
+    value={editMedForm.brand}
+    onValueChange={(val) =>
+      setEditMedForm(f => ({ ...f, brand: val, name: f.name || val }))
+    }
+    onPrefill={(p) =>
+      setEditMedForm(f => ({
+        ...f,
+        productKind: "branded",
+        name: f.name || p.name || f.brand,
+        type: p.type || f.type,
+        packCount: p.packCount ?? f.packCount,
+        packUnit: p.packUnit ?? f.packUnit,
+        hsn: p.hsn ?? f.hsn,
+        gstRate: p.gstRate ?? f.gstRate,
+      }))
+    }
+  />
+)}
 
-                  <TextField
-                    label="Composition"
-                    fullWidth
-                    value={editMedForm.composition}
-                    onChange={e => setEditMedForm(f => ({ ...f, composition: e.target.value }))}
-                  />
+                  <CompositionAutocomplete
+  value={editMedForm.composition}
+  onValueChange={(val) => setEditMedForm(f => ({ ...f, composition: val }))}
+  onPrefill={(p) =>
+    setEditMedForm(f => ({
+      ...f,
+      productKind: f.productKind === "generic" ? "generic" : (p.productKind || f.productKind),
+      name: f.productKind === "generic" ? (f.name || p.name || val) : f.name,
+      type: p.type || f.type,
+      packUnit: p.packUnit ?? f.packUnit,
+      hsn: p.hsn ?? f.hsn,
+      gstRate: p.gstRate ?? f.gstRate,
+    }))
+  }
+/>
+
                   <TextField
                     label="Company / Manufacturer"
                     fullWidth
@@ -1662,20 +1697,42 @@ export default function PharmacyDashboard() {
 
                 {/* BRAND (hidden for Generic) */}
                 {medForm.productKind === "branded" && (
-                  <TextField
-                    label="Brand"
-                    value={medForm.brand}
-                    onChange={e => setMedForm(f => ({ ...f, brand: e.target.value, name: linkBrandToName(e.target.value) }))}
-                    onFocus={() => setIsEditing(true)}
-                    onBlur={() => setIsEditing(false)}
-                  />
-                )}
+  <BrandAutocomplete
+    value={medForm.brand}
+    onValueChange={(val) =>
+      setMedForm(f => ({ ...f, brand: val, name: f.name || val }))
+    }
+    onPrefill={(p) =>
+      setMedForm(f => ({
+        ...f,
+        productKind: "branded",
+        name: f.name || p.name || f.brand,
+        type: p.type || f.type,
+        packCount: p.packCount ?? f.packCount,
+        packUnit: p.packUnit ?? f.packUnit,
+        hsn: p.hsn ?? f.hsn,
+        gstRate: p.gstRate ?? f.gstRate,
+      }))
+    }
+  />
+)}
 
-                <TextField
-                  label="Composition (e.g., Paracetamol 650 mg)"
-                  value={medForm.composition}
-                  onChange={e => setMedForm(f => ({ ...f, composition: e.target.value }))}
-                />
+                <CompositionAutocomplete
+  value={medForm.composition}
+  onValueChange={(val) => setMedForm(f => ({ ...f, composition: val }))}
+  onPrefill={(p) =>
+    setMedForm(f => ({
+      ...f,
+      productKind: f.productKind === "generic" ? "generic" : (p.productKind || f.productKind),
+      name: f.productKind === "generic" ? (f.name || p.name || val) : f.name,
+      type: p.type || f.type,
+      packUnit: p.packUnit ?? f.packUnit,
+      hsn: p.hsn ?? f.hsn,
+      gstRate: p.gstRate ?? f.gstRate,
+    }))
+  }
+/>
+
                 <TextField
                   label="Company / Manufacturer"
                   value={medForm.company}
