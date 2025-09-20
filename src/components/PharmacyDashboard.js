@@ -1401,7 +1401,7 @@ await postSuggestLearn({
     setEditMedForm(f => ({
       ...f,
       productKind: f.productKind === "generic" ? "generic" : (p.productKind || f.productKind),
-      name: f.productKind === "generic" ? (f.name || p.name || val) : f.name,
+      name: f.productKind === "generic" ? (f.name || p.name || f.composition || "") : f.name,
       type: p.type || f.type,
       packUnit: p.packUnit ?? f.packUnit,
       hsn: p.hsn ?? f.hsn,
@@ -1724,7 +1724,7 @@ await postSuggestLearn({
     setMedForm(f => ({
       ...f,
       productKind: f.productKind === "generic" ? "generic" : (p.productKind || f.productKind),
-      name: f.productKind === "generic" ? (f.name || p.name || val) : f.name,
+      name: f.productKind === "generic" ? (f.name || p.name || f.composition || "") : f.name,
       type: p.type || f.type,
       packUnit: p.packUnit ?? f.packUnit,
       hsn: p.hsn ?? f.hsn,
