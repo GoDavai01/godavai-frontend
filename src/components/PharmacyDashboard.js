@@ -104,6 +104,17 @@ const packLabel = (count, unit) => {
   return `${count} ${printable}`;
 };
 
+const keepUnlessExplicitClear = (prev, next) =>
+  next === null ? "" : (typeof next === "string" && next.trim() === "" ? prev : next);
+
+// ▼▼ NEW: utilities for multi-composition ▼▼
+const splitComps = (s = "") =>
+  String(s).split("+").map(x => x.trim()).filter(Boolean);
+
+const joinComps = (arr = []) =>
+  arr.map(s => s.trim()).filter(Boolean).join(" + ");
+// ▲▲ END NEW ▲▲
+
 /* ----------------------- STATUS / MISC HELPERS ---------------------- */
 
 
@@ -532,7 +543,8 @@ export default function PharmacyDashboard() {
     hsn: "3004",                 // sensible default for many medicines
     gstRate: 5,                  // 0 / 5 / 12 / 18
     packCount: "",               // numeric string is fine for inputs
-    packUnit: ""                 // '', 'tablets', 'capsules', 'ml', 'g', 'units', 'sachets', 'drops'
+    packUnit: "",                // '', 'tablets', 'capsules', 'ml', 'g', 'units', 'sachets', 'drops'
+    compositions: []             // NEW: multi composition chips
   });
   const [editMedForm, setEditMedForm] = useState({
     name: "", brand: "", composition: "", company: "",
@@ -543,7 +555,8 @@ export default function PharmacyDashboard() {
     hsn: "3004",
     gstRate: 5,
     packCount: "",
-    packUnit: ""
+    packUnit: "",
+    compositions: []            // NEW
   });
 
   const handleImagesChange = (e) => {
@@ -591,12 +604,19 @@ export default function PharmacyDashboard() {
       // NOTE: if generic, brand should be blank (UI already hides it but we enforce again)
       const safeBrand = medForm.productKind === "generic" ? "" : (medForm.brand || "");
 
+      // NEW: join compositions (or fall back to single composition)
+      const compositionValue =
+        (medForm.compositions?.length
+          ? joinComps(medForm.compositions)
+          : (medForm.composition || "")
+        );
+
       if (medImages && medImages.length) {
         data = new FormData();
         // Name can be derived by backend; still send current value
         data.append("name", medForm.name);
         data.append("brand", safeBrand);
-        data.append("composition", medForm.composition || "");
+        data.append("composition", compositionValue || "");
         data.append("company", medForm.company || "");
         data.append("price", medForm.price);
         data.append("mrp", medForm.mrp);
@@ -619,7 +639,7 @@ export default function PharmacyDashboard() {
         data = {
           name: medForm.name,
           brand: safeBrand,
-          composition: medForm.composition || "",
+          composition: compositionValue || "",
           company: medForm.company || "",
           price: medForm.price,
           mrp: medForm.mrp,
@@ -641,19 +661,19 @@ export default function PharmacyDashboard() {
 
       await axios.post(`${API_BASE_URL}/api/pharmacy/medicines`, data, { headers });
       // ✳️ teach the suggester from this add
-await postSuggestLearn({
-  brand: (medForm.productKind === "branded" ? medForm.brand : "") || undefined,
-  composition: medForm.composition || undefined,
-  type: medForm.type || undefined,
-  packUnit: medForm.packUnit || undefined,
-  packCount: medForm.packCount || undefined,
-});
+      await postSuggestLearn({
+        brand: (medForm.productKind === "branded" ? medForm.brand : "") || undefined,
+        composition: compositionValue || undefined,
+        type: medForm.type || undefined,
+        packUnit: medForm.packUnit || undefined,
+        packCount: medForm.packCount || undefined,
+      });
       setMedMsg("Medicine added!");
       setMedForm({
         name: "", brand: "", composition: "", company: "",
         price: "", mrp: "", stock: "", category: "", discount: "",
         customCategory: "", type: "Tablet", customType: "", prescriptionRequired: false,
-        productKind: "branded", hsn: "3004", gstRate: 5, packCount: "", packUnit: ""
+        productKind: "branded", hsn: "3004", gstRate: 5, packCount: "", packUnit: "", compositions: []
       });
       setMedImages([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -692,6 +712,7 @@ await postSuggestLearn({
       gstRate: typeof med.gstRate === "number" ? med.gstRate : 5,
       packCount: (med.packCount ?? "") + "",
       packUnit: med.packUnit || "",
+      compositions: splitComps(med.composition || "")
     });
   };
 
@@ -764,11 +785,18 @@ await postSuggestLearn({
       // NOTE: if switching to generic, brand must be blank
       const safeBrand = editMedForm.productKind === "generic" ? "" : (editMedForm.brand || "");
 
+      // NEW: join compositions (or fall back)
+      const editCompositionValue =
+        (editMedForm.compositions?.length
+          ? joinComps(editMedForm.compositions)
+          : (editMedForm.composition || "")
+        );
+
       if (editMedImages && editMedImages.length) {
         data = new FormData();
         data.append("name", editMedForm.name);
         data.append("brand", safeBrand);
-        data.append("composition", editMedForm.composition || "");
+        data.append("composition", editCompositionValue || "");
         data.append("company", editMedForm.company || "");
         data.append("price", editMedForm.price);
         data.append("mrp", editMedForm.mrp);
@@ -792,7 +820,7 @@ await postSuggestLearn({
         data = {
           name: editMedForm.name,
           brand: safeBrand,
-          composition: editMedForm.composition || "",
+          composition: editCompositionValue || "",
           company: editMedForm.company || "",
           price: editMedForm.price,
           mrp: editMedForm.mrp,
@@ -814,13 +842,13 @@ await postSuggestLearn({
 
       await axios.patch(`${API_BASE_URL}/api/pharmacy/medicines/${editMedId}`, data, { headers });
       // ✳️ teach the suggester from this edit
-await postSuggestLearn({
-  brand: (editMedForm.productKind === "branded" ? editMedForm.brand : "") || undefined,
-  composition: editMedForm.composition || undefined,
-  type: editMedForm.type || undefined,
-  packUnit: editMedForm.packUnit || undefined,
-  packCount: editMedForm.packCount || undefined,
-});
+      await postSuggestLearn({
+        brand: (editMedForm.productKind === "branded" ? editMedForm.brand : "") || undefined,
+        composition: editCompositionValue || undefined,
+        type: editMedForm.type || undefined,
+        packUnit: editMedForm.packUnit || undefined,
+        packCount: editMedForm.packCount || undefined,
+      });
       setMedMsg("Medicine updated!");
       setEditMedId(null);
       setEditMedImages([]);
@@ -1374,41 +1402,83 @@ await postSuggestLearn({
 
                   {/* BRAND (hidden for Generic) */}
                   {editMedForm.productKind === "branded" && (
-  <BrandAutocomplete
-    value={editMedForm.brand}
-    onValueChange={(val) =>
-      setEditMedForm(f => ({ ...f, brand: val, name: f.name || val }))
-    }
-    onPrefill={(p) =>
-      setEditMedForm(f => ({
-        ...f,
-        productKind: "branded",
-        name: f.name || p.name || f.brand,
-        type: p.type || f.type,
-        packCount: p.packCount ?? f.packCount,
-        packUnit: p.packUnit ?? f.packUnit,
-        hsn: p.hsn ?? f.hsn,
-        gstRate: p.gstRate ?? f.gstRate,
-      }))
-    }
-  />
-)}
+                    <BrandAutocomplete
+                      value={editMedForm.brand}
+                      onValueChange={(val) =>
+                        setEditMedForm(f => {
+                          const nextBrand = keepUnlessExplicitClear(f.brand, val);
+                          return { ...f, brand: nextBrand, name: f.name || nextBrand };
+                        })
+                      }
+                      onPrefill={(p) =>
+                        setEditMedForm(f => ({
+                          ...f,
+                          productKind: "branded",
+                          name: f.name || p.name || f.brand,
+                          type: p.type ?? f.type,
+                          packCount: p.packCount ?? f.packCount,
+                          packUnit: p.packUnit ?? f.packUnit,
+                          hsn: p.hsn ?? f.hsn,
+                          gstRate: p.gstRate ?? f.gstRate,
+                        }))
+                      }
+                    />
+                  )}
 
-                  <CompositionAutocomplete
-  value={editMedForm.composition}
-  onValueChange={(val) => setEditMedForm(f => ({ ...f, composition: val }))}
-  onPrefill={(p) =>
-    setEditMedForm(f => ({
-      ...f,
-      productKind: f.productKind === "generic" ? "generic" : (p.productKind || f.productKind),
-      name: f.productKind === "generic" ? (f.name || p.name || f.composition || "") : f.name,
-      type: p.type || f.type,
-      packUnit: p.packUnit ?? f.packUnit,
-      hsn: p.hsn ?? f.hsn,
-      gstRate: p.gstRate ?? f.gstRate,
-    }))
-  }
-/>
+                  {/* COMPOSITION with + chips (EDIT) */}
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="flex-start">
+                    <Box sx={{ flex: 1, width: "100%" }}>
+                      <CompositionAutocomplete
+                        value={editMedForm.composition}
+                        onValueChange={(val) =>
+                          setEditMedForm(f => ({ ...f, composition: keepUnlessExplicitClear(f.composition, val) }))
+                        }
+                        onPrefill={(p) =>
+                          setEditMedForm(f => ({
+                            ...f,
+                            productKind: f.productKind === "generic" ? "generic" : (p.productKind || f.productKind),
+                            name: f.productKind === "generic" ? (f.name || p.name || f.composition || "") : f.name,
+                            type: p.type ?? f.type,
+                            packUnit: p.packUnit ?? f.packUnit,
+                            hsn: p.hsn ?? f.hsn,
+                            gstRate: p.gstRate ?? f.gstRate,
+                          }))
+                        }
+                      />
+                    </Box>
+                    <Button
+                      variant="outlined"
+                      onClick={() =>
+                        setEditMedForm(f => {
+                          const toAdd = (f.composition || "").trim();
+                          if (!toAdd) return f;
+                          const set = new Set((f.compositions || []).map(s => s.toLowerCase()));
+                          if (!set.has(toAdd.toLowerCase())) {
+                            return { ...f, compositions: [...(f.compositions || []), toAdd], composition: "" };
+                          }
+                          return { ...f, composition: "" };
+                        })
+                      }
+                    >
+                      +
+                    </Button>
+                  </Stack>
+                  {(editMedForm.compositions || []).length > 0 && (
+                    <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                      {editMedForm.compositions.map((c) => (
+                        <Chip
+                          key={c}
+                          label={c}
+                          onDelete={() =>
+                            setEditMedForm(f => ({
+                              ...f,
+                              compositions: (f.compositions || []).filter(x => x.toLowerCase() !== c.toLowerCase())
+                            }))
+                          }
+                        />
+                      ))}
+                    </Stack>
+                  )}
 
                   <TextField
                     label="Company / Manufacturer"
@@ -1492,39 +1562,7 @@ await postSuggestLearn({
                     />
                   )}
 
-                  {/* Prescription Required toggle */}
-                  <Stack direction="row" alignItems="center" justifyContent="space-between">
-                    <Typography>Prescription Required</Typography>
-                    <Switch
-                      checked={!!editMedForm.prescriptionRequired}
-                      onChange={e =>
-                        setEditMedForm(f => ({ ...f, prescriptionRequired: e.target.checked }))
-                      }
-                      color="success"
-                    />
-                  </Stack>
-
-                  {/* TAX */}
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                    <TextField
-                      label="HSN Code"
-                      fullWidth
-                      value={editMedForm.hsn}
-                      onChange={e => setEditMedForm(f => ({ ...f, hsn: e.target.value.replace(/[^\d]/g, "") }))}
-                    />
-                    <FormControl fullWidth>
-                      <InputLabel>GST Rate</InputLabel>
-                      <Select
-                        label="GST Rate"
-                        value={editMedForm.gstRate}
-                        onChange={e => setEditMedForm(f => ({ ...f, gstRate: Number(e.target.value) }))}
-                      >
-                        {[0,5,12,18].map(r => <MenuItem key={r} value={r}>{r}%</MenuItem>)}
-                      </Select>
-                    </FormControl>
-                  </Stack>
-
-                  {/* PACK SIZE (filtered by Type) */}
+                  {/* ▼▼ MOVED UP: PACK SIZE right under Type ▼▼ */}
                   {editMedForm.type !== "Other" && usePackPresetEdit && (
                     <FormControl fullWidth>
                       <InputLabel>Pack Size</InputLabel>
@@ -1575,6 +1613,39 @@ await postSuggestLearn({
                       </FormControl>
                     </Stack>
                   )}
+                  {/* ▲▲ MOVED UP END ▲▲ */}
+
+                  {/* Prescription Required toggle */}
+                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                    <Typography>Prescription Required</Typography>
+                    <Switch
+                      checked={!!editMedForm.prescriptionRequired}
+                      onChange={e =>
+                        setEditMedForm(f => ({ ...f, prescriptionRequired: e.target.checked }))
+                      }
+                      color="success"
+                    />
+                  </Stack>
+
+                  {/* TAX */}
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                    <TextField
+                      label="HSN Code"
+                      fullWidth
+                      value={editMedForm.hsn}
+                      onChange={e => setEditMedForm(f => ({ ...f, hsn: e.target.value.replace(/[^\d]/g, "") }))}
+                    />
+                    <FormControl fullWidth>
+                      <InputLabel>GST Rate</InputLabel>
+                      <Select
+                        label="GST Rate"
+                        value={editMedForm.gstRate}
+                        onChange={e => setEditMedForm(f => ({ ...f, gstRate: Number(e.target.value) }))}
+                      >
+                        {[0,5,12,18].map(r => <MenuItem key={r} value={r}>{r}%</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Stack>
 
                   <Stack direction="row" spacing={1} alignItems="center">
                     {/* Gallery Upload */}
@@ -1697,41 +1768,83 @@ await postSuggestLearn({
 
                 {/* BRAND (hidden for Generic) */}
                 {medForm.productKind === "branded" && (
-  <BrandAutocomplete
-    value={medForm.brand}
-    onValueChange={(val) =>
-      setMedForm(f => ({ ...f, brand: val, name: f.name || val }))
-    }
-    onPrefill={(p) =>
-      setMedForm(f => ({
-        ...f,
-        productKind: "branded",
-        name: f.name || p.name || f.brand,
-        type: p.type || f.type,
-        packCount: p.packCount ?? f.packCount,
-        packUnit: p.packUnit ?? f.packUnit,
-        hsn: p.hsn ?? f.hsn,
-        gstRate: p.gstRate ?? f.gstRate,
-      }))
-    }
-  />
-)}
+                  <BrandAutocomplete
+                    value={medForm.brand}
+                    onValueChange={(val) =>
+                      setMedForm(f => {
+                        const nextBrand = keepUnlessExplicitClear(f.brand, val);
+                        return { ...f, brand: nextBrand, name: f.name || nextBrand };
+                      })
+                    }
+                    onPrefill={(p) =>
+                      setMedForm(f => ({
+                        ...f,
+                        productKind: "branded",
+                        name: f.name || p.name || f.brand,
+                        type: p.type ?? f.type,
+                        packCount: p.packCount ?? f.packCount,
+                        packUnit: p.packUnit ?? f.packUnit,
+                        hsn: p.hsn ?? f.hsn,
+                        gstRate: p.gstRate ?? f.gstRate,
+                      }))
+                    }
+                  />
+                )}
 
-                <CompositionAutocomplete
-  value={medForm.composition}
-  onValueChange={(val) => setMedForm(f => ({ ...f, composition: val }))}
-  onPrefill={(p) =>
-    setMedForm(f => ({
-      ...f,
-      productKind: f.productKind === "generic" ? "generic" : (p.productKind || f.productKind),
-      name: f.productKind === "generic" ? (f.name || p.name || f.composition || "") : f.name,
-      type: p.type || f.type,
-      packUnit: p.packUnit ?? f.packUnit,
-      hsn: p.hsn ?? f.hsn,
-      gstRate: p.gstRate ?? f.gstRate,
-    }))
-  }
-/>
+                {/* COMPOSITION with + chips (ADD) */}
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="flex-start">
+                  <Box sx={{ flex: 1, width: "100%" }}>
+                    <CompositionAutocomplete
+                      value={medForm.composition}
+                      onValueChange={(val) =>
+                        setMedForm(f => ({ ...f, composition: keepUnlessExplicitClear(f.composition, val) }))
+                      }
+                      onPrefill={(p) =>
+                        setMedForm(f => ({
+                          ...f,
+                          productKind: f.productKind === "generic" ? "generic" : (p.productKind || f.productKind),
+                          name: f.productKind === "generic" ? (f.name || p.name || f.composition || "") : f.name,
+                          type: p.type ?? f.type,
+                          packUnit: p.packUnit ?? f.packUnit,
+                          hsn: p.hsn ?? f.hsn,
+                          gstRate: p.gstRate ?? f.gstRate,
+                        }))
+                      }
+                    />
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    onClick={() =>
+                      setMedForm(f => {
+                        const toAdd = (f.composition || "").trim();
+                        if (!toAdd) return f;
+                        const set = new Set((f.compositions || []).map(s => s.toLowerCase()));
+                        if (!set.has(toAdd.toLowerCase())) {
+                          return { ...f, compositions: [...(f.compositions || []), toAdd], composition: "" };
+                        }
+                        return { ...f, composition: "" };
+                      })
+                    }
+                  >
+                    +
+                  </Button>
+                </Stack>
+                {(medForm.compositions || []).length > 0 && (
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                    {medForm.compositions.map((c) => (
+                      <Chip
+                        key={c}
+                        label={c}
+                        onDelete={() =>
+                          setMedForm(f => ({
+                            ...f,
+                            compositions: (f.compositions || []).filter(x => x.toLowerCase() !== c.toLowerCase())
+                          }))
+                        }
+                      />
+                    ))}
+                  </Stack>
+                )}
 
                 <TextField
                   label="Company / Manufacturer"
@@ -1823,40 +1936,7 @@ await postSuggestLearn({
                   />
                 )}
 
-                {/* Prescription Required toggle */}
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                  <Typography>Prescription Required</Typography>
-                  <Switch
-                    checked={!!medForm.prescriptionRequired}
-                    onChange={e =>
-                      setMedForm(f => ({ ...f, prescriptionRequired: e.target.checked }))
-                    }
-                    color="success"
-                  />
-                </Stack>
-
-                {/* TAX (server-side only; never shown to customers) */}
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                  <TextField
-                    label="HSN Code"
-                    value={medForm.hsn}
-                    onChange={e => setMedForm(f => ({ ...f, hsn: e.target.value.replace(/[^\d]/g, "") }))}
-                    helperText="e.g., 3004"
-                    fullWidth
-                  />
-                  <FormControl fullWidth>
-                    <InputLabel>GST Rate</InputLabel>
-                    <Select
-                      label="GST Rate"
-                      value={medForm.gstRate}
-                      onChange={e => setMedForm(f => ({ ...f, gstRate: Number(e.target.value) }))}
-                    >
-                      {[0,5,12,18].map(r => <MenuItem key={r} value={r}>{r}%</MenuItem>)}
-                    </Select>
-                  </FormControl>
-                </Stack>
-
-                {/* PACK SIZE (filtered by Type) */}
+                {/* ▼▼ MOVED UP: PACK SIZE right under Type ▼▼ */}
                 {medForm.type !== "Other" && usePackPreset && (
                   <FormControl fullWidth>
                     <InputLabel>Pack Size</InputLabel>
@@ -1908,6 +1988,40 @@ await postSuggestLearn({
                     </FormControl>
                   </Stack>
                 )}
+                {/* ▲▲ MOVED UP END ▲▲ */}
+
+                {/* Prescription Required toggle */}
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Typography>Prescription Required</Typography>
+                  <Switch
+                    checked={!!medForm.prescriptionRequired}
+                    onChange={e =>
+                      setMedForm(f => ({ ...f, prescriptionRequired: e.target.checked }))
+                    }
+                    color="success"
+                  />
+                </Stack>
+
+                {/* TAX (server-side only; never shown to customers) */}
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                  <TextField
+                    label="HSN Code"
+                    value={medForm.hsn}
+                    onChange={e => setMedForm(f => ({ ...f, hsn: e.target.value.replace(/[^\d]/g, "") }))}
+                    helperText="e.g., 3004"
+                    fullWidth
+                  />
+                  <FormControl fullWidth>
+                    <InputLabel>GST Rate</InputLabel>
+                    <Select
+                      label="GST Rate"
+                      value={medForm.gstRate}
+                      onChange={e => setMedForm(f => ({ ...f, gstRate: Number(e.target.value) }))}
+                    >
+                      {[0,5,12,18].map(r => <MenuItem key={r} value={r}>{r}%</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                </Stack>
 
                 <Stack direction="row" spacing={2} alignItems="center">
                   {/* Hidden file inputs */}
