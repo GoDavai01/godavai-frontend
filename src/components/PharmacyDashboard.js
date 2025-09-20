@@ -642,7 +642,7 @@ export default function PharmacyDashboard() {
       await axios.post(`${API_BASE_URL}/api/pharmacy/medicines`, data, { headers });
       // ✳️ teach the suggester from this add
 await postSuggestLearn({
-  brand: medForm.brand || undefined,
+  brand: (medForm.productKind === "branded" ? medForm.brand : "") || undefined,
   composition: medForm.composition || undefined,
   type: medForm.type || undefined,
   packUnit: medForm.packUnit || undefined,
@@ -815,7 +815,7 @@ await postSuggestLearn({
       await axios.patch(`${API_BASE_URL}/api/pharmacy/medicines/${editMedId}`, data, { headers });
       // ✳️ teach the suggester from this edit
 await postSuggestLearn({
-  brand: editMedForm.brand || undefined,
+  brand: (editMedForm.productKind === "branded" ? editMedForm.brand : "") || undefined,
   composition: editMedForm.composition || undefined,
   type: editMedForm.type || undefined,
   packUnit: editMedForm.packUnit || undefined,
