@@ -33,6 +33,8 @@ import { Card as SCard, CardHeader as SCardHeader, CardTitle as SCardTitle, Card
 import stringSimilarity from "string-similarity";
 import PrescriptionOrdersTab from "./PrescriptionOrdersTab";
 import axios from "axios";
+import { TYPE_OPTIONS, PACK_SIZES_BY_TYPE } from "../constants/packSizes";
+import { CUSTOMER_CATEGORIES } from "../constants/customerCategories";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
@@ -74,16 +76,34 @@ function ymd(date) { const d = new Date(date); return d.toISOString().slice(0,10
 function ym(date) { const d = new Date(date); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2,"0"); return `${y}-${m}`; }
 function weekLabel(date) { const s = startOfWeek(date); return `Week of ${ymd(s)}`; }
 
+// Accept "60 ml" or "10 tablets" or an object {count, unit, label}
+const normalizePackOpt = (raw) => {
+  if (!raw) return { count: "", unit: "", label: "" };
+  if (typeof raw === "string") {
+    const m = raw.trim().match(/^(\d+)\s*([A-Za-z]+)s?$/);
+    if (!m) return { count: "", unit: "", label: raw };
+    const [, count, unit] = m;
+    return { count, unit: unit.toLowerCase(), label: `${count} ${unit.toLowerCase()}` };
+  }
+  const count = String(raw.count ?? "").trim();
+  const unit  = String(raw.unit ?? "").trim().toLowerCase();
+  const label = raw.label || (count && unit ? `${count} ${unit}` : "");
+  return { count, unit, label };
+};
+
+const packLabel = (count, unit) => {
+  if (!count || !unit) return "";
+  const u = unit.toLowerCase();
+  // keep ml/g singular; pluralize others
+  const printable = (u === "ml" || u === "g")
+    ? u
+    : (Number(count) === 1 ? u.replace(/s$/,"") : (u.endsWith("s") ? u : u + "s"));
+  return `${count} ${printable}`;
+};
+
 /* ----------------------- STATUS / MISC HELPERS ---------------------- */
 
-const MED_CATEGORIES = [
-  "Pain Relief","Fever","Cough & Cold","Antibiotic","Digestive",
-  "Diabetes","Hypertension","Supplements","Other"
-];
-const TYPE_OPTIONS = [
-  "Tablet","Syrup","Injection","Cream","Ointment",
-  "Drop","Spray","Inhaler","Other"
-];
+
 
 function getStatusLabel(status) {
   if (status === "quoted") return "Quote Sent - Awaiting User";
@@ -383,18 +403,22 @@ export default function PharmacyDashboard() {
   const [medSearchOpen, setMedSearchOpen] = useState(false);
   const [medSearch, setMedSearch] = useState("");
   // ▲▲ ADDED END ▲▲
+  const [usePackPreset, setUsePackPreset] = useState(true);
+  const [usePackPresetEdit, setUsePackPresetEdit] = useState(true);
 
   const today = todayString();
   const ordersToday = orders.filter(o => (o.createdAt || "").slice(0, 10) === today);
   const completedOrders = orders.filter(o => o.status === 3 || o.status === "delivered");
 
   const allPharmacyCategories = React.useMemo(() => {
-    const allCats = medicines.flatMap(m =>
+  const allCats = medicines.flatMap(m =>
       Array.isArray(m.category) ? m.category : (m.category ? [m.category] : [])
     );
+    // Start with Excel categories, add any legacy/custom categories from inventory,
+    // then ensure "Other" is always the last option.
     const unique = Array.from(new Set([
-      ...MED_CATEGORIES,
-      ...allCats.filter(c => !!c && !MED_CATEGORIES.includes(c))
+      ...CUSTOMER_CATEGORIES,
+      ...allCats.filter(c => !!c && !CUSTOMER_CATEGORIES.includes(c))
     ]));
     return unique.filter(c => c !== "Other").concat("Other");
   }, [medicines]);
@@ -503,7 +527,7 @@ export default function PharmacyDashboard() {
     // NEW:
     productKind: "branded",      // "branded" | "generic"
     hsn: "3004",                 // sensible default for many medicines
-    gstRate: 0,                  // 0 / 5 / 12 / 18
+    gstRate: 5,                  // 0 / 5 / 12 / 18
     packCount: "",               // numeric string is fine for inputs
     packUnit: ""                 // '', 'tablets', 'capsules', 'ml', 'g', 'units', 'sachets', 'drops'
   });
@@ -514,7 +538,7 @@ export default function PharmacyDashboard() {
     // NEW:
     productKind: "branded",
     hsn: "3004",
-    gstRate: 0,
+    gstRate: 5,
     packCount: "",
     packUnit: ""
   });
@@ -618,7 +642,7 @@ export default function PharmacyDashboard() {
         name: "", brand: "", composition: "", company: "",
         price: "", mrp: "", stock: "", category: "", discount: "",
         customCategory: "", type: "Tablet", customType: "", prescriptionRequired: false,
-        productKind: "branded", hsn: "3004", gstRate: 0, packCount: "", packUnit: ""
+        productKind: "branded", hsn: "3004", gstRate: 5, packCount: "", packUnit: ""
       });
       setMedImages([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -654,7 +678,7 @@ export default function PharmacyDashboard() {
       // --------------------- (b) HYDRATE NEW FIELDS ---------------------
       productKind: med.productKind || (med.brand ? "branded" : "generic"),
       hsn: med.hsn || "3004",
-      gstRate: typeof med.gstRate === "number" ? med.gstRate : 0,
+      gstRate: typeof med.gstRate === "number" ? med.gstRate : 5,
       packCount: (med.packCount ?? "") + "",
       packUnit: med.packUnit || "",
     });
@@ -1413,7 +1437,11 @@ export default function PharmacyDashboard() {
                     <Select
                       value={editMedForm.type}
                       label="Type"
-                      onChange={e => setEditMedForm(f => ({ ...f, type: e.target.value }))}
+                      onChange={(e) => {
+                        const t = e.target.value;
+                        setEditMedForm(f => ({ ...f, type: t, packCount: "", packUnit: "" }));
+                        setUsePackPresetEdit(t !== "Other");
+                      }}
                     >
                       {TYPE_OPTIONS.map(opt => (
                         <MenuItem key={opt} value={opt}>{opt}</MenuItem>
@@ -1461,28 +1489,57 @@ export default function PharmacyDashboard() {
                     </FormControl>
                   </Stack>
 
-                  {/* PACK SIZE */}
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                    <TextField
-                      label="Pack Count"
-                      type="number"
-                      fullWidth
-                      value={editMedForm.packCount}
-                      onChange={e => setEditMedForm(f => ({ ...f, packCount: e.target.value }))}
-                    />
+                  {/* PACK SIZE (filtered by Type) */}
+                  {editMedForm.type !== "Other" && usePackPresetEdit && (
                     <FormControl fullWidth>
-                      <InputLabel>Pack Unit</InputLabel>
+                      <InputLabel>Pack Size</InputLabel>
                       <Select
-                        label="Pack Unit"
-                        value={editMedForm.packUnit}
-                        onChange={e => setEditMedForm(f => ({ ...f, packUnit: e.target.value }))}
+                        label="Pack Size"
+                        value={packLabel(editMedForm.packCount, editMedForm.packUnit) || ""}
+                        onChange={(e) => {
+                          if (e.target.value === "__CUSTOM__") {
+                            setUsePackPresetEdit(false);
+                            setEditMedForm(f => ({ ...f, packCount: "", packUnit: "" }));
+                            return;
+                          }
+                          const opt = normalizePackOpt(e.target.value);
+                          setEditMedForm(f => ({ ...f, packCount: opt.count, packUnit: opt.unit }));
+                        }}
                       >
-                        {["", "tablets", "capsules", "ml", "g", "units", "sachets", "drops"].map(u =>
-                          <MenuItem key={u || "none"} value={u}>{u || "—"}</MenuItem>
-                        )}
+                        {(PACK_SIZES_BY_TYPE[editMedForm.type] || []).map((raw) => {
+                          const o = normalizePackOpt(raw);
+                          return (
+                            <MenuItem key={o.label} value={o.label}>{o.label}</MenuItem>
+                          );
+                        })}
+                        <MenuItem value="__CUSTOM__">Custom…</MenuItem>
                       </Select>
                     </FormControl>
-                  </Stack>
+                  )}
+
+                  {(editMedForm.type === "Other" || !usePackPresetEdit) && (
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                      <TextField
+                        label="Pack Count"
+                        type="number"
+                        fullWidth
+                        value={editMedForm.packCount}
+                        onChange={e => setEditMedForm(f => ({ ...f, packCount: e.target.value }))}
+                      />
+                      <FormControl fullWidth>
+                        <InputLabel>Pack Unit</InputLabel>
+                        <Select
+                          label="Pack Unit"
+                          value={editMedForm.packUnit}
+                          onChange={e => setEditMedForm(f => ({ ...f, packUnit: e.target.value }))}
+                        >
+                          {["tablets","capsules","ml","g","units","sachets","drops"].map(u =>
+                            <MenuItem key={u} value={u}>{u}</MenuItem>
+                          )}
+                        </Select>
+                      </FormControl>
+                    </Stack>
+                  )}
 
                   <Stack direction="row" spacing={1} alignItems="center">
                     {/* Gallery Upload */}
@@ -1690,7 +1747,11 @@ export default function PharmacyDashboard() {
 
                 <FormControl fullWidth>
                   <InputLabel>Type</InputLabel>
-                  <Select value={medForm.type} label="Type" onChange={e => setMedForm(f => ({ ...f, type: e.target.value }))}>
+                  <Select value={medForm.type} label="Type" onChange={(e) => {
+                    const t = e.target.value;
+                    setMedForm(f => ({ ...f, type: t, packCount: "", packUnit: "" }));
+                    setUsePackPreset(t !== "Other");   // "Other" → manual fields
+                  }}>
                     {TYPE_OPTIONS.map(opt => (<MenuItem key={opt} value={opt}>{opt}</MenuItem>))}
                   </Select>
                 </FormControl>
@@ -1738,28 +1799,58 @@ export default function PharmacyDashboard() {
                   </FormControl>
                 </Stack>
 
-                {/* PACK SIZE */}
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                  <TextField
-                    label="Pack Count"
-                    type="number"
-                    value={medForm.packCount}
-                    onChange={e => setMedForm(f => ({ ...f, packCount: e.target.value }))}
-                    fullWidth
-                  />
+                {/* PACK SIZE (filtered by Type) */}
+                {medForm.type !== "Other" && usePackPreset && (
                   <FormControl fullWidth>
-                    <InputLabel>Pack Unit</InputLabel>
+                    <InputLabel>Pack Size</InputLabel>
                     <Select
-                      label="Pack Unit"
-                      value={medForm.packUnit}
-                      onChange={e => setMedForm(f => ({ ...f, packUnit: e.target.value }))}
+                      label="Pack Size"
+                      value={packLabel(medForm.packCount, medForm.packUnit) || ""}
+                      onChange={(e) => {
+                        if (e.target.value === "__CUSTOM__") {
+                          setUsePackPreset(false);
+                          setMedForm(f => ({ ...f, packCount: "", packUnit: "" }));
+                          return;
+                        }
+                        const opt = normalizePackOpt(e.target.value);
+                        setMedForm(f => ({ ...f, packCount: opt.count, packUnit: opt.unit }));
+                      }}
                     >
-                      {["", "tablets", "capsules", "ml", "g", "units", "sachets", "drops"].map(u =>
-                        <MenuItem key={u || "none"} value={u}>{u || "—"}</MenuItem>
-                      )}
+                      {(PACK_SIZES_BY_TYPE[medForm.type] || []).map((raw) => {
+                        const o = normalizePackOpt(raw);
+                        return (
+                          <MenuItem key={o.label} value={o.label}>{o.label}</MenuItem>
+                        );
+                      })}
+                      <MenuItem value="__CUSTOM__">Custom…</MenuItem>
                     </Select>
                   </FormControl>
-                </Stack>
+                )}
+
+                {/* Manual fallback (Type = Other OR user picked Custom…) */}
+                {(medForm.type === "Other" || !usePackPreset) && (
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                    <TextField
+                      label="Pack Count"
+                      type="number"
+                      value={medForm.packCount}
+                      onChange={e => setMedForm(f => ({ ...f, packCount: e.target.value }))}
+                      fullWidth
+                    />
+                    <FormControl fullWidth>
+                      <InputLabel>Pack Unit</InputLabel>
+                      <Select
+                        label="Pack Unit"
+                        value={medForm.packUnit}
+                        onChange={e => setMedForm(f => ({ ...f, packUnit: e.target.value }))}
+                      >
+                        {["tablets","capsules","ml","g","units","sachets","drops"].map(u =>
+                          <MenuItem key={u} value={u}>{u}</MenuItem>
+                        )}
+                      </Select>
+                    </FormControl>
+                  </Stack>
+                )}
 
                 <Stack direction="row" spacing={2} alignItems="center">
                   {/* Hidden file inputs */}

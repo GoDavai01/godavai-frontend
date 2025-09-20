@@ -11,6 +11,8 @@ import { useParams } from "react-router-dom";
 import PrescriptionUploadModal from "../components/PrescriptionUploadModal";
 import axios from "axios";
 import { useLocation } from "../context/LocationContext";
+import { CUSTOMER_CATEGORIES } from "../constants/customerCategories";
+import { TYPE_OPTIONS } from "../constants/packSizes";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0f6e51";
@@ -40,8 +42,33 @@ async function ensureDescription(apiBase, medId) {
   }
 }
 
-const allCategories = ["All","Painkiller","Fever","Cough & Cold","Diabetes","Heart","Antibiotic","Ayurveda"];
-const medTypes      = ["All","Tablet","Syrup","Injection","Cream","Ointment","Drop","Spray","Inhaler"];
+const allCategories = ["All", ...CUSTOMER_CATEGORIES];
+
+/** Map any raw type to a display group:
+ *  - "Drops (Eye|Ear|Nasal)" and legacy "Drop"/"Drops" -> "Drops"
+ *  - falsy/unknown -> "Other"
+ *  - otherwise return as-is
+ */
+const typeToGroup = (t) => {
+  if (!t) return "Other";
+  const s = String(Array.isArray(t) ? t[0] : t).trim();
+  if (/^drops?\s*\(/i.test(s)) return "Drops";
+  if (/^drop(s)?$/i.test(s)) return "Drops";
+  return s;
+};
+
+/** Build the chip list from canonical TYPE_OPTIONS + any legacy types found in inventory */
+const useMedTypeChips = (medicines) =>
+  useMemo(() => {
+    const base = TYPE_OPTIONS.map(typeToGroup).filter((t) => t !== "Other");
+    const inv = medicines
+      .flatMap((m) => (Array.isArray(m?.type) ? m.type : [m?.type]))
+      .map(typeToGroup);
+    const unique = Array.from(new Set(["All", ...base, ...inv]));
+    const out = unique.filter((t) => t !== "Other");
+    out.push("Other");
+    return out;
+  }, [medicines]);
 
 export default function Medicines() {
   const { pharmacyId } = useParams();
@@ -59,23 +86,28 @@ export default function Medicines() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [canDeliver, setCanDeliver] = useState(true);
 
+  // Build type chip list (kept in sync with TYPE_OPTIONS + inventory)
+  const medTypes = useMedTypeChips(medicines);
+
   // delivery availability near the user
   useEffect(() => {
     const lat = Number(currentAddress?.lat);
     const lng = Number(currentAddress?.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     fetch(`${API_BASE_URL}/api/delivery/active-partner-nearby?lat=${lat}&lng=${lng}`)
-    .then(r => r.json())
-    .then(d => setCanDeliver(!!d.activePartnerExists))
-    .catch(() => setCanDeliver(false));
-    }, [currentAddress]);
+      .then((r) => r.json())
+      .then((d) => setCanDeliver(!!d.activePartnerExists))
+      .catch(() => setCanDeliver(false));
+  }, [currentAddress]);
 
   useEffect(() => {
     (async () => {
       try {
         const r = await axios.get(`${API_BASE_URL}/api/pharmacies?id=${pharmacyId}`);
         if (Array.isArray(r.data)) setPharmacy(r.data[0]);
-      } catch { setPharmacy(null); }
+      } catch {
+        setPharmacy(null);
+      }
     })();
   }, [pharmacyId]);
 
@@ -94,21 +126,21 @@ export default function Medicines() {
     if (Array.isArray(med.category)) return med.category.includes(selected);
     return med.category === selected;
   };
+
   const matchType = (med, selected) => {
     if (selected === "All") return true;
-    if (!med.type) return false;
-    if (Array.isArray(med.type)) return med.type.includes(selected);
-    return med.type === selected;
+    const types = Array.isArray(med.type) ? med.type : [med.type];
+    const groups = types.map(typeToGroup);
+    return groups.includes(selected);
   };
 
-const filteredMeds = useMemo(
-  () =>
-    medicines
-      .filter((m) => m.status !== "unavailable" && m.available !== false) // both checks
-      .filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType)),
-  [medicines, selectedCategory, selectedType]
-);
-
+  const filteredMeds = useMemo(
+    () =>
+      medicines
+        .filter((m) => m.status !== "unavailable" && m.available !== false) // both checks
+        .filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType)),
+    [medicines, selectedCategory, selectedType]
+  );
 
   // Right column height; the page itself does not scroll.
   const columnHeight = `calc(100vh - ${TOP_OFFSET_PX}px)`;
@@ -145,8 +177,8 @@ const filteredMeds = useMemo(
             {!canDeliver && (
               <div className="mt-2 bg-red-50 text-red-700 font-bold text-[13.5px] px-3 py-2 rounded-xl">
                 ⛔ Sorry, no delivery partner is available at your location right now. Please try again soon.
-                </div>
-                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="h-6 w-40 rounded bg-neutral-100 animate-pulse mb-2" />
@@ -255,16 +287,18 @@ const filteredMeds = useMemo(
                           bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm overflow-hidden
                         "
                         onClick={async () => {
-  setSelectedMed(med);
-  setActiveImg(0);
-  if (!med.description || !med.description.trim()) {
-    const desc = await ensureDescription(API_BASE_URL, med._id);
-    if (desc) {
-      setSelectedMed(prev => (prev ? { ...prev, description: desc } : prev));
-      setMedicines(ms => ms.map(m => (m._id === med._id ? { ...m, description: desc } : m)));
-    }
-  }
-}}
+                          setSelectedMed(med);
+                          setActiveImg(0);
+                          if (!med.description || !med.description.trim()) {
+                            const desc = await ensureDescription(API_BASE_URL, med._id);
+                            if (desc) {
+                              setSelectedMed((prev) => (prev ? { ...prev, description: desc } : prev));
+                              setMedicines((ms) =>
+                                ms.map((m) => (m._id === med._id ? { ...m, description: desc } : m))
+                              );
+                            }
+                          }
+                        }}
                         title="Know more"
                       >
                         <img
@@ -274,32 +308,34 @@ const filteredMeds = useMemo(
                         />
                         {med.prescriptionRequired && (
                           <span
-                           className="
+                            className="
                            absolute top-2 left-2 rounded-full
                            bg-white text-red-600 border border-red-200
                            text-[10px] font-semibold px-2 py-0.5 shadow-sm
                            "
-                           title="Prescription required"
-                           >
+                            title="Prescription required"
+                          >
                             Rx
-                           </span>
-                           )}
+                          </span>
+                        )}
                       </button>
 
                       <div className="mt-2">
                         <div
                           className="text-[13px] font-extrabold text-emerald-800 leading-snug cursor-pointer"
                           onClick={async () => {
-  setSelectedMed(med);
-  setActiveImg(0);
-  if (!med.description || !med.description.trim()) {
-    const desc = await ensureDescription(API_BASE_URL, med._id);
-    if (desc) {
-      setSelectedMed(prev => (prev ? { ...prev, description: desc } : prev));
-      setMedicines(ms => ms.map(m => (m._id === med._id ? { ...m, description: desc } : m)));
-    }
-  }
-}}
+                            setSelectedMed(med);
+                            setActiveImg(0);
+                            if (!med.description || !med.description.trim()) {
+                              const desc = await ensureDescription(API_BASE_URL, med._id);
+                              if (desc) {
+                                setSelectedMed((prev) => (prev ? { ...prev, description: desc } : prev));
+                                setMedicines((ms) =>
+                                  ms.map((m) => (m._id === med._id ? { ...m, description: desc } : m))
+                                );
+                              }
+                            }
+                          }}
                           style={{
                             display: "-webkit-box",
                             WebkitLineClamp: 2,
@@ -341,7 +377,6 @@ const filteredMeds = useMemo(
                                 {med.category[0]}
                               </Badge>
                             )}
-                            
                           </div>
 
                           {/* RIGHT: Add button */}
@@ -351,9 +386,12 @@ const filteredMeds = useMemo(
                             style={{ backgroundColor: canDeliver ? DEEP : "#d1d5db", color: "white" }}
                             disabled={!canDeliver}
                             onClick={() => {
-                              if (!canDeliver) { alert("Delivery isn’t available right now."); return; }
+                              if (!canDeliver) {
+                                alert("Delivery isn’t available right now.");
+                                return;
+                              }
                               addToCart(med);
-                              }}
+                            }}
                           >
                             Add
                           </Button>
@@ -372,7 +410,10 @@ const filteredMeds = useMemo(
       <Dialog
         open={!!selectedMed}
         onOpenChange={(open) => {
-          if (!open) { setSelectedMed(null); setActiveImg(0); }
+          if (!open) {
+            setSelectedMed(null);
+            setActiveImg(0);
+          }
         }}
       >
         <DialogContent
@@ -402,19 +443,16 @@ const filteredMeds = useMemo(
                   <div
                     className="h-full flex transition-transform duration-300"
                     style={{ transform: `translateX(-${activeImg * 100}%)` }}
-                    onTouchStart={(e)=> (e.currentTarget.dataset.sx = e.touches[0].clientX)}
-                    onTouchEnd={(e)=> {
+                    onTouchStart={(e) => (e.currentTarget.dataset.sx = e.touches[0].clientX)}
+                    onTouchEnd={(e) => {
                       const sx = Number(e.currentTarget.dataset.sx || 0);
                       const dx = e.changedTouches[0].clientX - sx;
-                      if (dx < -40 && activeImg < images.length - 1) setActiveImg(i => i + 1);
-                      if (dx >  40 && activeImg > 0)               setActiveImg(i => i - 1);
+                      if (dx < -40 && activeImg < images.length - 1) setActiveImg((i) => i + 1);
+                      if (dx > 40 && activeImg > 0) setActiveImg((i) => i - 1);
                     }}
                   >
                     {images.map((src, i) => (
-                      <div
-                        key={i}
-                        className="min-w-full h-full grid place-items-center select-none"
-                      >
+                      <div key={i} className="min-w-full h-full grid place-items-center select-none">
                         <img
                           src={getImageUrl(src)}
                           alt={selectedMed.name}
@@ -430,13 +468,13 @@ const filteredMeds = useMemo(
                     <>
                       <button
                         className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5"
-                        onClick={() => setActiveImg(i => Math.max(0, i - 1))}
+                        onClick={() => setActiveImg((i) => Math.max(0, i - 1))}
                       >
                         ‹
                       </button>
                       <button
                         className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 ring-1 ring-black/10 px-2 py-1.5"
-                        onClick={() => setActiveImg(i => Math.min(images.length - 1, i + 1))}
+                        onClick={() => setActiveImg((i) => Math.min(images.length - 1, i + 1))}
                       >
                         ›
                       </button>
@@ -449,7 +487,7 @@ const filteredMeds = useMemo(
                       {images.map((_, i) => (
                         <span
                           key={i}
-                          onClick={()=>setActiveImg(i)}
+                          onClick={() => setActiveImg(i)}
                           className={`h-1.5 rounded-full cursor-pointer transition-all ${
                             i === activeImg ? "w-5 bg-emerald-600" : "w-2.5 bg-emerald-200"
                           }`}
@@ -486,7 +524,7 @@ const filteredMeds = useMemo(
                   </div>
                 )}
 
-                {/* ⬇️ ADDED: Prescription Required line */}
+                {/* Prescription Required */}
                 <div className="text-sm text-neutral-700 mb-2">
                   <b>Prescription Required:</b> {selectedMed.prescriptionRequired ? "Yes" : "No"}
                 </div>
@@ -524,10 +562,13 @@ const filteredMeds = useMemo(
                   style={{ backgroundColor: canDeliver ? DEEP : "#d1d5db", color: "white" }}
                   disabled={!canDeliver}
                   onClick={() => {
-                    if (!canDeliver) { alert("Delivery isn’t available right now."); return; }
+                    if (!canDeliver) {
+                      alert("Delivery isn’t available right now.");
+                      return;
+                    }
                     addToCart(selectedMed);
                     setSelectedMed(null);
-                    }}
+                  }}
                 >
                   Add to Cart
                 </Button>
