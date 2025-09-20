@@ -6,6 +6,25 @@ import CircularProgress from "@mui/material/CircularProgress";
 import useDebouncedValue from "../../hooks/useDebouncedValue";
 import { fetchCompositionSuggest, fetchPrefillByCompositionId } from "../../api/suggest";
 
+// --- small helper to strip brand prefixes & dosage-form suffixes ---
+function normalizeCompositionName(str = "") {
+  let t = String(str).trim();
+
+  // remove common dosage form tails
+  t = t.replace(
+    /\b(Tablet|Tablets|Capsule|Capsules|Syrup|Suspension|Injection|Gel|Cream|Ointment|Drops|Solution)\b.*$/i,
+    ""
+  ).trim();
+
+  // remove known brand-like prefixes (heuristic: first capitalized word that isn't the molecule)
+  t = t.replace(/^(DavaIndia|Genericart|Cipla|Sun|Alkem|Zydus)\s+/i, "");
+
+  // collapse multiple spaces
+  t = t.replace(/\s{2,}/g, " ").trim();
+
+  return t || str;
+}
+
 export default function CompositionAutocomplete({
   label = "Composition",
   value,
@@ -51,11 +70,20 @@ export default function CompositionAutocomplete({
       onOpen={() => setOpen(true)}
       onClose={() => setOpen(false)}
       options={options.length ? options : noOpt}
-      getOptionLabel={(o) => o?.name || ""}
-      filterOptions={(x) => x}
+      getOptionLabel={(o) => normalizeCompositionName(o?.name || "")}
+      filterOptions={(x) => {
+        // de-duplicate after normalization
+        const seen = new Set();
+        return x.filter((o) => {
+          const norm = normalizeCompositionName(o?.name || "");
+          if (seen.has(norm.toLowerCase())) return false;
+          seen.add(norm.toLowerCase());
+          return true;
+        });
+      }}
       loading={loading}
       disabled={disabled}
-      // --- IMPORTANT: fully control the textbox to prevent clearing ---
+      // fully control the textbox
       freeSolo
       inputValue={input}
       onInputChange={(_, v) => setInput(v ?? "")}
@@ -65,16 +93,17 @@ export default function CompositionAutocomplete({
       onChange={async (_e, option) => {
         if (!option) return;
         if (typeof option === "string") {
-          onValueChange?.(option);
-          onPrefill?.({ productKind: "generic", name: option });
+          onValueChange?.(normalizeCompositionName(option));
+          onPrefill?.({ productKind: "generic", name: normalizeCompositionName(option) });
           return;
         }
         if (option.id === "__manual__") {
-          onValueChange?.(input);
-          onPrefill?.({ productKind: "generic", name: input });
+          onValueChange?.(normalizeCompositionName(input));
+          onPrefill?.({ productKind: "generic", name: normalizeCompositionName(input) });
           return;
         }
-        onValueChange?.(option.name);
+        const norm = normalizeCompositionName(option.name);
+        onValueChange?.(norm);
         const prefill = await fetchPrefillByCompositionId(option.id);
         onPrefill?.({ ...prefill, compositionId: option.id });
       }}
