@@ -83,24 +83,27 @@ function weekLabel(date) { const s = startOfWeek(date); return `Week of ${ymd(s)
 const normalizePackOpt = (raw) => {
   if (!raw) return { count: "", unit: "", label: "" };
   if (typeof raw === "string") {
-    const m = raw.trim().match(/^(\d+)\s*([A-Za-z]+)s?$/);
+    // accept "10" or "10 tab" or "60 ml"
+    const m = raw.trim().match(/^(\d+)(?:\s*([A-Za-z]+)s?)?$/);
     if (!m) return { count: "", unit: "", label: raw };
-    const [, count, unit] = m;
-    return { count, unit: unit.toLowerCase(), label: `${count} ${unit.toLowerCase()}` };
+    const [, count, unit = "" ] = m;
+    const u = unit.toLowerCase();
+    const label = u ? `${count} ${u}` : `${count}`;
+    return { count, unit: u, label };
   }
   const count = String(raw.count ?? "").trim();
   const unit  = String(raw.unit ?? "").trim().toLowerCase();
-  const label = raw.label || (count && unit ? `${count} ${unit}` : "");
+  const label = raw.label || (count && unit ? `${count} ${unit}` : `${count}`);
   return { count, unit, label };
 };
 
 const packLabel = (count, unit) => {
-  if (!count || !unit) return "";
-  const u = unit.toLowerCase();
-  // keep ml/g singular; pluralize others
+  if (!count) return "";
+  const u = String(unit || "").toLowerCase();
+  if (!u) return String(count); // <- key fix: allow plain "10" etc for Tablet/Capsule
   const printable = (u === "ml" || u === "g")
     ? u
-    : (Number(count) === 1 ? u.replace(/s$/,"") : (u.endsWith("s") ? u : u + "s"));
+    : (Number(count) === 1 ? u.replace(/s$/, "") : (u.endsWith("s") ? u : u + "s"));
   return `${count} ${printable}`;
 };
 
