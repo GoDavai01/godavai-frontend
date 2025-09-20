@@ -352,7 +352,7 @@ function EarningsTab({ payouts }) {
 /* ---------------------------- MAIN DASHBOARD ---------------------------- */
 
 export default function PharmacyDashboard() {
-  // ======== all logic below is IDENTICAL to your original file ========
+  // ======== all logic below is IDENTICAL to your original file (with the requested additions) ========
   const [token, setToken] = useState(localStorage.getItem("pharmacyToken") || "");
   const [tab, setTab] = useState(0); // 0: Overview, 1: Earnings, 2: Medicines
 
@@ -495,15 +495,28 @@ export default function PharmacyDashboard() {
     setLoading(false);
   };
 
+  // --------------------- (a) EXTEND FORM STATE (two places) ---------------------
   const [medForm, setMedForm] = useState({
     name: "", brand: "", composition: "", company: "",
     price: "", mrp: "", stock: "", category: "", discount: "",
-    customCategory: "", type: "Tablet", customType: "", prescriptionRequired: false
+    customCategory: "", type: "Tablet", customType: "", prescriptionRequired: false,
+    // NEW:
+    productKind: "branded",      // "branded" | "generic"
+    hsn: "3004",                 // sensible default for many medicines
+    gstRate: 0,                  // 0 / 5 / 12 / 18
+    packCount: "",               // numeric string is fine for inputs
+    packUnit: ""                 // '', 'tablets', 'capsules', 'ml', 'g', 'units', 'sachets', 'drops'
   });
   const [editMedForm, setEditMedForm] = useState({
     name: "", brand: "", composition: "", company: "",
     price: "", mrp: "", stock: "", category: "", customCategory: "",
-    type: "Tablet", customType: "", prescriptionRequired: false
+    type: "Tablet", customType: "", prescriptionRequired: false,
+    // NEW:
+    productKind: "branded",
+    hsn: "3004",
+    gstRate: 0,
+    packCount: "",
+    packUnit: ""
   });
 
   const handleImagesChange = (e) => {
@@ -524,7 +537,7 @@ export default function PharmacyDashboard() {
 
   const handleAddMedicine = async () => {
     if (
-      !medForm.name || !medForm.price || !medForm.mrp || !medForm.stock ||
+      !medForm.price || !medForm.mrp || !medForm.stock ||
       !medForm.category ||
       (
         (Array.isArray(medForm.category) && medForm.category.includes("Other") && !medForm.customCategory) ||
@@ -547,10 +560,15 @@ export default function PharmacyDashboard() {
 
     try {
       let data, headers;
+
+      // NOTE: if generic, brand should be blank (UI already hides it but we enforce again)
+      const safeBrand = medForm.productKind === "generic" ? "" : (medForm.brand || "");
+
       if (medImages && medImages.length) {
         data = new FormData();
+        // Name can be derived by backend; still send current value
         data.append("name", medForm.name);
-        data.append("brand", medForm.brand);
+        data.append("brand", safeBrand);
         data.append("composition", medForm.composition || "");
         data.append("company", medForm.company || "");
         data.append("price", medForm.price);
@@ -560,14 +578,20 @@ export default function PharmacyDashboard() {
         data.append("category", JSON.stringify(finalCategories));
         data.append("type", medForm.type || "Tablet");
         if (medForm.type === "Other") data.append("customType", medForm.customType || "");
-        // ⬇️ add prescription flag
         data.append("prescriptionRequired", medForm.prescriptionRequired);
+        // ------- (d) send new fields -------
+        data.append("productKind", medForm.productKind);
+        data.append("hsn", medForm.hsn);
+        data.append("gstRate", medForm.gstRate);
+        data.append("packCount", medForm.packCount);
+        data.append("packUnit", medForm.packUnit);
+
         medImages.forEach(img => data.append("images", img));
         headers = { Authorization: `Bearer ${token}` };
       } else {
         data = {
           name: medForm.name,
-          brand: medForm.brand,
+          brand: safeBrand,
           composition: medForm.composition || "",
           company: medForm.company || "",
           price: medForm.price,
@@ -577,8 +601,13 @@ export default function PharmacyDashboard() {
           category: finalCategories,
           type: medForm.type || "Tablet",
           ...(medForm.type === "Other" && { customType: medForm.customType || "" }),
-          // ⬇️ add prescription flag
           prescriptionRequired: medForm.prescriptionRequired,
+          // ------- (d) send new fields -------
+          productKind: medForm.productKind,
+          hsn: medForm.hsn,
+          gstRate: medForm.gstRate,
+          packCount: medForm.packCount,
+          packUnit: medForm.packUnit
         };
         headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
       }
@@ -588,7 +617,8 @@ export default function PharmacyDashboard() {
       setMedForm({
         name: "", brand: "", composition: "", company: "",
         price: "", mrp: "", stock: "", category: "", discount: "",
-        customCategory: "", type: "Tablet", customType: "", prescriptionRequired: false
+        customCategory: "", type: "Tablet", customType: "", prescriptionRequired: false,
+        productKind: "branded", hsn: "3004", gstRate: 0, packCount: "", packUnit: ""
       });
       setMedImages([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -620,52 +650,58 @@ export default function PharmacyDashboard() {
       customCategory,
       type: TYPE_OPTIONS.includes(med.type) ? med.type : "Other",
       customType: TYPE_OPTIONS.includes(med.type) ? "" : (med.type || ""),
-      prescriptionRequired: !!med.prescriptionRequired
+      prescriptionRequired: !!med.prescriptionRequired,
+      // --------------------- (b) HYDRATE NEW FIELDS ---------------------
+      productKind: med.productKind || (med.brand ? "branded" : "generic"),
+      hsn: med.hsn || "3004",
+      gstRate: typeof med.gstRate === "number" ? med.gstRate : 0,
+      packCount: (med.packCount ?? "") + "",
+      packUnit: med.packUnit || "",
     });
   };
 
-// mark a medicine available/unavailable — optimistic + new endpoint
-const toggleAvailability = async (med) => {
-  const goingUnavailable = med.status !== "unavailable"; // if currently available → make unavailable
-  const newStatus = goingUnavailable ? "unavailable" : "active";
+  // mark a medicine available/unavailable — optimistic + new endpoint
+  const toggleAvailability = async (med) => {
+    const goingUnavailable = med.status !== "unavailable"; // if currently available → make unavailable
+    const newStatus = goingUnavailable ? "unavailable" : "active";
 
-  // optimistic UI update
-  setMedicines((ms) =>
-    ms.map((m) =>
-      (m._id || m.id) === (med._id || med.id)
-        ? { ...m, status: newStatus, available: !goingUnavailable }
-        : m
-    )
-  );
-
-  try {
-    await axios.patch(
-      `${API_BASE_URL}/api/pharmacy/medicines/${med._id || med.id}/availability`,
-      { status: newStatus },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-    setMedMsg(`Marked as ${newStatus}.`);
-  } catch (e) {
-    // revert on failure
+    // optimistic UI update
     setMedicines((ms) =>
       ms.map((m) =>
         (m._id || m.id) === (med._id || med.id)
-          ? { ...m, status: med.status, available: med.available }
+          ? { ...m, status: newStatus, available: !goingUnavailable }
           : m
       )
     );
-    setMedMsg("Failed to update availability.");
-  }
-};
+
+    try {
+      await axios.patch(
+        `${API_BASE_URL}/api/pharmacy/medicines/${med._id || med.id}/availability`,
+        { status: newStatus },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      setMedMsg(`Marked as ${newStatus}.`);
+    } catch (e) {
+      // revert on failure
+      setMedicines((ms) =>
+        ms.map((m) =>
+          (m._id || m.id) === (med._id || med.id)
+            ? { ...m, status: med.status, available: med.available }
+            : m
+        )
+      );
+      setMedMsg("Failed to update availability.");
+    }
+  };
 
 
   const handleSaveMedicine = async () => {
-    if (!editMedForm.name || !editMedForm.price || !editMedForm.stock ||
+    if (!editMedForm.price || !editMedForm.stock ||
         !editMedForm.category ||
         (
           (Array.isArray(editMedForm.category) && editMedForm.category.includes("Other") && !editMedForm.customCategory) ||
@@ -689,10 +725,14 @@ const toggleAvailability = async (med) => {
     try {
       let data, headers;
       const makeActive = editMedForm.price > 0 && editMedForm.mrp > 0 && (editMedForm.stock ?? 0) >= 0;
+
+      // NOTE: if switching to generic, brand must be blank
+      const safeBrand = editMedForm.productKind === "generic" ? "" : (editMedForm.brand || "");
+
       if (editMedImages && editMedImages.length) {
         data = new FormData();
         data.append("name", editMedForm.name);
-        data.append("brand", editMedForm.brand);
+        data.append("brand", safeBrand);
         data.append("composition", editMedForm.composition || "");
         data.append("company", editMedForm.company || "");
         data.append("price", editMedForm.price);
@@ -701,15 +741,22 @@ const toggleAvailability = async (med) => {
         data.append("category", JSON.stringify(finalCategories));
         data.append("type", editMedForm.type);
         if (editMedForm.type === "Other") data.append("customType", editMedForm.customType || "");
-        // ⬇️ add prescription flag
         data.append("prescriptionRequired", editMedForm.prescriptionRequired);
-        editMedImages.forEach(img => data.append("images", img));
         if (makeActive) data.append("status", "active");
+
+        // ------- (d) send new fields on edit -------
+        data.append("productKind", editMedForm.productKind);
+        data.append("hsn", editMedForm.hsn);
+        data.append("gstRate", editMedForm.gstRate);
+        data.append("packCount", editMedForm.packCount);
+        data.append("packUnit", editMedForm.packUnit);
+
+        editMedImages.forEach(img => data.append("images", img));
         headers = { Authorization: `Bearer ${token}` };
       } else {
         data = {
           name: editMedForm.name,
-          brand: editMedForm.brand,
+          brand: safeBrand,
           composition: editMedForm.composition || "",
           company: editMedForm.company || "",
           price: editMedForm.price,
@@ -718,9 +765,14 @@ const toggleAvailability = async (med) => {
           category: finalCategories,
           type: editMedForm.type,
           ...(editMedForm.type === "Other" && { customType: editMedForm.customType }),
-          // ⬇️ add prescription flag
           prescriptionRequired: editMedForm.prescriptionRequired,
           ...(makeActive ? { status: "active" } : {}),
+          // ------- (d) send new fields on edit -------
+          productKind: editMedForm.productKind,
+          hsn: editMedForm.hsn,
+          gstRate: editMedForm.gstRate,
+          packCount: editMedForm.packCount,
+          packUnit: editMedForm.packUnit
         };
         headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
       }
@@ -1085,9 +1137,9 @@ const toggleAvailability = async (med) => {
             </Box>
             <Divider className="my-3" />
 
-{/* PRESCRIPTION ORDERS (quotes flow) */}
-<Typography variant="h6" className="mb-1 font-extrabold">Prescription Orders</Typography>
-<PrescriptionOrdersTab token={token} medicines={medicines} />
+            {/* PRESCRIPTION ORDERS (quotes flow) */}
+            <Typography variant="h6" className="mb-1 font-extrabold">Prescription Orders</Typography>
+            <PrescriptionOrdersTab token={token} medicines={medicines} />
 
             {/* Logout */}
             <Box sx={{ width: "100%", position: "relative", pb: 7, textAlign: "center" }}>
@@ -1103,10 +1155,10 @@ const toggleAvailability = async (med) => {
           <EarningsTab payouts={payouts} />
         )}
 
-        {/* ================== MEDICINES TAB (moved from Overview toggle; logic unchanged) ================== */}
+        {/* ================== MEDICINES TAB ================== */}
         {tab === 2 && (
           <Box sx={{ mt: 1, mb: 10 }}>
-            {/* ▼▼ REPLACED HEADER WITH SEARCH ICON + OPTIONAL INPUT ▼▼ */}
+            {/* ▼▼ header with search ▼▼ */}
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
               <Typography variant="h6">Medicines</Typography>
               <IconButton
@@ -1134,7 +1186,6 @@ const toggleAvailability = async (med) => {
                 sx={{ mb: 1 }}
               />
             )}
-            {/* ▲▲ HEADER CHANGE END ▲▲ */}
 
             {(medSearch
                 ? medicines.filter(m => {
@@ -1150,135 +1201,150 @@ const toggleAvailability = async (med) => {
                     return hay.includes(q);
                   })
                 : medicines)
-  .slice()
-  .sort((a,b) => {
-    const ua = a.status === "unavailable" ? 1 : 0;
-    const ub = b.status === "unavailable" ? 1 : 0;
-    if (ua !== ub) return ua - ub;           // unavailable at bottom
-    return String(a.name).localeCompare(String(b.name));
-  })
-  .map(med => (
-  <Card
-    key={med.id || med._id}
-    className="mb-2 bg-white border border-emerald-200 rounded-2xl"
-    sx={{ position: "relative" }}
-  >
-    <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-      <Typography sx={{ flex: 1 }}>
-        <b>{med.name}</b>
-        {med.brand && (
-          <span style={{ color: "#059669", fontWeight: 400 }}>
-            {" "}({med.brand})
-          </span>
-        )}
-        {med.status === "draft" && (
-          <Chip size="small" label="Draft" color="warning" className="ml-2 font-bold" />
-        )}
-        {med.status === "unavailable" && (
-          <Chip size="small" label="Unavailable" color="error" className="ml-2 font-bold" />
-        )}
-        {" — "}
-        <span style={{ color: "#047857" }}>
-          {(Array.isArray(med.category) ? med.category.join(", ") : med.category) || "Miscellaneous"}
-        </span>
-        <br />
-        {med.composition && (
-          <span style={{ display: "block", color: "#475569" }}>
-            Composition: {med.composition}
-          </span>
-        )}
-        {med.company && (
-          <span style={{ display: "block", color: "#475569" }}>
-            Company: {med.company}
-          </span>
-        )}
-        <b>Selling Price:</b> ₹{med.price} | <b>MRP:</b> ₹{med.mrp} | <b>Stock:</b> {med.stock}
-        <br />
-        <b>Type:</b> {med.type || "Tablet"}
-      </Typography>
+              .slice()
+              .sort((a,b) => {
+                const ua = a.status === "unavailable" ? 1 : 0;
+                const ub = b.status === "unavailable" ? 1 : 0;
+                if (ua !== ub) return ua - ub;           // unavailable at bottom
+                return String(a.name).localeCompare(String(b.name));
+              })
+              .map(med => (
+                <Card
+                  key={med.id || med._id}
+                  className="mb-2 bg-white border border-emerald-200 rounded-2xl"
+                  sx={{ position: "relative" }}
+                >
+                  <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    <Typography sx={{ flex: 1 }}>
+                      <b>{med.name}</b>
+                      {med.brand && (
+                        <span style={{ color: "#059669", fontWeight: 400 }}>
+                          {" "}({med.brand})
+                        </span>
+                      )}
+                      {med.status === "draft" && (
+                        <Chip size="small" label="Draft" color="warning" className="ml-2 font-bold" />
+                      )}
+                      {med.status === "unavailable" && (
+                        <Chip size="small" label="Unavailable" color="error" className="ml-2 font-bold" />
+                      )}
+                      {" — "}
+                      <span style={{ color: "#047857" }}>
+                        {(Array.isArray(med.category) ? med.category.join(", ") : med.category) || "Miscellaneous"}
+                      </span>
+                      <br />
+                      {med.composition && (
+                        <span style={{ display: "block", color: "#475569" }}>
+                          Composition: {med.composition}
+                        </span>
+                      )}
+                      {med.company && (
+                        <span style={{ display: "block", color: "#475569" }}>
+                          Company: {med.company}
+                        </span>
+                      )}
+                      <b>Selling Price:</b> ₹{med.price} | <b>MRP:</b> ₹{med.mrp} | <b>Stock:</b> {med.stock}
+                      <br />
+                      <b>Type:</b> {med.type || "Tablet"}
+                      {/* --------------------- (e) SHOW PACK SIZE --------------------- */}
+                      {(med.packCount || med.packUnit) && (
+                        <>
+                          {" | "}
+                          <b>Pack:</b> {med.packCount || "-"} {med.packUnit || ""}
+                        </>
+                      )}
+                    </Typography>
 
-      {/* Toggle moved to top-right */}
-      <Box
-        sx={{
-          position: "absolute",
-          top: 8,
-          right: 8,
-          display: "flex",
-          alignItems: "center",
-          gap: 0.75,
-          bgcolor: "white",
-          px: 1,
-          py: 0.25,
-          borderRadius: 2,
-          boxShadow: 0.5,
-          border: "1px solid",
-          borderColor: "emerald.100",
-        }}
-      >
-        <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          Available
-        </Typography>
-        <Switch
-          size="small"
-          color="success"
-          checked={med.status !== "unavailable"}
-          onChange={() => toggleAvailability(med)}
-          disabled={loading}
-          inputProps={{ "aria-label": "Toggle Availability" }}
-        />
-      </Box>
+                    {/* Toggle moved to top-right */}
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        top: 8,
+                        right: 8,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 0.75,
+                        bgcolor: "white",
+                        px: 1,
+                        py: 0.25,
+                        borderRadius: 2,
+                        boxShadow: 0.5,
+                        border: "1px solid",
+                        borderColor: "emerald.100",
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                        Available
+                      </Typography>
+                      <Switch
+                        size="small"
+                        color="success"
+                        checked={med.status !== "unavailable"}
+                        onChange={() => toggleAvailability(med)}
+                        disabled={loading}
+                        inputProps={{ "aria-label": "Toggle Availability" }}
+                      />
+                    </Box>
 
-      <IconButton
-        color="primary"
-        size="small"
-        onClick={() => handleEditMedicine(med)}
-        disabled={loading}
-      >
-        <EditIcon />
-      </IconButton>
-      <IconButton
-        color="error"
-        size="small"
-        onClick={() => handleDeleteMedicine(med.id || med._id)}
-        disabled={loading}
-      >
-        <DeleteIcon />
-      </IconButton>
-    </CardContent>
-  </Card>
-))}
+                    <IconButton
+                      color="primary"
+                      size="small"
+                      onClick={() => handleEditMedicine(med)}
+                      disabled={loading}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      color="error"
+                      size="small"
+                      onClick={() => handleDeleteMedicine(med.id || med._id)}
+                      disabled={loading}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </CardContent>
+                </Card>
+              ))}
 
-
-
-            {/* Edit Medicine Dialog (unchanged fields/logic) */}
+            {/* Edit Medicine Dialog (with new fields) */}
             <Dialog open={!!editMedId} onClose={closeEditDialog} fullWidth maxWidth="xs">
               <DialogTitle>Edit Medicine</DialogTitle>
               <DialogContent>
                 <Stack spacing={2} mt={1}>
-                  {false && (
+                  {/* BRAND TYPE */}
+                  <FormControl fullWidth>
+                    <InputLabel>Brand Type</InputLabel>
+                    <Select
+                      label="Brand Type"
+                      value={editMedForm.productKind}
+                      onChange={e => setEditMedForm(f => ({
+                        ...f,
+                        productKind: e.target.value,
+                        brand: e.target.value === "generic" ? "" : f.brand,
+                        name: e.target.value === "generic" ? (f.name || f.composition || "") : (f.name || f.brand || "")
+                      }))}
+                    >
+                      <MenuItem value="branded">Branded</MenuItem>
+                      <MenuItem value="generic">Generic</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  {/* BRAND (hidden for Generic) */}
+                  {editMedForm.productKind === "branded" && (
                     <TextField
-                      label="Name"
+                      label="Brand"
                       fullWidth
-                      value={editMedForm.name}
-                      onChange={e => setEditMedForm(f => ({ ...f, name: e.target.value }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
+                      value={editMedForm.brand}
+                      onChange={e =>
+                        setEditMedForm(f => ({
+                          ...f,
+                          brand: e.target.value,
+                          name: f.name || linkBrandToName(e.target.value)
+                        }))
+                      }
                     />
                   )}
-                  <TextField
-                    label="Brand"
-                    fullWidth
-                    value={editMedForm.brand}
-                    onChange={e =>
-                      setEditMedForm(f => ({
-                        ...f,
-                        brand: e.target.value,
-                        name: f.name || linkBrandToName(e.target.value)
-                      }))
-                    }
-                    onFocus={() => setIsEditing(true)}
-                    onBlur={() => setIsEditing(false)}
-                  />
+
                   <TextField
                     label="Composition"
                     fullWidth
@@ -1297,8 +1363,6 @@ const toggleAvailability = async (med) => {
                     fullWidth
                     value={editMedForm.price}
                     onChange={e => setEditMedForm(f => ({ ...f, price: e.target.value }))}
-                    onFocus={() => setIsEditing(true)}
-                    onBlur={() => setIsEditing(false)}
                   />
                   <TextField
                     label="MRP"
@@ -1306,8 +1370,6 @@ const toggleAvailability = async (med) => {
                     fullWidth
                     value={editMedForm.mrp}
                     onChange={e => setEditMedForm(f => ({ ...f, mrp: e.target.value }))}
-                    onFocus={() => setIsEditing(true)}
-                    onBlur={() => setIsEditing(false)}
                   />
                   <TextField
                     label="Stock"
@@ -1315,8 +1377,6 @@ const toggleAvailability = async (med) => {
                     fullWidth
                     value={editMedForm.stock}
                     onChange={e => setEditMedForm(f => ({ ...f, stock: e.target.value }))}
-                    onFocus={() => setIsEditing(true)}
-                    onBlur={() => setIsEditing(false)}
                   />
 
                   <FormControl fullWidth>
@@ -1343,8 +1403,6 @@ const toggleAvailability = async (med) => {
                       fullWidth
                       value={editMedForm.customCategory}
                       onChange={e => setEditMedForm(f => ({ ...f, customCategory: e.target.value }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={e => { setIsEditing(false); handleCustomCategoryBlur(e.target.value); }}
                       error={!!medMsg && medMsg.toLowerCase().includes('category')}
                       helperText={!!medMsg && medMsg.toLowerCase().includes('category') ? medMsg : ''}
                     />
@@ -1368,8 +1426,6 @@ const toggleAvailability = async (med) => {
                       fullWidth
                       value={editMedForm.customType}
                       onChange={e => setEditMedForm(f => ({ ...f, customType: e.target.value }))}
-                      onFocus={() => setIsEditing(true)}
-                      onBlur={() => setIsEditing(false)}
                     />
                   )}
 
@@ -1385,44 +1441,86 @@ const toggleAvailability = async (med) => {
                     />
                   </Stack>
 
+                  {/* TAX */}
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                    <TextField
+                      label="HSN Code"
+                      fullWidth
+                      value={editMedForm.hsn}
+                      onChange={e => setEditMedForm(f => ({ ...f, hsn: e.target.value.replace(/[^\d]/g, "") }))}
+                    />
+                    <FormControl fullWidth>
+                      <InputLabel>GST Rate</InputLabel>
+                      <Select
+                        label="GST Rate"
+                        value={editMedForm.gstRate}
+                        onChange={e => setEditMedForm(f => ({ ...f, gstRate: Number(e.target.value) }))}
+                      >
+                        {[0,5,12,18].map(r => <MenuItem key={r} value={r}>{r}%</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Stack>
+
+                  {/* PACK SIZE */}
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                    <TextField
+                      label="Pack Count"
+                      type="number"
+                      fullWidth
+                      value={editMedForm.packCount}
+                      onChange={e => setEditMedForm(f => ({ ...f, packCount: e.target.value }))}
+                    />
+                    <FormControl fullWidth>
+                      <InputLabel>Pack Unit</InputLabel>
+                      <Select
+                        label="Pack Unit"
+                        value={editMedForm.packUnit}
+                        onChange={e => setEditMedForm(f => ({ ...f, packUnit: e.target.value }))}
+                      >
+                        {["", "tablets", "capsules", "ml", "g", "units", "sachets", "drops"].map(u =>
+                          <MenuItem key={u || "none"} value={u}>{u || "—"}</MenuItem>
+                        )}
+                      </Select>
+                    </FormControl>
+                  </Stack>
+
                   <Stack direction="row" spacing={1} alignItems="center">
-  {/* Gallery Upload */}
-  <input
-    type="file"
-    accept="image/*"
-    multiple
-    hidden
-    ref={editFileInputRef}
-    onChange={handleEditImagesChange}
-  />
-  <Button
-    startIcon={<PhotoCamera />}
-    variant={editMedImages && editMedImages.length ? "contained" : "outlined"}
-    onClick={() => editFileInputRef.current && editFileInputRef.current.click()}
-    color={editMedImages && editMedImages.length ? "success" : "primary"}
-    sx={{ minWidth: 120 }}
-  >
-    {editMedImages && editMedImages.length ? `${editMedImages.length} Image${editMedImages.length > 1 ? "s" : ""} Ready` : "Upload"}
-  </Button>
+                    {/* Gallery Upload */}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      hidden
+                      ref={editFileInputRef}
+                      onChange={handleEditImagesChange}
+                    />
+                    <Button
+                      startIcon={<PhotoCamera />}
+                      variant={editMedImages && editMedImages.length ? "contained" : "outlined"}
+                      onClick={() => editFileInputRef.current && editFileInputRef.current.click()}
+                      color={editMedImages && editMedImages.length ? "success" : "primary"}
+                      sx={{ minWidth: 120 }}
+                    >
+                      {editMedImages && editMedImages.length ? `${editMedImages.length} Image${editMedImages.length > 1 ? "s" : ""} Ready` : "Upload"}
+                    </Button>
 
-  {/* Camera Capture */}
-  <input
-    type="file"
-    accept="image/*"
-    multiple
-    capture="environment"
-    hidden
-    ref={cameraEditInputRef}
-    onChange={handleEditImagesChange}
-  />
-  <IconButton
-    color="primary"
-    onClick={() => cameraEditInputRef.current && cameraEditInputRef.current.click()}
-  >
-    <PhotoCamera />
-  </IconButton>
-</Stack>
-
+                    {/* Camera Capture */}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      capture="environment"
+                      hidden
+                      ref={cameraEditInputRef}
+                      onChange={handleEditImagesChange}
+                    />
+                    <IconButton
+                      color="primary"
+                      onClick={() => cameraEditInputRef.current && cameraEditInputRef.current.click()}
+                    >
+                      <PhotoCamera />
+                    </IconButton>
+                  </Stack>
 
                   {editMedId && medicines.find(m => (m._id || m.id) === editMedId)?.images?.length > 0 && (
                     <Stack direction="row" spacing={1} sx={{ my: 1 }}>
@@ -1479,25 +1577,43 @@ const toggleAvailability = async (med) => {
               </DialogActions>
             </Dialog>
 
-            {/* Add Medicine (unchanged logic, light styling) */}
+            {/* Add Medicine (with new fields) */}
             <Box sx={{ mt: 2, pb: 8, position: "relative" }} className="bg-white rounded-2xl border border-emerald-200 p-3 shadow-sm">
               <Stack spacing={2}>
-                {false && (
+                {/* BRAND TYPE */}
+                <FormControl fullWidth>
+                  <InputLabel>Brand Type</InputLabel>
+                  <Select
+                    label="Brand Type"
+                    value={medForm.productKind}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setMedForm(f => ({
+                        ...f,
+                        productKind: v,
+                        // hide/clear brand if generic
+                        brand: v === "generic" ? "" : f.brand,
+                        // optional: ensure name fallback
+                        name: v === "generic" ? (f.name || f.composition || "") : (f.name || f.brand || "")
+                      }));
+                    }}
+                  >
+                    <MenuItem value="branded">Branded</MenuItem>
+                    <MenuItem value="generic">Generic</MenuItem>
+                  </Select>
+                </FormControl>
+
+                {/* BRAND (hidden for Generic) */}
+                {medForm.productKind === "branded" && (
                   <TextField
-                    label="Name"
-                    value={medForm.name}
-                    onChange={e => setMedForm(f => ({ ...f, name: e.target.value }))}
+                    label="Brand"
+                    value={medForm.brand}
+                    onChange={e => setMedForm(f => ({ ...f, brand: e.target.value, name: linkBrandToName(e.target.value) }))}
                     onFocus={() => setIsEditing(true)}
                     onBlur={() => setIsEditing(false)}
                   />
                 )}
-                <TextField
-                  label="Brand"
-                  value={medForm.brand}
-                  onChange={e => setMedForm(f => ({ ...f, brand: e.target.value, name: linkBrandToName(e.target.value) }))}
-                  onFocus={() => setIsEditing(true)}
-                  onBlur={() => setIsEditing(false)}
-                />
+
                 <TextField
                   label="Composition (e.g., Paracetamol 650 mg)"
                   value={medForm.composition}
@@ -1541,6 +1657,7 @@ const toggleAvailability = async (med) => {
                   onFocus={() => setIsEditing(true)}
                   onBlur={() => setIsEditing(false)}
                 />
+
                 <FormControl fullWidth>
                   <InputLabel>Category</InputLabel>
                   <Select
@@ -1570,6 +1687,7 @@ const toggleAvailability = async (med) => {
                     helperText={!!medMsg && medMsg.toLowerCase().includes('category') ? medMsg : ''}
                   />
                 )}
+
                 <FormControl fullWidth>
                   <InputLabel>Type</InputLabel>
                   <Select value={medForm.type} label="Type" onChange={e => setMedForm(f => ({ ...f, type: e.target.value }))}>
@@ -1599,47 +1717,92 @@ const toggleAvailability = async (med) => {
                   />
                 </Stack>
 
+                {/* TAX (server-side only; never shown to customers) */}
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                  <TextField
+                    label="HSN Code"
+                    value={medForm.hsn}
+                    onChange={e => setMedForm(f => ({ ...f, hsn: e.target.value.replace(/[^\d]/g, "") }))}
+                    helperText="e.g., 3004"
+                    fullWidth
+                  />
+                  <FormControl fullWidth>
+                    <InputLabel>GST Rate</InputLabel>
+                    <Select
+                      label="GST Rate"
+                      value={medForm.gstRate}
+                      onChange={e => setMedForm(f => ({ ...f, gstRate: Number(e.target.value) }))}
+                    >
+                      {[0,5,12,18].map(r => <MenuItem key={r} value={r}>{r}%</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                </Stack>
+
+                {/* PACK SIZE */}
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                  <TextField
+                    label="Pack Count"
+                    type="number"
+                    value={medForm.packCount}
+                    onChange={e => setMedForm(f => ({ ...f, packCount: e.target.value }))}
+                    fullWidth
+                  />
+                  <FormControl fullWidth>
+                    <InputLabel>Pack Unit</InputLabel>
+                    <Select
+                      label="Pack Unit"
+                      value={medForm.packUnit}
+                      onChange={e => setMedForm(f => ({ ...f, packUnit: e.target.value }))}
+                    >
+                      {["", "tablets", "capsules", "ml", "g", "units", "sachets", "drops"].map(u =>
+                        <MenuItem key={u || "none"} value={u}>{u || "—"}</MenuItem>
+                      )}
+                    </Select>
+                  </FormControl>
+                </Stack>
+
                 <Stack direction="row" spacing={2} alignItems="center">
                   {/* Hidden file inputs */}
-<input
-  type="file"
-  accept="image/*"
-  multiple
-  hidden
-  ref={fileInputRef}
-  onChange={handleImagesChange}
-/>
-<input
-  type="file"
-  accept="image/*"
-  multiple
-  capture="environment"
-  hidden
-  ref={cameraInputRef}
-  onChange={handleImagesChange}
-/>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden
+                    ref={fileInputRef}
+                    onChange={handleImagesChange}
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    capture="environment"
+                    hidden
+                    ref={cameraInputRef}
+                    onChange={handleImagesChange}
+                  />
 
-<Stack direction="row" spacing={1}>
-  {/* Gallery Upload */}
-  <Button
-    startIcon={<PhotoCamera />}
-    variant={medImages && medImages.length ? "contained" : "outlined"}
-    onClick={() => fileInputRef.current && fileInputRef.current.click()}
-    color={medImages && medImages.length ? "success" : "primary"}
-    sx={{ minWidth: 120 }}
-  >
-    {medImages && medImages.length ? `${medImages.length} Image${medImages.length > 1 ? "s" : ""}` : "Upload"}
-  </Button>
+                  <Stack direction="row" spacing={1}>
+                    {/* Gallery Upload */}
+                    <Button
+                      startIcon={<PhotoCamera />}
+                      variant={medImages && medImages.length ? "contained" : "outlined"}
+                      onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                      color={medImages && medImages.length ? "success" : "primary"}
+                      sx={{ minWidth: 120 }}
+                    >
+                      {medImages && medImages.length ? `${medImages.length} Image${medImages.length > 1 ? "s" : ""}` : "Upload"}
+                    </Button>
 
-  {/* Camera Capture */}
-  <IconButton
-    color="primary"
-    onClick={() => cameraInputRef.current && cameraInputRef.current.click()}
-  >
-    <PhotoCamera />
-  </IconButton>
-</Stack>
+                    {/* Camera Capture */}
+                    <IconButton
+                      color="primary"
+                      onClick={() => cameraInputRef.current && cameraInputRef.current.click()}
+                    >
+                      <PhotoCamera />
+                    </IconButton>
+                  </Stack>
                 </Stack>
+
                 {medImages && medImages.length > 0 && (
                   <Stack direction="row" spacing={1} sx={{ my: 1 }}>
                     {medImages.map((img, i) => (
@@ -1665,7 +1828,7 @@ const toggleAvailability = async (med) => {
           </Box>
         )}
 
-        {/* Snackbars (unchanged behavior) */}
+        {/* Snackbars */}
         <Snackbar open={!!msg} autoHideDuration={2500} onClose={() => setMsg("")}>
           <Alert onClose={() => setMsg("")} severity={msg.includes("fail") ? "error" : "success"}>{msg}</Alert>
         </Snackbar>

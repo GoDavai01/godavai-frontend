@@ -309,7 +309,7 @@ export default function CheckoutPage() {
   const deliveryFee = itemTotal >= FREE_DELIVERY_MIN ? 0 : DELIVERY_FEE;
   const gst = Math.round(itemTotal * 0.05 * 100) / 100;
   const discount = couponApplied ? Math.round(itemTotal * 0.1) : 0;
-  const platformFee = 8;
+  const platformFee = 10;
   const fullTotal =
     itemTotal +
     deliveryFee +
