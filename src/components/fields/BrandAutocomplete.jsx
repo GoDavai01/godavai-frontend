@@ -19,7 +19,7 @@ export default function BrandAutocomplete({
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // keep controlled value in sync
+  // keep controlled value in sync from parent
   useEffect(() => setInput(value || ""), [value]);
 
   useEffect(() => {
@@ -40,7 +40,10 @@ export default function BrandAutocomplete({
     return () => { ignore = true; };
   }, [open, deb]);
 
-  const noOpt = useMemo(() => [{ id: "__manual__", name: `Add "${input}"` }], [input]);
+  const noOpt = useMemo(
+    () => [{ id: "__manual__", name: `Add "${input}"` }],
+    [input]
+  );
 
   return (
     <Autocomplete
@@ -48,20 +51,33 @@ export default function BrandAutocomplete({
       onOpen={() => setOpen(true)}
       onClose={() => setOpen(false)}
       options={options.length ? options : noOpt}
-      getOptionLabel={(o) => (o?.name || "")}
+      getOptionLabel={(o) => o?.name || ""}
       filterOptions={(x) => x} // server-side filtering
       loading={loading}
       disabled={disabled}
-      value={null} // we control TextField value ourselves
+      // --- IMPORTANT: make the textbox controlled so it never clears ---
+      freeSolo
+      inputValue={input}
+      onInputChange={(_, v) => setInput(v ?? "")}
+      clearOnBlur={false}
+      selectOnFocus
+      handleHomeEndKeys
+      // we don't pass a `value` prop so Autocomplete doesn't try to control selection object
       onChange={async (_e, option) => {
         if (!option) return;
-        if (option.id === "__manual__") {
-          onValueChange?.(input);
-          onPrefill?.({ productKind: "branded", name: input }); // minimal help
+        if (typeof option === "string") {
+          // freeSolo typed + Enter
+          onValueChange?.(option);
+          onPrefill?.({ productKind: "branded", name: option });
           return;
         }
+        if (option.id === "__manual__") {
+          onValueChange?.(input);
+          onPrefill?.({ productKind: "branded", name: input });
+          return;
+        }
+        // picked a real suggestion
         onValueChange?.(option.name);
-        // ask server for prefill
         const prefill = await fetchPrefillByBrandId(option.id);
         onPrefill?.({ ...prefill, brandId: option.id });
       }}
@@ -69,8 +85,6 @@ export default function BrandAutocomplete({
         <TextField
           {...params}
           label={label}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
           InputProps={{
             ...params.InputProps,
             endAdornment: (

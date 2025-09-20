@@ -19,6 +19,7 @@ export default function CompositionAutocomplete({
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // keep controlled value in sync from parent
   useEffect(() => setInput(value || ""), [value]);
 
   useEffect(() => {
@@ -39,7 +40,10 @@ export default function CompositionAutocomplete({
     return () => { ignore = true; };
   }, [open, deb]);
 
-  const noOpt = useMemo(() => [{ id: "__manual__", name: `Add "${input}"` }], [input]);
+  const noOpt = useMemo(
+    () => [{ id: "__manual__", name: `Add "${input}"` }],
+    [input]
+  );
 
   return (
     <Autocomplete
@@ -47,13 +51,24 @@ export default function CompositionAutocomplete({
       onOpen={() => setOpen(true)}
       onClose={() => setOpen(false)}
       options={options.length ? options : noOpt}
-      getOptionLabel={(o) => (o?.name || "")}
+      getOptionLabel={(o) => o?.name || ""}
       filterOptions={(x) => x}
       loading={loading}
       disabled={disabled}
-      value={null}
+      // --- IMPORTANT: fully control the textbox to prevent clearing ---
+      freeSolo
+      inputValue={input}
+      onInputChange={(_, v) => setInput(v ?? "")}
+      clearOnBlur={false}
+      selectOnFocus
+      handleHomeEndKeys
       onChange={async (_e, option) => {
         if (!option) return;
+        if (typeof option === "string") {
+          onValueChange?.(option);
+          onPrefill?.({ productKind: "generic", name: option });
+          return;
+        }
         if (option.id === "__manual__") {
           onValueChange?.(input);
           onPrefill?.({ productKind: "generic", name: input });
@@ -67,8 +82,6 @@ export default function CompositionAutocomplete({
         <TextField
           {...params}
           label={label}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
           InputProps={{
             ...params.InputProps,
             endAdornment: (
