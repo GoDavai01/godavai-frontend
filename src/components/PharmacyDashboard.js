@@ -654,11 +654,11 @@ export default function PharmacyDashboard() {
 
   const handleEditMedicine = (med) => {
     const medCats = Array.isArray(med.category) ? med.category : med.category ? [med.category] : [];
-    const customCats = medCats.filter(c => !MED_CATEGORIES.includes(c));
+    const customCats = medCats.filter(c => !CUSTOMER_CATEGORIES.includes(c));
     let newCategory = [...medCats];
     let customCategory = "";
     if (customCats.length > 0) {
-      newCategory = [...medCats.filter(c => MED_CATEGORIES.includes(c)), "Other"];
+      newCategory = [...medCats.filter(c => CUSTOMER_CATEGORIES.includes(c)), "Other"];
       customCategory = customCats[0];
     }
     setEditMedId(med.id || med._id);
