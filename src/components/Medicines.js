@@ -59,6 +59,19 @@ const typeToGroup = (t) => {
   return s;
 };
 
+/** Pretty label like "10 tablets", "60 ml", or just "10" */
+const packLabel = (count, unit) => {
+  const c = String(count || "").trim();
+  const u = String(unit || "").trim().toLowerCase();
+  if (!c && !u) return "";
+  if (!u) return c; // allow plain "10" for tablets/capsules, etc.
+  const printable = (u === "ml" || u === "g")
+    ? u
+    : (Number(c) === 1 ? u.replace(/s$/, "") : (u.endsWith("s") ? u : `${u}s`));
+  return `${c} ${printable}`.trim();
+};
+
+
 /** Build the chip list from canonical TYPE_OPTIONS + any legacy types found in inventory */
 const useMedTypeChips = (medicines) =>
   useMemo(() => {
@@ -580,19 +593,23 @@ export default function Medicines() {
               </div>
 
               {/* tags + info */}
-              <div className="px-5 pt-3">
                 <div className="flex flex-wrap gap-2 mb-2">
-                  {Array.isArray(selectedMed.category) && selectedMed.category.length > 0 && (
-                    <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
-                      {selectedMed.category.join(", ")}
-                    </Badge>
-                  )}
-                  {selectedMed.type && (
-                    <Badge className="bg-white text-emerald-700 border border-emerald-200 font-semibold">
-                      {Array.isArray(selectedMed.type) ? selectedMed.type.join(", ") : selectedMed.type}
-                    </Badge>
-                  )}
-                </div>
+    {Array.isArray(selectedMed.category) && selectedMed.category.length > 0 && (
+      <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
+        {selectedMed.category.join(", ")}
+      </Badge>
+    )}
+    {selectedMed.type && (
+      <Badge className="bg-white text-emerald-700 border border-emerald-200 font-semibold">
+        {Array.isArray(selectedMed.type) ? selectedMed.type.join(", ") : selectedMed.type}
+      </Badge>
+    )}
+    {(selectedMed.packCount || selectedMed.packUnit) && (
+      <Badge className="bg-white text-emerald-700 border border-emerald-200 font-semibold">
+        Pack: {packLabel(selectedMed.packCount, selectedMed.packUnit)}
+      </Badge>
+    )}
+  </div>
 
                 {selectedMed.composition && (
                   <div className="text-sm text-neutral-700 mb-1">
@@ -604,6 +621,11 @@ export default function Medicines() {
                     <b>Company:</b> {selectedMed.company}
                   </div>
                 )}
+                {(selectedMed.packCount || selectedMed.packUnit) && (
+  <div className="text-sm text-neutral-700 mb-1">
+    <b>Pack size:</b> {packLabel(selectedMed.packCount, selectedMed.packUnit)}
+  </div>
+)}
 
                 {/* Prescription Required */}
                 <div className="text-sm text-neutral-700 mb-2">
