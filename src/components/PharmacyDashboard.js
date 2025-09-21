@@ -426,6 +426,8 @@ export default function PharmacyDashboard() {
   const today = todayString();
   const ordersToday = orders.filter(o => (o.createdAt || "").slice(0, 10) === today);
   const completedOrders = orders.filter(o => o.status === 3 || o.status === "delivered");
+  const isErrorText = (t = "") =>
+  /fail|error|not found|invalid|incorrect|missing|required|empty|incomplete|fill all/i.test(t);
 
   const allPharmacyCategories = React.useMemo(() => {
   const allCats = medicines.flatMap(m =>
@@ -2098,8 +2100,10 @@ export default function PharmacyDashboard() {
           <Alert onClose={() => setMsg("")} severity={msg.includes("fail") ? "error" : "success"}>{msg}</Alert>
         </Snackbar>
         <Snackbar open={!!medMsg} autoHideDuration={2200} onClose={() => setMedMsg("")}>
-          <Alert onClose={() => setMedMsg("")} severity={medMsg.includes("fail") ? "error" : "success"}>{medMsg}</Alert>
-        </Snackbar>
+  <Alert onClose={() => setMedMsg("")} severity={isErrorText(medMsg) ? "error" : "success"}>
+    {medMsg}
+  </Alert>
+</Snackbar>
       </Box>
     </ThemeProvider>
   );

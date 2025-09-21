@@ -13,6 +13,8 @@ import axios from "axios";
 import { useLocation } from "../context/LocationContext";
 import { CUSTOMER_CATEGORIES } from "../constants/customerCategories";
 import { TYPE_OPTIONS } from "../constants/packSizes";
+import GenericSuggestionModal from "../components/generics/GenericSuggestionModal";
+import { buildCompositionKey } from "../lib/composition";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0f6e51";
@@ -72,7 +74,7 @@ const useMedTypeChips = (medicines) =>
 
 export default function Medicines() {
   const { pharmacyId } = useParams();
-  const { cart, addToCart } = useCart();
+  const { cart, addToCart, removeFromCart } = useCart();
   const { currentAddress } = useLocation();
 
   const [pharmacy, setPharmacy] = useState(null);
@@ -85,6 +87,91 @@ export default function Medicines() {
   const [selectedMed, setSelectedMed] = useState(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [canDeliver, setCanDeliver] = useState(true);
+
+  // ===== Generic suggestion state =====
+  const [genericSugg, setGenericSugg] = useState({ open: false, brand: null, generics: [] });
+
+  const isGenericItem = (m) =>
+    (m?.productKind === "generic") || !m?.brand || String(m.brand).trim() === "";
+
+  const compKeyOf = (m) => buildCompositionKey(m?.composition || "");
+
+  const samePack = (a, b) => {
+    if (!a || !b) return true;
+    const ac = Number(a.packCount || 0), bc = Number(b.packCount || 0);
+    const au = String(a.packUnit || "").toLowerCase();
+    const bu = String(b.packUnit || "").toLowerCase();
+    if (ac && bc && ac !== bc) return false;
+    if (au && bu && au !== bu) return false;
+    return true;
+  };
+
+  async function fetchGenericsFromApi(phId, key, brandId) {
+    try {
+      const url = `${API_BASE_URL}/api/pharmacies/${phId}/alternatives?compositionKey=${encodeURIComponent(key)}${brandId ? `&brandId=${brandId}` : ""}`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error("bad");
+      return await r.json(); // { brand?, generics: [] }
+    } catch {
+      return null;
+    }
+  }
+
+  function findGenericsLocally(all, brand) {
+    const key = compKeyOf(brand);
+    const list = all
+      .filter((m) =>
+        !isGenericItem(brand) && // only when brand is actually branded
+        isGenericItem(m) &&
+        compKeyOf(m) === key &&
+        (m.status !== "unavailable") &&
+        (m.available !== false) &&
+        samePack(m, brand)
+      )
+      .sort((a, b) => Number(a.price || a.mrp || 0) - Number(b.price || b.mrp || 0));
+    return { brand, generics: list.slice(0, 5) };
+  }
+
+  const askedKey = (phId, key) => `GENERIC_ASKED_${phId}_${key}`;
+
+  function shouldAsk(med) {
+    if (isGenericItem(med)) return false;
+    const key = compKeyOf(med);
+    if (!key) return false;
+    return !sessionStorage.getItem(askedKey(pharmacyId, key));
+  }
+
+  function markAsked(med) {
+    const key = compKeyOf(med);
+    if (key) sessionStorage.setItem(askedKey(pharmacyId, key), "1");
+  }
+
+  // Single call site for adding with check
+  async function addWithGenericCheck(med) {
+    if (!canDeliver) {
+      alert("Delivery isn’t available right now.");
+      return;
+    }
+    // Add brand (user explicitly tapped Add)
+    addToCart(med);
+
+    // Ask (once per session per compositionKey+pharmacy)
+    if (!shouldAsk(med)) return;
+    const agree = window.confirm("See a lower-cost generic with the same composition from this pharmacy?");
+    markAsked(med);
+    if (!agree) return;
+
+    const key = compKeyOf(med);
+    let data = await fetchGenericsFromApi(pharmacyId, key, med._id);
+    if (!data || !Array.isArray(data.generics) || data.generics.length === 0) {
+      data = findGenericsLocally(medicines, med);
+    } else {
+      data.brand = data.brand || med;
+    }
+    if (data.generics && data.generics.length) {
+      setGenericSugg({ open: true, brand: data.brand || med, generics: data.generics });
+    }
+  }
 
   // Build type chip list (kept in sync with TYPE_OPTIONS + inventory)
   const medTypes = useMedTypeChips(medicines);
@@ -385,13 +472,7 @@ export default function Medicines() {
                             className="h-8 rounded-full px-3 text-[12px] font-bold"
                             style={{ backgroundColor: canDeliver ? DEEP : "#d1d5db", color: "white" }}
                             disabled={!canDeliver}
-                            onClick={() => {
-                              if (!canDeliver) {
-                                alert("Delivery isn’t available right now.");
-                                return;
-                              }
-                              addToCart(med);
-                            }}
+                            onClick={() => addWithGenericCheck(med)}
                           >
                             Add
                           </Button>
@@ -561,12 +642,8 @@ export default function Medicines() {
                   className="flex-1 font-bold"
                   style={{ backgroundColor: canDeliver ? DEEP : "#d1d5db", color: "white" }}
                   disabled={!canDeliver}
-                  onClick={() => {
-                    if (!canDeliver) {
-                      alert("Delivery isn’t available right now.");
-                      return;
-                    }
-                    addToCart(selectedMed);
+                  onClick={async () => {
+                    await addWithGenericCheck(selectedMed);
                     setSelectedMed(null);
                   }}
                 >
@@ -577,6 +654,28 @@ export default function Medicines() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Generic suggestion modal */}
+      <GenericSuggestionModal
+        open={genericSugg.open}
+        onOpenChange={(o) => setGenericSugg((s) => ({ ...s, open: o }))}
+        brand={genericSugg.brand}
+        generics={genericSugg.generics}
+        onReplace={(g) => {
+          const qty =
+            (cart.find(
+              (i) => (i._id || i.id) === (genericSugg.brand?._id || genericSugg.brand?.id)
+            )?.quantity) || 1;
+          removeFromCart(genericSugg.brand);
+          for (let k = 0; k < qty; k++) addToCart(g);
+          setGenericSugg({ open: false, brand: null, generics: [] });
+        }}
+        onAddAlso={(g) => {
+          addToCart(g);
+          setGenericSugg({ open: false, brand: null, generics: [] });
+        }}
+        onKeep={() => setGenericSugg({ open: false, brand: null, generics: [] })}
+      />
 
       {/* Upload Prescription FAB */}
       <motion.div
