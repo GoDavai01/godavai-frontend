@@ -1,3 +1,4 @@
+// src/components/generics/GenericSaverAtCheckout.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Button } from "../ui/button";
@@ -11,13 +12,19 @@ function savePair(brand, gen){
 const LS_KEY = "GENERIC_SAVER_SNOOZE_UNTIL";
 
 export default function GenericSaverAtCheckout({
-  open, onOpenChange, items = [], pharmacyId, fetchAlternatives, // (brand) => Promise<{brand,generics[]}>
-  onReplaceItem, onProceed, defaultSnoozeDays = 7
+  open,
+  onOpenChange,
+  items = [], // [{ item, qty }]
+  fetchAlternatives, // async (brandItem) -> { brand, generics[] }
+  onReplaceItem,     // (brand, bestGeneric, qty) => void
+  onProceed,         // () => void
+  defaultSnoozeDays = 7,
 }) {
-  const [rows, setRows] = useState([]);   // [{brand, best, saving, chosen: "brand"|"best"}]
+  const [rows, setRows] = useState([]);   // [{brand, best, saving, qty, chosen}]
   const [loading, setLoading] = useState(true);
   const [snoozeDays, setSnoozeDays] = useState(defaultSnoozeDays);
 
+  // load per line
   useEffect(() => {
     if (!open) return;
     (async () => {
@@ -26,7 +33,7 @@ export default function GenericSaverAtCheckout({
       for (const { item, qty } of items) {
         const data = await fetchAlternatives(item); // expects {brand,generics}
         const best = (data?.generics || [])[0];
-        if (data?.brand && best) {
+        if (data?.brand && best && price(data.brand) > price(best)) {
           out.push({
             brand: data.brand,
             qty,
@@ -39,12 +46,22 @@ export default function GenericSaverAtCheckout({
       setRows(out);
       setLoading(false);
     })();
-  }, [open]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const totalSaving = useMemo(
-    () => rows.reduce((s, r) => s + (r.saving.rupees * r.qty), 0),
+    () => rows.reduce((s, r) => s + (r.saving.rupees * (r.qty || 1)), 0),
     [rows]
   );
+
+  // ✅ If there are no savings, auto-proceed (don’t block checkout)
+  useEffect(() => {
+    if (!open) return;
+    if (!loading && rows.length === 0) {
+      onOpenChange(false);
+      onProceed();
+    }
+  }, [open, loading, rows, onOpenChange, onProceed]);
 
   if (!open) return null;
 
@@ -83,10 +100,14 @@ export default function GenericSaverAtCheckout({
                   <div className="mt-2 grid sm:grid-cols-[1fr_auto_1fr] items-center gap-2">
                     <div className="rounded-lg border p-2">
                       <div className="text-[12px] text-emerald-700">Best Generic</div>
-                      <div className="font-bold truncate">{r.best.name}</div>
-                      <div className="text-[12px] text-zinc-600 truncate">{r.best.composition}</div>
+                      <div className="font-bold truncate">{r.best.name || r.best.displayName}</div>
+                      {r.best.composition && (
+                        <div className="text-[12px] text-zinc-600 truncate">{r.best.composition}</div>
+                      )}
                     </div>
-                    <div className="text-center font-bold text-emerald-700">↓ Save ₹{r.saving.rupees} ({r.saving.pct}%)</div>
+                    <div className="text-center font-bold text-emerald-700">
+                      ↓ Save ₹{r.saving.rupees} ({r.saving.pct}%)
+                    </div>
                     <div className="text-right font-black" style={{ color: DEEP }}>₹{price(r.best)}</div>
                   </div>
 
@@ -115,8 +136,17 @@ export default function GenericSaverAtCheckout({
           <div className="mt-4 flex items-center justify-between gap-3">
             <div className="text-sm text-zinc-600">
               Don’t show for:
-              <label className="ml-2 mr-1"><input type="radio" name="sz" defaultChecked={defaultSnoozeDays===7} onChange={()=>setSnoozeDays(7)} /> 7 days</label>
-              <label className="ml-2"><input type="radio" name="sz" onChange={()=>setSnoozeDays(3)} /> 3 days</label>
+              <label className="ml-2 mr-1">
+                <input
+                  type="radio"
+                  name="sz"
+                  defaultChecked={defaultSnoozeDays===7}
+                  onChange={()=>setSnoozeDays(7)}
+                /> 7 days
+              </label>
+              <label className="ml-2">
+                <input type="radio" name="sz" onChange={()=>setSnoozeDays(3)} /> 3 days
+              </label>
             </div>
             <div className="text-right">
               <div className="text-[12px] text-zinc-600">Potential saving</div>
@@ -141,8 +171,9 @@ export default function GenericSaverAtCheckout({
               className="font-bold text-white"
               style={{ backgroundColor: DEEP }}
               onClick={() => {
-                // apply chosen replacements
-                rows.filter(r => r.chosen === "best").forEach(r => onReplaceItem(r.brand, r.best, r.qty));
+                rows
+                  .filter(r => r.chosen === "best")
+                  .forEach(r => onReplaceItem(r.brand, r.best, r.qty));
                 onOpenChange(false);
                 onProceed();
               }}

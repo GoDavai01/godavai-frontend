@@ -8,10 +8,12 @@ import { Loader2 } from "lucide-react";
 import CartBody from "./CartBody";
 import { useCart } from "../../context/CartContext";
 import GenericSuggestionModal from "../../components/generics/GenericSuggestionModal";
+import GenericSaverAtCheckout from "../../components/generics/GenericSaverAtCheckout";
 import { buildCompositionKey } from "../../lib/composition";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0f6e51";
+const LS_SNOOZE_KEY = "GENERIC_SAVER_SNOOZE_UNTIL";
 
 export default function CartSheet({
   open,
@@ -26,10 +28,13 @@ export default function CartSheet({
   const [pharmacies, setPharmacies] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ===== Generic suggestion state =====
+  // ===== Old single-item suggestion (kept for Add flows elsewhere) =====
   const [genericSugg, setGenericSugg] = useState({ open: false, brand: null, generics: [] });
   const isGenericItem = (m) =>
     (m?.productKind === "generic") || !m?.brand || String(m.brand).trim() === "";
+
+  // ===== New multi-line saver at checkout =====
+  const [saverOpen, setSaverOpen] = useState(false);
 
   async function fetchEligiblePharmacies() {
     setLoading(true);
@@ -55,44 +60,63 @@ export default function CartSheet({
     // eslint-disable-next-line
   }, [selectOpen, cart]);
 
-  // ✅ More robust: always check generics for ANY branded line (qty 1 or 10)
-  //    and resolve pharmacy id defensively.
-  async function checkGenericsBeforeCheckout() {
+  // Build rows for the multi-line saver: each branded cart line + qty
+  const saverItems = cart
+    .filter((i) => !isGenericItem(i) && buildCompositionKey(i?.composition || ""))
+    .map((i) => ({ item: i, qty: i.quantity || 1 }));
+
+  // Resolve pharmacy id for a given item (selected → item’s → any item’s)
+  const resolvePharmacyId = (fallbackItem) =>
+    selectedPharmacy?._id ||
+    fallbackItem?.pharmacy ||
+    cart.find((x) => x?.pharmacy)?.pharmacy;
+
+  // Function passed to GenericSaver to fetch alternatives per item
+  const fetchAlternativesForItem = async (brandItem) => {
     try {
-      if (!cart.length) return onCheckout();
+      const pid = resolvePharmacyId(brandItem);
+      if (!pid) return { brand: brandItem, generics: [] };
+      const key = buildCompositionKey(brandItem?.composition || "");
+      if (!key) return { brand: brandItem, generics: [] };
 
-      // Find any branded item with a valid normalized composition
-      const branded = cart.find(
-        (i) => !isGenericItem(i) && buildCompositionKey(i?.composition || "")
-      );
-      if (!branded) return onCheckout();
-
-      // Resolve pharmacy id (selected → item’s → any item’s)
-      const pid =
-        selectedPharmacy?._id ||
-        branded?.pharmacy ||
-        cart.find((x) => x?.pharmacy)?.pharmacy;
-
-      if (!pid) return onCheckout();
-
-      const key = buildCompositionKey(branded.composition || "");
       const r = await fetch(
         `${API_BASE_URL}/api/pharmacies/${pid}/alternatives?compositionKey=${encodeURIComponent(
           key
-        )}&brandId=${branded._id}`
+        )}&brandId=${brandItem._id}`
       );
-
-      if (!r.ok) return onCheckout();
-
+      if (!r.ok) return { brand: brandItem, generics: [] };
       const data = await r.json();
-      if (Array.isArray(data?.generics) && data.generics.length) {
-        setGenericSugg({ open: true, brand: data.brand || branded, generics: data.generics });
-        return; // stop; modal decides next
-      }
+      return {
+        brand: data?.brand || brandItem,
+        generics: Array.isArray(data?.generics) ? data.generics : [],
+      };
     } catch {
-      // ignore and continue
+      return { brand: brandItem, generics: [] };
     }
-    onCheckout(); // no alternatives → proceed
+  };
+
+  // Apply replacement chosen in the saver
+  const replaceLineWithGeneric = (brand, generic, qty) => {
+    const phId = brand?.pharmacy || resolvePharmacyId(brand);
+    const withPharmacy = { ...generic, pharmacy: generic.pharmacy || phId };
+
+    removeFromCart(brand);
+    for (let k = 0; k < (qty || 1); k++) addToCart(withPharmacy);
+  };
+
+  // Entry-point when user taps PROCEED
+  async function handleProceed() {
+    // Respect snooze
+    const snoozeUntil = Number(localStorage.getItem(LS_SNOOZE_KEY) || 0);
+    const snoozed = snoozeUntil && snoozeUntil > Date.now();
+
+    // If nothing to check (no branded items) or snoozed, go straight through
+    if (!saverItems.length || snoozed) {
+      return onCheckout();
+    }
+
+    // Open the multi-line saver; it will auto-proceed if no savings are found.
+    setSaverOpen(true);
   }
 
   return (
@@ -118,12 +142,11 @@ export default function CartSheet({
           </SheetHeader>
 
           {/* Scroll area: takes available height inside the sheet */}
-          <div className="overflow-y-auto pr-1"
-               style={{ maxHeight: "calc(90svh - 72px)" }}>
+          <div className="overflow-y-auto pr-1" style={{ maxHeight: "calc(90svh - 72px)" }}>
             <CartBody
               onChangePharmacy={() => setSelectOpen(true)}
               onClearCart={onClearCart}
-              onCheckout={checkGenericsBeforeCheckout}
+              onCheckout={handleProceed}
               selectedPharmacy={selectedPharmacy}
               multiPharmacy={multiPharmacy}
               loadingPharmacies={loading}
@@ -193,7 +216,7 @@ export default function CartSheet({
           </DialogContent>
         </Dialog>
 
-        {/* Generic suggestion modal (same-component portal dialog) */}
+        {/* Legacy single-item generic suggestion (kept for Add flows that open this sheet) */}
         <GenericSuggestionModal
           open={genericSugg.open}
           onOpenChange={(o) => setGenericSugg((s) => ({ ...s, open: o }))}
@@ -205,17 +228,18 @@ export default function CartSheet({
                 (i) => (i._id || i.id) === (genericSugg.brand?._id || genericSugg.brand?.id)
               )?.quantity) || 1;
 
-            // ✅ ensure pharmacy is set on the generic we add
-            const phId = genericSugg.brand?.pharmacy || selectedPharmacy?._id || cart[0]?.pharmacy;
+            const phId =
+              genericSugg.brand?.pharmacy || selectedPharmacy?._id || cart[0]?.pharmacy;
             const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
 
             removeFromCart(genericSugg.brand);
             for (let k = 0; k < qty; k++) addToCart(withPharmacy);
             setGenericSugg({ open: false, brand: null, generics: [] });
-            onCheckout(); // continue after choice
+            onCheckout();
           }}
           onAddAlso={(g) => {
-            const phId = genericSugg.brand?.pharmacy || selectedPharmacy?._id || cart[0]?.pharmacy;
+            const phId =
+              genericSugg.brand?.pharmacy || selectedPharmacy?._id || cart[0]?.pharmacy;
             const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
 
             addToCart(withPharmacy);
@@ -226,6 +250,17 @@ export default function CartSheet({
             setGenericSugg({ open: false, brand: null, generics: [] });
             onCheckout();
           }}
+        />
+
+        {/* New multi-line saver at checkout */}
+        <GenericSaverAtCheckout
+          open={saverOpen}
+          onOpenChange={setSaverOpen}
+          items={saverItems}
+          fetchAlternatives={fetchAlternativesForItem}
+          onReplaceItem={replaceLineWithGeneric}
+          onProceed={onCheckout}
+          defaultSnoozeDays={7}
         />
       </SheetContent>
     </Sheet>
