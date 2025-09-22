@@ -168,12 +168,10 @@ export default function Medicines() {
     // Add brand (user explicitly tapped Add)
     addToCart(med);
 
-    // Ask (once per session per compositionKey+pharmacy)
+    // Ask (once per session per compositionKey+pharmacy) – open dialog directly
     if (!shouldAsk(med)) return;
-    const agree = window.confirm("See a lower-cost generic with the same composition from this pharmacy?");
-    markAsked(med);
-    if (!agree) return;
-
+        markAsked(med);
+    
     const key = compKeyOf(med);
     let data = await fetchGenericsFromApi(pharmacyId, key, med._id);
     if (!data || !Array.isArray(data.generics) || data.generics.length === 0) {
@@ -593,23 +591,25 @@ export default function Medicines() {
               </div>
 
               {/* tags + info */}
+              <div className="px-5 pt-3">
+                {/* REPLACED BADGES BLOCK WITH PACK SIZE BADGE TOO */}
                 <div className="flex flex-wrap gap-2 mb-2">
-    {Array.isArray(selectedMed.category) && selectedMed.category.length > 0 && (
-      <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
-        {selectedMed.category.join(", ")}
-      </Badge>
-    )}
-    {selectedMed.type && (
-      <Badge className="bg-white text-emerald-700 border border-emerald-200 font-semibold">
-        {Array.isArray(selectedMed.type) ? selectedMed.type.join(", ") : selectedMed.type}
-      </Badge>
-    )}
-    {(selectedMed.packCount || selectedMed.packUnit) && (
-      <Badge className="bg-white text-emerald-700 border border-emerald-200 font-semibold">
-        Pack: {packLabel(selectedMed.packCount, selectedMed.packUnit)}
-      </Badge>
-    )}
-  </div>
+                  {Array.isArray(selectedMed.category) && selectedMed.category.length > 0 && (
+                    <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
+                      {selectedMed.category.join(", ")}
+                    </Badge>
+                  )}
+                  {selectedMed.type && (
+                    <Badge className="bg-white text-emerald-700 border border-emerald-200 font-semibold">
+                      {Array.isArray(selectedMed.type) ? selectedMed.type.join(", ") : selectedMed.type}
+                    </Badge>
+                  )}
+                  {(selectedMed.packCount || selectedMed.packUnit) && (
+                    <Badge className="bg-white text-emerald-700 border border-emerald-200 font-semibold">
+                      Pack: {packLabel(selectedMed.packCount, selectedMed.packUnit)}
+                    </Badge>
+                  )}
+                </div>
 
                 {selectedMed.composition && (
                   <div className="text-sm text-neutral-700 mb-1">
@@ -621,11 +621,12 @@ export default function Medicines() {
                     <b>Company:</b> {selectedMed.company}
                   </div>
                 )}
+                {/* INSERTED PACK SIZE DETAIL UNDER COMPANY */}
                 {(selectedMed.packCount || selectedMed.packUnit) && (
-  <div className="text-sm text-neutral-700 mb-1">
-    <b>Pack size:</b> {packLabel(selectedMed.packCount, selectedMed.packUnit)}
-  </div>
-)}
+                  <div className="text-sm text-neutral-700 mb-1">
+                    <b>Pack size:</b> {packLabel(selectedMed.packCount, selectedMed.packUnit)}
+                  </div>
+                )}
 
                 {/* Prescription Required */}
                 <div className="text-sm text-neutral-700 mb-2">
