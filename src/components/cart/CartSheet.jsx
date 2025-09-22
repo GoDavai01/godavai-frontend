@@ -190,13 +190,21 @@ export default function CartSheet({
               (cart.find(
                 (i) => (i._id || i.id) === (genericSugg.brand?._id || genericSugg.brand?.id)
               )?.quantity) || 1;
+
+            // ✅ ensure pharmacy is set on the generic we add
+            const phId = genericSugg.brand?.pharmacy || selectedPharmacy?._id || cart[0]?.pharmacy;
+            const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
+
             removeFromCart(genericSugg.brand);
-            for (let k = 0; k < qty; k++) addToCart(g);
+            for (let k = 0; k < qty; k++) addToCart(withPharmacy);
             setGenericSugg({ open: false, brand: null, generics: [] });
             onCheckout(); // continue after choice
           }}
           onAddAlso={(g) => {
-            addToCart(g);
+            const phId = genericSugg.brand?.pharmacy || selectedPharmacy?._id || cart[0]?.pharmacy;
+            const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
+
+            addToCart(withPharmacy);
             setGenericSugg({ open: false, brand: null, generics: [] });
             onCheckout();
           }}
