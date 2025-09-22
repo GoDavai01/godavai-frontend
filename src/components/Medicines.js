@@ -170,8 +170,8 @@ export default function Medicines() {
 
     // Ask (once per session per compositionKey+pharmacy) – open dialog directly
     if (!shouldAsk(med)) return;
-    markAsked(med);
-
+        markAsked(med);
+    
     const key = compKeyOf(med);
     let data = await fetchGenericsFromApi(pharmacyId, key, med._id);
     if (!data || !Array.isArray(data.generics) || data.generics.length === 0) {
@@ -679,34 +679,35 @@ export default function Medicines() {
       </Dialog>
 
       {/* Generic suggestion modal */}
-      <GenericSuggestionModal
-        open={genericSugg.open}
-        onOpenChange={(o) => setGenericSugg((s) => ({ ...s, open: o })))}
-        brand={genericSugg.brand}
-        generics={genericSugg.generics}
-        onReplace={(g) => {
-          const qty =
-            (cart.find(
-              (i) => (i._id || i.id) === (genericSugg.brand?._id || genericSugg.brand?.id)
-            )?.quantity) || 1;
+<GenericSuggestionModal
+  open={genericSugg.open}
+  onOpenChange={(o) => setGenericSugg((s) => ({ ...s, open: o }))}
+  brand={genericSugg.brand}
+  generics={genericSugg.generics}
+  onReplace={(g) => {
+    const qty =
+      (cart.find(
+        (i) => (i._id || i.id) === (genericSugg.brand?._id || genericSugg.brand?.id)
+      )?.quantity) || 1;
 
-          // ✅ ensure pharmacy is set on the generic we add
-          const phId = genericSugg.brand?.pharmacy || pharmacyId || cart[0]?.pharmacy;
-          const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
+    // ✅ ensure pharmacy is set on the generic we add
+    const phId = genericSugg.brand?.pharmacy || pharmacyId || cart[0]?.pharmacy;
+    const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
 
-          removeFromCart(genericSugg.brand);
-          for (let k = 0; k < qty; k++) addToCart(withPharmacy);
-          setGenericSugg({ open: false, brand: null, generics: [] });
-        }}
-        onAddAlso={(g) => {
-          const phId = genericSugg.brand?.pharmacy || pharmacyId || cart[0]?.pharmacy;
-          const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
+    removeFromCart(genericSugg.brand);
+    for (let k = 0; k < qty; k++) addToCart(withPharmacy);
+    setGenericSugg({ open: false, brand: null, generics: [] });
+  }}
+  onAddAlso={(g) => {
+    // ✅ same fallback when adding alongside
+    const phId = genericSugg.brand?.pharmacy || pharmacyId || cart[0]?.pharmacy;
+    const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
 
-          addToCart(withPharmacy);
-          setGenericSugg({ open: false, brand: null, generics: [] });
-        }}
-        onKeep={() => setGenericSugg({ open: false, brand: null, generics: [] })}
-      />
+    addToCart(withPharmacy);
+    setGenericSugg({ open: false, brand: null, generics: [] });
+  }}
+  onKeep={() => setGenericSugg({ open: false, brand: null, generics: [] })}
+/>
 
       {/* Upload Prescription FAB */}
       <motion.div
