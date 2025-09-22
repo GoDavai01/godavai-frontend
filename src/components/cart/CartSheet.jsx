@@ -1,3 +1,4 @@
+// src/cart/CartSheet.jsx
 import React, { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../components/ui/dialog";
@@ -54,31 +55,44 @@ export default function CartSheet({
     // eslint-disable-next-line
   }, [selectOpen, cart]);
 
-  // Wrap checkout: check for same-composition generics in the SAME pharmacy before proceeding
+  // ✅ More robust: always check generics for ANY branded line (qty 1 or 10)
+  //    and resolve pharmacy id defensively.
   async function checkGenericsBeforeCheckout() {
     try {
-      const pid = selectedPharmacy?._id || cart[0]?.pharmacy;
-      if (!pid || !cart.length) return onCheckout();
+      if (!cart.length) return onCheckout();
 
-      // Pick first branded item that actually has a normalized composition key
-      const branded = cart.find((i) => !isGenericItem(i) && buildCompositionKey(i.composition));
+      // Find any branded item with a valid normalized composition
+      const branded = cart.find(
+        (i) => !isGenericItem(i) && buildCompositionKey(i?.composition || "")
+      );
       if (!branded) return onCheckout();
 
-      const key = buildCompositionKey(branded.composition);
+      // Resolve pharmacy id (selected → item’s → any item’s)
+      const pid =
+        selectedPharmacy?._id ||
+        branded?.pharmacy ||
+        cart.find((x) => x?.pharmacy)?.pharmacy;
+
+      if (!pid) return onCheckout();
+
+      const key = buildCompositionKey(branded.composition || "");
       const r = await fetch(
         `${API_BASE_URL}/api/pharmacies/${pid}/alternatives?compositionKey=${encodeURIComponent(
           key
         )}&brandId=${branded._id}`
       );
+
+      if (!r.ok) return onCheckout();
+
       const data = await r.json();
       if (Array.isArray(data?.generics) && data.generics.length) {
         setGenericSugg({ open: true, brand: data.brand || branded, generics: data.generics });
-        return; // show modal; continue after choice
+        return; // stop; modal decides next
       }
     } catch {
-      // fall through
+      // ignore and continue
     }
-    onCheckout(); // no alternative → proceed as usual
+    onCheckout(); // no alternatives → proceed
   }
 
   return (

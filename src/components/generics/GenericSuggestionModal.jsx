@@ -41,18 +41,26 @@ export default function GenericSuggestionModal({
         </DialogHeader>
 
         <div className="px-5 pb-4">
-          {/* Brand anchor */}
+          {/* Brand anchor — price aligned to the right (like generic cards) */}
           <div
             className="mb-3 rounded-xl border bg-white p-3 shadow-sm"
             style={{ borderColor: "rgba(15,110,81,0.18)" }}
           >
-            <div className="text-[13px] font-semibold text-zinc-500">Selected (Brand)</div>
-            <div className="mt-1 font-extrabold text-zinc-900 truncate">{brand?.brand || brand?.name}</div>
-            {brand?.composition && (
-              <div className="text-[13px] text-zinc-600">Composition: {brand.composition}</div>
-            )}
-            <div className="mt-1 text-[15px] font-black" style={{ color: DEEP }}>
-              ₹{priceOf(brand)}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[13px] font-semibold text-zinc-500">Selected (Brand)</div>
+                <div className="mt-1 font-extrabold text-zinc-900 truncate">{brand?.brand || brand?.name}</div>
+                {brand?.composition && (
+                  <div className="text-[12px] text-zinc-600 truncate">
+                    Composition: {brand.composition}
+                  </div>
+                )}
+              </div>
+              <div className="text-right">
+                <div className="text-[15px] font-black" style={{ color: DEEP }}>
+                  ₹{priceOf(brand)}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -94,19 +102,28 @@ export default function GenericSuggestionModal({
                           ₹{priceOf(g)}
                         </div>
                         {sv.rupees > 0 && (
-                          <div className="text-[11px] font-bold text-emerald-700">
+                          <div className="text-[12px] font-extrabold text-emerald-700">
                             Save ₹{sv.rupees} ({sv.pct}%)
                           </div>
                         )}
                       </div>
                     </div>
 
+                    {/* Swapped buttons: Add also (left) / Replace brand (right) */}
                     <div className="mt-2 flex gap-2">
-                      <Button className="flex-1 font-bold text-white" style={{ backgroundColor: DEEP }} onClick={() => onReplace?.(g)}>
-                        Replace brand
-                      </Button>
-                      <Button variant="outline" className="flex-1 font-bold" onClick={() => onAddAlso?.(g)}>
+                      <Button
+                        variant="outline"
+                        className="flex-1 font-bold"
+                        onClick={() => onAddAlso?.(g)}
+                      >
                         Add also
+                      </Button>
+                      <Button
+                        className="flex-1 font-bold text-white"
+                        style={{ backgroundColor: DEEP }}
+                        onClick={() => onReplace?.(g)}
+                      >
+                        Replace brand
                       </Button>
                     </div>
                   </div>
