@@ -6,6 +6,8 @@ import { Badge } from "../../components/ui/badge";
 import { Loader2 } from "lucide-react";
 import CartBody from "./CartBody";
 import { useCart } from "../../context/CartContext";
+import GenericSuggestionModal from "../../components/generics/GenericSuggestionModal";
+import { buildCompositionKey } from "../../lib/composition";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0f6e51";
@@ -18,10 +20,15 @@ export default function CartSheet({
   selectedPharmacy,
   multiPharmacy,
 }) {
-  const { cart, setSelectedPharmacy } = useCart();
+  const { cart, setSelectedPharmacy, addToCart, removeFromCart } = useCart();
   const [selectOpen, setSelectOpen] = useState(false);
   const [pharmacies, setPharmacies] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // ===== Generic suggestion state =====
+  const [genericSugg, setGenericSugg] = useState({ open: false, brand: null, generics: [] });
+  const isGenericItem = (m) =>
+    (m?.productKind === "generic") || !m?.brand || String(m.brand).trim() === "";
 
   async function fetchEligiblePharmacies() {
     setLoading(true);
@@ -46,6 +53,33 @@ export default function CartSheet({
     if (selectOpen && cart.length) fetchEligiblePharmacies();
     // eslint-disable-next-line
   }, [selectOpen, cart]);
+
+  // Wrap checkout: check for same-composition generics in the SAME pharmacy before proceeding
+  async function checkGenericsBeforeCheckout() {
+    try {
+      const pid = selectedPharmacy?._id || cart[0]?.pharmacy;
+      if (!pid || !cart.length) return onCheckout();
+
+      // Pick first branded item that actually has a normalized composition key
+      const branded = cart.find((i) => !isGenericItem(i) && buildCompositionKey(i.composition));
+      if (!branded) return onCheckout();
+
+      const key = buildCompositionKey(branded.composition);
+      const r = await fetch(
+        `${API_BASE_URL}/api/pharmacies/${pid}/alternatives?compositionKey=${encodeURIComponent(
+          key
+        )}&brandId=${branded._id}`
+      );
+      const data = await r.json();
+      if (Array.isArray(data?.generics) && data.generics.length) {
+        setGenericSugg({ open: true, brand: data.brand || branded, generics: data.generics });
+        return; // show modal; continue after choice
+      }
+    } catch {
+      // fall through
+    }
+    onCheckout(); // no alternative → proceed as usual
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -75,7 +109,7 @@ export default function CartSheet({
             <CartBody
               onChangePharmacy={() => setSelectOpen(true)}
               onClearCart={onClearCart}
-              onCheckout={onCheckout}
+              onCheckout={checkGenericsBeforeCheckout}
               selectedPharmacy={selectedPharmacy}
               multiPharmacy={multiPharmacy}
               loadingPharmacies={loading}
@@ -144,6 +178,33 @@ export default function CartSheet({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Generic suggestion modal (same-component portal dialog) */}
+        <GenericSuggestionModal
+          open={genericSugg.open}
+          onOpenChange={(o) => setGenericSugg((s) => ({ ...s, open: o }))}
+          brand={genericSugg.brand}
+          generics={genericSugg.generics}
+          onReplace={(g) => {
+            const qty =
+              (cart.find(
+                (i) => (i._id || i.id) === (genericSugg.brand?._id || genericSugg.brand?.id)
+              )?.quantity) || 1;
+            removeFromCart(genericSugg.brand);
+            for (let k = 0; k < qty; k++) addToCart(g);
+            setGenericSugg({ open: false, brand: null, generics: [] });
+            onCheckout(); // continue after choice
+          }}
+          onAddAlso={(g) => {
+            addToCart(g);
+            setGenericSugg({ open: false, brand: null, generics: [] });
+            onCheckout();
+          }}
+          onKeep={() => {
+            setGenericSugg({ open: false, brand: null, generics: [] });
+            onCheckout();
+          }}
+        />
       </SheetContent>
     </Sheet>
   );
