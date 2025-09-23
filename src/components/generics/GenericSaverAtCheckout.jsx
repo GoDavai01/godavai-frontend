@@ -4,47 +4,66 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Button } from "../ui/button";
 const DEEP = "#0f6e51";
 
-function price(m){ return Number(m?.price ?? m?.mrp ?? 0) || 0; }
-function savePair(brand, gen){
+function price(m) {
+  // align with GenericSuggestionModal’s logic
+  return Number(m?.price ?? m?.mrp ?? m?.sellingPrice ?? 0) || 0;
+}
+function savePair(brand, gen) {
   const s = Math.max(0, price(brand) - price(gen));
   return { rupees: s, pct: s ? Math.round((s / price(brand)) * 100) : 0 };
 }
+
 const LS_KEY = "GENERIC_SAVER_SNOOZE_UNTIL";
 
 export default function GenericSaverAtCheckout({
   open,
   onOpenChange,
-  items = [], // [{ item, qty }]
-  fetchAlternatives, // async (brandItem) -> { brand, generics[] }
-  onReplaceItem,     // (brand, bestGeneric, qty) => void
-  onProceed,         // () => void
+  items = [],            // [{ item, qty }]
+  fetchAlternatives,     // async (brandItem) -> { brand, generics[] }
+  onReplaceItem,         // (brand, bestGeneric, qty) => void
+  onProceed,             // () => void
   defaultSnoozeDays = 7,
 }) {
   const [rows, setRows] = useState([]);   // [{brand, best, saving, qty, chosen}]
   const [loading, setLoading] = useState(true);
+  const [checked, setChecked] = useState(false); // <-- NEW: completed one fetch pass
   const [snoozeDays, setSnoozeDays] = useState(defaultSnoozeDays);
 
-  // load per line
+  // Reset all state every time we open (prevents stale rows from last run)
   useEffect(() => {
     if (!open) return;
+    setRows([]);
+    setLoading(true);
+    setChecked(false);
+  }, [open]);
+
+  // Load per line AFTER we’ve reset state above
+  useEffect(() => {
+    if (!open) return;
+
     (async () => {
       setLoading(true);
       const out = [];
+
       for (const { item, qty } of items) {
-        const data = await fetchAlternatives(item); // expects {brand,generics}
+        const data = await fetchAlternatives(item); // expects { brand, generics }
         const best = (data?.generics || [])[0];
+
+        // only suggest if we actually save money
         if (data?.brand && best && price(data.brand) > price(best)) {
           out.push({
             brand: data.brand,
-            qty,
+            qty: qty || 1,
             best,
             saving: savePair(data.brand, best),
             chosen: "brand",
           });
         }
       }
+
       setRows(out);
       setLoading(false);
+      setChecked(true); // <-- mark this cycle complete
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -54,14 +73,14 @@ export default function GenericSaverAtCheckout({
     [rows]
   );
 
-  // ✅ If there are no savings, auto-proceed (don’t block checkout)
+  // Auto-proceed only AFTER we’ve actually checked (no flicker)
   useEffect(() => {
     if (!open) return;
-    if (!loading && rows.length === 0) {
+    if (checked && !loading && rows.length === 0) {
       onOpenChange(false);
       onProceed();
     }
-  }, [open, loading, rows, onOpenChange, onProceed]);
+  }, [open, checked, loading, rows, onOpenChange, onProceed]);
 
   if (!open) return null;
 
@@ -137,12 +156,7 @@ export default function GenericSaverAtCheckout({
             <div className="text-sm text-zinc-600">
               Don’t show for:
               <label className="ml-2 mr-1">
-                <input
-                  type="radio"
-                  name="sz"
-                  defaultChecked={defaultSnoozeDays===7}
-                  onChange={()=>setSnoozeDays(7)}
-                /> 7 days
+                <input type="radio" name="sz" defaultChecked={defaultSnoozeDays===7} onChange={()=>setSnoozeDays(7)} /> 7 days
               </label>
               <label className="ml-2">
                 <input type="radio" name="sz" onChange={()=>setSnoozeDays(3)} /> 3 days
@@ -171,9 +185,7 @@ export default function GenericSaverAtCheckout({
               className="font-bold text-white"
               style={{ backgroundColor: DEEP }}
               onClick={() => {
-                rows
-                  .filter(r => r.chosen === "best")
-                  .forEach(r => onReplaceItem(r.brand, r.best, r.qty));
+                rows.filter(r => r.chosen === "best").forEach(r => onReplaceItem(r.brand, r.best, r.qty));
                 onOpenChange(false);
                 onProceed();
               }}
