@@ -26,7 +26,7 @@ export default function GenericSaverAtCheckout({
 }) {
   const [rows, setRows] = useState([]);   // [{brand, best, saving, qty, chosen}]
   const [loading, setLoading] = useState(true);
-  const [checked, setChecked] = useState(false); // <-- NEW: completed one fetch pass
+  const [readyToRender, setReadyToRender] = useState(false);
   const [snoozeDays, setSnoozeDays] = useState(defaultSnoozeDays);
 
   // Reset all state every time we open (prevents stale rows from last run)
@@ -34,7 +34,7 @@ export default function GenericSaverAtCheckout({
     if (!open) return;
     setRows([]);
     setLoading(true);
-    setChecked(false);
+    setReadyToRender(false);
   }, [open]);
 
   // Load per line AFTER we’ve reset state above
@@ -44,6 +44,7 @@ export default function GenericSaverAtCheckout({
     (async () => {
       setLoading(true);
       const out = [];
+      const start = Date.now();
 
       for (const { item, qty } of items) {
         const data = await fetchAlternatives(item); // expects { brand, generics }
@@ -63,24 +64,22 @@ export default function GenericSaverAtCheckout({
 
       setRows(out);
       setLoading(false);
-      setChecked(true); // <-- mark this cycle complete
+
+      // ensure at least ~350ms of visible modal so it never "blips"
+      const elapsed = Date.now() - start;
+      const MIN_VISIBLE = 350;
+      if (elapsed < MIN_VISIBLE) {
+        setTimeout(() => setReadyToRender(true), MIN_VISIBLE - elapsed);
+      } else {
+        setReadyToRender(true);
+      }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, items, fetchAlternatives]);
 
   const totalSaving = useMemo(
     () => rows.reduce((s, r) => s + (r.saving.rupees * (r.qty || 1)), 0),
     [rows]
   );
-
-  // Auto-proceed only AFTER we’ve actually checked (no flicker)
-  useEffect(() => {
-    if (!open) return;
-    if (checked && !loading && rows.length === 0) {
-      onOpenChange(false);
-      onProceed();
-    }
-  }, [open, checked, loading, rows, onOpenChange, onProceed]);
 
   if (!open) return null;
 
@@ -97,51 +96,107 @@ export default function GenericSaverAtCheckout({
         </DialogHeader>
 
         <div className="px-5 pb-4">
-          {loading ? (
+          {loading || !readyToRender ? (
             <div className="text-sm text-zinc-500">Finding best prices…</div>
           ) : rows.length === 0 ? (
-            <div className="text-sm text-zinc-500">No savings available right now.</div>
+            <div className="space-y-3">
+              <div className="text-sm text-zinc-500">
+                No savings available right now. You can continue to checkout.
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  className="font-bold text-white"
+                  style={{ backgroundColor: DEEP }}
+                  onClick={() => {
+                    onOpenChange(false);
+                    onProceed();
+                  }}
+                >
+                  Continue to checkout
+                </Button>
+              </div>
+            </div>
           ) : (
             <div className="space-y-3">
               {rows.map((r, idx) => (
-                <div key={idx} className="rounded-xl border bg-white p-3 shadow-sm" style={{ borderColor:"rgba(15,110,81,0.18)" }}>
+                <div
+                  key={idx}
+                  className="rounded-xl border bg-white p-3 shadow-sm"
+                  style={{ borderColor: "rgba(15,110,81,0.18)" }}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-[12px] text-zinc-500">Brand</div>
-                      <div className="font-extrabold truncate">{r.brand.brand || r.brand.name}</div>
-                      <div className="text-[12px] text-zinc-600 truncate">Qty: {r.qty}</div>
+                      <div className="font-extrabold truncate">
+                        {r.brand.brand || r.brand.name}
+                      </div>
+                      <div className="text-[12px] text-zinc-600 truncate">
+                        Qty: {r.qty}
+                      </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-[15px] font-black" style={{ color: DEEP }}>₹{price(r.brand)}</div>
+                      <div
+                        className="text-[15px] font-black"
+                        style={{ color: DEEP }}
+                      >
+                        ₹{price(r.brand)}
+                      </div>
                     </div>
                   </div>
 
                   <div className="mt-2 grid sm:grid-cols-[1fr_auto_1fr] items-center gap-2">
                     <div className="rounded-lg border p-2">
-                      <div className="text-[12px] text-emerald-700">Best Generic</div>
-                      <div className="font-bold truncate">{r.best.name || r.best.displayName}</div>
+                      <div className="text-[12px] text-emerald-700">
+                        Best Generic
+                      </div>
+                      <div className="font-bold truncate">
+                        {r.best.name || r.best.displayName}
+                      </div>
                       {r.best.composition && (
-                        <div className="text-[12px] text-zinc-600 truncate">{r.best.composition}</div>
+                        <div className="text-[12px] text-zinc-600 truncate">
+                          {r.best.composition}
+                        </div>
                       )}
                     </div>
                     <div className="text-center font-bold text-emerald-700">
                       ↓ Save ₹{r.saving.rupees} ({r.saving.pct}%)
                     </div>
-                    <div className="text-right font-black" style={{ color: DEEP }}>₹{price(r.best)}</div>
+                    <div
+                      className="text-right font-black"
+                      style={{ color: DEEP }}
+                    >
+                      ₹{price(r.best)}
+                    </div>
                   </div>
 
                   <div className="mt-2 flex gap-2">
                     <Button
-                      className={`flex-1 font-bold ${r.chosen==="best"?"opacity-100":"opacity-80"}`}
+                      className={`flex-1 font-bold ${
+                        r.chosen === "best" ? "opacity-100" : "opacity-80"
+                      }`}
                       style={{ backgroundColor: DEEP, color: "white" }}
-                      onClick={() => setRows(rs => rs.map((x,i)=> i===idx?{...x, chosen:"best"}:x))}
+                      onClick={() =>
+                        setRows((rs) =>
+                          rs.map((x, i) =>
+                            i === idx ? { ...x, chosen: "best" } : x
+                          )
+                        )
+                      }
                     >
                       Replace with generic
                     </Button>
                     <Button
                       variant="outline"
-                      className={`flex-1 font-bold ${r.chosen==="brand"?"opacity-100":"opacity-80"}`}
-                      onClick={() => setRows(rs => rs.map((x,i)=> i===idx?{...x, chosen:"brand"}:x))}
+                      className={`flex-1 font-bold ${
+                        r.chosen === "brand" ? "opacity-100" : "opacity-80"
+                      }`}
+                      onClick={() =>
+                        setRows((rs) =>
+                          rs.map((x, i) =>
+                            i === idx ? { ...x, chosen: "brand" } : x
+                          )
+                        )
+                      }
                     >
                       Keep brand
                     </Button>
@@ -156,15 +211,28 @@ export default function GenericSaverAtCheckout({
             <div className="text-sm text-zinc-600">
               Don’t show for:
               <label className="ml-2 mr-1">
-                <input type="radio" name="sz" defaultChecked={defaultSnoozeDays===7} onChange={()=>setSnoozeDays(7)} /> 7 days
+                <input
+                  type="radio"
+                  name="sz"
+                  defaultChecked={defaultSnoozeDays === 7}
+                  onChange={() => setSnoozeDays(7)}
+                />{" "}
+                7 days
               </label>
               <label className="ml-2">
-                <input type="radio" name="sz" onChange={()=>setSnoozeDays(3)} /> 3 days
+                <input
+                  type="radio"
+                  name="sz"
+                  onChange={() => setSnoozeDays(3)}
+                />{" "}
+                3 days
               </label>
             </div>
             <div className="text-right">
               <div className="text-[12px] text-zinc-600">Potential saving</div>
-              <div className="text-lg font-black" style={{ color: DEEP }}>₹{totalSaving}</div>
+              <div className="text-lg font-black" style={{ color: DEEP }}>
+                ₹{totalSaving}
+              </div>
             </div>
           </div>
 
@@ -173,7 +241,7 @@ export default function GenericSaverAtCheckout({
               variant="outline"
               className="font-bold"
               onClick={() => {
-                const ts = Date.now() + snoozeDays*24*60*60*1000;
+                const ts = Date.now() + snoozeDays * 24 * 60 * 60 * 1000;
                 localStorage.setItem(LS_KEY, String(ts));
                 onOpenChange(false);
                 onProceed(); // continue without changes
@@ -185,7 +253,9 @@ export default function GenericSaverAtCheckout({
               className="font-bold text-white"
               style={{ backgroundColor: DEEP }}
               onClick={() => {
-                rows.filter(r => r.chosen === "best").forEach(r => onReplaceItem(r.brand, r.best, r.qty));
+                rows
+                  .filter((r) => r.chosen === "best")
+                  .forEach((r) => onReplaceItem(r.brand, r.best, r.qty));
                 onOpenChange(false);
                 onProceed();
               }}
