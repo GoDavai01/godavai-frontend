@@ -71,25 +71,65 @@ export default function CartSheet({
     fallbackItem?.pharmacy ||
     cart.find((x) => x?.pharmacy)?.pharmacy;
 
+  // Helper used by the client-side fallback to ensure same pack size
+  const samePack = (a, b) => {
+    if (!a || !b) return true;
+    const ac = Number(a.packCount || 0), bc = Number(b.packCount || 0);
+    const au = String(a.packUnit || "").toLowerCase();
+    const bu = String(b.packUnit || "").toLowerCase();
+    if (ac && bc && ac !== bc) return false;
+    if (au && bu && au !== bu) return false;
+    return true;
+  };
+
   // Function passed to GenericSaver to fetch alternatives per item
+  // Now with client-side fallback when the API returns empty.
   const fetchAlternativesForItem = async (brandItem) => {
     try {
       const pid = resolvePharmacyId(brandItem);
       if (!pid) return { brand: brandItem, generics: [] };
+
       const key = buildCompositionKey(brandItem?.composition || "");
       if (!key) return { brand: brandItem, generics: [] };
 
+      // 1) Try server
       const r = await fetch(
         `${API_BASE_URL}/api/pharmacies/${pid}/alternatives?compositionKey=${encodeURIComponent(
           key
         )}&brandId=${brandItem._id}`
       );
-      if (!r.ok) return { brand: brandItem, generics: [] };
-      const data = await r.json();
-      return {
-        brand: data?.brand || brandItem,
-        generics: Array.isArray(data?.generics) ? data.generics : [],
-      };
+      if (r.ok) {
+        const data = await r.json();
+        const out = {
+          brand: data?.brand || brandItem,
+          generics: Array.isArray(data?.generics) ? data.generics : [],
+        };
+        if (out.generics.length) return out;
+      }
+
+      // 2) Fallback: pull pharmacy inventory and filter locally (legacy support)
+      const invRes = await fetch(
+        `${API_BASE_URL}/api/medicines?pharmacyId=${pid}&onlyAvailable=1`
+      );
+      const inv = invRes.ok ? await invRes.json() : [];
+
+      const list = inv
+        .filter(
+          (m) =>
+            !isGenericItem(brandItem) &&
+            isGenericItem(m) &&
+            buildCompositionKey(m?.composition || "") === key &&
+            m.status !== "unavailable" &&
+            m.available !== false &&
+            m.stock > 0 &&
+            samePack(m, brandItem)
+        )
+        .sort(
+          (a, b) => Number(a.price || a.mrp || 0) - Number(b.price || b.mrp || 0)
+        )
+        .slice(0, 5);
+
+      return { brand: brandItem, generics: list };
     } catch {
       return { brand: brandItem, generics: [] };
     }

@@ -159,8 +159,16 @@ export default function GenericSaverAtCheckout({
                       )}
                     </div>
                     <div className="text-center font-bold text-emerald-700">
-                      ↓ Save ₹{r.saving.rupees} ({r.saving.pct}%)
-                    </div>
+  {r.qty > 1
+    ? (
+      <>
+        ↓ Save ₹{r.saving.rupees} ({r.saving.pct}%) per unit —{" "}
+        <span className="whitespace-nowrap">₹{r.saving.rupees * r.qty} total</span>
+      </>
+    )
+    : <>↓ Save ₹{r.saving.rupees} ({r.saving.pct}%)</>}
+</div>
+
                     <div
                       className="text-right font-black"
                       style={{ color: DEEP }}
