@@ -13,8 +13,6 @@ function savePair(brand, gen) {
   return { rupees: s, pct: s ? Math.round((s / price(brand)) * 100) : 0 };
 }
 
-const LS_KEY = "GENERIC_SAVER_SNOOZE_UNTIL";
-
 export default function GenericSaverAtCheckout({
   open,
   onOpenChange,
@@ -22,12 +20,11 @@ export default function GenericSaverAtCheckout({
   fetchAlternatives,     // async (brandItem) -> { brand, generics[] }
   onReplaceItem,         // (brand, bestGeneric, qty) => void
   onProceed,             // () => void
-  defaultSnoozeDays = 7,
+  defaultSnoozeDays = 7, // unused now; kept to avoid prop errors elsewhere
 }) {
   const [rows, setRows] = useState([]);   // [{brand, best, saving, qty}]
   const [loading, setLoading] = useState(true);
   const [readyToRender, setReadyToRender] = useState(false);
-  const [snoozeDays, setSnoozeDays] = useState(defaultSnoozeDays);
 
   // Reset all state every time we open (prevents stale rows from last run)
   useEffect(() => {
@@ -245,28 +242,9 @@ export default function GenericSaverAtCheckout({
             </>
           )}
 
-          {/* Footer */}
+          {/* Footer — no snooze, just the potential saving and proceed */}
           <div className="mt-4 flex items-center justify-between gap-3">
-            <div className="text-sm text-zinc-600">
-              Don’t show for:
-              <label className="ml-2 mr-1">
-                <input
-                  type="radio"
-                  name="sz"
-                  defaultChecked={defaultSnoozeDays === 7}
-                  onChange={() => setSnoozeDays(7)}
-                />{" "}
-                7 days
-              </label>
-              <label className="ml-2">
-                <input
-                  type="radio"
-                  name="sz"
-                  onChange={() => setSnoozeDays(3)}
-                />{" "}
-                3 days
-              </label>
-            </div>
+            <div className="text-sm text-zinc-600" />
             <div className="text-right">
               <div className="text-[12px] text-zinc-600">Potential saving</div>
               <div className="text-lg font-black" style={{ color: DEEP }}>
@@ -275,20 +253,7 @@ export default function GenericSaverAtCheckout({
             </div>
           </div>
 
-          <div className="mt-3 flex justify-end gap-2">
-            <Button
-              variant="outline"
-              className="font-bold"
-              onClick={() => {
-                const ts = Date.now() + snoozeDays * 24 * 60 * 60 * 1000;
-                localStorage.setItem(LS_KEY, String(ts));
-                onOpenChange(false);
-                onProceed(); // continue without changes
-              }}
-            >
-              Skip now
-            </Button>
-            {/* We no longer need "Apply & proceed" because per-row actions are instant */}
+          <div className="mt-3 flex justify-end">
             <Button
               className="font-bold text-white"
               style={{ backgroundColor: DEEP }}

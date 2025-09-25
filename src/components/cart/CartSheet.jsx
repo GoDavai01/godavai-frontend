@@ -13,7 +13,6 @@ import { buildCompositionKey } from "../../lib/composition";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0f6e51";
-const LS_SNOOZE_KEY = "GENERIC_SAVER_SNOOZE_UNTIL";
 
 export default function CartSheet({
   open,
@@ -146,16 +145,11 @@ export default function CartSheet({
 
   // Entry-point when user taps PROCEED
   async function handleProceed() {
-    // Respect snooze
-    const snoozeUntil = Number(localStorage.getItem(LS_SNOOZE_KEY) || 0);
-    const snoozed = snoozeUntil && snoozeUntil > Date.now();
-
-    // If nothing to check (no branded items) or snoozed, go straight through
-    if (!saverItems.length || snoozed) {
+    // If nothing to check (no branded items), go straight through
+    if (!saverItems.length) {
       return onCheckout();
     }
-
-    // Open the multi-line saver; it will auto-proceed if no savings are found.
+    // Always open the saver when there are branded items (no snooze/skip)
     setSaverOpen(true);
   }
 
@@ -300,7 +294,6 @@ export default function CartSheet({
           fetchAlternatives={fetchAlternativesForItem}
           onReplaceItem={replaceLineWithGeneric}
           onProceed={onCheckout}
-          defaultSnoozeDays={7}
         />
       </SheetContent>
     </Sheet>
