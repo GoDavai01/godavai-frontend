@@ -4,7 +4,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Button } from "../ui/button";
 
 const DEEP = "#0f6e51";
-const LS_KEY = "GENERIC_SAVER_SNOOZE_UNTIL";
 
 function price(m) {
   return Number(m?.price ?? m?.mrp ?? m?.sellingPrice ?? 0) || 0;
@@ -13,6 +12,8 @@ function savePair(brand, gen) {
   const s = Math.max(0, price(brand) - price(gen));
   return { rupees: s, pct: s ? Math.round((s / price(brand)) * 100) : 0 };
 }
+
+const LS_KEY = "GENERIC_SAVER_SNOOZE_UNTIL";
 
 export default function GenericSaverAtCheckout({
   open,
@@ -23,22 +24,20 @@ export default function GenericSaverAtCheckout({
   onProceed,             // () => void
   defaultSnoozeDays = 7,
 }) {
-  const [rows, setRows] = useState([]);     // [{brand, best, saving, qty}]
+  const [rows, setRows] = useState([]);   // [{brand, best, saving, qty}]
   const [loading, setLoading] = useState(true);
   const [readyToRender, setReadyToRender] = useState(false);
-  const [step, setStep] = useState(0);      // show ONE item at a time
   const [snoozeDays, setSnoozeDays] = useState(defaultSnoozeDays);
 
-  // reset whenever we open
+  // Reset all state every time we open (prevents stale rows from last run)
   useEffect(() => {
     if (!open) return;
     setRows([]);
-    setStep(0);
     setLoading(true);
     setReadyToRender(false);
   }, [open]);
 
-  // fetch suggestions
+  // Load per line AFTER we’ve reset state above
   useEffect(() => {
     if (!open) return;
 
@@ -48,13 +47,15 @@ export default function GenericSaverAtCheckout({
       const start = Date.now();
 
       for (const { item, qty } of items) {
-        const data = await fetchAlternatives(item);
+        const data = await fetchAlternatives(item); // expects { brand, generics }
         const best = (data?.generics || [])[0];
+
+        // only suggest if we actually save money
         if (data?.brand && best && price(data.brand) > price(best)) {
           out.push({
             brand: data.brand,
-            best,
             qty: qty || 1,
+            best,
             saving: savePair(data.brand, best),
           });
         }
@@ -63,7 +64,7 @@ export default function GenericSaverAtCheckout({
       setRows(out);
       setLoading(false);
 
-      // small delay to avoid flash
+      // ensure at least ~350ms so it never "blips"
       const elapsed = Date.now() - start;
       const MIN_VISIBLE = 350;
       if (elapsed < MIN_VISIBLE) {
@@ -74,25 +75,48 @@ export default function GenericSaverAtCheckout({
     })();
   }, [open, items, fetchAlternatives]);
 
-  const totalSaving = useMemo(
+  const remainingPotential = useMemo(
     () => rows.reduce((s, r) => s + (r.saving.rupees * (r.qty || 1)), 0),
     [rows]
   );
 
-  // helpers
-  const goNext = () => {
-    const next = step + 1;
-    if (next >= rows.length) {
+  // After any action, if no rows remain → close + proceed
+  const maybeFinish = (nextRows) => {
+    if (nextRows.length === 0) {
       onOpenChange(false);
       onProceed();
-    } else {
-      setStep(next);
     }
   };
 
-  if (!open) return null;
+  // Instant actions per line
+  const doReplaceNow = (idx) => {
+    setRows(prev => {
+      const r = prev[idx];
+      if (r) {
+        onReplaceItem(r.brand, r.best, r.qty);
+      }
+      const next = prev.filter((_, i) => i !== idx);
+      // Defer finish to next tick to avoid state update conflicts
+      setTimeout(() => maybeFinish(next), 0);
+      return next;
+    });
+  };
 
-  const current = rows[step];
+  const keepBrandNow = (idx) => {
+    setRows(prev => {
+      const next = prev.filter((_, i) => i !== idx);
+      setTimeout(() => maybeFinish(next), 0);
+      return next;
+    });
+  };
+
+  const replaceAllAndProceed = () => {
+    rows.forEach(r => onReplaceItem(r.brand, r.best, r.qty));
+    onOpenChange(false);
+    onProceed();
+  };
+
+  if (!open) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -129,121 +153,153 @@ export default function GenericSaverAtCheckout({
             </div>
           ) : (
             <>
-              {/* progress */}
-              <div className="mb-2 text-[12px] font-semibold text-emerald-800/80">
-                Item {step + 1} of {rows.length}
-              </div>
-
-              {/* single card for the current item */}
-              <div
-                className="rounded-xl border bg-white p-3 shadow-sm"
-                style={{ borderColor: "rgba(15,110,81,0.18)" }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[12px] text-zinc-500">Brand</div>
-                    <div className="font-extrabold truncate">
-                      {current.brand.brand || current.brand.name}
-                    </div>
-                    <div className="text-[12px] text-zinc-600 truncate">
-                      Qty: {current.qty}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[15px] font-black" style={{ color: DEEP }}>
-                      ₹{price(current.brand)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-2 grid sm:grid-cols-[1fr_auto_1fr] items-center gap-2">
-                  <div className="rounded-lg border p-2">
-                    <div className="text-[12px] text-emerald-700">Best Generic</div>
-                    <div className="font-bold truncate">
-                      {current.best.name || current.best.displayName}
-                    </div>
-                    {current.best.composition && (
-                      <div className="text-[12px] text-zinc-600 truncate">
-                        {current.best.composition}
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-center font-bold text-emerald-700">
-                    ↓ Save ₹{current.saving.rupees} ({current.saving.pct}%)
-                  </div>
-                  <div className="text-right font-black" style={{ color: DEEP }}>
-                    ₹{price(current.best)}
-                  </div>
-                </div>
-
-                {/* ACTION buttons = immediate */}
-                <div className="mt-3 flex gap-2">
+              {/* Optional bulk action when there are multiple lines */}
+              {rows.length > 1 && (
+                <div className="mb-2 flex justify-end">
                   <Button
-                    className="flex-1 font-bold text-white"
+                    className="font-bold text-white"
                     style={{ backgroundColor: DEEP }}
-                    onClick={() => {
-                      onReplaceItem(current.brand, current.best, current.qty);
-                      goNext();
-                    }}
+                    onClick={replaceAllAndProceed}
                   >
-                    Replace with generic
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1 font-bold"
-                    onClick={goNext}
-                  >
-                    Keep brand
+                    Replace all & proceed
                   </Button>
                 </div>
+              )}
+
+              <div className="text-[12px] text-emerald-700 mb-2">
+                Tap a button below to apply immediately. You can handle items one by one.
               </div>
 
-              {/* Footer: snooze + totals + skip */}
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <div className="text-sm text-zinc-600">
-                  Don’t show for:
-                  <label className="ml-2 mr-1">
-                    <input
-                      type="radio"
-                      name="sz"
-                      defaultChecked={defaultSnoozeDays === 7}
-                      onChange={() => setSnoozeDays(7)}
-                    />{" "}
-                    7 days
-                  </label>
-                  <label className="ml-2">
-                    <input
-                      type="radio"
-                      name="sz"
-                      onChange={() => setSnoozeDays(3)}
-                    />{" "}
-                    3 days
-                  </label>
-                </div>
-                <div className="text-right">
-                  <div className="text-[12px] text-zinc-600">Potential saving (all)</div>
-                  <div className="text-lg font-black" style={{ color: DEEP }}>
-                    ₹{totalSaving}
+              <div className="space-y-3">
+                {rows.map((r, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-xl border bg-white p-3 shadow-sm"
+                    style={{ borderColor: "rgba(15,110,81,0.18)" }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[12px] text-zinc-500">Brand</div>
+                        <div className="font-extrabold truncate">
+                          {r.brand.brand || r.brand.name}
+                        </div>
+                        <div className="text-[12px] text-zinc-600 truncate">
+                          Qty: {r.qty}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div
+                          className="text-[15px] font-black"
+                          style={{ color: DEEP }}
+                        >
+                          ₹{price(r.brand)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 grid sm:grid-cols-[1fr_auto_1fr] items-center gap-2">
+                      <div className="rounded-lg border p-2">
+                        <div className="text-[12px] text-emerald-700">
+                          Best Generic
+                        </div>
+                        <div className="font-bold truncate">
+                          {r.best.name || r.best.displayName}
+                        </div>
+                        {r.best.composition && (
+                          <div className="text-[12px] text-zinc-600 truncate">
+                            {r.best.composition}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-center font-bold text-emerald-700">
+                        ↓ Save ₹{r.saving.rupees} ({r.saving.pct}%)
+                      </div>
+                      <div
+                        className="text-right font-black"
+                        style={{ color: DEEP }}
+                      >
+                        ₹{price(r.best)}
+                      </div>
+                    </div>
+
+                    {/* Instant actions */}
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        className="flex-1 font-bold"
+                        style={{ backgroundColor: DEEP, color: "white" }}
+                        onClick={() => doReplaceNow(idx)}
+                      >
+                        Replace with generic
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 font-bold"
+                        onClick={() => keepBrandNow(idx)}
+                      >
+                        Keep brand
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </div>
-
-              <div className="mt-3 flex justify-end">
-                <Button
-                  variant="outline"
-                  className="font-bold"
-                  onClick={() => {
-                    const ts = Date.now() + snoozeDays * 24 * 60 * 60 * 1000;
-                    localStorage.setItem(LS_KEY, String(ts));
-                    onOpenChange(false);
-                    onProceed();
-                  }}
-                >
-                  Skip & checkout
-                </Button>
+                ))}
               </div>
             </>
           )}
+
+          {/* Footer */}
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="text-sm text-zinc-600">
+              Don’t show for:
+              <label className="ml-2 mr-1">
+                <input
+                  type="radio"
+                  name="sz"
+                  defaultChecked={defaultSnoozeDays === 7}
+                  onChange={() => setSnoozeDays(7)}
+                />{" "}
+                7 days
+              </label>
+              <label className="ml-2">
+                <input
+                  type="radio"
+                  name="sz"
+                  onChange={() => setSnoozeDays(3)}
+                />{" "}
+                3 days
+              </label>
+            </div>
+            <div className="text-right">
+              <div className="text-[12px] text-zinc-600">Potential saving</div>
+              <div className="text-lg font-black" style={{ color: DEEP }}>
+                ₹{remainingPotential}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 flex justify-end gap-2">
+            <Button
+              variant="outline"
+              className="font-bold"
+              onClick={() => {
+                const ts = Date.now() + snoozeDays * 24 * 60 * 60 * 1000;
+                localStorage.setItem(LS_KEY, String(ts));
+                onOpenChange(false);
+                onProceed(); // continue without changes
+              }}
+            >
+              Skip now
+            </Button>
+            {/* We no longer need "Apply & proceed" because per-row actions are instant */}
+            <Button
+              className="font-bold text-white"
+              style={{ backgroundColor: DEEP }}
+              onClick={() => {
+                onOpenChange(false);
+                onProceed();
+              }}
+            >
+              Proceed to checkout
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
