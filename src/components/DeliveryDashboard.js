@@ -20,8 +20,12 @@ import { motion, AnimatePresence } from "framer-motion";
 // icons
 import {
   Bike, CheckCheck, Pill, LogOut, MessageSquare, MapPin, Loader2,
-  AlarmClock, ShieldAlert, TimerReset, Navigation, Gauge, DollarSign
+  AlarmClock, ShieldAlert, TimerReset, Navigation, Gauge, DollarSign, BellRing
 } from "lucide-react";
+
+// native push (Capacitor) — safe on web too
+import { PushNotifications } from "@capacitor/push-notifications";
+import { Capacitor } from "@capacitor/core";
 
 // other components
 import ChatModal from "./ChatModal";
@@ -378,6 +382,13 @@ export default function DeliveryDashboard() {
   const [todayEarnings, setTodayEarnings] = useState(null);
   const [cashDue, setCashDue] = useState(0);
 
+  // NEW: Instant offer popup state + audio
+  const [offer, setOffer] = useState(null); // {orderId, pharmacy, total, ...}
+  const [offerDeadline, setOfferDeadline] = useState(null); // epoch ms
+  const [left, setLeft] = useState(0);
+  const offerAudioRef = useRef(null);
+  const offerLoopRef = useRef(null);
+
   // Auto-refresh orders (poll)
   useEffect(() => {
     if (!loggedIn) return;
@@ -659,6 +670,134 @@ export default function DeliveryDashboard() {
       setSnackbar({ open: true, message: "Invalid OTP or error", severity: "error" });
     }
   };
+
+  /* ------------------------------- NEW: PUSH ------------------------------- */
+  useEffect(() => {
+    (async () => {
+      if (!loggedIn || !partner?._id) return;
+      // web gets Notification API; native gets FCM via Capacitor
+      if (Capacitor.isNativePlatform?.()) {
+        try {
+          const perm = await PushNotifications.requestPermissions();
+          if (perm.receive === "granted") {
+            await PushNotifications.register();
+          }
+          const onReg = PushNotifications.addListener("registration", async (token) => {
+            try {
+              await axios.post(`${API_BASE_URL}/api/delivery/register-device-token`, {
+                partnerId: partner._id,
+                token: token.value,
+                platform: "android",
+              });
+            } catch {}
+          });
+          const onError = PushNotifications.addListener("registrationError", () => {});
+          const onReceive = PushNotifications.addListener("pushNotificationReceived", () => {});
+          return () => {
+            onReg.remove();
+            onError.remove();
+            onReceive.remove();
+          };
+        } catch {}
+      } else {
+        // Ask web Notification permission once
+        if ("Notification" in window && Notification.permission === "default") {
+          try { await Notification.requestPermission(); } catch {}
+        }
+      }
+    })();
+  }, [loggedIn, partner?._id]);
+
+  /* ------------------------------- NEW: SSE ------------------------------- */
+  useEffect(() => {
+    if (!loggedIn || !partner?._id) return;
+    let es;
+    try {
+      es = new EventSource(`${API_BASE_URL}/api/delivery/stream/${partner._id}`);
+      es.addEventListener("offer", (ev) => {
+        const payload = JSON.parse(ev.data || "{}");
+        if (!payload?.orderId) return;
+        // avoid duplicate modal if already fetched via polling
+        const alreadyHave = orders.some(o => String(o._id) === String(payload.orderId));
+        if (alreadyHave) return;
+
+        setOffer(payload);
+        const deadline = Date.now() + 25_000; // 25s to respond
+        setOfferDeadline(deadline);
+        setLeft(Math.ceil((deadline - Date.now()) / 1000));
+
+        // play sound + vibrate + optional web heads-up
+        try {
+          if (!offerAudioRef.current) {
+            offerAudioRef.current = new Audio("/sounds/offer.mp3");
+          }
+          // loop every ~3s while modal is open
+          offerAudioRef.current.currentTime = 0;
+          offerAudioRef.current.play().catch(() => {});
+          if (offerLoopRef.current) clearInterval(offerLoopRef.current);
+          offerLoopRef.current = setInterval(() => {
+            if (offerAudioRef.current) {
+              offerAudioRef.current.currentTime = 0;
+              offerAudioRef.current.play().catch(() => {});
+            }
+          }, 3000);
+        } catch {}
+        try { if (navigator.vibrate) navigator.vibrate([150, 80, 150, 80, 300]); } catch {}
+        try {
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("New delivery offer", { body: "Tap to open GoDavaii", tag: "gd-offer" });
+          }
+        } catch {}
+      });
+    } catch {}
+
+    return () => {
+      if (es) es.close();
+    };
+    // include orders.length so if new order appears via poll, we won't keep stale modal
+  }, [loggedIn, partner?._id, orders.length]);
+
+  // NEW: countdown for offer
+  useEffect(() => {
+    if (!offerDeadline) return;
+    const t = setInterval(async () => {
+      const secs = Math.max(0, Math.ceil((offerDeadline - Date.now()) / 1000));
+      setLeft(secs);
+      if (secs === 0) {
+        // auto-dismiss + attempt reject (non-fatal)
+        const id = offer?.orderId;
+        setOffer(null);
+        setOfferDeadline(null);
+        try {
+          if (id) {
+            const token = localStorage.getItem("deliveryToken");
+            await axios.patch(`${API_BASE_URL}/api/delivery/orders/${id}/reject`, {}, {
+              headers: token ? { Authorization: `Bearer ${token}` } : undefined
+            });
+          }
+        } catch {}
+      }
+    }, 200);
+    return () => clearInterval(t);
+  }, [offerDeadline, offer?.orderId]);
+
+  // Stop audio when modal closes
+  useEffect(() => {
+    if (!offer) {
+      if (offerLoopRef.current) {
+        clearInterval(offerLoopRef.current);
+        offerLoopRef.current = null;
+      }
+      try { offerAudioRef.current && offerAudioRef.current.pause(); } catch {}
+    }
+  }, [offer]);
+
+  // Ask web Notification permission on mount (no-op if already granted/denied)
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      try { Notification.requestPermission(); } catch {}
+    }
+  }, []);
 
   if (!loggedIn) {
     return (
@@ -1064,6 +1203,62 @@ export default function DeliveryDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* NEW: Incoming Offer Modal */}
+      <Dialog open={!!offer} onOpenChange={(o)=>{ if(!o){ setOffer(null); setOfferDeadline(null); }}}>
+        <DialogContent className="force-light sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BellRing className="h-5 w-5 text-emerald-600" />
+              New Delivery Offer
+            </DialogTitle>
+          </DialogHeader>
+
+          {offer && (
+            <div className="space-y-2">
+              <div className="text-sm text-slate-600">
+                Pharmacy: <b>{offer?.pharmacy?.name || "Pharmacy"}</b>
+              </div>
+              <div className="text-sm text-slate-600">
+                Payout estimate: <b>₹{Math.round((offer.total || 0) * 0.08)}</b>
+              </div>
+              <div className="mt-2">
+                <Badge className="bg-emerald-600 text-white font-bold">
+                  Respond in {left}s
+                </Badge>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button
+                  className="btn-primary-emerald !font-extrabold"
+                  onClick={async () => {
+                    try {
+                      await handleUpdateStatus(offer.orderId, "accepted");
+                    } finally {
+                      setOffer(null); setOfferDeadline(null);
+                    }
+                  }}
+                >
+                  Accept
+                </Button>
+                <Button
+                  className="!font-extrabold bg-red-600 hover:bg-red-700 text-white"
+                  onClick={async () => {
+                    try {
+                      const token = localStorage.getItem("deliveryToken");
+                      await axios.patch(`${API_BASE_URL}/api/delivery/orders/${offer.orderId}/reject`, {}, {
+                        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+                      });
+                    } catch {}
+                    setOffer(null); setOfferDeadline(null);
+                  }}
+                >
+                  Reject
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* CHAT MODAL */}
       <ChatModal
