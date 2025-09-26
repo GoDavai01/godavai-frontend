@@ -13,6 +13,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
+import { BackgroundGeolocation } from "@capacitor-community/background-geolocation";
 
 // framer-motion
 import { motion, AnimatePresence } from "framer-motion";
@@ -433,6 +434,53 @@ export default function DeliveryDashboard() {
     }
     return () => { if (navigator.geolocation && watchId) navigator.geolocation.clearWatch(watchId); };
   }, [loggedIn, partner?._id, active]);
+
+  useEffect(() => {
+  if (!loggedIn || !partner?._id) return;
+
+  let watcherId;
+
+  (async () => {
+    try {
+      if (!active) return; // only track when rider is active
+
+      // Start background location (Android keeps running when app is minimized/locked)
+      watcherId = await BackgroundGeolocation.addWatcher(
+        {
+          // shown while running as a foreground service
+          backgroundTitle: 'GoDavaii Delivery',
+          backgroundMessage: 'Sharing your live location',
+          // tuning
+          distanceFilter: 25,          // meters between updates
+          stale: false,
+          requestPermissions: true,    // ask on first run
+          stopOnTerminate: false       // keep tracking after app is killed (Android)
+          // Some versions also accept: interval: 8000, fastestInterval: 5000
+        },
+        async (position, error) => {
+          if (error) return; // ignore transient errors
+          const { latitude, longitude } = position;
+          setDriverLoc({ lat: latitude, lng: longitude });
+          try {
+            await axios.post(`${API_BASE_URL}/api/delivery/update-location`, {
+              partnerId: partner._id,
+              lat: latitude,
+              lng: longitude,
+            });
+          } catch {}
+        }
+      );
+    } catch {
+      // likely running on web or no permission — silently ignore
+    }
+  })();
+
+  return () => {
+    // stop background watcher when leaving the screen or toggling inactive
+    if (watcherId) BackgroundGeolocation.removeWatcher({ id: watcherId });
+  };
+}, [active, loggedIn, partner?._id]);
+
 
   useEffect(() => {
     if (loggedIn) {
