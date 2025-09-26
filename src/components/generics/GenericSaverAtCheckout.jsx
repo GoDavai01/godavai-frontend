@@ -13,6 +13,17 @@ function savePair(brand, gen) {
   return { rupees: s, pct: s ? Math.round((s / price(brand)) * 100) : 0 };
 }
 
+// Reusable 3D button look (same color for both actions)
+const BTN3D_CLASS =
+  "flex-1 relative font-extrabold text-white rounded-xl px-3 py-2 " +
+  "cursor-pointer transition-transform focus:outline-none focus:ring-2 focus:ring-emerald-300 " +
+  "hover:translate-y-[1px] active:translate-y-[2px]";
+const BTN3D_STYLE = {
+  background: "linear-gradient(180deg, #13a079 0%, #0f6e51 100%)",
+  boxShadow:
+    "0 4px 0 #0b4f3d, 0 8px 16px rgba(15,110,81,0.30)",
+};
+
 export default function GenericSaverAtCheckout({
   open,
   onOpenChange,
@@ -26,7 +37,6 @@ export default function GenericSaverAtCheckout({
   const [loading, setLoading] = useState(true);
   const [readyToRender, setReadyToRender] = useState(false);
 
-  // Reset all state every time we open (prevents stale rows from last run)
   useEffect(() => {
     if (!open) return;
     setRows([]);
@@ -34,7 +44,6 @@ export default function GenericSaverAtCheckout({
     setReadyToRender(false);
   }, [open]);
 
-  // Load per line AFTER we’ve reset state above
   useEffect(() => {
     if (!open) return;
 
@@ -44,10 +53,9 @@ export default function GenericSaverAtCheckout({
       const start = Date.now();
 
       for (const { item, qty } of items) {
-        const data = await fetchAlternatives(item); // expects { brand, generics }
+        const data = await fetchAlternatives(item);
         const best = (data?.generics || [])[0];
 
-        // only suggest if we actually save money
         if (data?.brand && best && price(data.brand) > price(best)) {
           out.push({
             brand: data.brand,
@@ -61,7 +69,6 @@ export default function GenericSaverAtCheckout({
       setRows(out);
       setLoading(false);
 
-      // ensure at least ~350ms so it never "blips"
       const elapsed = Date.now() - start;
       const MIN_VISIBLE = 350;
       if (elapsed < MIN_VISIBLE) {
@@ -77,7 +84,6 @@ export default function GenericSaverAtCheckout({
     [rows]
   );
 
-  // After any action, if no rows remain → close + proceed
   const maybeFinish = (nextRows) => {
     if (nextRows.length === 0) {
       onOpenChange(false);
@@ -85,7 +91,6 @@ export default function GenericSaverAtCheckout({
     }
   };
 
-  // Instant actions per line
   const doReplaceNow = (idx) => {
     setRows(prev => {
       const r = prev[idx];
@@ -93,7 +98,6 @@ export default function GenericSaverAtCheckout({
         onReplaceItem(r.brand, r.best, r.qty);
       }
       const next = prev.filter((_, i) => i !== idx);
-      // Defer finish to next tick to avoid state update conflicts
       setTimeout(() => maybeFinish(next), 0);
       return next;
     });
@@ -150,7 +154,6 @@ export default function GenericSaverAtCheckout({
             </div>
           ) : (
             <>
-              {/* Optional bulk action when there are multiple lines */}
               {rows.length > 1 && (
                 <div className="mb-2 flex justify-end">
                   <Button
@@ -185,10 +188,7 @@ export default function GenericSaverAtCheckout({
                         </div>
                       </div>
                       <div className="text-right">
-                        <div
-                          className="text-[15px] font-black"
-                          style={{ color: DEEP }}
-                        >
+                        <div className="text-[15px] font-black" style={{ color: DEEP }}>
                           ₹{price(r.brand)}
                         </div>
                       </div>
@@ -196,9 +196,7 @@ export default function GenericSaverAtCheckout({
 
                     <div className="mt-2 grid sm:grid-cols-[1fr_auto_1fr] items-center gap-2">
                       <div className="rounded-lg border p-2">
-                        <div className="text-[12px] text-emerald-700">
-                          Best Generic
-                        </div>
+                        <div className="text-[12px] text-emerald-700">Best Generic</div>
                         <div className="font-bold truncate">
                           {r.best.name || r.best.displayName}
                         </div>
@@ -211,29 +209,26 @@ export default function GenericSaverAtCheckout({
                       <div className="text-center font-bold text-emerald-700">
                         ↓ Save ₹{r.saving.rupees} ({r.saving.pct}%)
                       </div>
-                      <div
-                        className="text-right font-black"
-                        style={{ color: DEEP }}
-                      >
+                      <div className="text-right font-black" style={{ color: DEEP }}>
                         ₹{price(r.best)}
                       </div>
                     </div>
 
-                    {/* Instant actions */}
+                    {/* Instant actions — Keep Brand (left), Replace with Generic (right) */}
                     <div className="mt-2 flex gap-2">
                       <Button
-                        className="flex-1 font-bold"
-                        style={{ backgroundColor: DEEP, color: "white" }}
-                        onClick={() => doReplaceNow(idx)}
-                      >
-                        Replace with generic
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="flex-1 font-bold"
+                        className={BTN3D_CLASS}
+                        style={BTN3D_STYLE}
                         onClick={() => keepBrandNow(idx)}
                       >
-                        Keep brand
+                        Keep <span className="ml-1">Brand</span>
+                      </Button>
+                      <Button
+                        className={BTN3D_CLASS}
+                        style={BTN3D_STYLE}
+                        onClick={() => doReplaceNow(idx)}
+                      >
+                        Replace with <span className="ml-1">Generic</span>
                       </Button>
                     </div>
                   </div>
@@ -242,7 +237,6 @@ export default function GenericSaverAtCheckout({
             </>
           )}
 
-          {/* Footer — no snooze, just the potential saving and proceed */}
           <div className="mt-4 flex items-center justify-between gap-3">
             <div className="text-sm text-zinc-600" />
             <div className="text-right">

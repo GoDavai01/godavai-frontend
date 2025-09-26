@@ -32,7 +32,7 @@ export default function CartSheet({
   const isGenericItem = (m) =>
     (m?.productKind === "generic") || !m?.brand || String(m.brand).trim() === "";
 
-  // ===== New multi-line saver at checkout =====
+  // ===== Multi-line saver at checkout =====
   const [saverOpen, setSaverOpen] = useState(false);
 
   async function fetchEligiblePharmacies() {
@@ -59,8 +59,7 @@ export default function CartSheet({
     // eslint-disable-next-line
   }, [selectOpen, cart]);
 
-  // Build rows for the multi-line saver:
-  // ✅ Only check "is branded". Do NOT require composition locally.
+  // Build rows for the saver (distinct cart lines; qty handled inside saver)
   const saverItems = cart
     .filter((i) => !isGenericItem(i))
     .map((i) => ({ item: i, qty: i.quantity || 1 }));
@@ -83,18 +82,17 @@ export default function CartSheet({
   };
 
   // Function passed to GenericSaver to fetch alternatives per item
-  // Server-first (even without local composition), then client fallback if possible.
+  // Server-first; client fallback if needed.
   const fetchAlternativesForItem = async (brandItem) => {
     try {
       const pid = resolvePharmacyId(brandItem);
       if (!pid) return { brand: brandItem, generics: [] };
 
-      // Try to get a key from the cart line if present (optional)
       const keyFromItem = buildCompositionKey(
         brandItem?.composition || brandItem?.compositionKey || ""
       );
 
-      // 1) Try server — pass brandId always; include compositionKey only if we have one
+      // 1) Try server — pass brandId; include compositionKey if available
       let data;
       const url =
         `${API_BASE_URL}/api/pharmacies/${pid}/alternatives?brandId=${brandItem._id}` +
@@ -107,11 +105,10 @@ export default function CartSheet({
           brand: data?.brand || brandItem,
           generics: Array.isArray(data?.generics) ? data.generics : [],
         };
-        if (out.generics.length) return out; // ✅ found on server
+        if (out.generics.length) return out;
       }
 
       // 2) Fallback: pull pharmacy inventory and filter locally (legacy support)
-      // Build an effective key using either our cart item OR the server-returned brand.
       const effectiveKey =
         keyFromItem ||
         buildCompositionKey(
@@ -121,8 +118,6 @@ export default function CartSheet({
             brandItem?.composition ||
             "")
         );
-
-      // If we STILL can't build a key, bail out gracefully.
       if (!effectiveKey) {
         return { brand: data?.brand || brandItem, generics: [] };
       }
@@ -143,9 +138,7 @@ export default function CartSheet({
             m.stock > 0 &&
             samePack(m, brandItem)
         )
-        .sort(
-          (a, b) => Number(a.price || a.mrp || 0) - Number(b.price || b.mrp || 0)
-        )
+        .sort((a, b) => Number(a.price || a.mrp || 0) - Number(b.price || b.mrp || 0))
         .slice(0, 5);
 
       return { brand: data?.brand || brandItem, generics: list };
@@ -154,22 +147,39 @@ export default function CartSheet({
     }
   };
 
-  // Apply replacement chosen in the saver
+  // Apply replacement chosen in the saver — keep pharmacy selection safe
   const replaceLineWithGeneric = (brand, generic, qty) => {
     const phId = brand?.pharmacy || resolvePharmacyId(brand);
     const withPharmacy = { ...generic, pharmacy: generic.pharmacy || phId };
 
-    removeFromCart(brand);
-    for (let k = 0; k < (qty || 1); k++) addToCart(withPharmacy);
+    const wasOnlyLine = cart.length === 1;
+    const prevSelection = selectedPharmacy ? { ...selectedPharmacy } : null;
+
+    // If this was the only line, add first then remove → avoids "cart empty" side-effects
+    if (wasOnlyLine) {
+      for (let k = 0; k < (qty || 1); k++) addToCart(withPharmacy);
+      removeFromCart(brand);
+    } else {
+      removeFromCart(brand);
+      for (let k = 0; k < (qty || 1); k++) addToCart(withPharmacy);
+    }
+
+    // Re-assert selection so UI never shows "Select Pharmacy"
+    if (prevSelection) {
+      setSelectedPharmacy(prevSelection);
+    } else if (phId) {
+      // minimal object; name will get filled when user opens selector again
+      setSelectedPharmacy((p) => p || { _id: phId });
+    }
   };
 
   // Entry-point when user taps PROCEED
   async function handleProceed() {
-    // If nothing to check (no branded items), go straight through
-    if (!saverItems.length) {
+    // Decide at click-time (fresh cart), not from a potentially stale array
+    const hasBranded = cart.some((i) => !isGenericItem(i));
+    if (!hasBranded) {
       return onCheckout();
     }
-    // Always open the saver when there are branded items
     setSaverOpen(true);
   }
 
@@ -286,8 +296,19 @@ export default function CartSheet({
               genericSugg.brand?.pharmacy || selectedPharmacy?._id || cart[0]?.pharmacy;
             const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
 
-            removeFromCart(genericSugg.brand);
-            for (let k = 0; k < qty; k++) addToCart(withPharmacy);
+            // Preserve pharmacy while replacing
+            const prevSelection = selectedPharmacy ? { ...selectedPharmacy } : null;
+            const wasOnlyLine = cart.length === 1;
+
+            if (wasOnlyLine) {
+              for (let k = 0; k < qty; k++) addToCart(withPharmacy);
+              removeFromCart(genericSugg.brand);
+            } else {
+              removeFromCart(genericSugg.brand);
+              for (let k = 0; k < qty; k++) addToCart(withPharmacy);
+            }
+            if (prevSelection) setSelectedPharmacy(prevSelection);
+
             setGenericSugg({ open: false, brand: null, generics: [] });
             onCheckout();
           }}
@@ -306,7 +327,7 @@ export default function CartSheet({
           }}
         />
 
-        {/* New multi-line saver at checkout */}
+        {/* Multi-line saver at checkout */}
         <GenericSaverAtCheckout
           open={saverOpen}
           onOpenChange={setSaverOpen}
