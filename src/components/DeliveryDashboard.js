@@ -15,12 +15,6 @@ import { Switch } from "../components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { PushNotifications } from "@capacitor/push-notifications";
 import { Capacitor, registerPlugin } from "@capacitor/core";
-const BackgroundGeolocation = Capacitor?.isNativePlatform?.()
-  ? registerPlugin("BackgroundGeolocation")
-  : {
-      addWatcher: async () => null,
-      removeWatcher: async () => {},
-    };
 
 // framer-motion
 import { motion, AnimatePresence } from "framer-motion";
@@ -35,6 +29,13 @@ import {
 import ChatModal from "./ChatModal";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+
+const BackgroundGeolocation = Capacitor?.isNativePlatform?.()
+  ? registerPlugin("BackgroundGeolocation")
+  : {
+      addWatcher: async () => null,
+      removeWatcher: async () => {},
+    };
 
 /* ------------------------- helpers (unchanged logic) ------------------------ */
 function formatOrderDate(dateStr) {
