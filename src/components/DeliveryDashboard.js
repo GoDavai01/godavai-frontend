@@ -26,10 +26,6 @@ import {
   AlarmClock, ShieldAlert, TimerReset, Navigation, Gauge, DollarSign, BellRing
 } from "lucide-react";
 
-// native push (Capacitor) — safe on web too
-import { PushNotifications } from "@capacitor/push-notifications";
-import { Capacitor } from "@capacitor/core";
-
 // other components
 import ChatModal from "./ChatModal";
 
