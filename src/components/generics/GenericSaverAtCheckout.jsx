@@ -20,8 +20,7 @@ const BTN3D_CLASS =
   "hover:translate-y-[1px] active:translate-y-[2px]";
 const BTN3D_STYLE = {
   background: "linear-gradient(180deg, #13a079 0%, #0f6e51 100%)",
-  boxShadow:
-    "0 4px 0 #0b4f3d, 0 8px 16px rgba(15,110,81,0.30)",
+  boxShadow: "0 4px 0 #0b4f3d, 0 8px 16px rgba(15,110,81,0.30)",
 };
 
 export default function GenericSaverAtCheckout({
@@ -37,6 +36,7 @@ export default function GenericSaverAtCheckout({
   const [loading, setLoading] = useState(true);
   const [readyToRender, setReadyToRender] = useState(false);
 
+  // Reset all state every time we open (prevents stale rows)
   useEffect(() => {
     if (!open) return;
     setRows([]);
@@ -44,6 +44,7 @@ export default function GenericSaverAtCheckout({
     setReadyToRender(false);
   }, [open]);
 
+  // Load suggestions
   useEffect(() => {
     if (!open) return;
 
@@ -53,7 +54,7 @@ export default function GenericSaverAtCheckout({
       const start = Date.now();
 
       for (const { item, qty } of items) {
-        const data = await fetchAlternatives(item);
+        const data = await fetchAlternatives(item); // { brand, generics }
         const best = (data?.generics || [])[0];
 
         if (data?.brand && best && price(data.brand) > price(best)) {
@@ -94,9 +95,7 @@ export default function GenericSaverAtCheckout({
   const doReplaceNow = (idx) => {
     setRows(prev => {
       const r = prev[idx];
-      if (r) {
-        onReplaceItem(r.brand, r.best, r.qty);
-      }
+      if (r) onReplaceItem(r.brand, r.best, r.qty);
       const next = prev.filter((_, i) => i !== idx);
       setTimeout(() => maybeFinish(next), 0);
       return next;
@@ -214,21 +213,21 @@ export default function GenericSaverAtCheckout({
                       </div>
                     </div>
 
-                    {/* Instant actions — Keep Brand (left), Replace with Generic (right) */}
+                    {/* Actions — Keep Brand (left), Replace with Generic (right) */}
                     <div className="mt-2 flex gap-2">
                       <Button
                         className={BTN3D_CLASS}
                         style={BTN3D_STYLE}
                         onClick={() => keepBrandNow(idx)}
                       >
-                        Keep <span className="ml-1">Brand</span>
+                        Keep Brand
                       </Button>
                       <Button
                         className={BTN3D_CLASS}
                         style={BTN3D_STYLE}
                         onClick={() => doReplaceNow(idx)}
                       >
-                        Replace with <span className="ml-1">Generic</span>
+                        Replace with Generic
                       </Button>
                     </div>
                   </div>
@@ -237,6 +236,7 @@ export default function GenericSaverAtCheckout({
             </>
           )}
 
+          {/* Footer — potential saving + proceed */}
           <div className="mt-4 flex items-center justify-between gap-3">
             <div className="text-sm text-zinc-600" />
             <div className="text-right">
