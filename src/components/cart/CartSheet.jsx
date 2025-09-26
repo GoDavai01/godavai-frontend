@@ -59,9 +59,10 @@ export default function CartSheet({
     // eslint-disable-next-line
   }, [selectOpen, cart]);
 
-  // Build rows for the multi-line saver: each branded cart line + qty
+  // Build rows for the multi-line saver:
+  // ✅ Only check "is branded". Do NOT require composition locally.
   const saverItems = cart
-    .filter((i) => !isGenericItem(i) && buildCompositionKey(i?.composition || ""))
+    .filter((i) => !isGenericItem(i))
     .map((i) => ({ item: i, qty: i.quantity || 1 }));
 
   // Resolve pharmacy id for a given item (selected → item’s → any item’s)
@@ -82,31 +83,50 @@ export default function CartSheet({
   };
 
   // Function passed to GenericSaver to fetch alternatives per item
-  // Now with client-side fallback when the API returns empty.
+  // Server-first (even without local composition), then client fallback if possible.
   const fetchAlternativesForItem = async (brandItem) => {
     try {
       const pid = resolvePharmacyId(brandItem);
       if (!pid) return { brand: brandItem, generics: [] };
 
-      const key = buildCompositionKey(brandItem?.composition || "");
-      if (!key) return { brand: brandItem, generics: [] };
-
-      // 1) Try server
-      const r = await fetch(
-        `${API_BASE_URL}/api/pharmacies/${pid}/alternatives?compositionKey=${encodeURIComponent(
-          key
-        )}&brandId=${brandItem._id}`
+      // Try to get a key from the cart line if present (optional)
+      const keyFromItem = buildCompositionKey(
+        brandItem?.composition || brandItem?.compositionKey || ""
       );
+
+      // 1) Try server — pass brandId always; include compositionKey only if we have one
+      let data;
+      const url =
+        `${API_BASE_URL}/api/pharmacies/${pid}/alternatives?brandId=${brandItem._id}` +
+        (keyFromItem ? `&compositionKey=${encodeURIComponent(keyFromItem)}` : "");
+
+      const r = await fetch(url);
       if (r.ok) {
-        const data = await r.json();
+        data = await r.json();
         const out = {
           brand: data?.brand || brandItem,
           generics: Array.isArray(data?.generics) ? data.generics : [],
         };
-        if (out.generics.length) return out;
+        if (out.generics.length) return out; // ✅ found on server
       }
 
       // 2) Fallback: pull pharmacy inventory and filter locally (legacy support)
+      // Build an effective key using either our cart item OR the server-returned brand.
+      const effectiveKey =
+        keyFromItem ||
+        buildCompositionKey(
+          (data?.brand?.compositionKey ||
+            data?.brand?.composition ||
+            brandItem?.compositionKey ||
+            brandItem?.composition ||
+            "")
+        );
+
+      // If we STILL can't build a key, bail out gracefully.
+      if (!effectiveKey) {
+        return { brand: data?.brand || brandItem, generics: [] };
+      }
+
       const invRes = await fetch(
         `${API_BASE_URL}/api/medicines?pharmacyId=${pid}&onlyAvailable=1`
       );
@@ -117,7 +137,7 @@ export default function CartSheet({
           (m) =>
             !isGenericItem(brandItem) &&
             isGenericItem(m) &&
-            buildCompositionKey(m?.composition || "") === key &&
+            buildCompositionKey(m?.composition || m?.compositionKey || "") === effectiveKey &&
             m.status !== "unavailable" &&
             m.available !== false &&
             m.stock > 0 &&
@@ -128,7 +148,7 @@ export default function CartSheet({
         )
         .slice(0, 5);
 
-      return { brand: brandItem, generics: list };
+      return { brand: data?.brand || brandItem, generics: list };
     } catch {
       return { brand: brandItem, generics: [] };
     }
@@ -149,7 +169,7 @@ export default function CartSheet({
     if (!saverItems.length) {
       return onCheckout();
     }
-    // Always open the saver when there are branded items (no snooze/skip)
+    // Always open the saver when there are branded items
     setSaverOpen(true);
   }
 
