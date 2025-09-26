@@ -14,6 +14,8 @@ import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import { BackgroundGeolocation } from "@capacitor-community/background-geolocation";
+import { PushNotifications } from "@capacitor/push-notifications";
+import { Capacitor } from "@capacitor/core";
 
 // framer-motion
 import { motion, AnimatePresence } from "framer-motion";

@@ -8,6 +8,7 @@
     "@capacitor/app": "^7.1.0",
     "@capacitor/cli": "^7.4.3",
     "@capacitor/core": "^7.4.3",
+    "@capacitor/push-notifications": "^7.0.3",
     "@capacitor/splash-screen": "^7.0.1",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
