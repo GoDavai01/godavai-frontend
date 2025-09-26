@@ -13,9 +13,14 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
-import { BackgroundGeolocation } from "@capacitor-community/background-geolocation";
 import { PushNotifications } from "@capacitor/push-notifications";
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
+const BackgroundGeolocation = Capacitor?.isNativePlatform?.()
+  ? registerPlugin("BackgroundGeolocation")
+  : {
+      addWatcher: async () => null,
+      removeWatcher: async () => {},
+    };
 
 // framer-motion
 import { motion, AnimatePresence } from "framer-motion";
@@ -435,6 +440,7 @@ export default function DeliveryDashboard() {
 
   useEffect(() => {
   if (!loggedIn || !partner?._id) return;
+  if (!Capacitor?.isNativePlatform?.()) return; // skip on web builds
 
   let watcherId;
 
