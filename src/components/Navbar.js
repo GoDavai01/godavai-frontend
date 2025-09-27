@@ -29,21 +29,20 @@ export default function Navbar({
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [search, setSearch] = useState(searchProp);
   const [options, setOptions] = useState([]);
-  const [loading, setLoading] = useState(false);
+  the const [loading, setLoading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-
   const [pharmacyName, setPharmacyName] = useState("");
 
   const boxRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Detect if we're on /medicines/:pharmacyId and capture that id
+  // Detect if we're on /medicines/:pharmacyId
   const activePharmacyId = useMemo(() => {
     const m = routerLocation.pathname.match(/^\/medicines\/([a-fA-F0-9]{24})/);
     return m?.[1] || null;
   }, [routerLocation.pathname]);
 
-  // Load pharmacy name when on a pharmacy page (for placeholder)
+  // Load pharmacy name for placeholder
   useEffect(() => {
     let cancel = false;
     async function run() {
@@ -63,10 +62,10 @@ export default function Navbar({
     return () => { cancel = true; };
   }, [activePharmacyId]);
 
-  // Dynamic placeholder text
+  // Dynamic placeholder text (now says “Search in …”)
   const placeholder = useMemo(() => {
     if (routerLocation.pathname.startsWith("/medicines")) {
-      return pharmacyName ? `Search ${pharmacyName}` : "Search this pharmacy";
+      return pharmacyName ? `Search in ${pharmacyName}` : "Search in this pharmacy";
     }
     if (routerLocation.pathname.startsWith("/doctors")) return "Search Doctors";
     if (routerLocation.pathname.startsWith("/labs")) return "Search Labs";
@@ -103,21 +102,19 @@ export default function Navbar({
         axios.get(url, { params, signal: controller.signal }).then((r) => r.data);
 
       try {
-        // Rich medicines autocomplete (name/brand/company/composition/category)
         if (type === "medicine" || type === "all") {
           const city = (currentAddress?.city || "").trim();
           const data = await tryReq(`${API_BASE_URL}/api/medicines/autocomplete`, {
             q: search,
             city,
             limit: 12,
-            pharmacyId: activePharmacyId || undefined, // <-- scope when on a pharmacy
+            pharmacyId: activePharmacyId || undefined, // scope when on a pharmacy
           });
           setOptions(data || []);
           setDropdownOpen(true);
           return;
         }
 
-        // Non-medicine routes: legacy autocomplete
         const city = (currentAddress?.city || "").trim();
         const data = await tryReq(`${API_BASE_URL}/api/search/search-autocomplete`, {
           q: search,
@@ -128,7 +125,6 @@ export default function Navbar({
         setDropdownOpen(true);
       } catch (e1) {
         try {
-          // Alt legacy route
           const data = await tryReq(`${API_BASE_URL}/api/search/autocomplete`, {
             q: search,
             type,
@@ -136,7 +132,6 @@ export default function Navbar({
           setOptions(data || []);
           setDropdownOpen(true);
         } catch (e2) {
-          // Final safe fallback for medicines: names from /medicines/search
           if (type === "medicine" || type === "all") {
             try {
               const meds = await tryReq(`${API_BASE_URL}/api/medicines/search`, {
@@ -278,7 +273,6 @@ export default function Navbar({
               className="h-full w-full rounded-2xl bg-transparent text-[16.5px] font-semibold tracking-tight text-zinc-800 outline-none placeholder:text-zinc-400"
             />
             {loading && <Loader2 className="ml-1 h-4 w-4 animate-spin text-zinc-600" />}
-            {/* Tiny scope badge when on a pharmacy page */}
             {activePharmacyId && !loading && (
               <span className="ml-2 hidden sm:inline rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
                 This pharmacy
