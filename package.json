@@ -32,6 +32,7 @@
     "credit-card-type": "^10.0.2",
     "dayjs": "^1.11.13",
     "framer-motion": "^12.23.6",
+    "google-auth-library": "^10.3.0",
     "i18next": "^25.2.1",
     "i18next-browser-languagedetector": "^8.2.0",
     "jwt-decode": "^4.0.0",

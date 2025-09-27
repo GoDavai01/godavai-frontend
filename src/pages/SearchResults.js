@@ -124,6 +124,7 @@ function MedCard({ med, onAdd, onOpen }) {
 export default function SearchResults() {
   const location = useLocation();
   const query = new URLSearchParams(location.search).get("q") || "";
+  const pharmacyId = new URLSearchParams(location.search).get("pharmacyId") || null;
   const navigate = useNavigate();
 
   // Dialog state
@@ -146,14 +147,23 @@ export default function SearchResults() {
   const lat = locationObj.lat || null;
   const lng = locationObj.lng || null;
 
-  // ===== Fetch nearby pharmacies (≤5km) =====
+  // ===== Fetch nearby pharmacies (≤5km) OR a specific pharmacy if pharmacyId passed =====
   useEffect(() => {
     let cancel = false;
     async function run() {
-      if (!lat || !lng) {
-        setNearbyPharmacies([]);
+      // If a pharmacy is specified, use only that pharmacy.
+      if (pharmacyId) {
+        try {
+          const r = await axios.get(`${API_BASE_URL}/api/pharmacies`, { params: { id: pharmacyId }});
+          const ph = Array.isArray(r.data) ? r.data[0] : null;
+          if (!cancel) setNearbyPharmacies(ph ? [ph] : []);
+        } catch {
+          if (!cancel) setNearbyPharmacies([]);
+        }
         return;
       }
+      // Otherwise, use nearby (≤5km) as before.
+      if (!lat || !lng) { setNearbyPharmacies([]); return; }
       try {
         const r = await fetch(
           `${API_BASE_URL}/api/pharmacies/nearby?lat=${lat}&lng=${lng}&maxDistance=${MAX_DISTANCE}`
@@ -168,7 +178,7 @@ export default function SearchResults() {
     return () => {
       cancel = true;
     };
-  }, [lat, lng]);
+  }, [lat, lng, pharmacyId]);
 
   // ===== Fetch matching meds + group by nearby pharmacy =====
   useEffect(() => {
@@ -185,7 +195,7 @@ export default function SearchResults() {
       setLoading(true);
       try {
         const { data } = await axios.get(`${API_BASE_URL}/api/medicines/search`, {
-          params: { q: query, lat, lng, maxDistance: MAX_DISTANCE, limit: 400 },
+          params: { q: query, lat, lng, maxDistance: MAX_DISTANCE, limit: 400, pharmacyId },
         });
 
         const meds = (Array.isArray(data) ? data : [])
