@@ -39,6 +39,11 @@ import axios from "axios";
 import { TYPE_OPTIONS, PACK_SIZES_BY_TYPE } from "../constants/packSizes";
 import { CUSTOMER_CATEGORIES } from "../constants/customerCategories";
 
+// ========== (A) NEW IMPORTS ==========
+import { Capacitor } from "@capacitor/core";
+import { PushNotifications } from "@capacitor/push-notifications";
+// =====================================
+
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 /* ---------------------------- UTILITIES ---------------------------- */
@@ -119,8 +124,6 @@ const joinComps = (arr = []) =>
 // ▲▲ END NEW ▲▲
 
 /* ----------------------- STATUS / MISC HELPERS ---------------------- */
-
-
 
 function getStatusLabel(status) {
   if (status === "quoted") return "Quote Sent - Awaiting User";
@@ -442,6 +445,14 @@ export default function PharmacyDashboard() {
     return unique.filter(c => c !== "Other").concat("Other");
   }, [medicines]);
 
+  // ========== (B) NEW STATE + HELPERS ==========
+  // Incoming order popup + alerts
+  const seenOrderIdsRef = useRef(new Set());
+  const [incomingOrder, setIncomingOrder] = useState(null);
+  const [incomingOpen, setIncomingOpen] = useState(false);
+  const incomingAudioRef = useRef(null);
+  // ============================================
+
   useEffect(() => {
     if (!token) return;
     const fetchAll = () => {
@@ -470,6 +481,38 @@ export default function PharmacyDashboard() {
     return () => clearInterval(interval);
   }, [token, msg, isEditing]);
 
+  // ========== (C) ASK PERMISSION & REGISTER PUSH TOKEN (NATIVE) ==========
+  useEffect(() => {
+    if (!token) return;
+    // Web: ask once
+    if ("Notification" in window && Notification.permission === "default") {
+      try { Notification.requestPermission(); } catch {}
+    }
+    // Native: register for push (Android/iOS)
+    if (Capacitor?.isNativePlatform?.()) {
+      (async () => {
+        try {
+          const perm = await PushNotifications.requestPermissions();
+          if (perm.receive === "granted") {
+            await PushNotifications.register();
+          }
+          const reg = PushNotifications.addListener("registration", async (t) => {
+            try {
+              await axios.post(`${API_BASE_URL}/api/pharmacies/register-device-token`, {
+                token: t.value,
+                platform: "android"
+              }, { headers: { Authorization: `Bearer ${token}` }});
+            } catch {}
+          });
+          const err = PushNotifications.addListener("registrationError", () => {});
+          const recv = PushNotifications.addListener("pushNotificationReceived", () => {});
+          return () => { reg.remove(); err.remove(); recv.remove(); };
+        } catch {}
+      })();
+    }
+  }, [token]);
+  // ======================================================================
+
   useEffect(() => {
     if (!token) return;
     axios.get(`${API_BASE_URL}/api/pharmacy/medicines`, {
@@ -484,6 +527,39 @@ export default function PharmacyDashboard() {
       })
       .catch(() => setMedicines([]));
   }, [token, medMsg]);
+
+  // ========== (D) POP DIALOG + NOTIFY ON NEW "PLACED/PENDING" ORDERS ==========
+  useEffect(() => {
+    if (!orders?.length) return;
+    // build set of current ids
+    const current = new Set(orders.map(o => String(o._id || o.id)));
+    // find an order that is NEW to us and "placed/pending"
+    const newlyPlaced = orders.find(o => {
+      const id = String(o._id || o.id);
+      const wasSeen = seenOrderIdsRef.current.has(id);
+      const isPlaced = (o.status === "placed" || o.status === "pending" || o.status === 0);
+      return !wasSeen && isPlaced;
+    });
+    // always keep seen ids up to date
+    current.forEach(id => seenOrderIdsRef.current.add(id));
+    if (!newlyPlaced) return;
+
+    setIncomingOrder(newlyPlaced);
+    setIncomingOpen(true);
+    try {
+      if (!incomingAudioRef.current) incomingAudioRef.current = new Audio("/sounds/offer.mp3");
+      incomingAudioRef.current.currentTime = 0;
+      incomingAudioRef.current.play().catch(() => {});
+    } catch {}
+    try { if (navigator?.vibrate) navigator.vibrate([120, 80, 120]); } catch {}
+    try {
+      if ("Notification" in window && Notification.permission === "granted") {
+        const items = (newlyPlaced.items || []).map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ");
+        new Notification("New Pharmacy Order", { body: items ? items : "Tap to view", tag: "pharmacy-new-order" });
+      }
+    } catch {}
+  }, [orders]);
+  // ==========================================================================
 
   const handleLogin = async () => {
     setLoading(true);
@@ -1136,35 +1212,19 @@ export default function PharmacyDashboard() {
                       {/* Status Actions */}
                       <Box sx={{ mt: 2 }}>
                         {(order.status === "placed" || order.status === 0 || order.status === "pending") && (
+                          // ========== (E) SWAPPED + RESTYLED BUTTONS ==========
                           <Stack direction="row" spacing={2}>
+                            {/* LEFT: REJECT (red, filled) */}
                             <Button
                               size="small"
-                              color="primary"
-                              variant="outlined"
+                              variant="contained"
                               className="rounded-xl"
-                              onClick={async () => {
-                                setLoading(true);
-                                try {
-                                  await axios.patch(
-                                    `${API_BASE_URL}/api/pharmacy/orders/${order.id || order._id}`,
-                                    { status: "processing", pharmacyAccepted: true },
-                                    { headers: { Authorization: `Bearer ${token}` } }
-                                  );
-                                  setMsg("Order accepted!");
-                                } catch {
-                                  setMsg("Failed to accept order!");
-                                }
-                                setLoading(false);
+                              sx={{
+                                bgcolor: "#dc2626",
+                                color: "white",
+                                fontWeight: 800,
+                                "&:hover": { bgcolor: "#b91c1c" }
                               }}
-                              disabled={loading}
-                            >
-                              Accept Order
-                            </Button>
-                            <Button
-                              size="small"
-                              color="error"
-                              variant="outlined"
-                              className="rounded-xl"
                               onClick={async () => {
                                 setLoading(true);
                                 try {
@@ -1181,9 +1241,40 @@ export default function PharmacyDashboard() {
                               }}
                               disabled={loading}
                             >
-                              Reject Order
+                              REJECT ORDER
+                            </Button>
+
+                            {/* RIGHT: ACCEPT (deep green, filled) */}
+                            <Button
+                              size="small"
+                              variant="contained"
+                              className="rounded-xl"
+                              sx={{
+                                bgcolor: "#065f46",        // deep emerald-800
+                                color: "white",
+                                fontWeight: 800,
+                                "&:hover": { bgcolor: "#064e3b" }
+                              }}
+                              onClick={async () => {
+                                setLoading(true);
+                                try {
+                                  await axios.patch(
+                                    `${API_BASE_URL}/api/pharmacy/orders/${order.id || order._id}`,
+                                    { status: "processing", pharmacyAccepted: true },
+                                    { headers: { Authorization: `Bearer ${token}` } }
+                                  );
+                                  setMsg("Order accepted!");
+                                } catch {
+                                  setMsg("Failed to accept order!");
+                                }
+                                setLoading(false);
+                              }}
+                              disabled={loading}
+                            >
+                              ACCEPT ORDER
                             </Button>
                           </Stack>
+                          // =====================================================
                         )}
                         {(order.status === 1 || order.status === "processing") && (
                           <Chip label="Processing" color="primary" className="mt-2 font-bold" sx={{ pointerEvents: "none" }} />
@@ -1212,6 +1303,72 @@ export default function PharmacyDashboard() {
               ))}
             </Box>
             <Divider className="my-3" />
+
+            {/* ========== (F) INCOMING ORDER POPUP DIALOG ========== */}
+            <Dialog open={incomingOpen} onClose={() => setIncomingOpen(false)} fullWidth maxWidth="xs">
+              <DialogTitle>New Order</DialogTitle>
+              <DialogContent dividers>
+                {incomingOrder ? (
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+                      Order #{String(incomingOrder._id || incomingOrder.id).slice(-5)}
+                    </Typography>
+                    <Typography sx={{ mb: 0.5 }}>
+                      <b>Items:</b>{" "}
+                      {incomingOrder.items?.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ") || "—"}
+                    </Typography>
+                    <Typography sx={{ mb: 0.5 }}>
+                      <b>Total:</b> {formatRupees(incomingOrder.total || 0)}
+                    </Typography>
+                    <Typography sx={{ color: "text.secondary" }}>
+                      Placed: {incomingOrder.createdAt ? new Date(incomingOrder.createdAt).toLocaleString() : "-"}
+                    </Typography>
+                  </Box>
+                ) : <Typography>No details.</Typography>}
+              </DialogContent>
+              <DialogActions sx={{ px: 2, pb: 2 }}>
+                {/* Reject on LEFT */}
+                <Button
+                  variant="contained"
+                  sx={{ bgcolor: "#dc2626", color: "#fff", fontWeight: 800, "&:hover": { bgcolor: "#b91c1c" } }}
+                  onClick={async () => {
+                    if (!incomingOrder) return setIncomingOpen(false);
+                    try {
+                      await axios.patch(
+                        `${API_BASE_URL}/api/pharmacy/orders/${incomingOrder._id || incomingOrder.id}`,
+                        { status: "rejected", pharmacyAccepted: false },
+                        { headers: { Authorization: `Bearer ${token}` } }
+                      );
+                      setMsg("Order rejected!");
+                    } catch { setMsg("Failed to reject order!"); }
+                    setIncomingOpen(false);
+                  }}
+                >
+                  REJECT ORDER
+                </Button>
+
+                {/* Accept on RIGHT */}
+                <Button
+                  variant="contained"
+                  sx={{ bgcolor: "#065f46", color: "#fff", fontWeight: 800, "&:hover": { bgcolor: "#064e3b" } }}
+                  onClick={async () => {
+                    if (!incomingOrder) return setIncomingOpen(false);
+                    try {
+                      await axios.patch(
+                        `${API_BASE_URL}/api/pharmacy/orders/${incomingOrder._id || incomingOrder.id}`,
+                        { status: "processing", pharmacyAccepted: true },
+                        { headers: { Authorization: `Bearer ${token}` } }
+                      );
+                      setMsg("Order accepted!");
+                    } catch { setMsg("Failed to accept order!"); }
+                    setIncomingOpen(false);
+                  }}
+                >
+                  ACCEPT ORDER
+                </Button>
+              </DialogActions>
+            </Dialog>
+            {/* ========== END INCOMING ORDER POPUP ========== */}
 
             {/* PRESCRIPTION ORDERS (quotes flow) */}
             <Typography variant="h6" className="mb-1 font-extrabold">Prescription Orders</Typography>

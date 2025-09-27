@@ -58,6 +58,10 @@ import DeleteAccount from "./pages/legal/DeleteAccount";
 import { App as CapApp } from "@capacitor/app";
 import { useAndroidBack } from "./hooks/useAndroidBack";
 
+// === ADD: Capacitor LocalNotifications for Android notification channel ===
+import { Capacitor } from "@capacitor/core";
+import { LocalNotifications } from "@capacitor/local-notifications";
+
 // Root routes where Back should offer "double-back to exit"
 const ROOT_ROUTES = new Set(["/", "/home", "/otp-login"]);
 
@@ -277,6 +281,28 @@ function AppContent() {
 }
 
 function App() {
+  // Create high-importance notification channel once on native Android
+  useEffect(() => {
+    if (!Capacitor?.isNativePlatform?.()) return;
+    if (Capacitor.getPlatform?.() !== "android") return;
+
+    (async () => {
+      try {
+        await LocalNotifications.requestPermissions();
+        await LocalNotifications.createChannel({
+          id: "gd_orders",
+          name: "Order Alerts",
+          description: "New orders and urgent pharmacy notifications",
+          importance: 5, // IMPORTANCE_HIGH
+          visibility: 1, // VISIBILITY_PUBLIC
+          sound: "default",
+          vibration: true,
+          lights: true,
+        });
+      } catch {}
+    })();
+  }, []);
+
   return (
     <ThemeProvider>
       <CssBaseline />
