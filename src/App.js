@@ -62,6 +62,15 @@ import { useAndroidBack } from "./hooks/useAndroidBack";
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
 
+// 🔔 Push (FCM) registration + native HTTP for token POST
+import { PushNotifications } from "@capacitor/push-notifications";
+import { CapacitorHttp } from "@capacitor/core";
+
+// Simple app-wide event bus to inform components when a push is tapped
+const subscribers = new Set();
+export function onAppEvent(cb){ subscribers.add(cb); return () => subscribers.delete(cb); }
+export function emitAppEvent(evt){ subscribers.forEach(cb => cb(evt)); }
+
 // Root routes where Back should offer "double-back to exit"
 const ROOT_ROUTES = new Set(["/", "/home", "/otp-login"]);
 
@@ -298,6 +307,39 @@ function App() {
           sound: "default",
           vibration: true,
           lights: true,
+        });
+      } catch {}
+    })();
+  }, []);
+
+  // 🔔 Register for FCM push on native (Android) and send token to backend
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!Capacitor?.isNativePlatform?.()) return;
+        // Ask permission
+        const perm = await PushNotifications.requestPermissions();
+        if (perm.receive !== "granted") return;
+        await PushNotifications.register();
+
+        // Save token
+        PushNotifications.addListener("registration", async (token) => {
+          try {
+            const jwt = localStorage.getItem("token");
+            if (!jwt) return;
+            await CapacitorHttp.post({
+              url: (process.env.REACT_APP_API_BASE_URL || "http://localhost:5000") + "/api/prescriptions/register-fcm",
+              headers: { Authorization: "Bearer " + jwt, "Content-Type": "application/json" },
+              data: { token: token?.value || token },
+            });
+          } catch {}
+        });
+
+        // When user taps a notification, tell the app
+        PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+          const orderId = action?.notification?.data?.orderId;
+          if (!orderId) return;
+          emitAppEvent({ type: "OPEN_RX_QUOTE", orderId });
         });
       } catch {}
     })();

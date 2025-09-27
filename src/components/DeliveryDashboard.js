@@ -486,6 +486,29 @@ export default function DeliveryDashboard() {
   };
 }, [active, loggedIn, partner?._id]);
 
+  // Extra safety net: poll for GPS every ~90s while Active (works even if tab is backgrounded)
+  useEffect(() => {
+    if (!loggedIn || !partner?._id || !active) return;
+    let timer = setInterval(() => {
+      try {
+        if (!navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            const { latitude, longitude } = pos.coords || {};
+            setDriverLoc({ lat: latitude, lng: longitude });
+            try {
+              await axios.post(`${API_BASE_URL}/api/delivery/update-location`, {
+                partnerId: partner._id, lat: latitude, lng: longitude,
+              });
+            } catch {}
+          },
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 }
+        );
+      } catch {}
+    }, 90_000); // ~1.5 min
+    return () => clearInterval(timer);
+  }, [loggedIn, partner?._id, active]);
 
   useEffect(() => {
     if (loggedIn) {
@@ -745,7 +768,34 @@ export default function DeliveryDashboard() {
             } catch {}
           });
           const onError = PushNotifications.addListener("registrationError", () => {});
-          const onReceive = PushNotifications.addListener("pushNotificationReceived", () => {});
+          // When a push arrives in foreground, pop the same dialog we use for SSE
+          const onReceive = PushNotifications.addListener("pushNotificationReceived", (n) => {
+            try {
+              const data = n?.data || {};
+              if (data.type === "offer" && data.orderId) {
+                setOffer({
+                  orderId: data.orderId,
+                  pharmacy: { name: n?.title?.replace("New delivery offer from ", "") || "Pharmacy" },
+                  total: Number(data.total || 0)
+                });
+                const deadline = Date.now() + 25_000;
+                setOfferDeadline(deadline);
+                setLeft(Math.ceil((deadline - Date.now()) / 1000));
+                // sound + vibration
+                try {
+                  if (!offerAudioRef.current) offerAudioRef.current = new Audio("/sounds/offer.mp3");
+                  offerAudioRef.current.currentTime = 0;
+                  offerAudioRef.current.play().catch(()=>{});
+                  if (offerLoopRef.current) clearInterval(offerLoopRef.current);
+                  offerLoopRef.current = setInterval(() => {
+                    offerAudioRef.current.currentTime = 0;
+                    offerAudioRef.current.play().catch(()=>{});
+                  }, 3000);
+                } catch {}
+                try { if (navigator.vibrate) navigator.vibrate([200,80,200,80,300]); } catch {}
+              }
+            } catch {}
+          });
           return () => {
             onReg.remove();
             onError.remove();
@@ -1164,10 +1214,15 @@ export default function DeliveryDashboard() {
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         {order.status === "assigned" && (
                           <>
-                            <Button className="btn-primary-emerald !font-extrabold" onClick={() => handleUpdateStatus(order._id, "accepted")}>Accept Order</Button>
-                            <Button onClick={() => handleUpdateStatus(order._id, "rejected")}
+                            <Button
+                              onClick={() => handleUpdateStatus(order._id, "rejected")}
                               className="!font-extrabold bg-red-600 hover:bg-red-700 active:bg-red-800 text-white border border-red-700/80 shadow-sm">
                               Reject
+                            </Button>
+                            <Button
+                              className="btn-primary-emerald !font-extrabold"
+                              onClick={() => handleUpdateStatus(order._id, "accepted")}>
+                              Accept Order
                             </Button>
                           </>
                         )}
@@ -1282,18 +1337,6 @@ export default function DeliveryDashboard() {
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Button
-                  className="btn-primary-emerald !font-extrabold"
-                  onClick={async () => {
-                    try {
-                      await handleUpdateStatus(offer.orderId, "accepted");
-                    } finally {
-                      setOffer(null); setOfferDeadline(null);
-                    }
-                  }}
-                >
-                  Accept
-                </Button>
-                <Button
                   className="!font-extrabold bg-red-600 hover:bg-red-700 text-white"
                   onClick={async () => {
                     try {
@@ -1303,9 +1346,16 @@ export default function DeliveryDashboard() {
                       });
                     } catch {}
                     setOffer(null); setOfferDeadline(null);
-                  }}
-                >
+                  }}>
                   Reject
+                </Button>
+                <Button
+                  className="btn-primary-emerald !font-extrabold"
+                  onClick={async () => {
+                    try { await handleUpdateStatus(offer.orderId, "accepted"); }
+                    finally { setOffer(null); setOfferDeadline(null); }
+                  }}>
+                  Accept
                 </Button>
               </div>
             </div>

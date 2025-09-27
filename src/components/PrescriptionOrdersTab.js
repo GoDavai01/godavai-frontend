@@ -1,4 +1,4 @@
-// src/components/PrescriptionOrdersTab.js
+// src/components/PrescriptionOrdersTab.js 
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Box, Typography, Card, CardContent, Button, Stack, Dialog,
@@ -7,6 +7,7 @@ import {
 import Autocomplete from "@mui/material/Autocomplete";
 import axios from "axios";
 import RxAiSideBySideDialog from "./RxAiSideBySideDialog";
+import { onAppEvent } from "../App"; // 🔔 for opening dialog from push tap
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
@@ -21,6 +22,9 @@ const SURFACE_SOFT = "#f6faf8";
 const BORDER = "#e6ebe9";
 const TEXT_PRIMARY = "#102a26";
 const TEXT_SECONDARY = "#5b6b66";
+
+// 🔔 tiny in-memory seen cache & helpers
+const seenKey = "__gd_rx_seen__";
 
 // Helper: returns seconds left from now to expiry
 function getSecondsLeft(expiry) {
@@ -69,6 +73,43 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
 
   // Viewer state
   const [previewOrder, setPreviewOrder] = useState(null);
+  // New-order alert state
+  const [newOrderAlert, setNewOrderAlert] = useState(null); // the order to show in dialog
+
+  // Keep a stable set of already seen order ids (across re-renders)
+  const seenRef = React.useRef(new Set(JSON.parse(localStorage.getItem(seenKey) || "[]")));
+
+  // Small beep without any asset (Web Audio API)
+  const beep = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(880, ctx.currentTime);
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      o.connect(g); g.connect(ctx.destination);
+      o.start();
+      g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
+      o.stop(ctx.currentTime + 0.55);
+    } catch {}
+  }, []);
+
+  // Local (browser) notification if tab is hidden
+  const browserNotify = useCallback((title, body) => {
+    try {
+      if (document.visibilityState === "visible") return;
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "granted") {
+        new Notification(title, { body });
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then(p => {
+          if (p === "granted") new Notification(title, { body });
+        });
+      }
+    } catch {}
+  }, []);
 
   // --- fetchOrders helper ---
   const fetchOrders = useCallback(() => {
@@ -77,10 +118,31 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
       .get(`${API_BASE_URL}/api/prescriptions/pharmacy-orders`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      .then((res) => setOrders(res.data || []))
+      .then((res) => {
+        const list = res.data || [];
+        setOrders(list);
+        // Detect brand-new orders assigned to this pharmacy & still open for quotes
+        const fresh = list.find(
+          o =>
+            o?.status === "waiting_for_quotes" &&
+            !seenRef.current.has(o._id)
+        );
+        if (fresh) {
+          // Mark seen (so we don’t re-alert after each poll)
+          seenRef.current.add(fresh._id);
+          localStorage.setItem(seenKey, JSON.stringify(Array.from(seenRef.current)));
+          // Haptics + sound
+          if (navigator?.vibrate) navigator.vibrate([120, 60, 120]);
+          beep();
+          // Show in-app dialog
+          setNewOrderAlert(fresh);
+          // Also pop a browser notification if app is backgrounded
+          browserNotify("New prescription order", `Order #${fresh._id.slice(-5)} waiting for your quote`);
+        }
+      })
       .catch(() => setOrders([]))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, beep, browserNotify]);
 
   // Get all prescription orders for this pharmacy
   useEffect(() => {
@@ -142,6 +204,21 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
       .then((res) => setPharmacyMeds(res.data || []))
       .catch(() => setPharmacyMeds([]));
   }, [token]);
+
+  // 🔔 Open dialog when a push notification is tapped (from App event bus)
+  useEffect(() => {
+    const off = onAppEvent(async (evt) => {
+      if (evt?.type !== "OPEN_RX_QUOTE" || !evt.orderId) return;
+      await fetchOrders();
+      const target = (orders || []).find(o => String(o._id) === String(evt.orderId));
+      if (target && target.status === "waiting_for_quotes") {
+        handlePartialFulfill(target);
+      } else if (target) {
+        setPreviewOrder(target);
+      }
+    });
+    return off;
+  }, [orders, fetchOrders]);
 
   /* ---------------- QUOTE ACTIONS ---------------- */
 
@@ -1008,6 +1085,55 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
         token={token}
         onRefetched={() => fetchOrders()}
       />
+
+      {/* 🔔 NEW-ORDER DIALOG (Heads-up) */}
+      <Dialog open={!!newOrderAlert} onClose={() => setNewOrderAlert(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 900, color: TEXT_PRIMARY }}>
+          🔔 New Prescription Order Assigned
+        </DialogTitle>
+        <DialogContent>
+          {newOrderAlert && (
+            <>
+              <Typography sx={{ fontWeight: 800, color: TEXT_PRIMARY }}>
+                Order #{newOrderAlert._id.slice(-5)}
+              </Typography>
+              <Typography sx={{ mt: 1, color: TEXT_SECONDARY, fontWeight: 700 }}>
+                Quote window ends at: {newOrderAlert.quoteExpiry ? new Date(newOrderAlert.quoteExpiry).toLocaleString() : "-"}
+              </Typography>
+              {Array.isArray(newOrderAlert.attachments) && newOrderAlert.attachments.length > 0 && (
+                <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
+                  {newOrderAlert.attachments.slice(0, 3).map((url, i) => {
+                    const abs = url.startsWith("/uploads/") ? `${API_BASE_URL}${url}` : url;
+                    return (
+                      <Button key={i} size="small" variant="outlined" component="a" href={abs} target="_blank" rel="noopener noreferrer"
+                        sx={{ fontWeight: 800, borderColor: BRAND_GREEN, color: BRAND_GREEN, "&:hover": { borderColor: BRAND_GREEN_DARK, color: BRAND_GREEN_DARK } }}>
+                        View Rx {i + 1}
+                      </Button>
+                    );
+                  })}
+                </Stack>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNewOrderAlert(null)} sx={{ fontWeight: 800 }}>Later</Button>
+          <Button
+            variant="outlined"
+            sx={{ fontWeight: 900, borderColor: BRAND_GREEN, color: BRAND_GREEN, "&:hover": { borderColor: BRAND_GREEN_DARK, color: BRAND_GREEN_DARK } }}
+            onClick={() => { setShowQuoteDialog(false); setNewOrderAlert(null); }}
+          >
+            Close
+          </Button>
+          <Button
+            variant="contained"
+            sx={{ fontWeight: 900, bgcolor: BRAND_GREEN, "&:hover": { bgcolor: BRAND_GREEN_DARK } }}
+            onClick={() => { const o = newOrderAlert; setNewOrderAlert(null); handlePartialFulfill(o); }}
+          >
+            Quote Now
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={!!msg}
