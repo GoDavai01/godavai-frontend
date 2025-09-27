@@ -29,7 +29,7 @@ export default function Navbar({
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [search, setSearch] = useState(searchProp);
   const [options, setOptions] = useState([]);
-  the const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [pharmacyName, setPharmacyName] = useState("");
 
@@ -62,7 +62,7 @@ export default function Navbar({
     return () => { cancel = true; };
   }, [activePharmacyId]);
 
-  // Dynamic placeholder text (now says “Search in …”)
+  // Dynamic placeholder text
   const placeholder = useMemo(() => {
     if (routerLocation.pathname.startsWith("/medicines")) {
       return pharmacyName ? `Search in ${pharmacyName}` : "Search in this pharmacy";
@@ -108,7 +108,7 @@ export default function Navbar({
             q: search,
             city,
             limit: 12,
-            pharmacyId: activePharmacyId || undefined, // scope when on a pharmacy
+            pharmacyId: activePharmacyId || undefined, // scope when on a pharmacy page
           });
           setOptions(data || []);
           setDropdownOpen(true);
@@ -123,7 +123,7 @@ export default function Navbar({
         });
         setOptions(data || []);
         setDropdownOpen(true);
-      } catch (e1) {
+      } catch {
         try {
           const data = await tryReq(`${API_BASE_URL}/api/search/autocomplete`, {
             q: search,
@@ -131,7 +131,7 @@ export default function Navbar({
           });
           setOptions(data || []);
           setDropdownOpen(true);
-        } catch (e2) {
+        } catch {
           if (type === "medicine" || type === "all") {
             try {
               const meds = await tryReq(`${API_BASE_URL}/api/medicines/search`, {

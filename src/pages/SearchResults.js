@@ -2,13 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { motion } from "framer-motion";
-import {
-  Search,
-  Clock,
-  Loader2,
-  X,
-} from "lucide-react";
+import { Search, Clock, Loader2, X } from "lucide-react";
 import { useCart } from "../context/CartContext";
 
 // shadcn/ui
@@ -137,7 +131,7 @@ export default function SearchResults() {
   const [autoSuggestions, setAutoSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // nearby pharmacies (within 5km)
+  // nearby pharmacies (within 5km) OR a specific pharmacy
   const [nearbyPharmacies, setNearbyPharmacies] = useState([]); // [{...ph, dist}]
   // group: [{ pharmacy, medicines: [] }]
   const [pharmacySections, setPharmacySections] = useState([]);
@@ -151,10 +145,9 @@ export default function SearchResults() {
   useEffect(() => {
     let cancel = false;
     async function run() {
-      // If a pharmacy is specified, use only that pharmacy.
       if (pharmacyId) {
         try {
-          const r = await axios.get(`${API_BASE_URL}/api/pharmacies`, { params: { id: pharmacyId }});
+          const r = await axios.get(`${API_BASE_URL}/api/pharmacies`, { params: { id: pharmacyId } });
           const ph = Array.isArray(r.data) ? r.data[0] : null;
           if (!cancel) setNearbyPharmacies(ph ? [ph] : []);
         } catch {
@@ -162,8 +155,11 @@ export default function SearchResults() {
         }
         return;
       }
-      // Otherwise, use nearby (≤5km) as before.
-      if (!lat || !lng) { setNearbyPharmacies([]); return; }
+
+      if (!lat || !lng) {
+        setNearbyPharmacies([]);
+        return;
+      }
       try {
         const r = await fetch(
           `${API_BASE_URL}/api/pharmacies/nearby?lat=${lat}&lng=${lng}&maxDistance=${MAX_DISTANCE}`
@@ -219,7 +215,7 @@ export default function SearchResults() {
 
         for (const m of meds) {
           const pid = String(m.pharmacy || "");
-          if (!nearbyIds.has(pid)) continue; // keep only ≤5km pharmacies
+          if (!nearbyIds.has(pid)) continue; // keep only listed pharmacies
           if (!phMap.has(pid)) {
             const ph = nearbyPharmacies.find((p) => String(p._id) === pid);
             if (!ph) continue;
@@ -248,11 +244,12 @@ export default function SearchResults() {
 
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, lat, lng, nearbyPharmacies]);
+  }, [query, lat, lng, nearbyPharmacies, pharmacyId]);
 
-  // suggestions chip click
+  // suggestions chip click — keep pharmacy scope if present
   const handleSuggestionClick = (suggestion) => {
-    navigate(`/search?q=${encodeURIComponent(suggestion)}`);
+    const pid = pharmacyId ? `&pharmacyId=${pharmacyId}` : "";
+    navigate(`/search?q=${encodeURIComponent(suggestion)}${pid}`);
   };
 
   // ===== one-pharmacy cart rule =====
@@ -480,7 +477,7 @@ export default function SearchResults() {
                   {selectedMed.mrp && (selectedMed.price ?? 0) < selectedMed.mrp && (
                     <>
                       <div className="text-sm text-neutral-400 line-through">₹{selectedMed.mrp}</div>
-                      <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
+                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-100 font-semibold">
                         {Math.round(((selectedMed.mrp - (selectedMed.price ?? 0)) / selectedMed.mrp) * 100)}
                         % OFF
                       </Badge>
