@@ -46,11 +46,7 @@ async function ensureDescription(apiBase, medId) {
 
 const allCategories = ["All", ...CUSTOMER_CATEGORIES];
 
-/** Map any raw type to a display group:
- *  - "Drops (Eye|Ear|Nasal)" and legacy "Drop"/"Drops" -> "Drops"
- *  - falsy/unknown -> "Other"
- *  - otherwise return as-is
- */
+/** Map any raw type to a display group */
 const typeToGroup = (t) => {
   if (!t) return "Other";
   const s = String(Array.isArray(t) ? t[0] : t).trim();
@@ -64,13 +60,17 @@ const packLabel = (count, unit) => {
   const c = String(count || "").trim();
   const u = String(unit || "").trim().toLowerCase();
   if (!c && !u) return "";
-  if (!u) return c; // allow plain "10" for tablets/capsules, etc.
-  const printable = (u === "ml" || u === "g")
-    ? u
-    : (Number(c) === 1 ? u.replace(/s$/, "") : (u.endsWith("s") ? u : `${u}s`));
+  if (!u) return c;
+  const printable =
+    u === "ml" || u === "g"
+      ? u
+      : Number(c) === 1
+      ? u.replace(/s$/, "")
+      : u.endsWith("s")
+      ? u
+      : `${u}s`;
   return `${c} ${printable}`.trim();
 };
-
 
 /** Build the chip list from canonical TYPE_OPTIONS + any legacy types found in inventory */
 const useMedTypeChips = (medicines) =>
@@ -97,6 +97,10 @@ export default function Medicines() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedType, setSelectedType] = useState("All");
 
+  // NEW: Branded/Generic toggle
+  const BRAND_KINDS = ["All", "Branded", "Generic"];
+  const [selectedKind, setSelectedKind] = useState("All");
+
   const [selectedMed, setSelectedMed] = useState(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [canDeliver, setCanDeliver] = useState(true);
@@ -105,13 +109,14 @@ export default function Medicines() {
   const [genericSugg, setGenericSugg] = useState({ open: false, brand: null, generics: [] });
 
   const isGenericItem = (m) =>
-    (m?.productKind === "generic") || !m?.brand || String(m.brand).trim() === "";
+    m?.productKind === "generic" || !m?.brand || String(m.brand).trim() === "";
 
   const compKeyOf = (m) => buildCompositionKey(m?.composition || "");
 
   const samePack = (a, b) => {
     if (!a || !b) return true;
-    const ac = Number(a.packCount || 0), bc = Number(b.packCount || 0);
+    const ac = Number(a.packCount || 0),
+      bc = Number(b.packCount || 0);
     const au = String(a.packUnit || "").toLowerCase();
     const bu = String(b.packUnit || "").toLowerCase();
     if (ac && bc && ac !== bc) return false;
@@ -121,7 +126,9 @@ export default function Medicines() {
 
   async function fetchGenericsFromApi(phId, key, brandId) {
     try {
-      const url = `${API_BASE_URL}/api/pharmacies/${phId}/alternatives?compositionKey=${encodeURIComponent(key)}${brandId ? `&brandId=${brandId}` : ""}`;
+      const url = `${API_BASE_URL}/api/pharmacies/${phId}/alternatives?compositionKey=${encodeURIComponent(
+        key
+      )}${brandId ? `&brandId=${brandId}` : ""}`;
       const r = await fetch(url);
       if (!r.ok) throw new Error("bad");
       return await r.json(); // { brand?, generics: [] }
@@ -133,13 +140,14 @@ export default function Medicines() {
   function findGenericsLocally(all, brand) {
     const key = compKeyOf(brand);
     const list = all
-      .filter((m) =>
-        !isGenericItem(brand) && // only when brand is actually branded
-        isGenericItem(m) &&
-        compKeyOf(m) === key &&
-        (m.status !== "unavailable") &&
-        (m.available !== false) &&
-        samePack(m, brand)
+      .filter(
+        (m) =>
+          !isGenericItem(brand) && // only when brand is actually branded
+          isGenericItem(m) &&
+          compKeyOf(m) === key &&
+          m.status !== "unavailable" &&
+          m.available !== false &&
+          samePack(m, brand)
       )
       .sort((a, b) => Number(a.price || a.mrp || 0) - Number(b.price || b.mrp || 0));
     return { brand, generics: list.slice(0, 5) };
@@ -168,10 +176,9 @@ export default function Medicines() {
     // Add brand (user explicitly tapped Add)
     addToCart(med);
 
-    // Ask (once per session per compositionKey+pharmacy) – open dialog directly
     if (!shouldAsk(med)) return;
-        markAsked(med);
-    
+    markAsked(med);
+
     const key = compKeyOf(med);
     let data = await fetchGenericsFromApi(pharmacyId, key, med._id);
     if (!data || !Array.isArray(data.generics) || data.generics.length === 0) {
@@ -232,12 +239,21 @@ export default function Medicines() {
     return groups.includes(selected);
   };
 
+  // NEW: filter by branded/generic
+  const matchKind = (med, kind) => {
+    if (kind === "All") return true;
+    if (kind === "Generic") return isGenericItem(med);
+    if (kind === "Branded") return !isGenericItem(med);
+    return true;
+  };
+
   const filteredMeds = useMemo(
     () =>
       medicines
-        .filter((m) => m.status !== "unavailable" && m.available !== false) // both checks
-        .filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType)),
-    [medicines, selectedCategory, selectedType]
+        .filter((m) => m.status !== "unavailable" && m.available !== false)
+        .filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType))
+        .filter((m) => matchKind(m, selectedKind)),
+    [medicines, selectedCategory, selectedType, selectedKind]
   );
 
   // Right column height; the page itself does not scroll.
@@ -325,8 +341,31 @@ export default function Medicines() {
             className="min-w-0 overflow-y-auto no-scrollbar"
             style={{ height: columnHeight, paddingBottom: rightPaddingBottom }}
           >
-            {/* Type chips */}
+            {/* Sticky filter bars */}
             <div className="sticky top-0 z-10 pb-2 bg-[var(--pillo-page-bg,white)]">
+              {/* Branded / Generic toggle */}
+              <div className="mb-2 flex gap-1.5">
+                {BRAND_KINDS.map((k) => {
+                  const active = k === selectedKind;
+                  return (
+                    <button
+                      key={k}
+                      onClick={() => setSelectedKind(k)}
+                      className={[
+                        "rounded-full px-3 py-1.5 text-[13px] font-bold ring-1 transition",
+                        active
+                          ? "bg-white text-emerald-700 ring-emerald-300 shadow-sm"
+                          : "bg-white/90 text-neutral-700 ring-[var(--pillo-surface-border)] hover:bg-white",
+                      ].join(" ")}
+                      aria-pressed={active}
+                    >
+                      {k}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Type chips */}
               <div
                 className="flex gap-2 overflow-x-auto no-scrollbar pb-1 pr-1"
                 style={{
@@ -399,11 +438,7 @@ export default function Medicines() {
                         }}
                         title="Know more"
                       >
-                        <img
-                          src={getImageUrl(med.img)}
-                          alt={med.name}
-                          className="h-full w-full object-contain"
-                        />
+                        <img src={getImageUrl(med.img)} alt={med.name} className="h-full w-full object-contain" />
                         {med.prescriptionRequired && (
                           <span
                             className="
@@ -446,29 +481,20 @@ export default function Medicines() {
                         </div>
 
                         {med.company && (
-                          <div className="text-[11px] text-neutral-500 truncate mt-0.5">
-                            {med.company}
-                          </div>
+                          <div className="text-[11px] text-neutral-500 truncate mt-0.5">{med.company}</div>
                         )}
 
                         <div className="mt-1 flex items-baseline gap-1">
                           <div className="text-[15px] font-extrabold" style={{ color: DEEP }}>
                             ₹{med.price}
                           </div>
-                          {med.mrp && (
-                            <div className="text-[11px] text-neutral-400 line-through">
-                              ₹{med.mrp}
-                            </div>
-                          )}
+                          {med.mrp && <div className="text-[11px] text-neutral-400 line-through">₹{med.mrp}</div>}
                           {hasDiscount && (
-                            <span className="ml-auto text-[10px] font-bold text-emerald-700">
-                              {discountPct}% OFF
-                            </span>
+                            <span className="ml-auto text-[10px] font-bold text-emerald-700">{discountPct}% OFF</span>
                           )}
                         </div>
 
                         <div className="mt-2 flex items-center justify-between">
-                          {/* LEFT: category + (optional) Rx badge */}
                           <div className="flex items-center gap-1">
                             {Array.isArray(med.category) && med.category[0] && (
                               <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold text-[10px] px-2 py-0.5">
@@ -477,7 +503,6 @@ export default function Medicines() {
                             )}
                           </div>
 
-                          {/* RIGHT: Add button */}
                           <Button
                             size="sm"
                             className="h-8 rounded-full px-3 text-[12px] font-bold"
@@ -592,7 +617,6 @@ export default function Medicines() {
 
               {/* tags + info */}
               <div className="px-5 pt-3">
-                {/* REPLACED BADGES BLOCK WITH PACK SIZE BADGE TOO */}
                 <div className="flex flex-wrap gap-2 mb-2">
                   {Array.isArray(selectedMed.category) && selectedMed.category.length > 0 && (
                     <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-100 font-semibold">
@@ -621,7 +645,6 @@ export default function Medicines() {
                     <b>Company:</b> {selectedMed.company}
                   </div>
                 )}
-                {/* INSERTED PACK SIZE DETAIL UNDER COMPANY */}
                 {(selectedMed.packCount || selectedMed.packUnit) && (
                   <div className="text-sm text-neutral-700 mb-1">
                     <b>Pack size:</b> {packLabel(selectedMed.packCount, selectedMed.packUnit)}
@@ -679,35 +702,33 @@ export default function Medicines() {
       </Dialog>
 
       {/* Generic suggestion modal */}
-<GenericSuggestionModal
-  open={genericSugg.open}
-  onOpenChange={(o) => setGenericSugg((s) => ({ ...s, open: o }))}
-  brand={genericSugg.brand}
-  generics={genericSugg.generics}
-  onReplace={(g) => {
-    const qty =
-      (cart.find(
-        (i) => (i._id || i.id) === (genericSugg.brand?._id || genericSugg.brand?.id)
-      )?.quantity) || 1;
+      <GenericSuggestionModal
+        open={genericSugg.open}
+        onOpenChange={(o) => setGenericSugg((s) => ({ ...s, open: o }))}
+        brand={genericSugg.brand}
+        generics={genericSugg.generics}
+        onReplace={(g) => {
+          const qty =
+            (cart.find(
+              (i) => (i._id || i.id) === (genericSugg.brand?._id || genericSugg.brand?.id)
+            )?.quantity) || 1;
 
-    // ✅ ensure pharmacy is set on the generic we add
-    const phId = genericSugg.brand?.pharmacy || pharmacyId || cart[0]?.pharmacy;
-    const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
+          const phId = genericSugg.brand?.pharmacy || pharmacyId || cart[0]?.pharmacy;
+          const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
 
-    removeFromCart(genericSugg.brand);
-    for (let k = 0; k < qty; k++) addToCart(withPharmacy);
-    setGenericSugg({ open: false, brand: null, generics: [] });
-  }}
-  onAddAlso={(g) => {
-    // ✅ same fallback when adding alongside
-    const phId = genericSugg.brand?.pharmacy || pharmacyId || cart[0]?.pharmacy;
-    const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
+          removeFromCart(genericSugg.brand);
+          for (let k = 0; k < qty; k++) addToCart(withPharmacy);
+          setGenericSugg({ open: false, brand: null, generics: [] });
+        }}
+        onAddAlso={(g) => {
+          const phId = genericSugg.brand?.pharmacy || pharmacyId || cart[0]?.pharmacy;
+          const withPharmacy = { ...g, pharmacy: g.pharmacy || phId };
 
-    addToCart(withPharmacy);
-    setGenericSugg({ open: false, brand: null, generics: [] });
-  }}
-  onKeep={() => setGenericSugg({ open: false, brand: null, generics: [] })}
-/>
+          addToCart(withPharmacy);
+          setGenericSugg({ open: false, brand: null, generics: [] });
+        }}
+        onKeep={() => setGenericSugg({ open: false, brand: null, generics: [] })}
+      />
 
       {/* Upload Prescription FAB */}
       <motion.div
