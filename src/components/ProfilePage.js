@@ -3,14 +3,12 @@ import React, { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useThemeMode } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
-import { useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import creditCardType from "credit-card-type";
 import ChatSupportModal from "./ChatSupportModal";
 import AddressForm from "./AddressForm";
 
-// shadcn/ui
 import { Button } from "../components/ui/button";
 import { CardContent } from "../components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
@@ -22,18 +20,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Badge } from "../components/ui/badge";
 import { ChevronRight, Shield, FileText, ScrollText, Cookie, UserX } from "lucide-react";
 
-// framer-motion
 import { motion, AnimatePresence } from "framer-motion";
-
-// lucide-react
 import {
   Pencil, Plus, ChevronDown, Mail, Home, History, BadgeCheck, Wallet, Settings,
   Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera
 } from "lucide-react";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-
-// flip this to "true" in env when you launch phone-login
 const MOBILE_LOGIN_ENABLED = String(process.env.REACT_APP_MOBILE_LOGIN_ENABLED) === "true";
 
 const cardIcons = {
@@ -50,39 +43,27 @@ export default function ProfilePage() {
   const [chatSupportOpen, setChatSupportOpen] = useState(false);
 
   const [openSections, setOpenSections] = useState({
-    addresses: true,
-    wallet: false,
-    orders: false,
-    badges: false,
-    personalization: false,
-    settings: false,
-    pharmacist: false,
-    delivery: false,
-    support: false,
-    refer: false,
-    legal: false,
+    addresses: true, wallet: false, orders: false, badges: false, personalization: false,
+    settings: false, pharmacist: false, delivery: false, support: false, refer: false, legal: false,
   });
   const toggleSection = (key) => setOpenSections((p) => ({ ...p, [key]: !p[key] }));
-
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
 
   // --- Edit profile dialog ---
   const [editDialog, setEditDialog] = useState(false);
   const [editData, setEditData] = useState({
-    name: user?.name || "",
-    email: user?.email || "",
-    mobile: user?.mobile || "",
-    dob: user?.dob || "",
-    avatar: user?.avatar || "",
+    name: user?.name || "", email: user?.email || "", mobile: user?.mobile || "",
+    dob: user?.dob || "", avatar: user?.avatar || "",
   });
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar || "");
   const fileInputRef = useRef();
 
-  // ---- First-run detection ----
+  // First-run detection with localStorage fallback (in case backend doesn’t return the flag yet)
   const search = new URLSearchParams(location.search);
   const forceSetup = search.get("setup") === "1";
+  const localDone = localStorage.getItem("profileCompleted") === "1";
   const missingRequired = !user?.name || !user?.email || !user?.dob;
-  const isFirstRun = forceSetup || !user?.profileCompleted || missingRequired;
+  const isFirstRun = forceSetup || (!localDone && (!user?.profileCompleted || missingRequired));
 
   useEffect(() => {
     if (!user) return;
@@ -98,7 +79,7 @@ export default function ProfilePage() {
       setAvatarPreview(user.avatar || "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?._id]); // run when the logged-in user is loaded
+  }, [user?._id]); // when the logged-in user is loaded
 
   const handleEditProfileOpen = () => {
     setEditData({
@@ -125,31 +106,37 @@ export default function ProfilePage() {
 
   const handleProfileSave = async () => {
     try {
-      // Mark as completed on save
-      await axios.put(`${API_BASE_URL}/api/users/${user._id}`, {
-        ...editData,
-        profileCompleted: true,
-      });
+      // IMPORTANT: include auth header + mark profile completed
+      await axios.put(
+        `${API_BASE_URL}/api/users/${user._id}`,
+        { ...editData, profileCompleted: true },
+        { headers: { Authorization: "Bearer " + token } }
+      );
+
       setSnackbar({ open: true, message: "Profile updated!", severity: "success" });
+
+      // Refresh profile from server so AuthContext is accurate
       const updatedProfile = await axios.get(`${API_BASE_URL}/api/profile`, {
         headers: { Authorization: "Bearer " + token },
       });
       setUser(updatedProfile.data);
-      setEditDialog(false);
 
-      // After first-time setup, go Home (safe to always redirect)
+      // Local fallback to guarantee this never opens again even if backend lacks the flag
+      localStorage.setItem("profileCompleted", "1");
+
+      setEditDialog(false);
       navigate("/", { replace: true });
-    } catch {
+    } catch (e) {
       setSnackbar({ open: true, message: "Failed to update!", severity: "error" });
     }
   };
 
-  // --- Settings modals (logic unchanged) ---
+  // --- Settings modals (unchanged) ---
   const [changePassOpen, setChangePassOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  // --- Addresses (logic unchanged) ---
+  // --- Addresses (unchanged) ---
   const [editingAddress, setEditingAddress] = useState(null);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const handleAddressSave = async (newAddr) => {
@@ -160,19 +147,12 @@ export default function ProfilePage() {
       newAddr.id = Date.now().toString();
       updated = [...addresses, newAddr];
     }
-    if (newAddr.isDefault) {
-      updated = updated.map((a) => ({ ...a, isDefault: a.id === newAddr.id }));
-    }
+    if (newAddr.isDefault) updated = updated.map((a) => ({ ...a, isDefault: a.id === newAddr.id }));
     await updateAddresses(updated);
-    setSnackbar({
-      open: true,
-      message: editingAddress ? "Address updated!" : "Address added!",
-      severity: "success",
-    });
+    setSnackbar({ open: true, message: editingAddress ? "Address updated!" : "Address added!", severity: "success" });
     setShowAddressForm(false);
     setEditingAddress(null);
   };
-
   const handleDeleteAddress = async (addr) => {
     if (!window.confirm("Are you sure you want to delete this address?")) return;
     const updated = addresses.filter((a) => a.id !== addr.id);
@@ -180,13 +160,12 @@ export default function ProfilePage() {
     setSnackbar({ open: true, message: "Address deleted!", severity: "success" });
   };
 
-  // --- Cards (logic unchanged) ---
+  // Cards (unchanged)
   const [cards, setCards] = useState([]);
   const [cardDialog, setCardDialog] = useState(false);
   const [editingCard, setEditingCard] = useState(null);
   const [cardForm, setCardForm] = useState({ number: "", name: "", expiry: "", brand: "" });
   const [cardTypeIcon, setCardTypeIcon] = useState(null);
-
   function detectCardType(number) {
     if (!number) return "";
     const result = creditCardType(number.replace(/\s/g, ""));
@@ -199,13 +178,10 @@ export default function ProfilePage() {
     setCardTypeIcon(cardIcons[type] || null);
     setCardForm((f) => ({ ...f, number: num, brand: type || "" }));
   }
-  function handleCardFormChange(field, value) {
-    setCardForm((f) => ({ ...f, [field]: value }));
-  }
+  function handleCardFormChange(field, value) { setCardForm((f) => ({ ...f, [field]: value })); }
   function handleCardSave() {
     if (cardForm.number.length < 19 || !cardForm.name || !/^\d{2}\/\d{2}$/.test(cardForm.expiry)) {
-      setSnackbar({ open: true, message: "Enter valid card details!", severity: "error" });
-      return;
+      setSnackbar({ open: true, message: "Enter valid card details!", severity: "error" }); return;
     }
     const last4 = cardForm.number.replace(/\s/g, "").slice(-4);
     if (editingCard) {
@@ -232,107 +208,68 @@ export default function ProfilePage() {
     setCardDialog(true);
   }
 
-  // --- Orders (logic unchanged) ---
+  // Orders (unchanged except for auth header already present elsewhere)
   const [orders, setOrders] = useState([]);
   const [orderDetail, setOrderDetail] = useState(null);
-
   useEffect(() => {
     if (!user?._id || !token) return;
-
     const ac = new AbortController();
-
     const load = async () => {
       try {
         const res = await axios.get(`${API_BASE_URL}/api/orders/myorders`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: ac.signal,
         });
-        const sorted = [...res.data].sort(
-          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-        );
+        const sorted = [...res.data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         setOrders(sorted);
       } catch {
         try {
-          const res2 = await axios.get(
-            `${API_BASE_URL}/api/allorders/myorders-userid/${user._id}`,
-            { signal: ac.signal }
-          );
-          const sorted2 = [...res2.data].sort(
-            (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-          );
+          const res2 = await axios.get(`${API_BASE_URL}/api/allorders/myorders-userid/${user._id}`, { signal: ac.signal });
+          const sorted2 = [...res2.data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
           setOrders(sorted2);
-        } catch {
-          setOrders([]);
-        }
+        } catch { setOrders([]); }
       }
     };
-
-    load();
-    return () => ac.abort();
+    load(); return () => ac.abort();
   }, [user?._id, token]);
 
   const handleOrderAgain = (order) => {
-    const pharmacyId =
-      (order.pharmacy && order.pharmacy._id) || order.pharmacyId || order.pharmacy;
-    if (pharmacyId) {
-      navigate(`/medicines/${pharmacyId}`);
-    } else {
-      setSnackbar({
-        open: true,
-        message: "Pharmacy information missing. Unable to reorder.",
-        severity: "error",
-      });
-    }
+    const pharmacyId = (order.pharmacy && order.pharmacy._id) || order.pharmacyId || order.pharmacy;
+    if (pharmacyId) navigate(`/medicines/${pharmacyId}`);
+    else setSnackbar({ open: true, message: "Pharmacy information missing. Unable to reorder.", severity: "error" });
   };
 
-  // Loyalty
   const totalSpent = orders.reduce((s, o) => s + (o.total || 0), 0);
   const loyaltyPoints = Math.floor(totalSpent);
 
-  // Personalization
   const { t, i18n } = useTranslation();
   const { mode, setMode } = useThemeMode();
   const [language, setLanguage] = useState(i18n.language || "en");
-  const handleLanguageChange = (lng) => {
-    setLanguage(lng);
-    i18n.changeLanguage(lng);
-    localStorage.setItem("language", lng);
-  };
+  const handleLanguageChange = (lng) => { setLanguage(lng); i18n.changeLanguage(lng); localStorage.setItem("language", lng); };
   const handleThemeChange = (theme) => setMode(theme);
 
-  // Settings toggles
   const [orderUpdates, setOrderUpdates] = useState(true);
   const [offerPromos, setOfferPromos] = useState(true);
   const [dataSharing, setDataSharing] = useState(true);
   const [twoFA, setTwoFA] = useState(false);
 
-  // Support
   const [supportDialog, setSupportDialog] = useState(false);
   const [supportMsg, setSupportMsg] = useState("");
 
-  // Referral
   const referralCode = `GODAVAII-USER-${user?._id || "XXXX"}`;
 
-  // Logout
   const handleLogout = () => {
     logout();
     setSnackbar({ open: true, message: "Logged out!", severity: "info" });
     setTimeout(() => navigate("/login"), 1000);
   };
 
-  // When phone login is ON + user already verified phone, lock the field
   const mobileLocked = MOBILE_LOGIN_ENABLED && Boolean(user?.mobileVerified);
   const canEditMobile = !mobileLocked;
 
   return (
-    <div
-      className="
-        profile-page mx-auto w-full
-        max-w-[520px] md:max-w-[680px] lg:max-w-[820px]
-        px-4 sm:px-5 md:px-6
-        pb-28 pt-4 bg-white
-      "
-    >
+    <div className="profile-page mx-auto w-full max-w-[520px] md:max-w-[680px] lg:max-w-[820px] px-4 sm:px-5 md:px-6 pb-28 pt-4 bg-white">
+      
       {/* Top: Profile Summary */}
       <div className="flex items-center gap-3 sm:gap-4 py-3 md:py-4 border-b border-slate-100 mb-4">
         <div className="relative shrink-0">
@@ -948,23 +885,17 @@ export default function ProfilePage() {
       <Dialog
         open={editDialog}
         onOpenChange={(open) => {
-          // On first run, do NOT allow closing until required fields are set
           if (open) return setEditDialog(true);
           if (isFirstRun) {
-            if (editData.name && editData.email && editData.dob) {
-              setEditDialog(false);
-            } else {
-              setEditDialog(true);
-            }
+            if (editData.name && editData.email && editData.dob) setEditDialog(false);
+            else setEditDialog(true);
           } else {
             setEditDialog(false);
           }
         }}
       >
         <DialogContent className="sm:max-w-md force-light">
-          <DialogHeader>
-            <DialogTitle>Edit Profile</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Edit Profile</DialogTitle></DialogHeader>
 
           <div className="space-y-3">
             <div className="flex items-center gap-3">
@@ -972,13 +903,8 @@ export default function ProfilePage() {
                 <AvatarImage src={avatarPreview} />
                 <AvatarFallback>{(user?.name || "NU").slice(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
-              <Button
-                variant="secondary"
-                onClick={() => fileInputRef.current?.click()}
-                className="bg-slate-100 text-slate-900 hover:bg-slate-200 !font-bold"
-              >
-                <Camera className="h-4 w-4 mr-2" />
-                Change Avatar
+              <Button variant="secondary" onClick={() => fileInputRef.current?.click()} className="bg-slate-100 text-slate-900 hover:bg-slate-200 !font-bold">
+                <Camera className="h-4 w-4 mr-2" /> Change Avatar
               </Button>
               <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={handleAvatarChange} />
             </div>
@@ -993,42 +919,27 @@ export default function ProfilePage() {
 
             <Field label="Mobile">
               <div className="flex gap-2">
-                <Input
-                  className="gd-input flex-1"
-                  value={editData.mobile}
-                  onChange={(e) => setEditData({ ...editData, mobile: e.target.value })}
-                  disabled={!canEditMobile}
-                  placeholder="Add your mobile number"
-                />
-                {canEditMobile ? null : (
-                  <Button type="button" variant="outline" className="btn-outline-soft !font-bold">
-                    Change
-                  </Button>
-                )}
+                <Input className="gd-input flex-1" value={editData.mobile} onChange={(e) => setEditData({ ...editData, mobile: e.target.value })} disabled={!canEditMobile} placeholder="Add your mobile number" />
+                {!canEditMobile && <Button type="button" variant="outline" className="btn-outline-soft !font-bold">Change</Button>}
               </div>
-              {canEditMobile ? (
-                <div className="mt-1 text-xs text-slate-500">
-                  You can add or edit your mobile now. When phone login launches, we’ll ask you to verify it.
-                </div>
-              ) : null}
+              {canEditMobile && <div className="mt-1 text-xs text-slate-500">You can add or edit your mobile now. When phone login launches, we’ll ask you to verify it.</div>}
             </Field>
 
             <Field label="DOB">
-              <Input className="gd-input" type="date" value={editData.dob} onChange={(e) => setEditData({ ...editData, dob: e.target.value })} required />
+              {/* IMPORTANT: native date input expects YYYY-MM-DD */}
+              <Input className="gd-input" type="date" value={editData.dob || ""} onChange={(e) => setEditData({ ...editData, dob: e.target.value })} required />
             </Field>
           </div>
 
           <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
             {!isFirstRun && (
-              <Button
-                variant="ghost"
-                className="btn-ghost-soft !font-bold w-full sm:w-auto"
-                onClick={() => setEditDialog(false)}
-              >
+              <Button variant="ghost" className="btn-ghost-soft !font-bold w-full sm:w-auto" onClick={() => setEditDialog(false)}>
                 Cancel
               </Button>
             )}
-            <Button className="btn-primary-emerald !font-bold w-full sm:w-auto" onClick={handleProfileSave} disabled={!editData.name || !editData.email || !editData.dob}>
+            <Button className="btn-primary-emerald !font-bold w-full sm:w-auto"
+              onClick={handleProfileSave}
+              disabled={!editData.name || !editData.email || !editData.dob}>
               Save
             </Button>
           </DialogFooter>
@@ -1070,41 +981,21 @@ export default function ProfilePage() {
 }
 
 /* ---------- Reusable UI helpers (visual only) ---------- */
-
 function Section({ icon, title, expanded, onToggle, action, children }) {
   return (
     <div className="section">
-      {/* Header (outside card) */}
-      <button
-        onClick={onToggle}
-        className="
-          w-full group section-head
-          flex items-center justify-between gap-2 sm:gap-3 flex-wrap text-left
-        "
-      >
+      <button onClick={onToggle} className="w-full group section-head flex items-center justify-between gap-2 sm:gap-3 flex-wrap text-left">
         <div className="icon-tile">{icon}</div>
         <div className="flex-1 min-w-[160px] sm:min-w-[220px] text-left">
           <div className="h2-strong text-[15px] sm:text-[16px]">{title}</div>
         </div>
-        {/* action (like Add New) can be wide; allow wrapping below on small screens */}
-        <div className="ml-auto order-3 sm:order-none w-full sm:w-auto flex justify-end">
-          {action}
-        </div>
+        <div className="ml-auto order-3 sm:order-none w-full sm:w-auto flex justify-end">{action}</div>
         <ChevronDown className={`h-5 w-5 text-slate-500 transition-transform ${expanded ? "rotate-180" : ""}`} />
       </button>
-
-      {/* Content (inside card) */}
       <AnimatePresence initial={false}>
         {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ type: "tween", duration: 0.18 }}
-          >
-            <div className="section-card">
-              <CardContent className="pt-4">{children}</CardContent>
-            </div>
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: "tween", duration: 0.18 }}>
+            <div className="section-card"><CardContent className="pt-4">{children}</CardContent></div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1120,8 +1011,6 @@ function ToggleRow({ label, checked, onChange }) {
     </div>
   );
 }
-
-/** Grid row so labels and controls align perfectly */
 function Row({ label, children }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] items-start sm:items-center gap-2 sm:gap-3">
@@ -1130,7 +1019,6 @@ function Row({ label, children }) {
     </div>
   );
 }
-
 function Field({ label, children }) {
   return (
     <div className="grid gap-1.5">

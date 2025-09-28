@@ -44,7 +44,7 @@ export default function OtpLogin({ onLogin }) {
       const res = await axios.post(`${API_BASE_URL}/api/auth/verify-otp`, { identifier, otp });
       setSnack({ open: true, msg: "Login Successful!", severity: "success" });
 
-      // Save token, decode user, update AuthContext
+      // Save token, decode user basics, update AuthContext immediately
       const token = res.data.token;
       const decoded = jwtDecode(token);
       const userObj = {
@@ -52,18 +52,22 @@ export default function OtpLogin({ onLogin }) {
         mobile: decoded.mobile,
         email: decoded.email,
         name: decoded.name,
-        profileCompleted: decoded.profileCompleted, // if backend includes it
-        dob: decoded.dob, // if backend includes it
+        profileCompleted: decoded.profileCompleted, // may be undefined
+        dob: decoded.dob, // may be undefined
       };
       login(userObj, token);
-
       if (onLogin) onLogin(userObj);
 
+      // Decide landing using ACTUAL profile from backend (not token)
+      const { data: profile } = await axios.get(`${API_BASE_URL}/api/profile`, {
+        headers: { Authorization: "Bearer " + token },
+      });
+
       const needsProfile =
-        userObj?.profileCompleted === false ||
-        !userObj?.name ||
-        !userObj?.email ||
-        !userObj?.dob;
+        profile?.profileCompleted === false ||
+        !profile?.name ||
+        !profile?.email ||
+        !profile?.dob;
 
       window.location.href = needsProfile ? "/profile?setup=1" : "/";
     } catch (err) {
@@ -135,11 +139,7 @@ export default function OtpLogin({ onLogin }) {
           >
             {loading ? <CircularProgress size={24} /> : "Verify & Login"}
           </Button>
-          <Button
-            fullWidth
-            sx={{ mt: 1 }}
-            onClick={() => setStep(1)}
-          >
+          <Button fullWidth sx={{ mt: 1 }} onClick={() => setStep(1)}>
             Change number/email
           </Button>
         </>

@@ -8,16 +8,9 @@ import BottomNavBar from "./BottomNavBar";
 import PrescriptionUploadModal from "./PrescriptionUploadModal";
 import Navbar from "./Navbar";
 import {
-  UploadCloud,
-  Pill,
-  Stethoscope,
-  Clock,
-  ChevronRight,
-  MapPin,
-  X,
+  UploadCloud, Pill, Stethoscope, Clock, ChevronRight, MapPin, X,
 } from "lucide-react";
 
-// UI primitives (same ones used in Medicines.js)
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -41,115 +34,56 @@ const ICONS = {
   pill: "/images/pill-modern.svg",
 };
 
-const categories = [
-  "Fever",
-  "Diabetes",
-  "Cold",
-  "Heart",
-  "Antibiotic",
-  "Ayurveda",
-  "Painkiller",
-  "Cough",
-];
+const categories = ["Fever","Diabetes","Cold","Heart","Antibiotic","Ayurveda","Painkiller","Cough"];
 
-const API_BASE_URL =
-  process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-
-// same image helper as Medicines.js
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const getImageUrl = (img) => {
-  if (!img)
-    return "https://img.freepik.com/free-vector/medicine-bottle-pills-isolated_1284-42391.jpg?w=400";
-  if (typeof img === "string" && img.startsWith("/uploads/"))
-    return `${API_BASE_URL}${img}`;
-  if (
-    typeof img === "string" &&
-    (img.startsWith("http://") || img.startsWith("https://"))
-  )
-    return img;
+  if (!img) return "https://img.freepik.com/free-vector/medicine-bottle-pills-isolated_1284-42391.jpg?w=400";
+  if (typeof img === "string" && img.startsWith("/uploads/")) return `${API_BASE_URL}${img}`;
+  if (typeof img === "string" && (img.startsWith("http://") || img.startsWith("https://"))) return img;
   return img;
 };
-
 const DEEP = "#0f6e51";
 
 function formatPharmacyDistance(ph) {
-  const km =
-    typeof ph?.distanceKm === "number"
-      ? ph.distanceKm
-      : typeof ph?.distanceMeters === "number"
-      ? ph.distanceMeters / 1000
-      : typeof ph?.dist?.calculated === "number"
-      ? ph.dist.calculated / 1000
-      : null;
-
+  const km = typeof ph?.distanceKm === "number"
+    ? ph.distanceKm
+    : typeof ph?.distanceMeters === "number"
+    ? ph.distanceMeters / 1000
+    : typeof ph?.dist?.calculated === "number"
+    ? ph.dist.calculated / 1000
+    : null;
   if (km == null || Number.isNaN(km)) return "--";
   return km < 1 ? "<1 km" : `${km.toFixed(1)} km`;
 }
 
-/* ---------- Horizontal medicine card (image left, details right) ---------- */
 function MedCard({ med, onAdd, onOpen }) {
-  // allow parent to disable add
-  const disabled =
-    typeof onAdd?.disabled === "boolean" ? onAdd.disabled : false;
-  const [src, setSrc] = useState(
-    getImageUrl(med.img || med.image || med.imageUrl) || ICONS.medicine
-  );
-
-  const price =
-    med.price ?? med.mrp ?? med.sellingPrice ?? med.salePrice ?? "--";
-
+  const disabled = typeof onAdd?.disabled === "boolean" ? onAdd.disabled : false;
+  const [src, setSrc] = useState(getImageUrl(med.img || med.image || med.imageUrl) || ICONS.medicine);
+  const price = med.price ?? med.mrp ?? med.sellingPrice ?? med.salePrice ?? "--";
   return (
     <div
       className="min-w-[240px] max-w-[240px] sm:min-w-[260px] sm:max-w-[260px] h-[106px] rounded-2xl bg-white/95 ring-1 ring-[var(--pillo-surface-border)] shadow-sm flex items-center p-3 gap-3 cursor-pointer active:scale-[0.99] transition"
       onClick={() => onOpen?.(med)}
     >
-      {/* BIG thumbnail */}
       <div className="h-[78px] w-[86px] rounded-xl bg-white ring-1 ring-[var(--pillo-surface-border)] shadow-sm overflow-hidden grid place-items-center">
-        <img
-          src={src}
-          alt={med.brand || med.name || "Medicine"}
-          loading="lazy"
-          onError={() => setSrc(ICONS.medicine)}
-          className="h-full w-full object-contain"
-        />
+        <img src={src} alt={med.brand || med.name || "Medicine"} loading="lazy" onError={() => setSrc(ICONS.medicine)} className="h-full w-full object-contain" />
       </div>
-
-      {/* Details */}
       <div className="flex-1 min-w-0">
-        <div
-          className="text-[13.5px] sm:text-[14.5px] font-bold text-[var(--pillo-active-text)] break-words"
-          style={{
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-          }}
-          title={med.brand || med.name || med.medicineName}
-        >
+        <div className="text-[13.5px] sm:text-[14.5px] font-bold text-[var(--pillo-active-text)] break-words"
+          style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+          title={med.brand || med.name || med.medicineName}>
           {med.brand || med.name || med.medicineName || "Medicine"}
         </div>
-
-        <div className="mt-0.5 text-[13px] font-semibold text-[var(--pillo-active-text)]">
-          ₹{price}
-        </div>
-
+        <div className="mt-0.5 text-[13px] font-semibold text-[var(--pillo-active-text)]">₹{price}</div>
         <div className="mt-1 flex items-center justify-between">
           <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-[var(--pillo-active-text)] ring-1 ring-[var(--pillo-surface-border)]">
             <Clock className="h-3 w-3" /> ≤ 30 min
           </span>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (disabled) return;
-              onAdd(med);
-            }}
+            onClick={(e) => { e.stopPropagation(); if (disabled) return; onAdd(med); }}
             disabled={disabled}
-            className={`rounded-full text-white text-[12px] font-bold px-3 py-1.5 shadow
-              ${
-                disabled
-                  ? "bg-gray-300 cursor-not-allowed"
-                  : "bg-[var(--pillo-active-text)] hover:brightness-105"
-              }`}
-          >
+            className={`rounded-full text-white text-[12px] font-bold px-3 py-1.5 shadow ${disabled ? "bg-gray-300 cursor-not-allowed" : "bg-[var(--pillo-active-text)] hover:brightness-105"}`}>
             Add
           </button>
         </div>
@@ -164,102 +98,67 @@ export default function Home() {
   const { user } = useAuth();
   const { cart, addToCart } = useCart();
   const navigate = useNavigate();
-  const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
   const { currentAddress } = useLocation();
+  const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
   const [userCoords, setUserCoords] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState("");
   const popupTimeout = useRef(null);
   const [showFallbackMeds, setShowFallbackMeds] = useState(false);
   const noMedicinesTimer = useRef(null);
   const [lastOrder, setLastOrder] = useState(null);
-  const dockBottom = `calc(${
-    cart.length > 0 ? 144 : 72
-  }px + env(safe-area-inset-bottom, 0px) + 12px)`;
+  const dockBottom = `calc(${(cart.length > 0 ? 144 : 72)}px + env(safe-area-inset-bottom, 0px) + 12px)`;
   const [allMedsByPharmacy, setAllMedsByPharmacy] = useState({});
   const [canDeliver, setCanDeliver] = useState(true);
 
-   // Hard-redirect first-run users to profile setup
+  // First-run redirect: allow Homepage when either server says completed OR local fallback is set
   useEffect(() => {
     if (!user) return;
+    const localDone = localStorage.getItem("profileCompleted") === "1";
     const missingRequired = !user.name || !user.email || !user.dob;
-    if (!user.profileCompleted || missingRequired) {
+    if (!localDone && (!user.profileCompleted || missingRequired)) {
       navigate("/profile?setup=1", { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?._id]);
 
-  // Dialog state (reuse Medicines.js UI)
   const [selectedMed, setSelectedMed] = useState(null);
   const [activeImg, setActiveImg] = useState(0);
   const images = useMemo(() => {
     if (!selectedMed) return [];
-    const arr =
-      (Array.isArray(selectedMed.images) && selectedMed.images.length
-        ? selectedMed.images
-        : [selectedMed.img]
-      ).filter(Boolean) || [];
+    const arr = (Array.isArray(selectedMed.images) && selectedMed.images.length ? selectedMed.images : [selectedMed.img]).filter(Boolean) || [];
     return arr;
   }, [selectedMed]);
 
-  /* === state + helper for active order (expanded statuses) === */
-  const ACTIVE_STATUSES = new Set([
-    "pending",
-    "placed",
-    "quoted",
-    "processing",
-    "assigned",
-    "accepted",
-    "picked_up",
-    "out_for_delivery",
-  ]);
+  const ACTIVE_STATUSES = new Set(["pending","placed","quoted","processing","assigned","accepted","picked_up","out_for_delivery"]);
   const [activeOrder, setActiveOrder] = useState(null);
-
   function statusLabel(s) {
-    return s === "pending"
-      ? "Pending"
-      : s === "placed"
-      ? "Order Placed"
-      : s === "quoted"
-      ? "Quoted"
-      : s === "processing"
-      ? "Processing"
-      : s === "assigned"
-      ? "Assigned"
-      : s === "accepted"
-      ? "Accepted"
-      : s === "picked_up"
-      ? "Picked Up"
-      : s === "out_for_delivery"
-      ? "Out for Delivery"
-      : s === "delivered"
-      ? "Delivered"
-      : s;
+    return s === "pending" ? "Pending" :
+      s === "placed" ? "Order Placed" :
+      s === "quoted" ? "Quoted" :
+      s === "processing" ? "Processing" :
+      s === "assigned" ? "Assigned" :
+      s === "accepted" ? "Accepted" :
+      s === "picked_up" ? "Picked Up" :
+      s === "out_for_delivery" ? "Out for Delivery" :
+      s === "delivered" ? "Delivered" : s;
   }
-  /* === /active order === */
 
   useEffect(() => {
     if (currentAddress?.lat && currentAddress?.lng) {
       setUserCoords({ lat: currentAddress.lat, lng: currentAddress.lng });
     } else if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) =>
-          setUserCoords({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          }),
+        (pos) => setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
         () => setUserCoords(null)
       );
     }
   }, [currentAddress]);
 
-  // check delivery partner availability near the user
   useEffect(() => {
     const lat = Number(currentAddress?.lat ?? userCoords?.lat);
     const lng = Number(currentAddress?.lng ?? userCoords?.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    fetch(
-      `${API_BASE_URL}/api/delivery/active-partner-nearby?lat=${lat}&lng=${lng}`
-    )
+    fetch(`${API_BASE_URL}/api/delivery/active-partner-nearby?lat=${lat}&lng=${lng}`)
       .then((r) => r.json())
       .then((d) => setCanDeliver(!!d.activePartnerExists))
       .catch(() => setCanDeliver(false));
@@ -269,16 +168,13 @@ export default function Home() {
     async function fetchLastOrder() {
       if (!user?._id && !user?.userId) return;
       const userId = user._id || user.userId;
-      const res = await fetch(
-        `${API_BASE_URL}/api/allorders/myorders-userid/${userId}`
-      );
+      const res = await fetch(`${API_BASE_URL}/api/allorders/myorders-userid/${userId}`);
       const orders = await res.json();
       if (Array.isArray(orders) && orders.length > 0) setLastOrder(orders[0]);
     }
     fetchLastOrder();
   }, [user]);
 
-  // Load / keep active order (if any)
   useEffect(() => {
     async function getActive() {
       const idFromLS = localStorage.getItem("activeOrderId");
@@ -287,10 +183,7 @@ export default function Home() {
           const r = await fetch(`${API_BASE_URL}/api/orders/${idFromLS}`);
           if (r.ok) {
             const o = await r.json();
-            if (ACTIVE_STATUSES.has(o.status)) {
-              setActiveOrder(o);
-              return;
-            }
+            if (ACTIVE_STATUSES.has(o.status)) { setActiveOrder(o); return; }
           }
           localStorage.removeItem("activeOrderId");
         }
@@ -299,23 +192,13 @@ export default function Home() {
       if (!user?._id && !user?.userId) return;
       const userId = user._id || user.userId;
       try {
-        const r = await fetch(
-          `${API_BASE_URL}/api/allorders/myorders-userid/${userId}`
-        );
+        const r = await fetch(`${API_BASE_URL}/api/allorders/myorders-userid/${userId}`);
         const orders = await r.json();
         if (Array.isArray(orders) && orders.length) {
           const active = orders
             .filter((o) => ACTIVE_STATUSES.has(o.status))
-            .sort(
-              (a, b) =>
-                new Date(b.updatedAt || b.createdAt) -
-                new Date(a.updatedAt || a.createdAt)
-            )[0];
-          if (active) {
-            setActiveOrder(active);
-            localStorage.setItem("activeOrderId", active._id);
-            return;
-          }
+            .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0];
+          if (active) { setActiveOrder(active); localStorage.setItem("activeOrderId", active._id); return; }
         }
         setActiveOrder(null);
       } catch {}
@@ -325,33 +208,21 @@ export default function Home() {
 
   useEffect(() => {
     if (!userCoords) return;
-    fetch(
-      `${API_BASE_URL}/api/pharmacies/nearby?lat=${userCoords.lat}&lng=${userCoords.lng}&maxDistance=8000`
-    )
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`Nearby pharmacies HTTP ${res.status}`);
-        return res.json();
-      })
+    fetch(`${API_BASE_URL}/api/pharmacies/nearby?lat=${userCoords.lat}&lng=${userCoords.lng}&maxDistance=8000`)
+      .then(async (res) => { if (!res.ok) throw new Error(`Nearby pharmacies HTTP ${res.status}`); return res.json(); })
       .then((pharmacies) => {
-        const active = pharmacies
-          .filter((ph) => ph.active !== false)
-          .slice(0, 10);
+        const active = pharmacies.filter((ph) => ph.active !== false).slice(0, 10);
         setPharmaciesNearby(active);
         Promise.all(
           active.slice(0, 5).map((ph) =>
             fetch(`${API_BASE_URL}/api/medicines?pharmacyId=${ph._id}`)
               .then((res) => res.json())
-              .then((meds) => ({
-                pharmacyId: ph._id,
-                medicines: meds.slice(0, 8),
-              }))
+              .then((meds) => ({ pharmacyId: ph._id, medicines: meds.slice(0, 8) }))
               .catch(() => ({ pharmacyId: ph._id, medicines: [] }))
           )
         ).then((results) => {
           const map = {};
-          results.forEach((r) => {
-            map[r.pharmacyId] = r.medicines;
-          });
+          results.forEach((r) => { map[r.pharmacyId] = r.medicines; });
           setMostOrderedByPharmacy(map);
         });
       });
@@ -359,11 +230,8 @@ export default function Home() {
 
   useEffect(() => {
     if (!selectedCategory || pharmaciesNearby.length === 0) return;
-    const pharmaciesToFetch = pharmaciesNearby
-      .slice(0, 5)
-      .filter((ph) => !allMedsByPharmacy[ph._id]);
+    const pharmaciesToFetch = pharmaciesNearby.slice(0, 5).filter((ph) => !allMedsByPharmacy[ph._id]);
     if (pharmaciesToFetch.length === 0) return;
-
     Promise.all(
       pharmaciesToFetch.map((ph) =>
         fetch(`${API_BASE_URL}/api/medicines?pharmacyId=${ph._id}`)
@@ -374,9 +242,7 @@ export default function Home() {
     ).then((results) => {
       setAllMedsByPharmacy((prev) => {
         const newMap = { ...prev };
-        results.forEach((r) => {
-          newMap[r.pharmacyId] = r.medicines;
-        });
+        results.forEach((r) => { newMap[r.pharmacyId] = r.medicines; });
         return newMap;
       });
     });
@@ -384,16 +250,10 @@ export default function Home() {
   }, [selectedCategory, pharmaciesNearby]);
 
   const handleAddToCart = (med) => {
-    if (!canDeliver) {
-      alert("Sorry, delivery isn’t available at your location right now.");
-      return;
-    }
+    if (!canDeliver) { alert("Sorry, delivery isn’t available at your location right now."); return; }
     if ((cart?.length || 0) > 0) {
       const cartPharmacyId = cart[0]?.pharmacy?._id || cart[0]?.pharmacy;
-      if (
-        med.pharmacy?._id !== cartPharmacyId &&
-        med.pharmacy !== cartPharmacyId
-      ) {
+      if (med.pharmacy?._id !== cartPharmacyId && med.pharmacy !== cartPharmacyId) {
         alert("You can only order medicines from one pharmacy at a time.");
         return;
       }
@@ -416,11 +276,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!selectedCategory) {
-      setShowFallbackMeds(false);
-      if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
-      return;
-    }
+    if (!selectedCategory) { setShowFallbackMeds(false); if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current); return; }
     const noneHaveMeds = pharmaciesNearby.slice(0, 5).every((ph) => {
       const meds = allMedsByPharmacy[ph._id] || [];
       return !meds.some((med) => isMedicineInCategory(med, selectedCategory));
@@ -428,36 +284,21 @@ export default function Home() {
     if (noneHaveMeds) {
       setShowFallbackMeds(false);
       if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
-      noMedicinesTimer.current = setTimeout(
-        () => setShowFallbackMeds(true),
-        500
-      );
+      noMedicinesTimer.current = setTimeout(() => setShowFallbackMeds(true), 500);
     } else {
       setShowFallbackMeds(false);
       if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
     }
-    return () => {
-      if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current);
-    };
+    return () => { if (noMedicinesTimer.current) clearTimeout(noMedicinesTimer.current); };
     // eslint-disable-next-line
-  }, [
-    selectedCategory,
-    pharmaciesNearby,
-    allMedsByPharmacy,
-    mostOrderedByPharmacy,
-  ]);
+  }, [selectedCategory, pharmaciesNearby, allMedsByPharmacy, mostOrderedByPharmacy]);
 
   const filteredPharmacies = pharmaciesNearby
     .slice(0, 5)
     .map((ph) => {
-      let allMeds = selectedCategory
-        ? allMedsByPharmacy[ph._id] || []
-        : mostOrderedByPharmacy[ph._id] || [];
-      let filteredMeds = selectedCategory
-        ? allMeds.filter((med) => isMedicineInCategory(med, selectedCategory))
-        : allMeds;
-      if (selectedCategory && filteredMeds.length === 0 && showFallbackMeds)
-        filteredMeds = allMeds.slice(0, 8);
+      let allMeds = selectedCategory ? allMedsByPharmacy[ph._id] || [] : mostOrderedByPharmacy[ph._id] || [];
+      let filteredMeds = selectedCategory ? allMeds.filter((med) => isMedicineInCategory(med, selectedCategory)) : allMeds;
+      if (selectedCategory && filteredMeds.length === 0 && showFallbackMeds) filteredMeds = allMeds.slice(0, 8);
       return { ...ph, medicines: filteredMeds, medCount: filteredMeds.length };
     })
     .sort((a, b) => b.medCount - a.medCount);
