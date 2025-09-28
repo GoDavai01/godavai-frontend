@@ -8,7 +8,7 @@ android {
         applicationId "com.godavaii.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        versionCode 2
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
@@ -21,7 +21,7 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    // If you ever add Kotlin here, also set: kotlinOptions { jvmTarget = '17' }
+    // If you add Kotlin later: kotlinOptions { jvmTarget = '17' }
 
     signingConfigs {
         release {
@@ -54,14 +54,21 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+
+    // 👇 Firebase for FCM (BoM manages versions)
+    implementation platform('com.google.firebase:firebase-bom:33.4.0')
+    implementation 'com.google.firebase:firebase-messaging'
+
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
 }
 
+// Keep Capacitor’s generated config
 apply from: 'capacitor.build.gradle'
 
+// Conditionally apply google-services plugin only if the JSON exists
 try {
     def servicesJSON = file('google-services.json')
     if (servicesJSON.text) {

@@ -7,6 +7,7 @@ buildscript {
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.7.2'
+        // 👇 Required so the app module can "apply plugin: com.google.gms.google-services"
         classpath 'com.google.gms:google-services:4.4.2'
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
@@ -27,8 +28,8 @@ task clean(type: Delete) {
 }
 
 /**
- * Force Java 17 for all Android modules (app, capacitor-android, plugins).
- * DO NOT use options.release for Android; set compileOptions instead.
+ * ✅ Force Java 17 for all Android modules (app, capacitor-android, plugins).
+ * This overrides anything coming from capacitor.build.gradle that might set 21.
  */
 subprojects {
     afterEvaluate { proj ->
