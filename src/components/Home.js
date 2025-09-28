@@ -178,6 +178,16 @@ export default function Home() {
   const [allMedsByPharmacy, setAllMedsByPharmacy] = useState({});
   const [canDeliver, setCanDeliver] = useState(true);
 
+   // Hard-redirect first-run users to profile setup
+  useEffect(() => {
+    if (!user) return;
+    const missingRequired = !user.name || !user.email || !user.dob;
+    if (!user.profileCompleted || missingRequired) {
+      navigate("/profile?setup=1", { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?._id]);
+
   // Dialog state (reuse Medicines.js UI)
   const [selectedMed, setSelectedMed] = useState(null);
   const [activeImg, setActiveImg] = useState(0);

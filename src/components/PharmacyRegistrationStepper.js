@@ -257,14 +257,22 @@ const StepContent = React.memo(function StepContent({
         {/* (E) Legal Entity Name just under Pharmacy Name */}
         <div>
           <Label className="font-semibold text-emerald-900 flex items-center gap-1">
-            <Building2 className="h-3.5 w-3.5" /> Legal Entity Name (optional)
-          </Label>
-          <Input
-            name="legalEntityName"
-            value={safe(form.legalEntityName)}
-            onChange={handleChange}
-            placeholder="e.g., Karniva Private Limited"
-          />
+  <Building2 className="h-3.5 w-3.5" /> Legal Entity Name
+</Label>
+<Input
+  name="legalEntityName"
+  required
+  value={safe(form.legalEntityName)}
+  onChange={handleChange}
+  className={errors.legalEntityName ? "ring-2 ring-red-400" : ""}
+  placeholder="e.g., Karniva Private Limited"
+/>
+{errors.legalEntityName && (
+  <div className="text-red-600 text-xs font-semibold mt-1">
+    Legal entity name required
+  </div>
+)}
+
         </div>
 
         <div>
@@ -1026,6 +1034,7 @@ export default function PharmacyRegistrationStepper() {
     let tempErr = {};
     if (step === 0) {
       if (!form.name) tempErr.name = true;
+      if (!form.legalEntityName) tempErr.legalEntityName = true;
       if (!form.ownerName) tempErr.ownerName = true;
       if (!form.city) tempErr.city = true;
       if (!form.area) tempErr.area = true;

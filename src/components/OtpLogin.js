@@ -52,12 +52,20 @@ export default function OtpLogin({ onLogin }) {
         mobile: decoded.mobile,
         email: decoded.email,
         name: decoded.name,
+        profileCompleted: decoded.profileCompleted, // if backend includes it
+        dob: decoded.dob, // if backend includes it
       };
       login(userObj, token);
 
       if (onLogin) onLogin(userObj);
 
-      window.location.href = "/"; // Or use navigate("/home");
+      const needsProfile =
+        userObj?.profileCompleted === false ||
+        !userObj?.name ||
+        !userObj?.email ||
+        !userObj?.dob;
+
+      window.location.href = needsProfile ? "/profile?setup=1" : "/";
     } catch (err) {
       setSnack({ open: true, msg: err.response?.data?.error || "OTP verification failed.", severity: "error" });
     }
