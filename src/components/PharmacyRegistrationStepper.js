@@ -31,6 +31,7 @@ const API_BASE_URL =
 /* -------------------- constants (unchanged logic) -------------------- */
 const initialForm = {
   name: "",
+  legalEntityName: "", // 👈 NEW (A)
   ownerName: "",
   city: "",
   area: "",
@@ -67,7 +68,7 @@ const hours = Array.from({ length: 12 }, (_, i) =>
   String(i + 1).padStart(2, "0")
 );
 const minutes = ["00", "15", "30", "45"];
-const fileTypes = ".jpg,.jpeg,.png,.pdf";
+const fileTypes = "image/*,application/pdf"; // (B) broadened for camera + pdf
 const steps = [
   "Pharmacy & Owner Details",
   "Licenses & Credentials",
@@ -175,6 +176,50 @@ function StepperHeader({ step }) {
   );
 }
 
+/* -------------------- (C) tiny helpers for camera merges -------------- */
+async function readImageBitmap(file) {
+  const buf = await file.arrayBuffer();
+  const blob = new Blob([buf], { type: file.type });
+  return await createImageBitmap(blob);
+}
+
+// Merge N images vertically into a single compressed PNG/JPEG under ~2MB
+async function mergeImagesVerticallyToBlob(files, targetWidth = 1000) {
+  const bitmaps = [];
+  for (const f of files) {
+    if (!f.type.startsWith("image/")) continue;
+    bitmaps.push(await readImageBitmap(f));
+  }
+  if (!bitmaps.length) return null;
+
+  // scale to common width
+  const scaled = bitmaps.map((img) => {
+    const scale = targetWidth / img.width;
+    const w = Math.round(targetWidth);
+    const h = Math.round(img.height * scale);
+    return { img, w, h };
+  });
+  const totalH = scaled.reduce((s, x) => s + x.h, 0);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = totalH;
+  const ctx = canvas.getContext("2d");
+  let y = 0;
+  for (const s of scaled) {
+    ctx.drawImage(s.img, 0, y, s.w, s.h);
+    y += s.h;
+  }
+
+  // Try JPEG first for better size; fallback PNG
+  const tryQualities = [0.85, 0.72, 0.6, 0.5, 0.4];
+  for (const q of tryQualities) {
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", q));
+    if (blob && blob.size <= 2 * 1024 * 1024) return blob;
+  }
+  return await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.35));
+}
+
 /* ---------------------------- Step content --------------------------- */
 const StepContent = React.memo(function StepContent({
   step,
@@ -193,306 +238,319 @@ const StepContent = React.memo(function StepContent({
   setForm,
 }) {
   if (step === 0)
-  return (
-    <div className="space-y-3">
-      <div>
-        <Label className="font-semibold text-emerald-900 flex items-center gap-1">
-          <Building2 className="h-3.5 w-3.5" /> Pharmacy Name
-        </Label>
-      </div>
-      <Input
-        name="name"
-        required
-        value={safe(form.name)}
-        onChange={handleChange}
-        className={errors.name ? "ring-2 ring-red-400" : ""}
-        placeholder="Your pharmacy name"
-      />
-
-      <div>
-        <Label className="font-semibold text-emerald-900 flex items-center gap-1">
-          <UserRound className="h-3.5 w-3.5" /> Pharmacist's Name (Owner)
-        </Label>
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label className="font-semibold text-emerald-900 flex items-center gap-1">
+            <Building2 className="h-3.5 w-3.5" /> Pharmacy Name
+          </Label>
+        </div>
         <Input
-          name="ownerName"
+          name="name"
           required
-          value={safe(form.ownerName)}
+          value={safe(form.name)}
           onChange={handleChange}
-          className={errors.ownerName ? "ring-2 ring-red-400" : ""}
-          placeholder="Owner full name"
+          className={errors.name ? "ring-2 ring-red-400" : ""}
+          placeholder="Your pharmacy name"
         />
-      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <Label className="font-semibold text-emerald-900">City</Label>
-          <Input
-            name="city"
-            required
-            value={safe(form.city)}
-            onChange={handleChange}
-            className={errors.city ? "ring-2 ring-red-400" : ""}
-            placeholder="City"
-          />
-        </div>
-        <div>
-          <Label className="font-semibold text-emerald-900">Area</Label>
-          <Input
-            name="area"
-            required
-            value={safe(form.area)}
-            onChange={handleChange}
-            className={errors.area ? "ring-2 ring-red-400" : ""}
-            placeholder="Area / Locality"
-          />
-        </div>
-      </div>
-
-      <div>
-        <Label className="font-semibold text-emerald-900">Full Address</Label>
-        <Textarea
-          name="address"
-          required
-          value={safe(form.address)}
-          onChange={handleChange}
-          className={errors.address ? "ring-2 ring-red-400" : ""}
-          rows={3}
-          placeholder="Building, street, landmark…"
-        />
-      </div>
-
-      {/* Set Current Location — now bold */}
-      <Button
-        type="button"
-        aria-label="Set Current Location"
-        onClick={async () => {
-          if (!navigator.geolocation) {
-            alert("Geolocation is not supported on this device/browser.");
-            return;
-          }
-          navigator.geolocation.getCurrentPosition(
-            async (pos) => {
-              try {
-                const res = await axios.get(
-                  `${API_BASE_URL}/api/geocode?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}`
-                );
-                const formatted = res.data.results?.[0]?.formatted_address || "";
-                setForm((f) => ({
-                  ...f,
-                  lat: pos.coords.latitude,
-                  lng: pos.coords.longitude,
-                  formattedLocation: formatted,
-                }));
-              } catch {
-                setForm((f) => ({
-                  ...f,
-                  lat: pos.coords.latitude,
-                  lng: pos.coords.longitude,
-                  formattedLocation: `Lat: ${pos.coords.latitude.toFixed(5)}, Lng: ${pos.coords.longitude.toFixed(5)}`,
-                }));
-              }
-            },
-            (err) => alert("Could not fetch location: " + err.message)
-          );
-        }}
-        className={`w-full rounded-xl font-extrabold ${
-          form.lat && form.lng ? "bg-emerald-700 text-white" : "bg-white text-emerald-800"
-        } border border-emerald-200 hover:bg-emerald-50`}
-      >
-        <MapPin className="h-4 w-4 mr-2" />
-        {form.lat && form.lng ? "Location Set" : "Set Current Location"}
-      </Button>
-      {form.lat && form.lng && (
-        <div className="text-emerald-700 text-xs font-bold">
-          Location: {form.formattedLocation}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* (E) Legal Entity Name just under Pharmacy Name */}
         <div>
           <Label className="font-semibold text-emerald-900 flex items-center gap-1">
-            <Phone className="h-3.5 w-3.5" /> Contact Number
+            <Building2 className="h-3.5 w-3.5" /> Legal Entity Name (optional)
           </Label>
           <Input
-            name="contact"
-            required
-            value={safe(form.contact)}
+            name="legalEntityName"
+            value={safe(form.legalEntityName)}
             onChange={handleChange}
-            inputMode="numeric"
-            maxLength={10}
-            className={errors.contact ? "ring-2 ring-red-400" : ""}
-            placeholder="10 digit mobile"
+            placeholder="e.g., Karniva Private Limited"
           />
-          {errors.contact && (
-            <div className="text-red-600 text-xs font-semibold mt-1">
-              10-digit number
-            </div>
-          )}
         </div>
+
         <div>
           <Label className="font-semibold text-emerald-900 flex items-center gap-1">
-            <Mail className="h-3.5 w-3.5" /> Login Email
+            <UserRound className="h-3.5 w-3.5" /> Pharmacist's Name (Owner)
           </Label>
           <Input
-            name="email"
-            type="email"
+            name="ownerName"
             required
-            value={safe(form.email)}
+            value={safe(form.ownerName)}
             onChange={handleChange}
-            className={errors.email ? "ring-2 ring-red-400" : ""}
-            placeholder="name@example.com"
+            className={errors.ownerName ? "ring-2 ring-red-400" : ""}
+            placeholder="Owner full name"
           />
-          {errors.email && (
-            <div className="text-red-600 text-xs font-semibold mt-1">
-              Valid email required
-            </div>
-          )}
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <Label className="font-semibold text-emerald-900">City</Label>
+            <Input
+              name="city"
+              required
+              value={safe(form.city)}
+              onChange={handleChange}
+              className={errors.city ? "ring-2 ring-red-400" : ""}
+              placeholder="City"
+            />
+          </div>
+          <div>
+            <Label className="font-semibold text-emerald-900">Area</Label>
+            <Input
+              name="area"
+              required
+              value={safe(form.area)}
+              onChange={handleChange}
+              className={errors.area ? "ring-2 ring-red-400" : ""}
+              placeholder="Area / Locality"
+            />
+          </div>
+        </div>
+
         <div>
-          <Label className="font-semibold text-emerald-900 flex items-center gap-1">
-            <KeyRound className="h-3.5 w-3.5" /> Password
-          </Label>
-          <Input
-            name="password"
-            type="password"
+          <Label className="font-semibold text-emerald-900">Full Address</Label>
+          <Textarea
+            name="address"
             required
-            value={safe(form.password)}
+            value={safe(form.address)}
             onChange={handleChange}
-            className={errors.password ? "ring-2 ring-red-400" : ""}
-            placeholder="Min 6 characters"
+            className={errors.address ? "ring-2 ring-red-400" : ""}
+            rows={3}
+            placeholder="Building, street, landmark…"
           />
-          {errors.password && (
-            <div className="text-red-600 text-xs font-semibold mt-1">
-              Min 6 characters
-            </div>
-          )}
         </div>
-        <div>
-          <Label className="font-semibold text-emerald-900 flex items-center gap-1">
-            <Hash className="h-3.5 w-3.5" /> 4-digit Login PIN
-          </Label>
-          <Input
-            name="pin"
-            type="password"
-            required
-            value={safe(form.pin)}
-            onChange={handleChange}
-            inputMode="numeric"
-            maxLength={4}
-            className={errors.pin ? "ring-2 ring-red-400" : ""}
-            placeholder="Unique 4-digit PIN"
-          />
-          {errors.pin && (
-            <div className="text-red-600 text-xs font-semibold mt-1">
-              PIN must be 4 digits, unique, not same as mobile
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* Timings (mobile-safe; wraps instead of overflowing) */}
-      <div className="rounded-xl border border-emerald-200 p-3">
-        <label className="inline-flex items-center gap-2 font-bold text-emerald-900">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-emerald-700"
-            checked={!!form.open24}
-            onChange={(e) => handleTimingChange("open24", e.target.checked)}
-          />
-          Open 24 Hours
-        </label>
+        {/* Set Current Location — now bold */}
+        <Button
+          type="button"
+          aria-label="Set Current Location"
+          onClick={async () => {
+            if (!navigator.geolocation) {
+              alert("Geolocation is not supported on this device/browser.");
+              return;
+            }
+            navigator.geolocation.getCurrentPosition(
+              async (pos) => {
+                try {
+                  const res = await axios.get(
+                    `${API_BASE_URL}/api/geocode?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}`
+                  );
+                  const formatted = res.data.results?.[0]?.formatted_address || "";
+                  setForm((f) => ({
+                    ...f,
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    formattedLocation: formatted,
+                  }));
+                } catch {
+                  setForm((f) => ({
+                    ...f,
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    formattedLocation: `Lat: ${pos.coords.latitude.toFixed(5)}, Lng: ${pos.coords.longitude.toFixed(5)}`,
+                  }));
+                }
+              },
+              (err) => alert("Could not fetch location: " + err.message)
+            );
+          }}
+          className={`w-full rounded-xl font-extrabold ${
+            form.lat && form.lng ? "bg-emerald-700 text-white" : "bg-white text-emerald-800"
+          } border border-emerald-200 hover:bg-emerald-50`}
+        >
+          <MapPin className="h-4 w-4 mr-2" />
+          {form.lat && form.lng ? "Location Set" : "Set Current Location"}
+        </Button>
+        {form.lat && form.lng && (
+          <div className="text-emerald-700 text-xs font-bold">
+            Location: {form.formattedLocation}
+          </div>
+        )}
 
-        {!form.open24 && (
-          <div className="mt-3">
-            <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-6">
-              {/* From */}
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-[11px] font-bold text-emerald-900">From</span>
-                <div className="flex gap-2 flex-wrap justify-center sm:flex-nowrap">
-                  <select
-                    value={safe(form.timingFromHour)}
-                    onChange={(e) => handleTimingChange("timingFromHour", e.target.value)}
-                    className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
-                  >
-                    <option value="">HH</option>
-                    {hours.map((h) => (
-                      <option key={h} value={h}>{h}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={safe(form.timingFromMinute)}
-                    onChange={(e) => handleTimingChange("timingFromMinute", e.target.value)}
-                    className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
-                  >
-                    <option value="">MM</option>
-                    {minutes.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={safe(form.timingFromAmPm)}
-                    onChange={(e) => handleTimingChange("timingFromAmPm", e.target.value)}
-                    className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
-                  >
-                    <option value="">AM/PM</option>
-                    <option value="AM">AM</option>
-                    <option value="PM">PM</option>
-                  </select>
-                </div>
-              </div>
-
-              <Clock className="hidden sm:block h-5 w-5 text-emerald-700" />
-
-              {/* To */}
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-[11px] font-bold text-emerald-900">To</span>
-                <div className="flex gap-2 flex-wrap justify-center sm:flex-nowrap">
-                  <select
-                    value={safe(form.timingToHour)}
-                    onChange={(e) => handleTimingChange("timingToHour", e.target.value)}
-                    className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
-                  >
-                    <option value="">HH</option>
-                    {hours.map((h) => (
-                      <option key={h} value={h}>{h}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={safe(form.timingToMinute)}
-                    onChange={(e) => handleTimingChange("timingToMinute", e.target.value)}
-                    className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
-                  >
-                    <option value="">MM</option>
-                    {minutes.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={safe(form.timingToAmPm)}
-                    onChange={(e) => handleTimingChange("timingToAmPm", e.target.value)}
-                    className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
-                  >
-                    <option value="">AM/PM</option>
-                    <option value="AM">AM</option>
-                    <option value="PM">PM</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {errors.pharmacyTimings && (
-              <div className="text-red-600 text-xs font-semibold text-center mt-2">
-                Please fill complete timings or select “24 Hours”
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <Label className="font-semibold text-emerald-900 flex items-center gap-1">
+              <Phone className="h-3.5 w-3.5" /> Contact Number
+            </Label>
+            <Input
+              name="contact"
+              required
+              value={safe(form.contact)}
+              onChange={handleChange}
+              inputMode="numeric"
+              maxLength={10}
+              className={errors.contact ? "ring-2 ring-red-400" : ""}
+              placeholder="10 digit mobile"
+            />
+            {errors.contact && (
+              <div className="text-red-600 text-xs font-semibold mt-1">
+                10-digit number
               </div>
             )}
           </div>
-        )}
+          <div>
+            <Label className="font-semibold text-emerald-900 flex items-center gap-1">
+              <Mail className="h-3.5 w-3.5" /> Login Email
+            </Label>
+            <Input
+              name="email"
+              type="email"
+              required
+              value={safe(form.email)}
+              onChange={handleChange}
+              className={errors.email ? "ring-2 ring-red-400" : ""}
+              placeholder="name@example.com"
+            />
+            {errors.email && (
+              <div className="text-red-600 text-xs font-semibold mt-1">
+                Valid email required
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <Label className="font-semibold text-emerald-900 flex items-center gap-1">
+              <KeyRound className="h-3.5 w-3.5" /> Password
+            </Label>
+            <Input
+              name="password"
+              type="password"
+              required
+              value={safe(form.password)}
+              onChange={handleChange}
+              className={errors.password ? "ring-2 ring-red-400" : ""}
+              placeholder="Min 6 characters"
+            />
+            {errors.password && (
+              <div className="text-red-600 text-xs font-semibold mt-1">
+                Min 6 characters
+              </div>
+            )}
+          </div>
+          <div>
+            <Label className="font-semibold text-emerald-900 flex items-center gap-1">
+              <Hash className="h-3.5 w-3.5" /> 4-digit Login PIN
+            </Label>
+            <Input
+              name="pin"
+              type="password"
+              required
+              value={safe(form.pin)}
+              onChange={handleChange}
+              inputMode="numeric"
+              maxLength={4}
+              className={errors.pin ? "ring-2 ring-red-400" : ""}
+              placeholder="Unique 4-digit PIN"
+            />
+            {errors.pin && (
+              <div className="text-red-600 text-xs font-semibold mt-1">
+                PIN must be 4 digits, unique, not same as mobile
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Timings (mobile-safe; wraps instead of overflowing) */}
+        <div className="rounded-xl border border-emerald-200 p-3">
+          <label className="inline-flex items-center gap-2 font-bold text-emerald-900">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-emerald-700"
+              checked={!!form.open24}
+              onChange={(e) => handleTimingChange("open24", e.target.checked)}
+            />
+            Open 24 Hours
+          </label>
+
+          {!form.open24 && (
+            <div className="mt-3">
+              <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-6">
+                {/* From */}
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-[11px] font-bold text-emerald-900">From</span>
+                  <div className="flex gap-2 flex-wrap justify-center sm:flex-nowrap">
+                    <select
+                      value={safe(form.timingFromHour)}
+                      onChange={(e) => handleTimingChange("timingFromHour", e.target.value)}
+                      className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
+                    >
+                      <option value="">HH</option>
+                      {hours.map((h) => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={safe(form.timingFromMinute)}
+                      onChange={(e) => handleTimingChange("timingFromMinute", e.target.value)}
+                      className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
+                    >
+                      <option value="">MM</option>
+                      {minutes.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={safe(form.timingFromAmPm)}
+                      onChange={(e) => handleTimingChange("timingFromAmPm", e.target.value)}
+                      className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
+                    >
+                      <option value="">AM/PM</option>
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </div>
+                </div>
+
+                <Clock className="hidden sm:block h-5 w-5 text-emerald-700" />
+
+                {/* To */}
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-[11px] font-bold text-emerald-900">To</span>
+                  <div className="flex gap-2 flex-wrap justify-center sm:flex-nowrap">
+                    <select
+                      value={safe(form.timingToHour)}
+                      onChange={(e) => handleTimingChange("timingToHour", e.target.value)}
+                      className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
+                    >
+                      <option value="">HH</option>
+                      {hours.map((h) => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={safe(form.timingToMinute)}
+                      onChange={(e) => handleTimingChange("timingToMinute", e.target.value)}
+                      className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
+                    >
+                      <option value="">MM</option>
+                      {minutes.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={safe(form.timingToAmPm)}
+                      onChange={(e) => handleTimingChange("timingToAmPm", e.target.value)}
+                      className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
+                    >
+                      <option value="">AM/PM</option>
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {errors.pharmacyTimings && (
+                <div className="text-red-600 text-xs font-semibold text-center mt-2">
+                  Please fill complete timings or select “24 Hours”
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
 
   if (step === 1)
     return (
@@ -549,89 +607,169 @@ const StepContent = React.memo(function StepContent({
           </div>
         </div>
 
-        {/* Required docs */}
-        {Object.keys(requiredDocs).map((k) => (
-          <div key={k} className="space-y-1">
-            <Label className="font-semibold text-emerald-900">
-              {requiredDocs[k]} <span className="text-red-600">*</span>
-            </Label>
-            <label className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition">
-              <FileUp className="h-4 w-4" />
-              Upload
-              <input
-                type="file"
-                accept={fileTypes}
-                hidden
-                onChange={(e) => handleFile(e, k)}
-              />
-            </label>
-            <div className="text-xs font-semibold">
-              {files[k] instanceof File && (
-                <span className="text-emerald-700">Selected: {files[k].name}</span>
-              )}
-              {!files[k] && (errors[k] || fileErrors[k]) && (
-                <span className="text-red-600">{fileErrors[k] || "Required"}</span>
-              )}
-            </div>
-          </div>
-        ))}
+        {/* (F) Required docs with Upload + Camera, multi-capture */}
+        {Object.keys(requiredDocs).map((k) => {
+          const inputId = `${k}-file`;
+          return (
+            <div key={k} className="space-y-1">
+              <Label className="font-semibold text-emerald-900">
+                {requiredDocs[k]} <span className="text-red-600">*</span>
+              </Label>
 
-        {/* Optional docs */}
-        {Object.keys(optionalDocs).map((k) => (
-          <div key={k} className="space-y-1">
-            <Label className="font-semibold text-emerald-900">
-              {optionalDocs[k]}
-            </Label>
-            <label className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition">
-              <FileUp className="h-4 w-4" />
-              Upload
-              <input
-                type="file"
-                accept={fileTypes}
-                hidden
-                onChange={(e) => handleFile(e, k)}
-              />
-            </label>
-            <div className="text-xs font-semibold">
-              {files[k] instanceof File && (
-                <span className="text-emerald-700">Selected: {files[k].name}</span>
-              )}
-              {fileErrors[k] && <span className="text-red-600">{fileErrors[k]}</span>}
+              <div className="flex items-center gap-2">
+                <input
+                  id={inputId}
+                  type="file"
+                  accept={fileTypes}
+                  multiple
+                  capture="environment"
+                  hidden
+                  onChange={(e) => handleFile(e, k)}
+                />
+
+                <label
+                  htmlFor={inputId}
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition"
+                >
+                  <FileUp className="h-4 w-4" />
+                  Upload
+                </label>
+
+                <label
+                  htmlFor={inputId}
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-50 transition"
+                  title="Use camera (mobile)"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                  </svg>
+                  Camera
+                </label>
+              </div>
+
+              <div className="text-xs font-semibold">
+                {files[k] instanceof File && (
+                  <span className="text-emerald-700">
+                    Selected: {files[k].name}
+                  </span>
+                )}
+                {!files[k] && (errors[k] || fileErrors[k]) && (
+                  <span className="text-red-600">{fileErrors[k] || "Required"}</span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+
+        {/* Optional docs with the same pattern */}
+        {Object.keys(optionalDocs).map((k) => {
+          const inputId = `${k}-file`;
+          return (
+            <div key={k} className="space-y-1">
+              <Label className="font-semibold text-emerald-900">
+                {optionalDocs[k]}
+              </Label>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id={inputId}
+                  type="file"
+                  accept={fileTypes}
+                  multiple
+                  capture="environment"
+                  hidden
+                  onChange={(e) => handleFile(e, k)}
+                />
+
+                <label
+                  htmlFor={inputId}
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition"
+                >
+                  <FileUp className="h-4 w-4" />
+                  Upload
+                </label>
+
+                <label
+                  htmlFor={inputId}
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-50 transition"
+                  title="Use camera (mobile)"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                  </svg>
+                  Camera
+                </label>
+              </div>
+
+              <div className="text-xs font-semibold">
+                {files[k] instanceof File && (
+                  <span className="text-emerald-700">Selected: {files[k].name}</span>
+                )}
+                {fileErrors[k] && <span className="text-red-600">{fileErrors[k]}</span>}
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
 
   if (step === 2)
     return (
       <div className="space-y-3">
-        {["identityProof", "addressProof", "photo"].map((k) => (
-          <div key={k} className="space-y-1">
-            <Label className="font-semibold text-emerald-900">
-              {requiredDocs[k]}
-              <span className="text-red-600"> *</span>
-            </Label>
-            <label className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition">
-              <FileUp className="h-4 w-4" />
-              Upload
-              <input
-                type="file"
-                accept={fileTypes}
-                hidden
-                onChange={(e) => handleFile(e, k)}
-              />
-            </label>
-            <div className="text-xs font-semibold">
-              {files[k] instanceof File && (
-                <span className="text-emerald-700">Selected: {files[k].name}</span>
-              )}
-              {!files[k] && (errors[k] || fileErrors[k]) && (
-                <span className="text-red-600">{fileErrors[k] || "Required"}</span>
-              )}
+        {["identityProof", "addressProof", "photo"].map((k) => {
+          const inputId = `${k}-file`;
+          return (
+            <div key={k} className="space-y-1">
+              <Label className="font-semibold text-emerald-900">
+                {requiredDocs[k]}
+                <span className="text-red-600"> *</span>
+              </Label>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id={inputId}
+                  type="file"
+                  accept={fileTypes}
+                  multiple
+                  capture="environment"
+                  hidden
+                  onChange={(e) => handleFile(e, k)}
+                />
+
+                <label
+                  htmlFor={inputId}
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition"
+                >
+                  <FileUp className="h-4 w-4" />
+                  Upload
+                </label>
+
+                <label
+                  htmlFor={inputId}
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-50 transition"
+                  title="Use camera (mobile)"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                  </svg>
+                  Camera
+                </label>
+              </div>
+
+              <div className="text-xs font-semibold">
+                {files[k] instanceof File && (
+                  <span className="text-emerald-700">Selected: {files[k].name}</span>
+                )}
+                {!files[k] && (errors[k] || fileErrors[k]) && (
+                  <span className="text-red-600">{fileErrors[k] || "Required"}</span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
 
@@ -723,16 +861,39 @@ const StepContent = React.memo(function StepContent({
           <Label className="font-semibold text-emerald-900">
             Digital Signature (optional)
           </Label>
-          <label className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition">
-            <FileUp className="h-4 w-4" />
-            Upload
+
+          {/* (F) Upload + Camera for digital signature too */}
+          <div className="flex items-center gap-2">
             <input
+              id="digitalSignature-file"
               type="file"
               accept={fileTypes}
+              multiple
+              capture="environment"
               hidden
               onChange={(e) => handleFile(e, "digitalSignature")}
             />
-          </label>
+
+            <label
+              htmlFor="digitalSignature-file"
+              className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition"
+            >
+              <FileUp className="h-4 w-4" />
+              Upload
+            </label>
+
+            <label
+              htmlFor="digitalSignature-file"
+              className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-50 transition"
+              title="Use camera (mobile)"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+              Camera
+            </label>
+          </div>
         </div>
       </div>
     );
@@ -809,14 +970,47 @@ export default function PharmacyRegistrationStepper() {
     setErrors((er) => ({ ...er, pharmacyTimings: undefined }));
   };
 
-  // file logic (preserved)
-  const handleFile = (e, key) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  // (D) file logic: supports multi images -> merged single file, 2MB cap
+  const handleFile = async (e, key) => {
+    const flist = Array.from(e.target.files || []);
+    if (!flist.length) return;
+
+    // If multiple images, merge vertically into one file
+    const allAreImages = flist.every((f) => f.type.startsWith("image/"));
+    if (flist.length > 1 && allAreImages) {
+      try {
+        const mergedBlob = await mergeImagesVerticallyToBlob(flist, 1000);
+        if (!mergedBlob) {
+          setFileErrors((f) => ({ ...f, [key]: "Couldn’t process images" }));
+          return;
+        }
+        if (mergedBlob.size > 2 * 1024 * 1024) {
+          setFileErrors((f) => ({ ...f, [key]: "Merged file exceeds 2MB" }));
+          return;
+        }
+        const mergedFile = new File([mergedBlob], `${key}-merged.jpg`, { type: "image/jpeg" });
+        setFileErrors((f) => ({ ...f, [key]: undefined }));
+        setFiles((f) => ({ ...f, [key]: mergedFile }));
+        return;
+      } catch (err) {
+        setFileErrors((f) => ({ ...f, [key]: "Merge failed" }));
+        return;
+      }
+    }
+
+    // Single file path (image or PDF)
+    const file = flist[0];
     if (
-      !["image/jpeg", "image/png", "application/pdf"].includes(file.type)
+      ![
+        "image/jpeg",
+        "image/png",
+        "application/pdf",
+        "image/heic",
+        "image/webp",
+        "image/jpg",
+      ].includes(file.type)
     ) {
-      setFileErrors((f) => ({ ...f, [key]: "Invalid file type" }));
+      setFileErrors((f) => ({ ...f, [key]: "Invalid file type (use PDF/JPG/PNG)" }));
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
@@ -941,11 +1135,6 @@ export default function PharmacyRegistrationStepper() {
           throw new Error("Missing file: " + f);
         }
       });
-
-      // debug print (unchanged)
-      /* for (let [k, v] of fd.entries()) {
-        console.log(k, v instanceof File ? "(file) " + v.name : v);
-      } */
 
       setMsg("");
       await axios.post(`${API_BASE_URL}/api/pharmacy/register`, fd, {
