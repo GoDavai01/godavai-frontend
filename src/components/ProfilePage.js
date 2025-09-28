@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useThemeMode } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import axios from "axios";
 import creditCardType from "credit-card-type";
 import ChatSupportModal from "./ChatSupportModal";
@@ -44,6 +45,7 @@ const cardIcons = {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, setUser, logout, token, addresses, updateAddresses } = useAuth();
   const [chatSupportOpen, setChatSupportOpen] = useState(false);
 
@@ -76,8 +78,15 @@ export default function ProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar || "");
   const fileInputRef = useRef();
 
+  // ---- First-run detection ----
+  const search = new URLSearchParams(location.search);
+  const forceSetup = search.get("setup") === "1";
+  const missingRequired = !user?.name || !user?.email || !user?.dob;
+  const isFirstRun = forceSetup || !user?.profileCompleted || missingRequired;
+
   useEffect(() => {
-    if (user && (!user.name || !user.email || !user.dob)) {
+    if (!user) return;
+    if (isFirstRun) {
       setEditDialog(true);
       setEditData({
         name: user.name || "",
@@ -88,7 +97,8 @@ export default function ProfilePage() {
       });
       setAvatarPreview(user.avatar || "");
     }
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?._id]); // run when the logged-in user is loaded
 
   const handleEditProfileOpen = () => {
     setEditData({
@@ -115,13 +125,20 @@ export default function ProfilePage() {
 
   const handleProfileSave = async () => {
     try {
-      await axios.put(`${API_BASE_URL}/api/users/${user._id}`, editData);
+      // Mark as completed on save
+      await axios.put(`${API_BASE_URL}/api/users/${user._id}`, {
+        ...editData,
+        profileCompleted: true,
+      });
       setSnackbar({ open: true, message: "Profile updated!", severity: "success" });
       const updatedProfile = await axios.get(`${API_BASE_URL}/api/profile`, {
         headers: { Authorization: "Bearer " + token },
       });
       setUser(updatedProfile.data);
       setEditDialog(false);
+
+      // After first-time setup, go Home (safe to always redirect)
+      navigate("/", { replace: true });
     } catch {
       setSnackbar({ open: true, message: "Failed to update!", severity: "error" });
     }
@@ -525,8 +542,8 @@ export default function ProfilePage() {
                   className="gd-input"
                   value={cardForm.expiry}
                   onChange={(e) => {
-                    let v = e.target.value.replace(/[^\d/]/g, "").slice(0, 5);
-                    if (v.length === 2 && !v.includes("/")) v += "/";
+                    let v = e.target.value.replace(/[^\d/]/g, "").slice(0, 4);
+                    if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2, 4);
                     setCardForm((f) => ({ ...f, expiry: v }));
                   }}
                   placeholder="MM/YY"
@@ -931,8 +948,17 @@ export default function ProfilePage() {
       <Dialog
         open={editDialog}
         onOpenChange={(open) => {
-          if (!open && editData.name && editData.email && editData.dob) setEditDialog(false);
-          else if (open) setEditDialog(true);
+          // On first run, do NOT allow closing until required fields are set
+          if (open) return setEditDialog(true);
+          if (isFirstRun) {
+            if (editData.name && editData.email && editData.dob) {
+              setEditDialog(false);
+            } else {
+              setEditDialog(true);
+            }
+          } else {
+            setEditDialog(false);
+          }
         }}
       >
         <DialogContent className="sm:max-w-md force-light">
@@ -974,17 +1000,17 @@ export default function ProfilePage() {
                   disabled={!canEditMobile}
                   placeholder="Add your mobile number"
                 />
-                {mobileLocked && (
+                {canEditMobile ? null : (
                   <Button type="button" variant="outline" className="btn-outline-soft !font-bold">
                     Change
                   </Button>
                 )}
               </div>
-              {!mobileLocked && (
+              {canEditMobile ? (
                 <div className="mt-1 text-xs text-slate-500">
                   You can add or edit your mobile now. When phone login launches, we’ll ask you to verify it.
                 </div>
-              )}
+              ) : null}
             </Field>
 
             <Field label="DOB">
@@ -993,9 +1019,15 @@ export default function ProfilePage() {
           </div>
 
           <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
-            <Button variant="ghost" className="btn-ghost-soft !font-bold w-full sm:w-auto" onClick={() => setEditDialog(false)} disabled={!editData.name || !editData.email || !editData.dob}>
-              Cancel
-            </Button>
+            {!isFirstRun && (
+              <Button
+                variant="ghost"
+                className="btn-ghost-soft !font-bold w-full sm:w-auto"
+                onClick={() => setEditDialog(false)}
+              >
+                Cancel
+              </Button>
+            )}
             <Button className="btn-primary-emerald !font-bold w-full sm:w-auto" onClick={handleProfileSave} disabled={!editData.name || !editData.email || !editData.dob}>
               Save
             </Button>
