@@ -29,7 +29,11 @@ export default function OtpLogin({ onLogin }) {
       setStep(2);
       setSnack({ open: true, msg: "OTP sent!", severity: "success" });
     } catch (err) {
-      setSnack({ open: true, msg: err.response?.data?.error || "Error sending OTP.", severity: "error" });
+      setSnack({
+        open: true,
+        msg: err.response?.data?.error || "Error sending OTP.",
+        severity: "error"
+      });
     }
     setLoading(false);
   };
@@ -41,10 +45,12 @@ export default function OtpLogin({ onLogin }) {
     }
     setLoading(true);
     try {
-      const res = await axios.post(`${API_BASE_URL}/api/auth/verify-otp`, { identifier, otp });
+      const res = await axios.post(`${API_BASE_URL}/api/auth/verify-otp`, {
+        identifier,
+        otp
+      });
       setSnack({ open: true, msg: "Login Successful!", severity: "success" });
 
-      // Save token, decode user basics, update AuthContext immediately
       const token = res.data.token;
       const decoded = jwtDecode(token);
       const userObj = {
@@ -52,13 +58,12 @@ export default function OtpLogin({ onLogin }) {
         mobile: decoded.mobile,
         email: decoded.email,
         name: decoded.name,
-        profileCompleted: decoded.profileCompleted, // may be undefined
-        dob: decoded.dob, // may be undefined
+        profileCompleted: decoded.profileCompleted,
+        dob: decoded.dob,
       };
       login(userObj, token);
       if (onLogin) onLogin(userObj);
 
-      // Decide landing using ACTUAL profile from backend (not token)
       const { data: profile } = await axios.get(`${API_BASE_URL}/api/profile`, {
         headers: { Authorization: "Bearer " + token },
       });
@@ -71,7 +76,11 @@ export default function OtpLogin({ onLogin }) {
 
       window.location.href = needsProfile ? "/profile?setup=1" : "/";
     } catch (err) {
-      setSnack({ open: true, msg: err.response?.data?.error || "OTP verification failed.", severity: "error" });
+      setSnack({
+        open: true,
+        msg: err.response?.data?.error || "OTP verification failed.",
+        severity: "error"
+      });
     }
     setLoading(false);
   };
@@ -126,7 +135,10 @@ export default function OtpLogin({ onLogin }) {
             onChange={e => setOtp(e.target.value.replace(/\D/g, ""))}
             fullWidth
             autoFocus
-            inputProps={{ maxLength: 6, style: { letterSpacing: 6, fontSize: 24, textAlign: "center" } }}
+            inputProps={{
+              maxLength: 6,
+              style: { letterSpacing: 6, fontSize: 24, textAlign: "center" }
+            }}
           />
           <Button
             variant="contained"

@@ -42,9 +42,9 @@ const API_BASE_URL =
 // Deep green brand color
 const DEEP = "#0f6e51";
 
-// ---- fees / thresholds ----
-const DELIVERY_FEE = 25;
-const FREE_DELIVERY_MIN = 200;
+// ---- delivery fee config ----
+const FEE_PER_KM = 7;        // ₹7 per km
+const MIN_DELIVERY_FEE = 24; // minimum ₹24
 
 // ---------------- helpers (unchanged) ----------------
 function normalizeMedicine(med) {
