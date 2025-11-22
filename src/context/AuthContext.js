@@ -4,7 +4,8 @@ import axios from "axios";
 
 const AuthContext = createContext();
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL =
+  process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 function safeParse(json, fallback = null) {
   try {
@@ -45,7 +46,7 @@ export function AuthProvider({ children }) {
     if (user?._id) {
       axios
         .get(`${API_BASE_URL}/api/users/${user._id}/addresses`)
-        .then(res => setAddresses(res.data || []))
+        .then((res) => setAddresses(res.data || []))
         .catch(() => setAddresses([]));
     } else {
       setAddresses([]);
@@ -56,9 +57,9 @@ export function AuthProvider({ children }) {
     if (token) {
       axios
         .get(`${API_BASE_URL}/api/profile`, {
-          headers: { Authorization: "Bearer " + token }
+          headers: { Authorization: "Bearer " + token },
         })
-        .then(res => setUser(res.data))
+        .then((res) => setUser(res.data))
         .catch(() => setUser(null));
     }
   }, [token]);
@@ -67,7 +68,7 @@ export function AuthProvider({ children }) {
     if (!user?._id) return;
     setAddresses(nextAddresses);
     await axios.put(`${API_BASE_URL}/api/users/${user._id}/addresses`, {
-      addresses: nextAddresses
+      addresses: nextAddresses,
     });
   };
 
