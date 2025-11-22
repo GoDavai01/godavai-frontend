@@ -42,9 +42,13 @@ const API_BASE_URL =
 // Deep green brand color
 const DEEP = "#0f6e51";
 
-// ---- delivery fee config ----
-const FEE_PER_KM = 7;        // ₹7 per km
-const MIN_DELIVERY_FEE = 24; // minimum ₹24
+// ---- delivery + pricing config (FINAL MODEL) ----
+const MOV_MIN = 100; // Minimum order value
+const FREE_DELIVERY_MIN = 500; // Free delivery threshold (within 2.5 km)
+
+const BASE_DELIVERY_FEE = 12; // ₹100–₹499 base fee within 2.5 km
+const EXTRA_KM_THRESHOLD = 2.5; // base radius
+const EXTRA_KM_FEE = 10; // ₹10 per km beyond 2.5 km
 
 // ---------------- helpers (unchanged) ----------------
 function normalizeMedicine(med) {
@@ -63,6 +67,49 @@ function normalizeMedicine(med) {
       ? [med.category]
       : [],
   };
+}
+
+function getCoordsFromPharmacy(pharmacy) {
+  if (!pharmacy) return null;
+  const lat =
+    pharmacy.lat ??
+    pharmacy.latitude ??
+    pharmacy.location?.lat ??
+    pharmacy.location?.latitude;
+  const lng =
+    pharmacy.lng ??
+    pharmacy.longitude ??
+    pharmacy.location?.lng ??
+    pharmacy.location?.longitude;
+  if (typeof lat === "number" && typeof lng === "number") {
+    return { lat, lng };
+  }
+  return null;
+}
+
+function getCoordsFromAddress(addr) {
+  if (!addr) return null;
+  const lat = addr.lat ?? addr.latitude;
+  const lng = addr.lng ?? addr.longitude;
+  if (typeof lat === "number" && typeof lng === "number") {
+    return { lat, lng };
+  }
+  return null;
+}
+
+function haversineKm(a, b) {
+  if (!a || !b) return null;
+  const R = 6371; // km
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+
+  const h =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  return R * c; // km
 }
 
 function loadRazorpayScript(src) {
@@ -91,7 +138,6 @@ async function handlePlaceOrder(
     prescription,
     prescriptionPreview,
     instructions,
-    coupon,
     tip,
     donate,
     deliveryInstructions,
@@ -123,7 +169,6 @@ async function handlePlaceOrder(
       total,
       prescription: prescriptionUrl,
       instructions,
-      coupon,
       tip,
       donate: donate ? 3 : 0,
       deliveryInstructions,
@@ -154,12 +199,18 @@ async function handlePlaceOrder(
 
 // ---------------- Component ----------------
 export default function CheckoutPage() {
-  const { cart, clearCart, selectedPharmacy, addToCart, removeOneFromCart, removeFromCart } =
-    useCart();
+  const {
+    cart,
+    clearCart,
+    selectedPharmacy,
+    addToCart,
+    removeOneFromCart,
+    removeFromCart,
+  } = useCart();
   const removeItemCompletely = (med) => {
-  if (typeof removeFromCart === "function") return removeFromCart(med);
-  for (let i = 0; i < (med.quantity || 1); i++) removeOneFromCart(med);
-};
+    if (typeof removeFromCart === "function") return removeFromCart(med);
+    for (let i = 0; i < (med.quantity || 1); i++) removeOneFromCart(med);
+  };
   const { user, token, addresses, updateAddresses } = useAuth();
   const { currentAddress } = useLocContext();
   const navigate = useNavigate();
@@ -272,8 +323,6 @@ export default function CheckoutPage() {
   // UI state
   const [toast, setToast] = useState(null); // {type, message}
   const [loading, setLoading] = useState(false);
-  const [coupon, setCoupon] = useState("");
-  const [couponApplied, setCouponApplied] = useState(false);
   const [instructions, setInstructions] = useState("");
   const [wantChemistInstruction, setWantChemistInstruction] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
@@ -286,6 +335,7 @@ export default function CheckoutPage() {
   const prescriptionInput = useRef();
   const [prescription, setPrescription] = useState(null);
   const [prescriptionPreview, setPrescriptionPreview] = useState(null);
+  const [distanceKm, setDistanceKm] = useState(null);
 
   // smart suggestions
   const [rawSuggestions, setRawSuggestions] = useState([]);
@@ -297,36 +347,178 @@ export default function CheckoutPage() {
       setSelectedAddressId(allAddresses[0].id);
   }, [allAddresses, selectedAddressId]);
 
+  // distance between pharmacy & selected address
+  useEffect(() => {
+    const addr =
+      isPrescriptionFlow && lockedAddress
+        ? lockedAddress
+        : allAddresses.find((a) => a.id === selectedAddressId);
+
+    const pharmacyCoords = getCoordsFromPharmacy(selectedPharmacy);
+    const addrCoords = getCoordsFromAddress(addr);
+
+    const d = haversineKm(pharmacyCoords, addrCoords);
+    if (d && !Number.isNaN(d)) {
+      setDistanceKm(d);
+    } else {
+      setDistanceKm(null); // treat as within base radius
+    }
+  }, [
+    selectedPharmacy,
+    allAddresses,
+    selectedAddressId,
+    isPrescriptionFlow,
+    lockedAddress,
+  ]);
+
+  // suggestions fetch
+  useEffect(() => {
+    if (
+      isPrescriptionFlow ||
+      !selectedPharmacy?._id ||
+      suggestionsDisabledRef.current
+    ) {
+      setRawSuggestions([]);
+      return;
+    }
+
+    setSuggestionsLoading(true);
+
+    const exclude = cart
+      .map((m) => m._id || m.medicineId || m.medicine_id)
+      .filter(Boolean)
+      .join(",");
+
+    const params = { pharmacyId: selectedPharmacy._id, limit: 20, exclude };
+    console.log("Fetching suggestions with", params);
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+    (async () => {
+      try {
+        // 1) plural
+        const r = await axios.get(`${API_BASE_URL}/api/medicines/suggestions`, {
+          params,
+          headers,
+        });
+        setRawSuggestions(Array.isArray(r.data) ? r.data : []);
+        return; // success, stop here
+      } catch (err) {
+        if (err?.response?.status === 404) {
+          try {
+            // 2) singular
+            const r2 = await axios.get(
+              `${API_BASE_URL}/api/medicine/suggestions`,
+              {
+                params,
+                headers,
+              }
+            );
+            setRawSuggestions(Array.isArray(r2.data) ? r2.data : []);
+            return; // success, stop here
+          } catch (e2) {
+            if (e2?.response?.status === 404) {
+              try {
+                // 3) plain alias
+                const r3 = await axios.get(`${API_BASE_URL}/api/suggestions`, {
+                  params,
+                  headers,
+                });
+                setRawSuggestions(Array.isArray(r3.data) ? r3.data : []);
+                return;
+              } catch {
+                // all three failed
+                setRawSuggestions([]);
+              }
+            } else {
+              setRawSuggestions([]);
+            }
+          }
+        } else {
+          setRawSuggestions([]);
+        }
+      } finally {
+        setSuggestionsLoading(false);
+      }
+    })();
+  }, [selectedPharmacy?._id, isPrescriptionFlow, cart, token]);
+
+  const suggestions = useMemo(() => {
+    const excludeIds = new Set(
+      cart
+        .map(
+          (m) =>
+            m._id || m.medicineId || m.medicine_id || m.medicineId || m.id
+        )
+        .filter(Boolean)
+    );
+    return rawSuggestions
+      .filter((it) => !excludeIds.has(it._id || it.medicineId))
+      .slice(0, 10);
+  }, [rawSuggestions, cart]);
+
   // bill calc
   const itemList =
     isPrescriptionFlow && quoteItems.length
       ? quoteItems.filter((m) => m.available !== false)
       : cart;
+
   const itemTotal = itemList.reduce(
     (sum, med) => sum + (med.price || 0) * (med.quantity || 1),
     0
   );
-  const deliveryFee = itemTotal >= FREE_DELIVERY_MIN ? 0 : DELIVERY_FEE;
+
+  const effectiveDistance =
+    distanceKm == null ? EXTRA_KM_THRESHOLD : distanceKm;
+
+  const extraKm =
+    effectiveDistance > EXTRA_KM_THRESHOLD
+      ? Math.ceil(effectiveDistance - EXTRA_KM_THRESHOLD)
+      : 0;
+
+  const extraKmFee = extraKm * EXTRA_KM_FEE;
+  const isHighValue = itemTotal >= FREE_DELIVERY_MIN;
+  const meetsMoV = itemTotal >= MOV_MIN;
+
+  // customer-facing delivery fee:
+  // 100–499 → 12 + extra, 500+ → free base + extra only
+  let deliveryFee = 0;
+  if (meetsMoV) {
+    if (isHighValue) {
+      deliveryFee = extraKmFee; // base free
+    } else {
+      deliveryFee = BASE_DELIVERY_FEE + extraKmFee;
+    }
+  } else {
+    deliveryFee = 0; // below MoV; order anyway blocked
+  }
+
   const gst = Math.round(itemTotal * 0.05 * 100) / 100;
-  const discount = couponApplied ? Math.round(itemTotal * 0.1) : 0;
+
   const platformFee = 10;
+
   const fullTotal =
-    itemTotal +
-    deliveryFee +
-    gst +
-    platformFee +
-    (tip || 0) +
-    (donate ? 3 : 0) -
-    discount;
+    itemTotal + deliveryFee + gst + platformFee + (tip || 0) + (donate ? 3 : 0);
+
+  // banner: "add more for free delivery" (only if within base radius)
+  const showFreeBanner =
+    meetsMoV && !isHighValue && effectiveDistance <= EXTRA_KM_THRESHOLD + 1e-6;
+
+  const toFree = showFreeBanner ? Math.max(0, FREE_DELIVERY_MIN - itemTotal) : 0;
+  const progressToFree = showFreeBanner
+    ? Math.min(100, (itemTotal / FREE_DELIVERY_MIN) * 100)
+    : 0;
+
+  const movShortfall = Math.max(0, MOV_MIN - itemTotal);
 
   const availableOffers = [
     { code: "NEW15", desc: "Get 15% off for new users. Max ₹100 off." },
-    { code: "FREESHIP", desc: `Free delivery on orders above ₹${FREE_DELIVERY_MIN}.` },
+    {
+      code: "FREESHIP",
+      desc: `Free delivery on orders above ₹${FREE_DELIVERY_MIN}.`,
+    },
     { code: "SAVE30", desc: "Save ₹25 on your next order!" },
   ];
   const tipAmounts = [10, 15, 20, 30];
-  const toFree = Math.max(0, FREE_DELIVERY_MIN - itemTotal);
-  const progressToFree = Math.min(100, (itemTotal / FREE_DELIVERY_MIN) * 100);
 
   // address save/delete (restored)
   const handleSaveAddress = async (address) => {
@@ -343,7 +535,8 @@ export default function CheckoutPage() {
   };
 
   const handleDeleteAddress = async (addr) => {
-    if (!window.confirm("Are you sure you want to delete this address?")) return;
+    if (!window.confirm("Are you sure you want to delete this address?"))
+      return;
     const updated = addresses.filter((a) => a.id !== addr.id);
     await updateAddresses(updated);
     setToast({ type: "success", message: "Address deleted!" });
@@ -363,86 +556,6 @@ export default function CheckoutPage() {
     reader.onload = () => setPrescriptionPreview(reader.result);
     reader.readAsDataURL(file);
   };
-
-  // suggestions fetch
-  // suggestions fetch
-useEffect(() => {
-  if (
-    isPrescriptionFlow ||
-    !selectedPharmacy?._id ||
-    suggestionsDisabledRef.current
-  ) {
-    setRawSuggestions([]);
-    return;
-  }
-
-  setSuggestionsLoading(true);
-
-  const exclude = cart
-    .map((m) => m._id || m.medicineId || m.medicine_id)
-    .filter(Boolean)
-    .join(",");
-
-  const params = { pharmacyId: selectedPharmacy._id, limit: 20, exclude };
-  console.log("Fetching suggestions with", params);
-  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-
-  (async () => {
-    try {
-      // 1) plural
-      const r = await axios.get(`${API_BASE_URL}/api/medicines/suggestions`, {
-        params,
-        headers,
-      });
-      setRawSuggestions(Array.isArray(r.data) ? r.data : []);
-      return; // success, stop here
-    } catch (err) {
-      if (err?.response?.status === 404) {
-        try {
-          // 2) singular
-          const r2 = await axios.get(`${API_BASE_URL}/api/medicine/suggestions`, {
-            params,
-            headers,
-          });
-          setRawSuggestions(Array.isArray(r2.data) ? r2.data : []);
-          return; // success, stop here
-        } catch (e2) {
-          if (e2?.response?.status === 404) {
-            try {
-              // 3) plain alias
-              const r3 = await axios.get(`${API_BASE_URL}/api/suggestions`, {
-                params,
-                headers,
-              });
-              setRawSuggestions(Array.isArray(r3.data) ? r3.data : []);
-              return;
-            } catch {
-              // all three failed
-              setRawSuggestions([]);
-            }
-          } else {
-            setRawSuggestions([]);
-          }
-        }
-      } else {
-        setRawSuggestions([]);
-      }
-    } finally {
-      setSuggestionsLoading(false);
-    }
-  })();
-}, [selectedPharmacy?._id, isPrescriptionFlow, cart, token]);
-
-  const suggestions = useMemo(() => {
-    const excludeIds = new Set(
-      cart
-        .map((m) => m._id || m.medicineId || m.medicine_id || m.medicineId)
-        .filter(Boolean)
-    );
-    return rawSuggestions
-      .filter((it) => !excludeIds.has(it._id || it.medicineId))
-      .slice(0, 10);
-  }, [rawSuggestions, cart]);
 
   // order (unchanged logic)
   const handleOrder = async () => {
@@ -464,8 +577,14 @@ useEffect(() => {
           {},
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        setToast({ type: "success", message: "Order placed! Track in My Orders." });
-        setTimeout(() => navigate(`/order/${res.data?.orderId || ""}`), 1200);
+        setToast({
+          type: "success",
+          message: "Order placed! Track in My Orders.",
+        });
+        setTimeout(
+          () => navigate(`/order/${res.data?.orderId || ""}`),
+          1200
+        );
       } catch (e) {
         setToast({ type: "error", message: "Failed to confirm order!" });
       }
@@ -508,7 +627,6 @@ useEffect(() => {
           prescription,
           prescriptionPreview,
           instructions,
-          coupon,
           tip,
           donate,
           deliveryInstructions,
@@ -581,7 +699,6 @@ useEffect(() => {
             prescription,
             prescriptionPreview,
             instructions,
-            coupon,
             tip,
             donate,
             deliveryInstructions,
@@ -615,7 +732,10 @@ useEffect(() => {
   if (!cart.length && !isPrescriptionFlow) {
     return (
       <div className="min-h-screen bg-white max-w-md mx-auto pt-16 text-center">
-        <IndianRupee className="w-14 h-14 mx-auto mb-3" style={{ color: DEEP }} />
+        <IndianRupee
+          className="w-14 h-14 mx-auto mb-3"
+          style={{ color: DEEP }}
+        />
         <div className="text-xl font-extrabold" style={{ color: DEEP }}>
           No items in cart
         </div>
@@ -638,7 +758,10 @@ useEffect(() => {
         style={{ border: "1px solid rgba(15,110,81,0.12)" }}
       >
         <CardHeader className="pb-2">
-          <CardTitle className="text-[15px] font-extrabold" style={{ color: DEEP }}>
+          <CardTitle
+            className="text-[15px] font-extrabold"
+            style={{ color: DEEP }}
+          >
             {isPrescriptionFlow ? "Prescription Quote" : "Medicines in your order"}
           </CardTitle>
         </CardHeader>
@@ -657,7 +780,10 @@ useEffect(() => {
                     {med.name || med.medicineName}
                   </div>
                   {med.brand && (
-                    <div className="text-[12px] font-semibold" style={{ color: DEEP }}>
+                    <div
+                      className="text-[12px] font-semibold"
+                      style={{ color: DEEP }}
+                    >
                       {med.brand}
                     </div>
                   )}
@@ -668,67 +794,84 @@ useEffect(() => {
 
                 {!isPrescriptionFlow && (
                   <div className="flex items-center gap-1.5">
-  {/* Minus: if qty==1, remove the item */}
-  <Button
-    variant="outline"
-    size="icon"
-    className="h-8 w-8 rounded-full hover:bg-gray-50"
-    style={{
-      borderColor: med.quantity === 1 ? "rgba(239,68,68,0.40)" : "rgba(15,110,81,0.40)",
-      background: med.quantity === 1 ? "rgba(239,68,68,0.06)" : "rgba(15,110,81,0.06)",
-      color: med.quantity === 1 ? "#dc2626" : DEEP,
-    }}
-    onClick={() => {
-      if (med.quantity === 1) {
-        if (window.confirm("Remove this item?")) removeItemCompletely(med);
-      } else {
-        removeOneFromCart(med);
-      }
-    }}
-    aria-label={med.quantity === 1 ? "Remove item" : "Decrease quantity"}
-    title={med.quantity === 1 ? "Remove item" : "Decrease quantity"}
-  >
-    <Minus className="h-4 w-4" />
-  </Button>
+                    {/* Minus: if qty==1, remove the item */}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-full hover:bg-gray-50"
+                      style={{
+                        borderColor:
+                          med.quantity === 1
+                            ? "rgba(239,68,68,0.40)"
+                            : "rgba(15,110,81,0.40)",
+                        background:
+                          med.quantity === 1
+                            ? "rgba(239,68,68,0.06)"
+                            : "rgba(15,110,81,0.06)",
+                        color: med.quantity === 1 ? "#dc2626" : DEEP,
+                      }}
+                      onClick={() => {
+                        if (med.quantity === 1) {
+                          if (window.confirm("Remove this item?"))
+                            removeItemCompletely(med);
+                        } else {
+                          removeOneFromCart(med);
+                        }
+                      }}
+                      aria-label={
+                        med.quantity === 1 ? "Remove item" : "Decrease quantity"
+                      }
+                      title={
+                        med.quantity === 1 ? "Remove item" : "Decrease quantity"
+                      }
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
 
-  <div className="w-6 text-center font-extrabold" style={{ color: DEEP }}>
-    {med.quantity}
-  </div>
+                    <div
+                      className="w-6 text-center font-extrabold"
+                      style={{ color: DEEP }}
+                    >
+                      {med.quantity}
+                    </div>
 
-  <Button
-    variant="outline"
-    size="icon"
-    className="h-8 w-8 rounded-full hover:bg-gray-50"
-    style={{
-      borderColor: "rgba(15,110,81,0.40)",
-      background: "rgba(15,110,81,0.06)",
-      color: DEEP,
-    }}
-    onClick={() => addToCart(med)}
-    aria-label="Increase quantity"
-    title="Increase quantity"
-  >
-    <Plus className="h-4 w-4" />
-  </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-full hover:bg-gray-50"
+                      style={{
+                        borderColor: "rgba(15,110,81,0.40)",
+                        background: "rgba(15,110,81,0.06)",
+                        color: DEEP,
+                      }}
+                      onClick={() => addToCart(med)}
+                      aria-label="Increase quantity"
+                      title="Increase quantity"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
 
-  {/* Explicit Remove button (optional but handy) */}
-  <Button
-    variant="ghost"
-    size="sm"
-    className="h-8 px-2 text-red-600 hover:text-red-700"
-    onClick={() => {
-      if (window.confirm("Remove this item?")) removeItemCompletely(med);
-    }}
-    aria-label="Remove item"
-    title="Remove item"
-  >
-    <Trash2 className="h-4 w-4" />
-  </Button>
-</div>
-
+                    {/* Explicit Remove button (optional but handy) */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-red-600 hover:text-red-700"
+                      onClick={() => {
+                        if (window.confirm("Remove this item?"))
+                          removeItemCompletely(med);
+                      }}
+                      aria-label="Remove item"
+                      title="Remove item"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
 
-                <div className="text-[15px] font-extrabold min-w-[64px] text-right" style={{ color: DEEP }}>
+                <div
+                  className="text-[15px] font-extrabold min-w-[64px] text-right"
+                  style={{ color: DEEP }}
+                >
                   = ₹{(med.price || 0) * (med.quantity || 1)}
                 </div>
               </motion.div>
@@ -738,10 +881,16 @@ useEffect(() => {
           {isPrescriptionFlow && (
             <div className="mt-3">
               <Separator style={{ background: "rgba(15,110,81,0.12)" }} />
-              <div className="mt-2 text-sm font-medium" style={{ color: DEEP }}>
+              <div
+                className="mt-2 text-sm font-medium"
+                style={{ color: DEEP }}
+              >
                 {quoteMessage}
               </div>
-              <div className="mt-1 text-right font-black" style={{ color: DEEP }}>
+              <div
+                className="mt-1 text-right font-black"
+                style={{ color: DEEP }}
+              >
                 Quoted Total: ₹{quoteTotal}
               </div>
             </div>
@@ -751,9 +900,15 @@ useEffect(() => {
 
       {/* Smart Suggestions (same store) */}
       {!isPrescriptionFlow && suggestions.length > 0 && (
-        <Card className="mb-3 rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
+        <Card
+          className="mb-3 rounded-2xl"
+          style={{ border: "1px solid rgba(15,110,81,0.12)" }}
+        >
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2" style={{ color: DEEP }}>
+            <CardTitle
+              className="flex items-center gap-2"
+              style={{ color: DEEP }}
+            >
               <Sparkles className="h-4 w-4" />
               Smart Suggestions
             </CardTitle>
@@ -770,7 +925,9 @@ useEffect(() => {
                     {sug.name || sug.medicineName}
                   </div>
                   {sug.brand && (
-                    <div className="text-[12px] text-zinc-500">{sug.brand}</div>
+                    <div className="text-[12px] text-zinc-500">
+                      {sug.brand}
+                    </div>
                   )}
                   <div className="mt-1 font-bold" style={{ color: DEEP }}>
                     ₹{sug.price}
@@ -799,7 +956,10 @@ useEffect(() => {
       )}
 
       {suggestionsLoading && !isPrescriptionFlow && (
-        <Card className="mb-3 rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
+        <Card
+          className="mb-3 rounded-2xl"
+          style={{ border: "1px solid rgba(15,110,81,0.12)" }}
+        >
           <CardContent>
             <div className="text-sm text-zinc-500">Finding suggestions…</div>
           </CardContent>
@@ -849,7 +1009,10 @@ useEffect(() => {
       )}
 
       {/* Dosage + prescription */}
-      <Card className="mb-3 rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
+      <Card
+        className="mb-3 rounded-2xl"
+        style={{ border: "1px solid rgba(15,110,81,0.12)" }}
+      >
         <CardContent>
           <label className="mt-2 flex items-center gap-3 text-[15px] leading-tight">
             <input
@@ -881,23 +1044,24 @@ useEffect(() => {
           )}
 
           <div className="mt-4">
-            <div className="text-sm font-bold mb-2">Prescription (if needed)</div>
+            <div className="text-sm font-bold mb-2">
+              Prescription (if needed)
+            </div>
             <Button
-  variant="outline"
-  onClick={() => prescriptionInput.current?.click()}
-  className="rounded-full hover:brightness-105"
-  style={{
-    borderColor: "rgba(15,110,81,0.40)",
-    color: DEEP,
-    background: "rgba(15,110,81,0.06)",
-  }}
->
-  <Upload className="h-4 w-4 mr-2" />
-  <span className="font-extrabold">
-    {prescription ? "Change File" : "Upload Prescription"}
-  </span>
-</Button>
-
+              variant="outline"
+              onClick={() => prescriptionInput.current?.click()}
+              className="rounded-full hover:brightness-105"
+              style={{
+                borderColor: "rgba(15,110,81,0.40)",
+                color: DEEP,
+                background: "rgba(15,110,81,0.06)",
+              }}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              <span className="font-extrabold">
+                {prescription ? "Change File" : "Upload Prescription"}
+              </span>
+            </Button>
 
             <input
               ref={prescriptionInput}
@@ -933,150 +1097,143 @@ useEffect(() => {
       </Card>
 
       {/* Bill summary */}
-      <Card className="mb-3 rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
+      <Card
+        className="mb-3 rounded-2xl"
+        style={{ border: "1px solid rgba(15,110,81,0.12)" }}
+      >
         <CardHeader className="pb-2">
           <CardTitle style={{ color: DEEP }}>Bill Summary</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-sm space-y-2">
-            {toFree > 0 && (
-  <div
-    className="mb-2 rounded-xl p-2"
-    style={{ background: "rgba(15,110,81,0.06)", border: "1px solid rgba(15,110,81,0.18)" }}
-  >
-    <div className="text-[13px] font-semibold mb-2" style={{ color: DEEP }}>
-      Add ₹{toFree} more to get <span>FREE delivery</span>
-    </div>
-
-    {/* Progress line */}
-    <div
-      className="relative h-2 w-full rounded-full overflow-hidden"
-      style={{ background: "rgba(15,110,81,0.15)" }}
-      role="progressbar"
-      aria-valuenow={Math.round(progressToFree)}
-      aria-valuemin={0}
-      aria-valuemax={100}
-    >
-      <div
-        className="absolute inset-y-0 left-0 rounded-full"
-        style={{
-          width: `${progressToFree}%`,
-          background:
-            "linear-gradient(90deg, #3B82F6 0%, #10B981 60%, #A7F3D0 100%)",
-        }}
-      />
-    </div>
-  </div>
-)}
-
-
-            <div className="flex justify-between text-sm">
-  <span className="font-semibold text-zinc-800">Item total</span>
-  <span className="font-semibold text-zinc-800 tabular-nums">₹{itemTotal}</span>
-</div>
-
-<div className="flex justify-between text-sm">
-  <span className="font-semibold text-zinc-800">Delivery Fee</span>
-  <span className="font-semibold tabular-nums">
-    {deliveryFee === 0 ? <span className="text-emerald-700">Free</span> : `₹${deliveryFee}`}
-  </span>
-</div>
-
-<div className="flex justify-between text-sm">
-  <span className="font-semibold text-zinc-800">Platform Fee</span>
-  <span className="font-semibold text-zinc-800 tabular-nums">₹{platformFee}</span>
-</div>
-
-            {tip > 0 && (
-  <div className="flex justify-between font-semibold" style={{ color: DEEP }}>
-    <span>Delivery Tip</span>
-    <span className="tabular-nums">+₹{tip}</span>
-  </div>
-)}
-{donate && (
-  <div className="flex justify-between font-semibold" style={{ color: DEEP }}>
-    <span>Donation</span>
-    <span className="tabular-nums">+₹3</span>
-  </div>
-)}
-{discount > 0 && (
-  <div className="flex justify-between font-semibold" style={{ color: DEEP }}>
-    <span>Coupon Discount</span>
-    <span className="tabular-nums">−₹{discount}</span>
-  </div>
-)}
-
-            <Separator className="my-2" />
-            <div className="flex justify-between font-black text-base" style={{ color: DEEP }}>
-              <span>Grand Total</span>
-              <span>₹{fullTotal}</span>
-            </div>
-          </div>
-
-          {/* Coupon */}
-          <div className="mt-3">
-            <div
-              className="flex items-start gap-2 p-3 rounded-xl"
-              style={{ border: "1px solid rgba(15,110,81,0.18)", background: "rgba(15,110,81,0.06)" }}
-            >
-              <div className="shrink-0 mt-0.5">
-                <Tag className="w-4 h-4" style={{ color: DEEP }} />
-              </div>
-              <div className="flex-1 text-[13px] leading-5">
-                <span className="font-semibold" style={{ color: DEEP }}>
-                  Flat 10% off
-                </span>{" "}
-                on this order. Use code <span className="font-bold">GODAVAII10</span>.
-              </div>
-              {!couponApplied ? (
-                <Button
-                  size="sm"
-                  className="rounded-full text-white hover:brightness-105"
-                  style={{ backgroundColor: DEEP }}
-                  onClick={() => {
-                    setCoupon("GODAVAII10");
-                    setCouponApplied(true);
-                  }}
-                >
-                  Apply
-                </Button>
-              ) : (
-                <span
-                  className="text-xs font-semibold px-2 py-1 rounded-full border"
-                  style={{ background: "rgba(15,110,81,0.08)", color: DEEP, borderColor: "rgba(15,110,81,0.25)" }}
-                >
-                  Applied
-                </span>
-              )}
-            </div>
-
-            {couponApplied && (
-              <div className="mt-2 flex items-center gap-2">
-                <Input
-  value="GODAVAII10"
-  disabled
-  className="font-extrabold tracking-wide disabled:opacity-100 disabled:bg-white disabled:text-emerald-700"
-  style={{ color: DEEP }}
-/>
-
-<Button
-  variant="outline"
-  onClick={() => { setCoupon(""); setCouponApplied(false); }}
-  className="rounded-full font-semibold"
-  size="sm"
-  style={{ borderColor: "rgba(15,110,81,0.40)", color: DEEP }}
->
-  Remove
-</Button>
-
+            {/* MoV warning */}
+            {movShortfall > 0 && (
+              <div
+                className="mb-2 rounded-xl p-2 text-[13px] font-semibold"
+                style={{
+                  background: "rgba(248,113,113,0.08)",
+                  border: "1px solid rgba(239,68,68,0.35)",
+                  color: "#b91c1c",
+                }}
+              >
+                Minimum order value is ₹{MOV_MIN}. Add ₹{movShortfall} more to
+                place this order.
               </div>
             )}
+
+            {/* Free delivery progress banner (only when within radius) */}
+            {showFreeBanner && (
+              <div
+                className="mb-2 rounded-xl p-2"
+                style={{
+                  background: "rgba(15,110,81,0.06)",
+                  border: "1px solid rgba(15,110,81,0.18)",
+                }}
+              >
+                <div
+                  className="text-[13px] font-semibold mb-2"
+                  style={{ color: DEEP }}
+                >
+                  Add ₹{toFree} more to get <span>FREE delivery</span> (within
+                  2.5 km).
+                </div>
+
+                <div
+                  className="relative h-2 w-full rounded-full overflow-hidden"
+                  style={{ background: "rgba(15,110,81,0.15)" }}
+                  role="progressbar"
+                  aria-valuenow={Math.round(progressToFree)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full"
+                    style={{
+                      width: `${progressToFree}%`,
+                      background:
+                        "linear-gradient(90deg, #3B82F6 0%, #10B981 60%, #A7F3D0 100%)",
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-between text-sm">
+              <span className="font-semibold text-zinc-800">Item total</span>
+              <span className="font-semibold text-zinc-800 tabular-nums">
+                ₹{itemTotal}
+              </span>
+            </div>
+
+            <div className="flex justify-between text-sm">
+              <span className="font-semibold text-zinc-800">
+                Delivery Fee
+                {distanceKm != null && (
+                  <span className="text-[11px] text-zinc-500">
+                    {" "}
+                    ({distanceKm.toFixed(1)} km)
+                  </span>
+                )}
+              </span>
+              <span className="font-semibold tabular-nums">
+                {deliveryFee === 0 ? (
+                  <span className="text-emerald-700">
+                    {isHighValue ? "Free (₹500+)" : "₹0"}
+                  </span>
+                ) : (
+                  `₹${deliveryFee}`
+                )}
+              </span>
+            </div>
+
+            <div className="flex justify-between text-sm">
+              <span className="font-semibold text-zinc-800">Platform Fee</span>
+              <span className="font-semibold text-zinc-800 tabular-nums">
+                ₹{platformFee}
+              </span>
+            </div>
+
+            {/* Tip / donation summary */}
+            {tip > 0 && (
+              <div
+                className="flex justify-between font-semibold"
+                style={{ color: DEEP }}
+              >
+                <span>Delivery Tip</span>
+                <span className="tabular-nums">+₹{tip}</span>
+              </div>
+            )}
+            {donate && (
+              <div
+                className="flex justify-between font-semibold"
+                style={{ color: DEEP }}
+              >
+                <span>Donation</span>
+                <span className="tabular-nums">+₹3</span>
+              </div>
+            )}
+
+            <Separator className="my-2" />
+            <div
+              className="flex justify-between font-black text-base"
+              style={{ color: DEEP }}
+            >
+              <span>Grand Total</span>
+              <span>₹{fullTotal.toFixed(1)}</span>
+            </div>
+
+            <div className="text-[11px] text-zinc-400 mt-1">
+              Includes GST on medicines & platform fee.
+            </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Delivery partner instructions */}
-      <Card className="mb-3 rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
+      <Card
+        className="mb-3 rounded-2xl"
+        style={{ border: "1px solid rgba(15,110,81,0.12)" }}
+      >
         <CardContent>
           <Label className="text-[13px] font-semibold text-zinc-700">
             Instructions for Delivery Partner (optional)
@@ -1093,7 +1250,10 @@ useEffect(() => {
       </Card>
 
       {/* Tip + donate */}
-      <Card className="mb-3 rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
+      <Card
+        className="mb-3 rounded-2xl"
+        style={{ border: "1px solid rgba(15,110,81,0.12)" }}
+      >
         <CardHeader className="pb-2">
           <CardTitle style={{ color: DEEP }}>Add a Delivery Tip</CardTitle>
         </CardHeader>
@@ -1130,7 +1290,11 @@ useEffect(() => {
             >
               Other
             </Button>
-            <Button variant="ghost" className="text-red-500" onClick={() => setTip(0)}>
+            <Button
+              variant="ghost"
+              className="text-red-500"
+              onClick={() => setTip(0)}
+            >
               No Tip
             </Button>
           </div>
@@ -1138,7 +1302,10 @@ useEffect(() => {
       </Card>
 
       {/* Payment */}
-      <Card className="rounded-2xl" style={{ border: "1px solid rgba(15,110,81,0.12)" }}>
+      <Card
+        className="rounded-2xl"
+        style={{ border: "1px solid rgba(15,110,81,0.12)" }}
+      >
         <CardHeader className="pb-2">
           <CardTitle style={{ color: DEEP }}>Pay Using</CardTitle>
         </CardHeader>
@@ -1146,80 +1313,88 @@ useEffect(() => {
           <fieldset>
             <legend className="sr-only">Payment method</legend>
             <div className="grid grid-cols-1 gap-2">
-  {paymentOptions.map((opt) => {
-    const selected = paymentMethod === opt.value;
-    return (
-      <label key={opt.value} htmlFor={`pay-${opt.value}`} className="block">
-        <input
-          id={`pay-${opt.value}`}
-          type="radio"
-          name="payment"
-          value={opt.value}
-          checked={selected}
-          onChange={(e) => setPaymentMethod(e.target.value)}
-          className="sr-only"
-        />
+              {paymentOptions.map((opt) => {
+                const selected = paymentMethod === opt.value;
+                return (
+                  <label
+                    key={opt.value}
+                    htmlFor={`pay-${opt.value}`}
+                    className="block"
+                  >
+                    <input
+                      id={`pay-${opt.value}`}
+                      type="radio"
+                      name="payment"
+                      value={opt.value}
+                      checked={selected}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      className="sr-only"
+                    />
 
-        {/* Gradient border wrapper */}
-        <motion.div
-          layout
-          whileTap={{ scale: 0.98 }}
-          className={[
-            "rounded-2xl p-[2px] transition-all",
-            selected
-              ? "bg-[linear-gradient(120deg,#0f6e51,rgba(21,179,146,0.9))] shadow-[0_10px_24px_rgba(15,110,81,0.18)]"
-              : "bg-zinc-200/60 hover:bg-zinc-300/60"
-          ].join(" ")}
-        >
-          {/* Inner card */}
-          <div
-            className={[
-              "flex items-center justify-between rounded-[14px] p-3 transition-colors",
-              selected
-                ? "bg-white/80 backdrop-blur ring-1 ring-black/5"
-                : "bg-white"
-            ].join(" ")}
-          >
-            <div className="flex items-center gap-3">
-              {/* Custom radio */}
-              <span
-                className={[
-                  "relative grid place-items-center h-5 w-5 rounded-full border transition-all",
-                  selected ? "border-emerald-600" : "border-zinc-400"
-                ].join(" ")}
-              >
-                {selected && (
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
-                )}
-              </span>
+                    {/* Gradient border wrapper */}
+                    <motion.div
+                      layout
+                      whileTap={{ scale: 0.98 }}
+                      className={[
+                        "rounded-2xl p-[2px] transition-all",
+                        selected
+                          ? "bg-[linear-gradient(120deg,#0f6e51,rgba(21,179,146,0.9))] shadow-[0_10px_24px_rgba(15,110,81,0.18)]"
+                          : "bg-zinc-200/60 hover:bg-zinc-300/60",
+                      ].join(" ")}
+                    >
+                      {/* Inner card */}
+                      <div
+                        className={[
+                          "flex items-center justify-between rounded-[14px] p-3 transition-colors",
+                          selected
+                            ? "bg-white/80 backdrop-blur ring-1 ring-black/5"
+                            : "bg-white",
+                        ].join(" ")}
+                      >
+                        <div className="flex items-center gap-3">
+                          {/* Custom radio */}
+                          <span
+                            className={[
+                              "relative grid place-items-center h-5 w-5 rounded-full border transition-all",
+                              selected
+                                ? "border-emerald-600"
+                                : "border-zinc-400",
+                            ].join(" ")}
+                          >
+                            {selected && (
+                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
+                            )}
+                          </span>
 
-              <span
-                className={[
-                  "text-sm transition-colors",
-                  selected ? "font-semibold text-zinc-900" : "text-zinc-700"
-                ].join(" ")}
-              >
-                {opt.label}
-              </span>
+                          <span
+                            className={[
+                              "text-sm transition-colors",
+                              selected
+                                ? "font-semibold text-zinc-900"
+                                : "text-zinc-700",
+                            ].join(" ")}
+                          >
+                            {opt.label}
+                          </span>
+                        </div>
+
+                        {/* “Selected” badge */}
+                        {selected && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                            <Check className="h-3.5 w-3.5" />
+                            Selected
+                          </span>
+                        )}
+                      </div>
+                    </motion.div>
+                  </label>
+                );
+              })}
             </div>
-
-            {/* “Selected” badge */}
-            {selected && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
-                <Check className="h-3.5 w-3.5" />
-                Selected
-              </span>
-            )}
-          </div>
-        </motion.div>
-      </label>
-    );
-  })}
-</div>
           </fieldset>
 
           <Button
-            disabled={loading}
+            disabled={loading || itemTotal < MOV_MIN}
             onClick={handleOrder}
             className="w-full mt-3 rounded-full !font-extrabold !text-white tracking-wide hover:brightness-105"
             style={{ backgroundColor: DEEP }}
@@ -1229,9 +1404,11 @@ useEffect(() => {
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...
               </>
             ) : isPrescriptionFlow ? (
-              `Accept Quote & Pay ₹${fullTotal}`
+              `Accept Quote & Pay ₹${fullTotal.toFixed(1)}`
+            ) : itemTotal < MOV_MIN ? (
+              `Add ₹${MOV_MIN - itemTotal} more to place order`
             ) : (
-              `PAY ₹${fullTotal} & PLACE ORDER`
+              `PAY ₹${fullTotal.toFixed(1)} & PLACE ORDER`
             )}
           </Button>
         </CardContent>
