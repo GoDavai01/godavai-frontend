@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapPin, LocateFixed, X } from "lucide-react";
-import { useLocation } from "../contexts/LocationContext"; // 👈 note plural
+import { useLocation } from "../context/LocationContext"; // 👈 note plural
 import { loadGoogleMaps } from "../utils/googleMaps";
 
 const DEEP = "#0f6e51";
