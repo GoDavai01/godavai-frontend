@@ -23,7 +23,7 @@ import { ChevronRight, Shield, FileText, ScrollText, Cookie, UserX } from "lucid
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Pencil, Plus, ChevronDown, Mail, Home, History, BadgeCheck, Wallet, Settings,
-  Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera
+  Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera, Calendar
 } from "lucide-react";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -35,6 +35,38 @@ const cardIcons = {
   Amex: "https://img.icons8.com/color/48/000000/amex.png",
   Rupay: "https://seeklogo.com/images/R/rupay-logo-E3947D7A13-seeklogo.com.png",
 };
+
+// Convert "YYYY-MM-DD" -> "dd-mm-yyyy" for text box
+function formatDobForDisplay(iso) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  if (!y || !m || !d) return "";
+  return `${d.padStart(2, "0")}-${m.padStart(2, "0")}-${y}`;
+}
+
+// Convert "dd-mm-yyyy" or "dd/mm/yyyy" -> "YYYY-MM-DD" for backend
+function parseDobInputToIso(value) {
+  if (!value) return "";
+  const cleaned = value.trim().replace(/\./g, "/").replace(/-/g, "/");
+
+  const parts = cleaned.split("/");
+  if (parts.length !== 3) return "";
+
+  let [dd, mm, yy] = parts;
+  if (yy.length !== 4) return "";
+
+  const day = parseInt(dd, 10);
+  const month = parseInt(mm, 10);
+  const year = parseInt(yy, 10);
+
+  if (!day || !month || !year || month < 1 || month > 12 || day < 1 || day > 31) {
+    return "";
+  }
+
+  return `${year.toString().padStart(4, "0")}-${month
+    .toString()
+    .padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+}
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -57,6 +89,10 @@ export default function ProfilePage() {
   });
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar || "");
   const fileInputRef = useRef();
+  const [dobInput, setDobInput] = useState(() =>
+    formatDobForDisplay(user?.dob || "")
+  );
+  const dobPickerRef = useRef(null);
 
   // First-run detection with localStorage fallback (in case backend doesn’t return the flag yet)
   const search = new URLSearchParams(location.search);
@@ -78,6 +114,7 @@ export default function ProfilePage() {
       });
       setAvatarPreview(user.avatar || "");
     }
+    setDobInput(formatDobForDisplay(user.dob || ""));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?._id]); // when the logged-in user is loaded
 
@@ -90,6 +127,7 @@ export default function ProfilePage() {
       avatar: user?.avatar || "",
     });
     setAvatarPreview(user?.avatar || "");
+    setDobInput(formatDobForDisplay(user?.dob || ""));
     setEditDialog(true);
   };
 
@@ -926,9 +964,55 @@ export default function ProfilePage() {
             </Field>
 
             <Field label="DOB">
-              {/* IMPORTANT: native date input expects YYYY-MM-DD */}
-              <Input className="gd-input" type="date" value={editData.dob || ""} onChange={(e) => setEditData({ ...editData, dob: e.target.value })} required />
+              <div className="flex items-center gap-2">
+                {/* Text Input (dd-mm-yyyy) */}
+                <Input
+                  className="gd-input flex-1"
+                  placeholder="dd-mm-yyyy"
+                  inputMode="numeric"
+                  value={dobInput}
+                  onChange={(e) => setDobInput(e.target.value)}
+                  onBlur={() => {
+                    const iso = parseDobInputToIso(dobInput);
+                    if (iso) setEditData((d) => ({ ...d, dob: iso }));
+                  }}
+                  required
+                />
+
+                {/* Calendar Button */}
+                <div className="relative">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="btn-outline-soft !font-bold px-3"
+                    onClick={() => {
+                      if (dobPickerRef.current?.showPicker) dobPickerRef.current.showPicker();
+                      else dobPickerRef.current?.focus();
+                    }}
+                  >
+                    <Calendar className="h-4 w-4" />
+                  </Button>
+
+                  {/* Hidden date input */}
+                  <input
+                    ref={dobPickerRef}
+                    type="date"
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    value={editData.dob || ""}
+                    onChange={(e) => {
+                      const iso = e.target.value;
+                      setEditData((d) => ({ ...d, dob: iso }));
+                      setDobInput(formatDobForDisplay(iso));
+                    }}
+                  />
+                </div>
+              </div>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Aap chahein toh date likh bhi sakte hain (dd-mm-yyyy) ya calendar se select bhi kar sakte hain.
+              </p>
             </Field>
+
           </div>
 
           <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
