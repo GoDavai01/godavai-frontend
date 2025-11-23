@@ -1,24 +1,18 @@
+// src/components/AddressForm.js
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import axios from "axios";
 import { MapPin, LocateFixed, X } from "lucide-react";
-import { useLocation } from "../context/LocationContext";
+import { useLocation } from "../contexts/LocationContext"; // 👈 note plural
 import { loadGoogleMaps } from "../utils/googleMaps";
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0f6e51";
 
 /* --------------------------- Headless Modal --------------------------- */
-/** Responsive modal: centers on large screens, fills viewport on phones.
- *  - Uses svh so the content isn't cut by mobile browser chrome
- *  - Inner body scrolls; header/footer stay visible
- */
 function Modal({
   open,
   onClose,
   children,
-  // responsive width: tight on phones, wider on larger screens
   maxWidth = "max-w-[92vw] sm:max-w-md md:max-w-lg",
   zIndex = 2600,
 }) {
@@ -59,9 +53,7 @@ function Modal({
 
   return createPortal(
     <div className="fixed inset-0" style={{ zIndex }}>
-      {/* Transparent backdrop to keep your current look */}
       <div className="absolute inset-0 pointer-events-none" />
-      {/* Viewport container (flex so tall content naturally anchors to top on phones) */}
       <div
         className="
           absolute inset-0 overflow-y-auto
@@ -86,7 +78,6 @@ function Modal({
               className="bg-white rounded-2xl shadow-2xl border flex flex-col"
               style={{ borderColor: "#e5e7eb", maxHeight: "92svh" }}
             >
-              {/* Close */}
               <button
                 type="button"
                 aria-label="Close"
@@ -97,8 +88,6 @@ function Modal({
                 <X className="h-5 w-5" style={{ color: "#6b7280" }} />
               </button>
 
-              {/* Content from children will include header/body/footer.
-                  Make body scrollable while header/footer stay fixed inside card. */}
               {children}
             </div>
           </motion.div>
@@ -146,6 +135,25 @@ export default function AddressForm({
   const markerRef = useRef(null);
   const mapDivRef = useRef(null);
 
+  // Google Places + Geocoder refs (client side)
+  const placesServiceRef = useRef(null);
+  const geocoderRef = useRef(null);
+
+  async function ensurePlacesHelpers() {
+    const google = await loadGoogleMaps();
+    if (!placesServiceRef.current) {
+      placesServiceRef.current = new google.maps.places.AutocompleteService();
+    }
+    if (!geocoderRef.current) {
+      geocoderRef.current = new google.maps.Geocoder();
+    }
+    return {
+      google,
+      placesService: placesServiceRef.current,
+      geocoder: geocoderRef.current,
+    };
+  }
+
   // sync on open / initial
   useEffect(() => {
     setType(initial.type || "Home");
@@ -166,52 +174,86 @@ export default function AddressForm({
     setPin(initial.lat && initial.lng ? { lat: initial.lat, lng: initial.lng } : null);
   }, [open, initial]);
 
-  // search -> backend proxy (unchanged)
+  // 🔍 Autocomplete using Google Places directly (no backend)
   const handleInput = (val) => {
     setInput(val);
     setSelectedPlace(null);
     setPin(null);
+
     if (inputTimer.current) clearTimeout(inputTimer.current);
+
     if (!val || val.length < 3) {
       setOptions([]);
       return;
     }
+
     inputTimer.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const url = `${API_BASE_URL}/api/place-autocomplete?input=${encodeURIComponent(val)}`;
-        const resp = await axios.get(url);
-        setOptions(resp.data.predictions || []);
-      } catch {
+        const { placesService } = await ensurePlacesHelpers();
+
+        placesService.getPlacePredictions(
+          {
+            input: val,
+            // Restrict mostly to India (can remove if you want global)
+            componentRestrictions: { country: "in" },
+          },
+          (predictions, status) => {
+            if (status !== "OK" || !predictions) {
+              setOptions([]);
+            } else {
+              setOptions(
+                predictions.map((p) => ({
+                  description: p.description,
+                  place_id: p.place_id,
+                }))
+              );
+            }
+            setLoading(false);
+          }
+        );
+      } catch (err) {
+        console.error("Places autocomplete failed:", err);
         setOptions([]);
+        setLoading(false);
       }
-      setLoading(false);
     }, 350);
   };
 
   const handleOptionSelect = async (option) => {
     setLoading(true);
     try {
-      const detailsUrl = `${API_BASE_URL}/api/place-details?place_id=${option.place_id}`;
-      const resp = await axios.get(detailsUrl);
-      const result = resp.data.result;
-      setInput(result.formatted_address);
-      setAddressLine(result.formatted_address);
-      setSelectedPlace({
-        formatted: result.formatted_address,
-        lat: result.geometry.location.lat,
-        lng: result.geometry.location.lng,
-        place_id: option.place_id,
+      const { geocoder } = await ensurePlacesHelpers();
+
+      geocoder.geocode({ placeId: option.place_id }, (results, status) => {
+        if (status === "OK" && results && results[0]) {
+          const result = results[0];
+          const loc = result.geometry.location;
+          const formatted = result.formatted_address;
+          const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+          const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+
+          setInput(formatted);
+          setAddressLine(formatted);
+          setSelectedPlace({
+            formatted,
+            lat,
+            lng,
+            place_id: option.place_id,
+          });
+          setPin({ lat, lng });
+        } else {
+          alert("Could not fetch address details");
+        }
+        setLoading(false);
+        setOptions([]);
       });
-      setPin({
-        lat: result.geometry.location.lat,
-        lng: result.geometry.location.lng,
-      });
-    } catch {
+    } catch (err) {
+      console.error("Place details failed:", err);
+      setLoading(false);
+      setOptions([]);
       alert("Could not fetch address details");
     }
-    setLoading(false);
-    setOptions([]);
   };
 
   // Map init/update using loader util
@@ -281,15 +323,18 @@ export default function AddressForm({
         className="px-5 pt-5 pb-3 border-b shrink-0"
         style={{ borderColor: "#f1f5f9" }}
       >
-        <h3 className="text-base sm:text-lg font-extrabold tracking-tight" style={{ color: DEEP }}>
+        <h3
+          className="text-base sm:text-lg font-extrabold tracking-tight"
+          style={{ color: DEEP }}
+        >
           Add/Edit Address
         </h3>
       </div>
 
-      {/* Body: make it scrollable within the card */}
+      {/* Body */}
       <div
         className="px-5 pt-3 pb-3 space-y-3 overflow-y-auto"
-        style={{ maxHeight: "calc(92svh - 120px)" }} // header + footer area
+        style={{ maxHeight: "calc(92svh - 120px)" }}
       >
         <button
           type="button"
@@ -313,7 +358,7 @@ export default function AddressForm({
           Use My Current Location
         </button>
 
-        {/* Type chips: wrap on small screens */}
+        {/* Type chips */}
         <div className="flex gap-2 flex-wrap">
           {["Home", "Work", "Other"].map((t) => {
             const selected = type === t;
@@ -340,6 +385,7 @@ export default function AddressForm({
           })}
         </div>
 
+        {/* Name */}
         <div className="space-y-1">
           <label className="text-xs font-semibold" style={{ color: "#475569" }}>
             Name
@@ -347,7 +393,10 @@ export default function AddressForm({
           <input
             className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2"
             style={{ borderColor: "#e5e7eb", boxShadow: "none" }}
-            onFocus={(e) => (e.currentTarget.style.boxShadow = "0 0 0 2px rgba(15,110,81,.25)")}
+            onFocus={(e) =>
+              (e.currentTarget.style.boxShadow =
+                "0 0 0 2px rgba(15,110,81,.25)")
+            }
             onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -355,6 +404,7 @@ export default function AddressForm({
           />
         </div>
 
+        {/* Phone */}
         <div className="space-y-1">
           <label className="text-xs font-semibold" style={{ color: "#475569" }}>
             Phone
@@ -362,25 +412,37 @@ export default function AddressForm({
           <input
             className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2"
             style={{ borderColor: "#e5e7eb", boxShadow: "none" }}
-            onFocus={(e) => (e.currentTarget.style.boxShadow = "0 0 0 2px rgba(15,110,81,.25)")}
+            onFocus={(e) =>
+              (e.currentTarget.style.boxShadow =
+                "0 0 0 2px rgba(15,110,81,.25)")
+            }
             onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
             value={phone}
-            onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, ""))}
+            onChange={(e) =>
+              setPhone(e.target.value.replace(/[^\d+]/g, ""))
+            }
             maxLength={15}
             placeholder="+91…"
             inputMode="tel"
           />
         </div>
 
+        {/* Address search */}
         <div className="space-y-1 relative">
-          <label className="text-xs font-semibold flex items-center gap-1" style={{ color: "#475569" }}>
+          <label
+            className="text-xs font-semibold flex items-center gap-1"
+            style={{ color: "#475569" }}
+          >
             <MapPin className="h-4 w-4" style={{ color: DEEP }} />
             <span>Address (Search Google Maps)</span>
           </label>
           <input
             className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2"
             style={{ borderColor: "#e5e7eb", boxShadow: "none" }}
-            onFocus={(e) => (e.currentTarget.style.boxShadow = "0 0 0 2px rgba(15,110,81,.25)")}
+            onFocus={(e) =>
+              (e.currentTarget.style.boxShadow =
+                "0 0 0 2px rgba(15,110,81,.25)")
+            }
             onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
             value={input}
             onChange={(e) => handleInput(e.target.value)}
@@ -419,13 +481,13 @@ export default function AddressForm({
           )}
         </div>
 
+        {/* Map preview */}
         {pin && (
           <div className="space-y-2">
             <div
               ref={mapDivRef}
               id="map-preview"
               className="w-full rounded-xl border shadow-sm"
-              /* Responsive map height: comfortable on phones, capped on large screens */
               style={{
                 borderColor: "#e5e7eb",
                 height: "min(38svh, 320px)",
@@ -438,6 +500,7 @@ export default function AddressForm({
           </div>
         )}
 
+        {/* Floor */}
         <div className="space-y-1">
           <label className="text-xs font-semibold" style={{ color: "#475569" }}>
             Floor/House No.
@@ -445,7 +508,10 @@ export default function AddressForm({
           <input
             className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2"
             style={{ borderColor: "#e5e7eb", boxShadow: "none" }}
-            onFocus={(e) => (e.currentTarget.style.boxShadow = "0 0 0 2px rgba(15,110,81,.25)")}
+            onFocus={(e) =>
+              (e.currentTarget.style.boxShadow =
+                "0 0 0 2px rgba(15,110,81,.25)")
+            }
             onBlur={(e) => (e.currentTarget.style.boxShadow = "none")}
             value={floor}
             onChange={(e) => setFloor(e.target.value)}
@@ -454,7 +520,7 @@ export default function AddressForm({
         </div>
       </div>
 
-      {/* Footer (sticks inside card), plus a dedicated Cancel to keep spacing consistent */}
+      {/* Footer */}
       <div className="px-5 pb-4 -mt-2 space-y-2 shrink-0">
         <button
           type="button"

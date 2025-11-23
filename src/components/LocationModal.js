@@ -4,12 +4,12 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { MapPin, LocateFixed, X } from "lucide-react";
-// ✅ use the shared loader (no direct script tags, no hard-coded key)
 import { loadGoogleMaps } from "../utils/googleMaps";
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL =
+  process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
-/* ---------------- Modal (unchanged visuals/behavior) ---------------- */
+/* ---------------- Modal ---------------- */
 function Modal({ open, onClose, children, maxWidth = "max-w-sm", zIndex = 2600 }) {
   const pushedRef = useRef(false);
 
@@ -21,7 +21,10 @@ function Modal({ open, onClose, children, maxWidth = "max-w-sm", zIndex = 2600 }
     document.addEventListener("keydown", onKey);
     window.addEventListener("popstate", onPop);
 
-    try { window.history.pushState({ modal: "stack" }, ""); pushedRef.current = true; } catch {}
+    try {
+      window.history.pushState({ modal: "stack" }, "");
+      pushedRef.current = true;
+    } catch {}
 
     return () => {
       document.removeEventListener("keydown", onKey);
@@ -33,7 +36,9 @@ function Modal({ open, onClose, children, maxWidth = "max-w-sm", zIndex = 2600 }
   const safeClose = () => {
     onClose?.();
     if (pushedRef.current) {
-      try { window.history.back(); } catch {}
+      try {
+        window.history.back();
+      } catch {}
       pushedRef.current = false;
     }
   };
@@ -99,47 +104,97 @@ export default function LocationModal({ open, onClose, onSelect }) {
   const mapRef = useRef(null);
   const markerRef = useRef(null);
 
+  // Google Places / Geocoder refs
+  const placesServiceRef = useRef(null);
+  const geocoderRef = useRef(null);
+
+  async function ensurePlacesHelpers() {
+    const google = await loadGoogleMaps();
+    if (!placesServiceRef.current) {
+      placesServiceRef.current = new google.maps.places.AutocompleteService();
+    }
+    if (!geocoderRef.current) {
+      geocoderRef.current = new google.maps.Geocoder();
+    }
+    return {
+      google,
+      placesService: placesServiceRef.current,
+      geocoder: geocoderRef.current,
+    };
+  }
+
   useEffect(() => {
     if (open && !wasOpen.current) setInput("");
     wasOpen.current = open;
   }, [open]);
 
+  /* 🔍 Autocomplete (client-side Places API) */
   const handleInput = useCallback((val) => {
     setInput(val);
     if (inputTimer.current) clearTimeout(inputTimer.current);
+
     if (!val || val.length < 3) {
       setOptions([]);
       return;
     }
+
     inputTimer.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const url = `${API_BASE_URL}/api/place-autocomplete?input=${encodeURIComponent(val)}`;
-        const resp = await axios.get(url);
-        setOptions(resp.data.predictions || []);
-      } catch {
+        const { placesService } = await ensurePlacesHelpers();
+        placesService.getPlacePredictions(
+          {
+            input: val,
+            componentRestrictions: { country: "in" },
+          },
+          (predictions, status) => {
+            if (status !== "OK" || !predictions) {
+              setOptions([]);
+            } else {
+              setOptions(
+                predictions.map((p) => ({
+                  description: p.description,
+                  place_id: p.place_id,
+                }))
+              );
+            }
+            setLoading(false);
+          }
+        );
+      } catch (err) {
+        console.error("Places autocomplete failed:", err);
         setOptions([]);
+        setLoading(false);
       }
-      setLoading(false);
     }, 300);
   }, []);
 
   const handleOptionSelect = async (option) => {
     setLoading(true);
     try {
-      const detailsUrl = `${API_BASE_URL}/api/place-details?place_id=${option.place_id}`;
-      const resp = await axios.get(detailsUrl);
-      const result = resp.data.result;
-      const formatted = result.formatted_address;
-      const lat = result.geometry.location.lat;
-      const lng = result.geometry.location.lng;
-      onSelect({ formatted, lat, lng, place_id: option.place_id });
-    } catch {
+      const { geocoder } = await ensurePlacesHelpers();
+      geocoder.geocode({ placeId: option.place_id }, (results, status) => {
+        if (status === "OK" && results && results[0]) {
+          const res = results[0];
+          const loc = res.geometry.location;
+          const formatted = res.formatted_address;
+          const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+          const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+
+          onSelect({ formatted, lat, lng, place_id: option.place_id });
+        } else {
+          alert("Could not get address details.");
+        }
+        setLoading(false);
+      });
+    } catch (err) {
+      console.error("Place details failed:", err);
+      setLoading(false);
       alert("Could not get address details.");
     }
-    setLoading(false);
   };
 
+  /* 📍 Detect current GPS + reverse geocode using backend */
   const handleDetect = () => {
     setDetecting(true);
     if (!navigator.geolocation) {
@@ -190,9 +245,8 @@ export default function LocationModal({ open, onClose, onSelect }) {
         if (!div) return;
 
         const defaultCenter =
-          manualLatLng || { lat: 28.6139, lng: 77.209 }; // Delhi as default
+          manualLatLng || { lat: 28.6139, lng: 77.209 }; // Delhi fallback
 
-        // init / update map
         if (!map) {
           map = new google.maps.Map(div, {
             center: defaultCenter,
@@ -205,7 +259,6 @@ export default function LocationModal({ open, onClose, onSelect }) {
           map.setCenter(defaultCenter);
         }
 
-        // init / update draggable marker
         if (!marker) {
           marker = new google.maps.Marker({
             position: defaultCenter,
@@ -222,16 +275,18 @@ export default function LocationModal({ open, onClose, onSelect }) {
           marker.setPosition(defaultCenter);
         }
 
-        // click to move marker
         google.maps.event.addListener(map, "click", (e) => {
           marker.setPosition(e.latLng);
           setManualLatLng({ lat: e.latLng.lat(), lng: e.latLng.lng() });
         });
 
-        // try geolocate if we don't already have a pin
+        // Only auto-geo if we still don't have a pin
         if (navigator.geolocation && !manualLatLng) {
           navigator.geolocation.getCurrentPosition((pos) => {
-            const userLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            const userLoc = {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+            };
             map.setCenter(userLoc);
             marker.setPosition(userLoc);
             setManualLatLng(userLoc);
@@ -242,6 +297,27 @@ export default function LocationModal({ open, onClose, onSelect }) {
         console.error("Google Maps failed to load:", e);
       });
   }, [showPinDialog, manualLatLng]);
+
+  /* When user clicks "Drop Pin", first try to center map near typed city (Agra, Delhi, etc.) */
+  const openDropPinForInput = async () => {
+    setShowPinDialog(true);
+
+    if (!input || input.length < 3) return;
+
+    try {
+      const { geocoder } = await ensurePlacesHelpers();
+      geocoder.geocode({ address: input }, (results, status) => {
+        if (status === "OK" && results && results[0]) {
+          const loc = results[0].geometry.location;
+          const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+          const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+          setManualLatLng({ lat, lng });
+        }
+      });
+    } catch (e) {
+      console.error("Geocode for drop-pin center failed:", e);
+    }
+  };
 
   return (
     <>
@@ -298,7 +374,7 @@ export default function LocationModal({ open, onClose, onSelect }) {
           {input.length >= 3 && (
             <button
               type="button"
-              onClick={() => setShowPinDialog(true)}
+              onClick={openDropPinForInput}
               disabled={loading || detecting}
               className="w-full text-left rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-700"
             >
@@ -308,8 +384,13 @@ export default function LocationModal({ open, onClose, onSelect }) {
         </div>
       </Modal>
 
-      {/* Drop-pin mini modal (higher zIndex) */}
-      <Modal open={showPinDialog} onClose={() => setShowPinDialog(false)} maxWidth="max-w-sm" zIndex={2700}>
+      {/* Drop-pin modal: larger / more mobile-friendly */}
+      <Modal
+        open={showPinDialog}
+        onClose={() => setShowPinDialog(false)}
+        maxWidth="max-w-[96vw]"
+        zIndex={2700}
+      >
         <div className="px-5 pt-5 pb-3 border-b border-zinc-100">
           <h3 className="text-lg font-bold tracking-tight flex items-center gap-2">
             <MapPin className="h-5 w-5 text-amber-500" />
@@ -318,16 +399,21 @@ export default function LocationModal({ open, onClose, onSelect }) {
         </div>
 
         <div className="px-5 pb-4 pt-3 space-y-3">
-          <div className="w-full h-72 rounded-xl border border-zinc-200 shadow-sm">
-            {/* 🔁 Target for Google Map */}
-            <div ref={dropPinDivRef} id="drop-pin-map" className="w-full h-72 rounded-xl" />
+          <div className="w-full rounded-xl border border-zinc-200 shadow-sm overflow-hidden">
+            <div
+              ref={dropPinDivRef}
+              id="drop-pin-map"
+              className="w-full"
+              style={{ height: "min(70svh, 480px)" }} // 🧷 almost full-screen on mobile
+            />
           </div>
           {manualLatLng && (
             <p className="text-xs text-zinc-600">
-              Pin location: {manualLatLng.lat.toFixed(6)}, {manualLatLng.lng.toFixed(6)}
+              Pin location: {manualLatLng.lat.toFixed(6)},{" "}
+              {manualLatLng.lng.toFixed(6)}
             </p>
           )}
-          <div className="flex gap-2 justify-end">
+          <div className="flex gap-2 justify-end pt-1">
             <button
               type="button"
               onClick={() => setShowPinDialog(false)}
