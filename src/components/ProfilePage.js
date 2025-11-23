@@ -964,54 +964,67 @@ export default function ProfilePage() {
             </Field>
 
             <Field label="DOB">
-              <div className="flex items-center gap-2">
-                {/* Text Input (dd-mm-yyyy) */}
-                <Input
-                  className="gd-input flex-1"
-                  placeholder="dd-mm-yyyy"
-                  inputMode="numeric"
-                  value={dobInput}
-                  onChange={(e) => setDobInput(e.target.value)}
-                  onBlur={() => {
-                    const iso = parseDobInputToIso(dobInput);
-                    if (iso) setEditData((d) => ({ ...d, dob: iso }));
-                  }}
-                  required
-                />
+  <div className="flex items-center gap-2">
+    {/* Text Input (dd-mm-yyyy) */}
+    <Input
+      className="gd-input flex-1"
+      placeholder="dd-mm-yyyy"
+      inputMode="numeric"
+      value={dobInput}
+      onChange={(e) => {
+        // sirf digits allow karo, max 8 (ddmmyyyy)
+        let v = e.target.value.replace(/[^\d]/g, "").slice(0, 8);
 
-                {/* Calendar Button */}
-                <div className="relative">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="btn-outline-soft !font-bold px-3"
-                    onClick={() => {
-                      if (dobPickerRef.current?.showPicker) dobPickerRef.current.showPicker();
-                      else dobPickerRef.current?.focus();
-                    }}
-                  >
-                    <Calendar className="h-4 w-4" />
-                  </Button>
+        // auto-insert hyphens: dd-mm-yyyy
+        if (v.length > 4) {
+          // 15021998 -> 15-02-1998
+          v = v.replace(/^(\d{2})(\d{2})(\d{0,4})$/, "$1-$2-$3");
+        } else if (v.length > 2) {
+          // 1502 -> 15-02
+          v = v.replace(/^(\d{2})(\d{0,2})$/, "$1-$2");
+        }
 
-                  {/* Hidden date input */}
-                  <input
-                    ref={dobPickerRef}
-                    type="date"
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                    value={editData.dob || ""}
-                    onChange={(e) => {
-                      const iso = e.target.value;
-                      setEditData((d) => ({ ...d, dob: iso }));
-                      setDobInput(formatDobForDisplay(iso));
-                    }}
-                  />
-                </div>
-              </div>
+        setDobInput(v);
+      }}
+      onBlur={() => {
+        const iso = parseDobInputToIso(dobInput);
+        if (iso) setEditData((d) => ({ ...d, dob: iso }));
+      }}
+      required
+    />
 
-              <p className="mt-1 text-xs text-slate-500">
-                Aap chahein toh date likh bhi sakte hain (dd-mm-yyyy) ya calendar se select bhi kar sakte hain.
-              </p>
-            </Field>
+    {/* Calendar Button, date input ... (as-is) */}
+    <div className="relative">
+      <Button
+        type="button"
+        variant="outline"
+        className="btn-outline-soft !font-bold px-3"
+        onClick={() => {
+          if (dobPickerRef.current?.showPicker) dobPickerRef.current.showPicker();
+          else dobPickerRef.current?.focus();
+        }}
+      >
+        <Calendar className="h-4 w-4" />
+      </Button>
+
+      <input
+        ref={dobPickerRef}
+        type="date"
+        className="absolute inset-0 opacity-0 cursor-pointer"
+        value={editData.dob || ""}
+        onChange={(e) => {
+          const iso = e.target.value;
+          setEditData((d) => ({ ...d, dob: iso }));
+          setDobInput(formatDobForDisplay(iso));
+        }}
+      />
+    </div>
+  </div>
+
+  <p className="mt-1 text-xs text-slate-500">
+  You can type the date manually (dd-mm-yyyy) or select it from the calendar.
+  </p>
+</Field>
 
           </div>
 
