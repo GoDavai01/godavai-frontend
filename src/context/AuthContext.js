@@ -78,10 +78,16 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
-    setUser(null);
-    setToken("");
-    setAddresses([]);
-  };
+  setUser(null);
+  setToken("");
+  setAddresses([]);
+
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+    localStorage.removeItem("profileCompleted");
+  }
+};
 
   return (
     <AuthContext.Provider

@@ -143,31 +143,92 @@ export default function ProfilePage() {
   };
 
   const handleProfileSave = async () => {
-    try {
-      // IMPORTANT: include auth header + mark profile completed
-      await axios.put(
-        `${API_BASE_URL}/api/users/${user._id}`,
-        { ...editData, profileCompleted: true },
-        { headers: { Authorization: "Bearer " + token } }
-      );
+  // basic validation first so browser / device differences don’t break silently
+  const trimmedName = (editData.name || "").trim();
+  const trimmedEmail = (editData.email || "").trim();
 
-      setSnackbar({ open: true, message: "Profile updated!", severity: "success" });
+  if (!trimmedName) {
+    setSnackbar({
+      open: true,
+      message: "Please enter your name.",
+      severity: "error",
+    });
+    return;
+  }
 
-      // Refresh profile from server so AuthContext is accurate
-      const updatedProfile = await axios.get(`${API_BASE_URL}/api/profile`, {
-        headers: { Authorization: "Bearer " + token },
-      });
-      setUser(updatedProfile.data);
+  if (!trimmedEmail) {
+    setSnackbar({
+      open: true,
+      message: "Please enter your email.",
+      severity: "error",
+    });
+    return;
+  }
 
-      // Local fallback to guarantee this never opens again even if backend lacks the flag
-      localStorage.setItem("profileCompleted", "1");
+  // 🔴 always compute DOB from the text field (dd-mm-yyyy) at time of save
+  let dobIso = parseDobInputToIso(dobInput);
 
-      setEditDialog(false);
-      navigate("/", { replace: true });
-    } catch (e) {
-      setSnackbar({ open: true, message: "Failed to update!", severity: "error" });
-    }
+  // Agar text box khali hai lekin calendar se value aayi hui hai, toh woh use karo
+  if (!dobIso && editData.dob) {
+    dobIso = editData.dob; // <input type="date"> se already ISO aata hai
+  }
+
+  if (!dobIso) {
+    setSnackbar({
+      open: true,
+      message: "Please enter a valid DOB in dd-mm-yyyy format.",
+      severity: "error",
+    });
+    return;
+  }
+
+  const payload = {
+    ...editData,
+    name: trimmedName,
+    email: trimmedEmail,
+    dob: dobIso, // ✅ backend ko hamesha YYYY-MM-DD milega
+    profileCompleted: true,
   };
+
+  try {
+    await axios.put(
+      `${API_BASE_URL}/api/users/${user._id}`,
+      payload,
+      { headers: { Authorization: "Bearer " + token } }
+    );
+
+    setSnackbar({
+      open: true,
+      message: "Profile updated!",
+      severity: "success",
+    });
+
+    // Refresh profile from server so AuthContext + localStorage in sync rahe
+    const updatedProfile = await axios.get(`${API_BASE_URL}/api/profile`, {
+      headers: { Authorization: "Bearer " + token },
+    });
+
+    setUser(updatedProfile.data);
+
+    // dobInput ko bhi latest ISO se dob-display me convert karke set karo
+    setDobInput(
+      formatDobForDisplay(updatedProfile.data.dob || dobIso)
+    );
+
+    // Local fallback so first-run dialog dobara na khul jaaye
+    localStorage.setItem("profileCompleted", "1");
+
+    setEditDialog(false);
+    navigate("/", { replace: true });
+  } catch (e) {
+    console.error("Profile update failed:", e);
+    setSnackbar({
+      open: true,
+      message: "Failed to update!",
+      severity: "error",
+    });
+  }
+};
 
   // --- Settings modals (unchanged) ---
   const [changePassOpen, setChangePassOpen] = useState(false);
