@@ -8,6 +8,7 @@ import {
 import { Visibility, Delete, LocalPharmacy, NotificationsNone, DirectionsRun } from "@mui/icons-material";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import axios from "axios";
+import MedicineMasterAdmin from "./MedicineMasterAdmin";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
@@ -583,7 +584,8 @@ export default function AdminDashboard() {
             <Tab label={`Active Pharmacies (${filteredActivePharmacies.length})`} />
             <Tab label={`Delivery Partners (${deliveryPartners.length})`} />
             <Tab label={`Active Delivery Partners (${activeDeliveryPartners.length})`} />
-            <Tab label="Payments & Payouts" />
+            <Tab label="Medicine Master" />
+<Tab label="Payments & Payouts" />
           </Tabs>
         </Box>
 
@@ -895,10 +897,16 @@ export default function AdminDashboard() {
               )}
             </Box>
           )}
-          {/* ------------- NEW: PAYMENTS & PAYOUTS TAB ------------- */}
-  {activeTab === 6 && (
-    <PaymentsPayoutsPanel token={token} />
-  )}
+          {/* ------------- MEDICINE MASTER TAB ------------- */}
+{activeTab === 6 && (
+  <MedicineMasterAdmin token={token} />
+)}
+
+{/* ------------- PAYMENTS & PAYOUTS TAB ------------- */}
+{activeTab === 7 && (
+  <PaymentsPayoutsPanel token={token} />
+)}
+
         </Box>
 
         {/* ALL THE REST OF YOUR PANELS AND MODALS */}
