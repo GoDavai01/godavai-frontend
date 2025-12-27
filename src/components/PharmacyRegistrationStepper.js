@@ -113,7 +113,11 @@ const getMsgSeverity = (msg) => {
     lower.includes("invalid")
   )
     return "error";
-  if (lower.includes("success") || lower.includes("submitted") || lower.includes("approved"))
+  if (
+    lower.includes("success") ||
+    lower.includes("submitted") ||
+    lower.includes("approved")
+  )
     return "success";
   return "info";
 };
@@ -126,7 +130,11 @@ function InlineToast({ open, kind = "success", children, onClose }) {
   return (
     <div
       className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[1200] rounded-xl px-4 py-3 text-sm font-bold shadow-xl cursor-pointer
-      ${kind === "error" ? "bg-red-600 text-white" : "bg-emerald-700 text-white"}`}
+      ${
+        kind === "error"
+          ? "bg-red-600 text-white"
+          : "bg-emerald-700 text-white"
+      }`}
       onClick={onClose}
     >
       {children}
@@ -145,7 +153,15 @@ function StepperHeader({ step }) {
         className="absolute left-4 top-1/2 -translate-y-1/2 h-1.5 bg-emerald-700 rounded-full transition-all"
         style={{
           width:
-            step <= 0 ? "0%" : step === 1 ? "25%" : step === 2 ? "50%" : step === 3 ? "75%" : "100%",
+            step <= 0
+              ? "0%"
+              : step === 1
+              ? "25%"
+              : step === 2
+              ? "50%"
+              : step === 3
+              ? "75%"
+              : "100%",
         }}
       />
       <div className="relative grid grid-cols-5 gap-1">
@@ -156,15 +172,28 @@ function StepperHeader({ step }) {
             <div key={label} className="flex flex-col items-center">
               <motion.div
                 initial={{ scale: 0.9, opacity: 0.65 }}
-                animate={{ scale: active ? 1 : 0.95, opacity: active ? 1 : 0.55 }}
+                animate={{
+                  scale: active ? 1 : 0.95,
+                  opacity: active ? 1 : 0.55,
+                }}
                 className={`grid place-items-center h-9 w-9 rounded-full border text-white shadow-sm
-                  ${active ? "bg-emerald-700 border-emerald-700" : "bg-emerald-200 border-emerald-200"}`}
+                  ${
+                    active
+                      ? "bg-emerald-700 border-emerald-700"
+                      : "bg-emerald-200 border-emerald-200"
+                  }`}
               >
                 <Icon className="h-4 w-4" />
               </motion.div>
               <div
                 className={`mt-1 text-[10px] font-extrabold text-center leading-tight
-                ${idx === step ? "text-emerald-800" : active ? "text-emerald-600" : "text-gray-400"}`}
+                ${
+                  idx === step
+                    ? "text-emerald-800"
+                    : active
+                    ? "text-emerald-600"
+                    : "text-gray-400"
+                }`}
               >
                 {label}
               </div>
@@ -214,7 +243,9 @@ async function mergeImagesVerticallyToBlob(files, targetWidth = 1000) {
   // Try JPEG first for better size; fallback PNG
   const tryQualities = [0.85, 0.72, 0.6, 0.5, 0.4];
   for (const q of tryQualities) {
-    const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", q));
+    const blob = await new Promise((res) =>
+      canvas.toBlob(res, "image/jpeg", q)
+    );
     if (blob && blob.size <= 2 * 1024 * 1024) return blob;
   }
   return await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.35));
@@ -257,22 +288,21 @@ const StepContent = React.memo(function StepContent({
         {/* (E) Legal Entity Name just under Pharmacy Name */}
         <div>
           <Label className="font-semibold text-emerald-900 flex items-center gap-1">
-  <Building2 className="h-3.5 w-3.5" /> Legal Entity Name
-</Label>
-<Input
-  name="legalEntityName"
-  required
-  value={safe(form.legalEntityName)}
-  onChange={handleChange}
-  className={errors.legalEntityName ? "ring-2 ring-red-400" : ""}
-  placeholder="e.g., Karniva Private Limited"
-/>
-{errors.legalEntityName && (
-  <div className="text-red-600 text-xs font-semibold mt-1">
-    Legal entity name required
-  </div>
-)}
-
+            <Building2 className="h-3.5 w-3.5" /> Legal Entity Name
+          </Label>
+          <Input
+            name="legalEntityName"
+            required
+            value={safe(form.legalEntityName)}
+            onChange={handleChange}
+            className={errors.legalEntityName ? "ring-2 ring-red-400" : ""}
+            placeholder="e.g., Karniva Private Limited"
+          />
+          {errors.legalEntityName && (
+            <div className="text-red-600 text-xs font-semibold mt-1">
+              Legal entity name required
+            </div>
+          )}
         </div>
 
         <div>
@@ -342,7 +372,8 @@ const StepContent = React.memo(function StepContent({
                   const res = await axios.get(
                     `${API_BASE_URL}/api/geocode?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}`
                   );
-                  const formatted = res.data.results?.[0]?.formatted_address || "";
+                  const formatted =
+                    res.data.results?.[0]?.formatted_address || "";
                   setForm((f) => ({
                     ...f,
                     lat: pos.coords.latitude,
@@ -354,7 +385,9 @@ const StepContent = React.memo(function StepContent({
                     ...f,
                     lat: pos.coords.latitude,
                     lng: pos.coords.longitude,
-                    formattedLocation: `Lat: ${pos.coords.latitude.toFixed(5)}, Lng: ${pos.coords.longitude.toFixed(5)}`,
+                    formattedLocation: `Lat: ${pos.coords.latitude.toFixed(
+                      5
+                    )}, Lng: ${pos.coords.longitude.toFixed(5)}`,
                   }));
                 }
               },
@@ -362,7 +395,9 @@ const StepContent = React.memo(function StepContent({
             );
           }}
           className={`w-full rounded-xl font-extrabold ${
-            form.lat && form.lng ? "bg-emerald-700 text-white" : "bg-white text-emerald-800"
+            form.lat && form.lng
+              ? "bg-emerald-700 text-white"
+              : "bg-white text-emerald-800"
           } border border-emerald-200 hover:bg-emerald-50`}
         >
           <MapPin className="h-4 w-4 mr-2" />
@@ -476,31 +511,43 @@ const StepContent = React.memo(function StepContent({
               <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center sm:gap-6">
                 {/* From */}
                 <div className="flex flex-col items-center gap-1">
-                  <span className="text-[11px] font-bold text-emerald-900">From</span>
+                  <span className="text-[11px] font-bold text-emerald-900">
+                    From
+                  </span>
                   <div className="flex gap-2 flex-wrap justify-center sm:flex-nowrap">
                     <select
                       value={safe(form.timingFromHour)}
-                      onChange={(e) => handleTimingChange("timingFromHour", e.target.value)}
+                      onChange={(e) =>
+                        handleTimingChange("timingFromHour", e.target.value)
+                      }
                       className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
                     >
                       <option value="">HH</option>
                       {hours.map((h) => (
-                        <option key={h} value={h}>{h}</option>
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
                       ))}
                     </select>
                     <select
                       value={safe(form.timingFromMinute)}
-                      onChange={(e) => handleTimingChange("timingFromMinute", e.target.value)}
+                      onChange={(e) =>
+                        handleTimingChange("timingFromMinute", e.target.value)
+                      }
                       className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
                     >
                       <option value="">MM</option>
                       {minutes.map((m) => (
-                        <option key={m} value={m}>{m}</option>
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
                       ))}
                     </select>
                     <select
                       value={safe(form.timingFromAmPm)}
-                      onChange={(e) => handleTimingChange("timingFromAmPm", e.target.value)}
+                      onChange={(e) =>
+                        handleTimingChange("timingFromAmPm", e.target.value)
+                      }
                       className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
                     >
                       <option value="">AM/PM</option>
@@ -514,31 +561,43 @@ const StepContent = React.memo(function StepContent({
 
                 {/* To */}
                 <div className="flex flex-col items-center gap-1">
-                  <span className="text-[11px] font-bold text-emerald-900">To</span>
+                  <span className="text-[11px] font-bold text-emerald-900">
+                    To
+                  </span>
                   <div className="flex gap-2 flex-wrap justify-center sm:flex-nowrap">
                     <select
                       value={safe(form.timingToHour)}
-                      onChange={(e) => handleTimingChange("timingToHour", e.target.value)}
+                      onChange={(e) =>
+                        handleTimingChange("timingToHour", e.target.value)
+                      }
                       className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
                     >
                       <option value="">HH</option>
                       {hours.map((h) => (
-                        <option key={h} value={h}>{h}</option>
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
                       ))}
                     </select>
                     <select
                       value={safe(form.timingToMinute)}
-                      onChange={(e) => handleTimingChange("timingToMinute", e.target.value)}
+                      onChange={(e) =>
+                        handleTimingChange("timingToMinute", e.target.value)
+                      }
                       className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
                     >
                       <option value="">MM</option>
                       {minutes.map((m) => (
-                        <option key={m} value={m}>{m}</option>
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
                       ))}
                     </select>
                     <select
                       value={safe(form.timingToAmPm)}
-                      onChange={(e) => handleTimingChange("timingToAmPm", e.target.value)}
+                      onChange={(e) =>
+                        handleTimingChange("timingToAmPm", e.target.value)
+                      }
                       className="w-20 sm:w-24 rounded-lg border border-emerald-200 px-2 py-2 bg-white text-sm font-semibold"
                     >
                       <option value="">AM/PM</option>
@@ -625,18 +684,29 @@ const StepContent = React.memo(function StepContent({
               </Label>
 
               <div className="flex items-center gap-2">
+                {/* Upload picker (Files/Gallery/PDF) */}
                 <input
-                  id={inputId}
+                  id={`${inputId}-upload`}
                   type="file"
                   accept={fileTypes}
                   multiple
+                  hidden
+                  onChange={(e) => handleFile(e, k)}
+                />
+
+                {/* Camera capture (mobile) */}
+                <input
+                  id={`${inputId}-camera`}
+                  type="file"
+                  accept="image/*"
                   capture="environment"
+                  multiple
                   hidden
                   onChange={(e) => handleFile(e, k)}
                 />
 
                 <label
-                  htmlFor={inputId}
+                  htmlFor={`${inputId}-upload`}
                   className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition"
                 >
                   <FileUp className="h-4 w-4" />
@@ -644,13 +714,19 @@ const StepContent = React.memo(function StepContent({
                 </label>
 
                 <label
-                  htmlFor={inputId}
+                  htmlFor={`${inputId}-camera`}
                   className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-50 transition"
                   title="Use camera (mobile)"
                 >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/>
-                    <circle cx="12" cy="13" r="4"/>
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
                   </svg>
                   Camera
                 </label>
@@ -663,7 +739,9 @@ const StepContent = React.memo(function StepContent({
                   </span>
                 )}
                 {!files[k] && (errors[k] || fileErrors[k]) && (
-                  <span className="text-red-600">{fileErrors[k] || "Required"}</span>
+                  <span className="text-red-600">
+                    {fileErrors[k] || "Required"}
+                  </span>
                 )}
               </div>
             </div>
@@ -680,18 +758,29 @@ const StepContent = React.memo(function StepContent({
               </Label>
 
               <div className="flex items-center gap-2">
+                {/* Upload picker (Files/Gallery/PDF) */}
                 <input
-                  id={inputId}
+                  id={`${inputId}-upload`}
                   type="file"
                   accept={fileTypes}
                   multiple
+                  hidden
+                  onChange={(e) => handleFile(e, k)}
+                />
+
+                {/* Camera capture (mobile) */}
+                <input
+                  id={`${inputId}-camera`}
+                  type="file"
+                  accept="image/*"
                   capture="environment"
+                  multiple
                   hidden
                   onChange={(e) => handleFile(e, k)}
                 />
 
                 <label
-                  htmlFor={inputId}
+                  htmlFor={`${inputId}-upload`}
                   className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition"
                 >
                   <FileUp className="h-4 w-4" />
@@ -699,13 +788,19 @@ const StepContent = React.memo(function StepContent({
                 </label>
 
                 <label
-                  htmlFor={inputId}
+                  htmlFor={`${inputId}-camera`}
                   className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-50 transition"
                   title="Use camera (mobile)"
                 >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/>
-                    <circle cx="12" cy="13" r="4"/>
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
                   </svg>
                   Camera
                 </label>
@@ -713,9 +808,13 @@ const StepContent = React.memo(function StepContent({
 
               <div className="text-xs font-semibold">
                 {files[k] instanceof File && (
-                  <span className="text-emerald-700">Selected: {files[k].name}</span>
+                  <span className="text-emerald-700">
+                    Selected: {files[k].name}
+                  </span>
                 )}
-                {fileErrors[k] && <span className="text-red-600">{fileErrors[k]}</span>}
+                {fileErrors[k] && (
+                  <span className="text-red-600">{fileErrors[k]}</span>
+                )}
               </div>
             </div>
           );
@@ -736,18 +835,29 @@ const StepContent = React.memo(function StepContent({
               </Label>
 
               <div className="flex items-center gap-2">
+                {/* Upload picker (Files/Gallery/PDF) */}
                 <input
-                  id={inputId}
+                  id={`${inputId}-upload`}
                   type="file"
                   accept={fileTypes}
                   multiple
+                  hidden
+                  onChange={(e) => handleFile(e, k)}
+                />
+
+                {/* Camera capture (mobile) */}
+                <input
+                  id={`${inputId}-camera`}
+                  type="file"
+                  accept="image/*"
                   capture="environment"
+                  multiple
                   hidden
                   onChange={(e) => handleFile(e, k)}
                 />
 
                 <label
-                  htmlFor={inputId}
+                  htmlFor={`${inputId}-upload`}
                   className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition"
                 >
                   <FileUp className="h-4 w-4" />
@@ -755,13 +865,19 @@ const StepContent = React.memo(function StepContent({
                 </label>
 
                 <label
-                  htmlFor={inputId}
+                  htmlFor={`${inputId}-camera`}
                   className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-50 transition"
                   title="Use camera (mobile)"
                 >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/>
-                    <circle cx="12" cy="13" r="4"/>
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
                   </svg>
                   Camera
                 </label>
@@ -769,10 +885,14 @@ const StepContent = React.memo(function StepContent({
 
               <div className="text-xs font-semibold">
                 {files[k] instanceof File && (
-                  <span className="text-emerald-700">Selected: {files[k].name}</span>
+                  <span className="text-emerald-700">
+                    Selected: {files[k].name}
+                  </span>
                 )}
                 {!files[k] && (errors[k] || fileErrors[k]) && (
-                  <span className="text-red-600">{fileErrors[k] || "Required"}</span>
+                  <span className="text-red-600">
+                    {fileErrors[k] || "Required"}
+                  </span>
                 )}
               </div>
             </div>
@@ -872,18 +992,29 @@ const StepContent = React.memo(function StepContent({
 
           {/* (F) Upload + Camera for digital signature too */}
           <div className="flex items-center gap-2">
+            {/* Upload picker (Files/Gallery/PDF) */}
             <input
-              id="digitalSignature-file"
+              id="digitalSignature-file-upload"
               type="file"
               accept={fileTypes}
               multiple
+              hidden
+              onChange={(e) => handleFile(e, "digitalSignature")}
+            />
+
+            {/* Camera capture (mobile) */}
+            <input
+              id="digitalSignature-file-camera"
+              type="file"
+              accept="image/*"
               capture="environment"
+              multiple
               hidden
               onChange={(e) => handleFile(e, "digitalSignature")}
             />
 
             <label
-              htmlFor="digitalSignature-file"
+              htmlFor="digitalSignature-file-upload"
               className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition"
             >
               <FileUp className="h-4 w-4" />
@@ -891,13 +1022,19 @@ const StepContent = React.memo(function StepContent({
             </label>
 
             <label
-              htmlFor="digitalSignature-file"
+              htmlFor="digitalSignature-file-camera"
               className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-800 cursor-pointer hover:bg-emerald-50 transition"
               title="Use camera (mobile)"
             >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/>
-                <circle cx="12" cy="13" r="4"/>
+              <svg
+                viewBox="0 0 24 24"
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
               </svg>
               Camera
             </label>
@@ -996,7 +1133,9 @@ export default function PharmacyRegistrationStepper() {
           setFileErrors((f) => ({ ...f, [key]: "Merged file exceeds 2MB" }));
           return;
         }
-        const mergedFile = new File([mergedBlob], `${key}-merged.jpg`, { type: "image/jpeg" });
+        const mergedFile = new File([mergedBlob], `${key}-merged.jpg`, {
+          type: "image/jpeg",
+        });
         setFileErrors((f) => ({ ...f, [key]: undefined }));
         setFiles((f) => ({ ...f, [key]: mergedFile }));
         return;
@@ -1018,7 +1157,10 @@ export default function PharmacyRegistrationStepper() {
         "image/jpg",
       ].includes(file.type)
     ) {
-      setFileErrors((f) => ({ ...f, [key]: "Invalid file type (use PDF/JPG/PNG)" }));
+      setFileErrors((f) => ({
+        ...f,
+        [key]: "Invalid file type (use PDF/JPG/PNG)",
+      }));
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
