@@ -5,7 +5,8 @@ import {
   FormControlLabel, Checkbox, MenuItem, Select, InputLabel, FormControl
 } from "@mui/material";
 
-const API_BASE_URL = import.meta?.env?.VITE_API_BASE_URL || "";
+// ✅ FIX: Use CRA env (same as AdminDashboard)
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 const TYPE_OPTIONS = ["Tablet", "Capsule", "Syrup", "Injection", "Drops", "Cream", "Other"];
 
@@ -45,18 +46,27 @@ export default function MedicineMasterAdmin() {
   );
 
   const fetchList = async () => {
-    const status = tab === "pending" ? "pending" : "approved";
-    const res = await axios.get(
-      `${API_BASE_URL}/api/medicine-master/admin/all?q=${encodeURIComponent(q)}&status=${status}`,
-      { headers }
-    );
-    setList(res.data || []);
+    try {
+      const status = tab === "pending" ? "pending" : "approved";
+      const res = await axios.get(
+        `${API_BASE_URL}/api/medicine-master/admin/all?q=${encodeURIComponent(q)}&status=${status}`,
+        { headers }
+      );
+      setList(res.data || []);
+    } catch (e) {
+      // ✅ Prevent blank screen due to unhandled errors
+      setList([]);
+      setMsg(e?.response?.data?.error || "❌ Failed to load medicines. Check API_BASE_URL / token.");
+      console.error("MedicineMasterAdmin fetchList error:", e);
+    }
   };
 
-  useEffect(() => { fetchList(); }, [tab]); // eslint-disable-line
+  useEffect(() => {
+    fetchList();
+    // eslint-disable-next-line
+  }, [tab]);
 
   const uploadMany = async (files) => {
-    // If you already have /api/upload that returns { url }, keep it.
     const urls = [];
     for (const f of files) {
       const fd = new FormData();
@@ -83,10 +93,13 @@ export default function MedicineMasterAdmin() {
         category: form.category
           ? form.category.split(",").map(s => s.trim()).filter(Boolean)
           : [],
-        ...(form.type === "Other" ? { customType: form.customType || "" } : { customType: "" }),
+        ...(form.type === "Other"
+          ? { customType: form.customType || "" }
+          : { customType: "" }),
       };
 
       await axios.post(`${API_BASE_URL}/api/medicine-master/admin`, payload, { headers });
+
       setMsg("✅ Master medicine added!");
       setForm({
         name: "", brand: "", composition: "", company: "",
@@ -100,17 +113,26 @@ export default function MedicineMasterAdmin() {
       fetchList();
     } catch (e) {
       setMsg(e?.response?.data?.error || "❌ Failed to add master medicine.");
+      console.error("MedicineMasterAdmin addMaster error:", e);
     }
   };
 
   const approve = async (id) => {
-    await axios.patch(`${API_BASE_URL}/api/medicine-master/${id}/approve`, {}, { headers });
-    fetchList();
+    try {
+      await axios.patch(`${API_BASE_URL}/api/medicine-master/${id}/approve`, {}, { headers });
+      fetchList();
+    } catch (e) {
+      setMsg(e?.response?.data?.error || "❌ Approve failed.");
+    }
   };
 
   const reject = async (id) => {
-    await axios.patch(`${API_BASE_URL}/api/medicine-master/${id}/reject`, {}, { headers });
-    fetchList();
+    try {
+      await axios.patch(`${API_BASE_URL}/api/medicine-master/${id}/reject`, {}, { headers });
+      fetchList();
+    } catch (e) {
+      setMsg(e?.response?.data?.error || "❌ Reject failed.");
+    }
   };
 
   return (
@@ -263,12 +285,7 @@ export default function MedicineMasterAdmin() {
           )}
 
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mb: 2 }}>
-            <TextField
-              fullWidth
-              label="Search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
+            <TextField fullWidth label="Search" value={q} onChange={(e) => setQ(e.target.value)} />
             <Button variant="outlined" onClick={fetchList}>Search</Button>
           </Stack>
 
@@ -280,7 +297,7 @@ export default function MedicineMasterAdmin() {
                     <Box>
                       <Typography fontWeight={800}>{m.name}</Typography>
                       <Typography variant="body2" color="text.secondary">
-                        ₹{m.price} / MRP ₹{m.mrp} • Stock base: (master)
+                        ₹{m.price} / MRP ₹{m.mrp}
                       </Typography>
                       <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
                         <Chip size="small" label={m.productKind} />
@@ -309,6 +326,8 @@ export default function MedicineMasterAdmin() {
               <Typography color="text.secondary">No records.</Typography>
             )}
           </Stack>
+
+          {msg ? <Typography sx={{ mt: 2 }}>{msg}</Typography> : null}
         </CardContent>
       </Card>
     </Box>
