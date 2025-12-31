@@ -215,7 +215,10 @@ export default function MedicineMasterAdmin() {
           {tab === "approved" && (
             <>
               {/* ✅ Pharmacy-style form */}
-              <Box sx={{ mt: 1, pb: 2 }} className="bg-white rounded-2xl border border-emerald-200 p-3 shadow-sm">
+              <Box
+  sx={{ mt: 1, pb: 2, bgcolor: "#212325", border: "1px solid #1d8f72", borderRadius: 2, p: 2 }}
+>
+
                 <Stack spacing={2}>
                   {/* Brand Type */}
                   <FormControl fullWidth>
