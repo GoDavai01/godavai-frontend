@@ -515,17 +515,48 @@ export default function PharmacyDashboard() {
   };
 
   const removeFromInventory = async (invId) => {
-  try {
-    setInvMsg("Removing...");
-    await axios.delete(`${API_BASE_URL}/api/pharmacies/inventory/${invId}`, {
-      headers: { Authorization: `Bearer ${token}` },
+    // ✅ optimistic UI remove (instant)
+    const prev = inventory;
+    setInventory((cur) => cur.filter((x) => x._id !== invId));
+
+    try {
+      setInvMsg("Removing...");
+      await axios.delete(`${API_BASE_URL}/api/pharmacies/inventory/${invId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setInvMsg("✅ Removed from inventory!");
+    } catch (e) {
+      // ✅ revert if failed
+      setInventory(prev);
+      setInvMsg(e?.response?.data?.error || "❌ Failed to remove.");
+    }
+  };
+
+  // ✅ EDIT INVENTORY MODAL STATE
+  const [editInvOpen, setEditInvOpen] = useState(false);
+  const [editInv, setEditInv] = useState(null);
+  const [editInvForm, setEditInvForm] = useState({ sellingPrice: 0, mrp: 0, stockQty: 0 });
+
+  const openEditInventory = (it) => {
+    setEditInv(it);
+    setEditInvForm({
+      sellingPrice: Number(it.sellingPrice ?? it.price ?? 0),
+      mrp: Number(it.mrp ?? 0),
+      stockQty: Number(it.stockQty ?? it.stock ?? 0),
     });
-    setInvMsg("✅ Removed from inventory!");
-    fetchInventory();
-  } catch (e) {
-    setInvMsg(e?.response?.data?.error || "❌ Failed to remove.");
-  }
-};
+    setEditInvOpen(true);
+  };
+
+  const saveEditInventory = async () => {
+    if (!editInv?._id) return;
+    await updateInventory(editInv._id, {
+      sellingPrice: Number(editInvForm.sellingPrice || 0),
+      mrp: Number(editInvForm.mrp || 0),
+      stockQty: Number(editInvForm.stockQty || 0),
+      // discount backend auto-calc logic stays as-is
+    });
+    setEditInvOpen(false);
+  };
 
   // ====== END MEDICINES TAB BLOCK ======
 
@@ -1526,54 +1557,34 @@ export default function PharmacyDashboard() {
                     <Card key={it._id} sx={{ bgcolor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 3 }}>
                       <CardContent>
                         <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-  <Typography fontWeight={800}>{it.name}</Typography>
+                          <Box>
+                            <Typography fontWeight={800}>{it.name}</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              ₹{Number(it.sellingPrice ?? it.price ?? 0)} • MRP ₹{Number(it.mrp ?? 0)} • Stock {Number(it.stockQty ?? it.stock ?? 0)}
+                            </Typography>
+                          </Box>
 
-  <Button
-    variant="outlined"
-    color="error"
-    onClick={() => removeFromInventory(it._id)}
-    sx={{ fontWeight: 800 }}
-  >
-    Remove
-  </Button>
-</Stack>
+                          <Stack direction="row" spacing={1}>
+                            <Button
+                              variant="outlined"
+                              onClick={() => openEditInventory(it)}
+                              sx={{ fontWeight: 800 }}
+                            >
+                              Edit
+                            </Button>
 
-                        <Grid container spacing={1} sx={{ mt: 1 }}>
-                          <Grid item xs={12} sm={3}>
-                            <TextField
-                              fullWidth
-                              label="Price"
-                              value={it.sellingPrice ?? it.price ?? 0}
-                              onChange={(e) => updateInventory(it._id, { sellingPrice: Number(e.target.value || 0) })}
-                            />
-                          </Grid>
-                          <Grid item xs={12} sm={3}>
-                            <TextField
-                              fullWidth
-                              label="MRP"
-                              value={it.mrp ?? 0}
-                              onChange={(e) => updateInventory(it._id, { mrp: Number(e.target.value || 0) })}
-                            />
-                          </Grid>
-                          <Grid item xs={12} sm={3}>
-                            <TextField
-                              fullWidth
-                              label="Discount %"
-                              value={it.discount ?? 0}
-                              onChange={(e) => updateInventory(it._id, { discount: Number(e.target.value || 0) })}
-                            />
-                          </Grid>
-                          <Grid item xs={12} sm={3}>
-                            <TextField
-                              fullWidth
-                              label="Stock"
-                              value={it.stockQty ?? it.stock ?? 0}
-                              onChange={(e) => updateInventory(it._id, { stockQty: Number(e.target.value || 0) })}
-                            />
-                          </Grid>
-                        </Grid>
+                            <Button
+                              variant="outlined"
+                              color="error"
+                              onClick={() => removeFromInventory(it._id)}
+                              sx={{ fontWeight: 800 }}
+                            >
+                              Remove
+                            </Button>
+                          </Stack>
+                        </Stack>
 
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
                           Note: Ye changes sirf aapki pharmacy ke liye hain. Master catalog change nahi hoga.
                         </Typography>
                       </CardContent>
@@ -1586,6 +1597,45 @@ export default function PharmacyDashboard() {
                 </Stack>
               </CardContent>
             </Card>
+
+            {/* ✅ Edit Inventory Dialog (My Inventory → Edit) */}
+            <Dialog open={editInvOpen} onClose={() => setEditInvOpen(false)} fullWidth maxWidth="sm">
+              <DialogTitle>Edit Inventory</DialogTitle>
+              <DialogContent>
+                <Stack spacing={2} sx={{ mt: 1 }}>
+                  <TextField
+                    label="Selling Price"
+                    type="number"
+                    value={editInvForm.sellingPrice}
+                    onChange={(e) => setEditInvForm(f => ({ ...f, sellingPrice: e.target.value }))}
+                    fullWidth
+                  />
+                  <TextField
+                    label="MRP"
+                    type="number"
+                    value={editInvForm.mrp}
+                    onChange={(e) => setEditInvForm(f => ({ ...f, mrp: e.target.value }))}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Stock"
+                    type="number"
+                    value={editInvForm.stockQty}
+                    onChange={(e) => setEditInvForm(f => ({ ...f, stockQty: e.target.value }))}
+                    fullWidth
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    Note: Ye changes sirf aapki pharmacy ke liye hain. Master catalog change nahi hoga.
+                  </Typography>
+                </Stack>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setEditInvOpen(false)}>Cancel</Button>
+                <Button variant="contained" onClick={saveEditInventory} sx={{ fontWeight: 800 }}>
+                  Save
+                </Button>
+              </DialogActions>
+            </Dialog>
 
             {/* ✅ Panel 3: Request New Medicine */}
             <Card sx={{ bgcolor: "#ffffff", border: "1px solid #d1fae5", borderRadius: 3 }}>
