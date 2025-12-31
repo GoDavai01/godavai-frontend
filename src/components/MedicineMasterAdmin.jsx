@@ -1,7 +1,4 @@
 // src/components/admin/MedicineMasterAdmin.jsx
-// MedicineMasterAdmin.jsx (FULLY REPLACEABLE)
-// Make Admin Medicine Master form behave like PharmacyDashboard "Request New Medicine"
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import {
@@ -9,36 +6,65 @@ import {
   FormControlLabel, Checkbox, MenuItem, Select, InputLabel, FormControl
 } from "@mui/material";
 
-// ✅ Reuse same components used in PharmacyDashboard
 import BrandAutocomplete from "./fields/BrandAutocomplete";
 import CompositionAutocomplete from "./fields/CompositionAutocomplete";
 
-// ✅ Reuse same constants (as in PharmacyDashboard)
 import { TYPE_OPTIONS, PACK_SIZES_BY_TYPE } from "../constants/packSizes";
 import { CUSTOMER_CATEGORIES } from "../constants/customerCategories";
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+// ✅ Normalize base so /api never duplicates
+const RAW_BASE = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+const BASE = String(RAW_BASE).replace(/\/+$/, "").replace(/\/api\/?$/i, ""); // removes trailing /api
+const API = (path) => `${BASE}${path.startsWith("/") ? path : `/${path}`}`;
 
-// ---- helpers (same pattern as PharmacyDashboard) ----
+// ---- helpers ----
 const splitComps = (s = "") => String(s).split("+").map(x => x.trim()).filter(Boolean);
 const joinComps = (arr = []) => arr.map(s => s.trim()).filter(Boolean).join(" + ");
 
 const keepUnlessExplicitClear = (prev, next) =>
   next === null ? "" : (typeof next === "string" && next.trim() === "" ? prev : next);
 
+// ✅ pack helpers (prevents white page)
+const packLabel = (count, unit) => {
+  const c = String(count || "").trim();
+  const u = String(unit || "").trim().toLowerCase();
+  if (!c && !u) return "";
+  return u ? `${c} ${u}` : c;
+};
+
+const normalizePackOpt = (raw) => {
+  if (!raw) return { count: "", unit: "", label: "" };
+  if (typeof raw === "string") {
+    const m = raw.trim().match(/^(\d+)(?:\s*([A-Za-z]+)s?)?$/);
+    if (!m) return { count: "", unit: "", label: raw };
+    const [, count, unit = ""] = m;
+    const u = unit.toLowerCase();
+    return { count, unit: u, label: u ? `${count} ${u}` : `${count}` };
+  }
+  const count = String(raw.count ?? "").trim();
+  const unit = String(raw.unit ?? "").trim().toLowerCase();
+  const label = raw.label || (count && unit ? `${count} ${unit}` : "");
+  return { count, unit, label: String(label || "") };
+};
+
 export default function MedicineMasterAdmin() {
-  // ✅ FIX: support both token keys (common reason for 401/403 => "Failed to add master medicine")
-  const token = localStorage.getItem("adminToken") || localStorage.getItem("token") || "";
+  // ✅ FIX: token fallback keys (your 401 is because key differs)
+  const token =
+    localStorage.getItem("adminToken") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("authToken") ||
+    "";
+
   const fileRef = useRef(null);
 
-  const [tab, setTab] = useState("approved"); // approved | pending
+  const [tab, setTab] = useState("approved");
   const [q, setQ] = useState("");
   const [list, setList] = useState([]);
   const [msg, setMsg] = useState("");
 
-  // ✅ Admin form = Pharmacy-style
   const [form, setForm] = useState({
-    productKind: "branded", // branded | generic
+    productKind: "branded",
     name: "",
     brand: "",
     composition: "",
@@ -49,8 +75,8 @@ export default function MedicineMasterAdmin() {
     mrp: "",
     discount: "",
 
-    category: [],           // multi-select categories
-    customCategory: "",     // if "Other"
+    category: [],
+    customCategory: "",
     type: "Tablet",
     customType: "",
     packCount: "",
@@ -68,20 +94,16 @@ export default function MedicineMasterAdmin() {
     [token]
   );
 
-  // ✅ FIX: auto-calc discount when MRP/Price changes (user will input only MRP + selling price)
+  // ✅ Discount auto-calc from Selling Price & MRP
   useEffect(() => {
     const mrp = Number(form.mrp || 0);
     const price = Number(form.price || 0);
 
     if (mrp > 0 && price >= 0 && price <= mrp) {
       const disc = Math.round((((mrp - price) / mrp) * 100) * 100) / 100; // 2 decimals
-      // update only if changed, to avoid re-render loops
       setForm(f => (String(f.discount) === String(disc) ? f : ({ ...f, discount: String(disc) })));
     } else {
-      // if invalid values, keep discount blank (don’t force 0)
-      if (form.discount !== "") {
-        setForm(f => ({ ...f, discount: "" }));
-      }
+      if (form.discount !== "") setForm(f => ({ ...f, discount: "" }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.mrp, form.price]);
@@ -89,15 +111,19 @@ export default function MedicineMasterAdmin() {
   const fetchList = async () => {
     try {
       const status = tab === "pending" ? "pending" : "approved";
+
+      // ✅ IMPORTANT: ensure correct endpoint (NOT cine-master)
       const res = await axios.get(
-        `${API_BASE_URL}/api/medicine-master/admin/all?q=${encodeURIComponent(q)}&status=${status}`,
+        API(`/api/medicine-master/admin/all?q=${encodeURIComponent(q)}&status=${status}`),
         { headers }
       );
+
       setList(res.data || []);
       setMsg("");
     } catch (e) {
+      const status = e?.response?.status;
       setList([]);
-      setMsg(e?.response?.data?.error || "❌ Failed to load medicines. Check API_BASE_URL / token.");
+      setMsg(e?.response?.data?.error || (status ? `❌ Failed to load medicines. (HTTP ${status})` : "❌ Failed to load medicines."));
       console.error("MedicineMasterAdmin fetchList error:", e);
     }
   };
@@ -109,7 +135,12 @@ export default function MedicineMasterAdmin() {
     for (const f of files) {
       const fd = new FormData();
       fd.append("file", f);
-      const r = await axios.post(`${API_BASE_URL}/api/upload`, fd, { headers });
+
+      // ✅ FIX: this was becoming /api/api/upload in your console
+      const r = await axios.post(API("/api/upload"), fd, {
+        headers: { Authorization: `Bearer ${token}` } // don't force Content-Type, axios handles it
+      });
+
       if (r?.data?.url) urls.push(r.data.url);
     }
     return urls;
@@ -129,36 +160,9 @@ export default function MedicineMasterAdmin() {
     return form.type || "Tablet";
   };
 
-  // ✅ FIX (ONLY CHANGE): normalize pack options + render as label to avoid white page crash
-  const packLabel = (count, unit) => {
-    const c = String(count || "").trim();
-    const u = String(unit || "").trim().toLowerCase();
-    if (!c && !u) return "";
-    return u ? `${c} ${u}` : c;
-  };
-
-  // Accept "60 ml" or "10 tablets" or an object {count, unit, label}
-  const normalizePackOpt = (raw) => {
-    if (!raw) return { count: "", unit: "", label: "" };
-    if (typeof raw === "string") {
-      const m = raw.trim().match(/^(\d+)(?:\s*([A-Za-z]+)s?)?$/);
-      if (!m) return { count: "", unit: "", label: raw };
-      const [, count, unit = ""] = m;
-      const u = unit.toLowerCase();
-      const label = u ? `${count} ${u}` : `${count}`;
-      return { count, unit: u, label };
-    }
-    const count = String(raw.count ?? "").trim();
-    const unit = String(raw.unit ?? "").trim().toLowerCase();
-    const label = raw.label || (count && unit ? `${count} ${unit}` : String(raw.label || ""));
-    return { count, unit, label };
-  };
-
   const getDefaultPackForType = (typeVal) => {
     const opts = PACK_SIZES_BY_TYPE?.[typeVal] || [];
-    const first = opts?.[0];
-    const o = normalizePackOpt(first);
-    if (!o?.count && !o?.unit && !o?.label) return { count: "", unit: "" };
+    const o = normalizePackOpt(opts?.[0]);
     return { count: o.count || "", unit: o.unit || "" };
   };
 
@@ -171,38 +175,31 @@ export default function MedicineMasterAdmin() {
         form.compositions?.length ? joinComps(form.compositions) : (form.composition || "");
 
       const payload = {
-        // identity
         productKind: form.productKind,
         name: (form.name || form.brand || compositionValue || "").trim(),
         brand: form.productKind === "generic" ? "" : (form.brand || "").trim(),
         composition: (compositionValue || "").trim(),
         company: (form.company || "").trim(),
 
-        // commerce
         price: Number(form.price || 0),
         mrp: Number(form.mrp || 0),
-        // ✅ ensure payload discount is always computed value
         discount: Number(form.discount || 0),
 
-        // catalog
         category: computedCategory(),
         type: computedType(),
         customType: form.type === "Other" ? (form.customType || "") : "",
 
-        // compliance
         prescriptionRequired: !!form.prescriptionRequired,
         hsn: String(form.hsn || "3004").replace(/[^\d]/g, "") || "3004",
         gstRate: Number(form.gstRate || 0),
 
-        // pack
         packCount: Number(form.packCount || 0),
         packUnit: (form.packUnit || "").trim(),
 
-        // media
         images: imgUrls,
       };
 
-      await axios.post(`${API_BASE_URL}/api/medicine-master/admin`, payload, { headers });
+      await axios.post(API("/api/medicine-master/admin"), payload, { headers });
 
       setMsg("✅ Master medicine added!");
       setForm({
@@ -219,33 +216,32 @@ export default function MedicineMasterAdmin() {
       if (fileRef.current) fileRef.current.value = "";
       fetchList();
     } catch (e) {
-      // ✅ show better error if backend sends message
-      const serverMsg = e?.response?.data?.error;
       const status = e?.response?.status;
-      setMsg(serverMsg || (status ? `❌ Failed to add master medicine. (HTTP ${status})` : "❌ Failed to add master medicine."));
+      setMsg(e?.response?.data?.error || (status ? `❌ Failed to add master medicine. (HTTP ${status})` : "❌ Failed to add master medicine."));
       console.error("MedicineMasterAdmin addMaster error:", e);
     }
   };
 
   const approve = async (id) => {
     try {
-      await axios.patch(`${API_BASE_URL}/api/medicine-master/${id}/approve`, {}, { headers });
+      await axios.patch(API(`/api/medicine-master/${id}/approve`), {}, { headers });
       fetchList();
     } catch (e) {
-      setMsg(e?.response?.data?.error || "❌ Approve failed.");
+      const status = e?.response?.status;
+      setMsg(e?.response?.data?.error || (status ? `❌ Approve failed. (HTTP ${status})` : "❌ Approve failed."));
     }
   };
 
   const reject = async (id) => {
     try {
-      await axios.patch(`${API_BASE_URL}/api/medicine-master/${id}/reject`, {}, { headers });
+      await axios.patch(API(`/api/medicine-master/${id}/reject`), {}, { headers });
       fetchList();
     } catch (e) {
-      setMsg(e?.response?.data?.error || "❌ Reject failed.");
+      const status = e?.response?.status;
+      setMsg(e?.response?.data?.error || (status ? `❌ Reject failed. (HTTP ${status})` : "❌ Reject failed."));
     }
   };
 
-  // pack size dropdown options based on type
   const packOptions = PACK_SIZES_BY_TYPE?.[form.type] || [];
 
   return (
@@ -270,12 +266,8 @@ export default function MedicineMasterAdmin() {
 
           {tab === "approved" && (
             <>
-              {/* ✅ Pharmacy-style form */}
-              <Box
-                sx={{ mt: 1, pb: 2, bgcolor: "#212325", border: "1px solid #1d8f72", borderRadius: 2, p: 2 }}
-              >
+              <Box sx={{ mt: 1, pb: 2, bgcolor: "#212325", border: "1px solid #1d8f72", borderRadius: 2, p: 2 }}>
                 <Stack spacing={2}>
-                  {/* Brand Type */}
                   <FormControl fullWidth>
                     <InputLabel>Brand Type</InputLabel>
                     <Select
@@ -298,7 +290,6 @@ export default function MedicineMasterAdmin() {
                     </Select>
                   </FormControl>
 
-                  {/* Brand (only for branded) */}
                   {form.productKind === "branded" && (
                     <BrandAutocomplete
                       value={form.brand}
@@ -323,7 +314,6 @@ export default function MedicineMasterAdmin() {
                     />
                   )}
 
-                  {/* Name (always available) */}
                   <TextField
                     fullWidth
                     label="Medicine Name"
@@ -331,7 +321,6 @@ export default function MedicineMasterAdmin() {
                     onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
                   />
 
-                  {/* Composition autocomplete (supports multi-composition) */}
                   <CompositionAutocomplete
                     value={form.composition}
                     onValueChange={(val) =>
@@ -390,7 +379,6 @@ export default function MedicineMasterAdmin() {
                     </Grid>
                   </Grid>
 
-                  {/* Category (multi-select) */}
                   <FormControl fullWidth>
                     <InputLabel>Category</InputLabel>
                     <Select
@@ -422,7 +410,6 @@ export default function MedicineMasterAdmin() {
                     />
                   )}
 
-                  {/* Type + pack */}
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
                       <FormControl fullWidth>
@@ -436,7 +423,6 @@ export default function MedicineMasterAdmin() {
                             setForm(f => ({
                               ...f,
                               type: nextType,
-                              // ✅ auto reset pack to a valid option when type changes
                               packCount: def.count,
                               packUnit: def.unit,
                             }));
@@ -446,6 +432,7 @@ export default function MedicineMasterAdmin() {
                         </Select>
                       </FormControl>
                     </Grid>
+
                     <Grid item xs={12} md={6}>
                       <FormControl fullWidth>
                         <InputLabel>Pack Size</InputLabel>
@@ -495,12 +482,10 @@ export default function MedicineMasterAdmin() {
                         label="Pack Unit (optional)"
                         value={form.packUnit}
                         onChange={(e) => setForm(f => ({ ...f, packUnit: e.target.value }))}
-                        placeholder="10 tablets / 60 ml"
                       />
                     </Grid>
                   </Grid>
 
-                  {/* Rx + HSN/GST */}
                   <Grid container spacing={2} alignItems="center">
                     <Grid item xs={12} md={4}>
                       <FormControlLabel
@@ -535,7 +520,6 @@ export default function MedicineMasterAdmin() {
                     </Grid>
                   </Grid>
 
-                  {/* Images */}
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Button variant="outlined" component="label">
                       Upload Images
@@ -565,7 +549,6 @@ export default function MedicineMasterAdmin() {
             </>
           )}
 
-          {/* Search + list */}
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mb: 2 }}>
             <TextField fullWidth label="Search" value={q} onChange={(e) => setQ(e.target.value)} />
             <Button variant="outlined" onClick={fetchList}>Search</Button>
