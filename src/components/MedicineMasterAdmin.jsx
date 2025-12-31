@@ -2,8 +2,22 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import {
-  Box, Button, Card, CardContent, Chip, Divider, Grid, Stack, TextField, Typography,
-  FormControlLabel, Checkbox, MenuItem, Select, InputLabel, FormControl
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Divider,
+  Grid,
+  Stack,
+  TextField,
+  Typography,
+  FormControlLabel,
+  Checkbox,
+  MenuItem,
+  Select,
+  InputLabel,
+  FormControl,
 } from "@mui/material";
 
 import BrandAutocomplete from "./fields/BrandAutocomplete";
@@ -14,15 +28,24 @@ import { CUSTOMER_CATEGORIES } from "../constants/customerCategories";
 
 // ✅ Normalize base so /api never duplicates
 const RAW_BASE = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-const BASE = String(RAW_BASE).replace(/\/+$/, "").replace(/\/api\/?$/i, ""); // removes trailing /api
+const BASE = String(RAW_BASE).replace(/\/+$/, "").replace(/\/api\/?$/i, "");
 const API = (path) => `${BASE}${path.startsWith("/") ? path : `/${path}`}`;
 
 // ---- helpers ----
-const splitComps = (s = "") => String(s).split("+").map(x => x.trim()).filter(Boolean);
-const joinComps = (arr = []) => arr.map(s => s.trim()).filter(Boolean).join(" + ");
+const splitComps = (s = "") =>
+  String(s)
+    .split("+")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+const joinComps = (arr = []) =>
+  arr
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+    .join(" + ");
 
 const keepUnlessExplicitClear = (prev, next) =>
-  next === null ? "" : (typeof next === "string" && next.trim() === "" ? prev : next);
+  next === null ? "" : typeof next === "string" && next.trim() === "" ? prev : next;
 
 // ✅ pack helpers (prevents white page)
 const packLabel = (count, unit) => {
@@ -47,15 +70,57 @@ const normalizePackOpt = (raw) => {
   return { count, unit, label: String(label || "") };
 };
 
-export default function MedicineMasterAdmin() {
-  // ✅ FIX: token fallback keys (your 401 is because key differs)
-  const token =
-    localStorage.getItem("adminToken") ||
-    localStorage.getItem("token") ||
-    localStorage.getItem("accessToken") ||
-    localStorage.getItem("authToken") ||
-    "";
+// ✅ Robust token reader (handles quoted token / JSON token / Bearer token)
+const readToken = () => {
+  const candidates = [
+    localStorage.getItem("adminToken"),
+    localStorage.getItem("token"),
+    localStorage.getItem("accessToken"),
+    localStorage.getItem("authToken"),
+    sessionStorage.getItem("adminToken"),
+    sessionStorage.getItem("token"),
+    sessionStorage.getItem("accessToken"),
+    sessionStorage.getItem("authToken"),
+  ].filter(Boolean);
 
+  for (let t of candidates) {
+    t = String(t).trim();
+
+    // If stored as JSON: {"token":"..."} or {"accessToken":"..."}
+    if (
+      (t.startsWith("{") && t.endsWith("}")) ||
+      (t.startsWith("[") && t.endsWith("]"))
+    ) {
+      try {
+        const obj = JSON.parse(t);
+        const maybe =
+          obj?.token ||
+          obj?.accessToken ||
+          obj?.authToken ||
+          obj?.adminToken ||
+          obj?.data?.token;
+        if (maybe) t = String(maybe).trim();
+      } catch (_) {}
+    }
+
+    // remove Bearer if already included
+    if (t.toLowerCase().startsWith("bearer ")) t = t.slice(7).trim();
+
+    // remove wrapping quotes "...."
+    if (
+      (t.startsWith('"') && t.endsWith('"')) ||
+      (t.startsWith("'") && t.endsWith("'"))
+    ) {
+      t = t.slice(1, -1).trim();
+    }
+
+    // looks like JWT (has 2 dots)
+    if (t.split(".").length === 3) return t;
+  }
+  return "";
+};
+
+export default function MedicineMasterAdmin() {
   const fileRef = useRef(null);
 
   const [tab, setTab] = useState("approved");
@@ -89,10 +154,26 @@ export default function MedicineMasterAdmin() {
 
   const [images, setImages] = useState([]);
 
+  // ✅ Always use CLEAN token
+  const token = useMemo(() => readToken(), []);
   const headers = useMemo(
-    () => ({ Authorization: `Bearer ${token}` }),
+    () => (token ? { Authorization: `Bearer ${token}` } : {}),
     [token]
   );
+
+  const handle401 = () => {
+    setMsg("Invalid or expired token. Please login again.");
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("token");
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("authToken");
+    sessionStorage.removeItem("adminToken");
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("accessToken");
+    sessionStorage.removeItem("authToken");
+    // optional:
+    // window.location.href = "/admin/login";
+  };
 
   // ✅ Discount auto-calc from Selling Price & MRP
   useEffect(() => {
@@ -101,9 +182,11 @@ export default function MedicineMasterAdmin() {
 
     if (mrp > 0 && price >= 0 && price <= mrp) {
       const disc = Math.round((((mrp - price) / mrp) * 100) * 100) / 100; // 2 decimals
-      setForm(f => (String(f.discount) === String(disc) ? f : ({ ...f, discount: String(disc) })));
+      setForm((f) =>
+        String(f.discount) === String(disc) ? f : { ...f, discount: String(disc) }
+      );
     } else {
-      if (form.discount !== "") setForm(f => ({ ...f, discount: "" }));
+      if (form.discount !== "") setForm((f) => ({ ...f, discount: "" }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.mrp, form.price]);
@@ -121,44 +204,58 @@ export default function MedicineMasterAdmin() {
       setMsg("");
     } catch (e) {
       const status = e?.response?.status;
+
+      if (status === 401) {
+        handle401();
+        setList([]);
+        return;
+      }
+
       setList([]);
       setMsg(
         e?.response?.data?.error ||
-        e?.response?.data?.message ||
-        (status ? `❌ Failed to load medicines. (HTTP ${status})` : "❌ Failed to load medicines.")
+          e?.response?.data?.message ||
+          (status ? `❌ Failed to load medicines. (HTTP ${status})` : "❌ Failed to load medicines.")
       );
       console.error("MedicineMasterAdmin fetchList error:", e);
     }
   };
 
-  useEffect(() => { fetchList(); /* eslint-disable-next-line */ }, [tab]);
+  useEffect(() => {
+    fetchList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
-  // ✅ FIXED: use fetch for upload (bypasses any global axios JSON Content-Type)
+  // ✅ Upload with fetch to avoid axios global JSON Content-Type issues
   const uploadMany = async (files) => {
     const urls = [];
+
     for (const f of files) {
       const fd = new FormData();
-      // backend accepts: file/image/images/photo :contentReference[oaicite:2]{index=2}
       fd.append("file", f);
 
       const resp = await fetch(API("/api/upload"), {
         method: "POST",
         headers: {
-          // do NOT set Content-Type (browser will set multipart boundary)
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: fd,
       });
 
       const data = await resp.json().catch(() => ({}));
 
+      if (resp.status === 401) {
+        handle401();
+        throw new Error("Invalid or expired token. Please login again.");
+      }
+
       if (!resp.ok) {
-        // backend sends { message: "..."} on upload errors :contentReference[oaicite:3]{index=3}
         throw new Error(data?.message || data?.error || `Upload failed (HTTP ${resp.status})`);
       }
 
       if (data?.url) urls.push(data.url);
     }
+
     return urls;
   };
 
@@ -166,7 +263,7 @@ export default function MedicineMasterAdmin() {
     const cats = Array.isArray(form.category) ? form.category : [];
     if (cats.includes("Other")) {
       const custom = (form.customCategory || "").trim();
-      return [...cats.filter(c => c !== "Other"), ...(custom ? [custom] : [])];
+      return [...cats.filter((c) => c !== "Other"), ...(custom ? [custom] : [])];
     }
     return cats;
   };
@@ -184,11 +281,17 @@ export default function MedicineMasterAdmin() {
 
   const addMaster = async () => {
     try {
+      if (!token) {
+        handle401();
+        return;
+      }
+
       setMsg("Uploading...");
       const imgUrls = images.length ? await uploadMany(images) : [];
 
-      const compositionValue =
-        form.compositions?.length ? joinComps(form.compositions) : (form.composition || "");
+      const compositionValue = form.compositions?.length
+        ? joinComps(form.compositions)
+        : form.composition || "";
 
       const payload = {
         productKind: form.productKind,
@@ -203,7 +306,7 @@ export default function MedicineMasterAdmin() {
 
         category: computedCategory(),
         type: computedType(),
-        customType: form.type === "Other" ? (form.customType || "") : "",
+        customType: form.type === "Other" ? form.customType || "" : "",
 
         prescriptionRequired: !!form.prescriptionRequired,
         hsn: String(form.hsn || "3004").replace(/[^\d]/g, "") || "3004",
@@ -220,21 +323,41 @@ export default function MedicineMasterAdmin() {
       setMsg("✅ Master medicine added!");
       setForm({
         productKind: "branded",
-        name: "", brand: "", composition: "", compositions: [],
-        company: "", price: "", mrp: "", discount: "",
-        category: [], customCategory: "",
-        type: "Tablet", customType: "",
-        packCount: "", packUnit: "",
+        name: "",
+        brand: "",
+        composition: "",
+        compositions: [],
+        company: "",
+        price: "",
+        mrp: "",
+        discount: "",
+        category: [],
+        customCategory: "",
+        type: "Tablet",
+        customType: "",
+        packCount: "",
+        packUnit: "",
         prescriptionRequired: false,
-        hsn: "3004", gstRate: 5,
+        hsn: "3004",
+        gstRate: 5,
       });
       setImages([]);
       if (fileRef.current) fileRef.current.value = "";
       fetchList();
     } catch (e) {
       const status = e?.response?.status;
+
+      if (status === 401) {
+        handle401();
+        return;
+      }
+
       const serverMsg = e?.response?.data?.error || e?.response?.data?.message;
-      setMsg(serverMsg || e?.message || (status ? `❌ Failed to add master medicine. (HTTP ${status})` : "❌ Failed to add master medicine."));
+      setMsg(
+        serverMsg ||
+          e?.message ||
+          (status ? `❌ Failed to add master medicine. (HTTP ${status})` : "❌ Failed to add master medicine.")
+      );
       console.error("MedicineMasterAdmin addMaster error:", e);
     }
   };
@@ -245,7 +368,17 @@ export default function MedicineMasterAdmin() {
       fetchList();
     } catch (e) {
       const status = e?.response?.status;
-      setMsg(e?.response?.data?.error || e?.response?.data?.message || (status ? `❌ Approve failed. (HTTP ${status})` : "❌ Approve failed."));
+
+      if (status === 401) {
+        handle401();
+        return;
+      }
+
+      setMsg(
+        e?.response?.data?.error ||
+          e?.response?.data?.message ||
+          (status ? `❌ Approve failed. (HTTP ${status})` : "❌ Approve failed.")
+      );
     }
   };
 
@@ -255,7 +388,17 @@ export default function MedicineMasterAdmin() {
       fetchList();
     } catch (e) {
       const status = e?.response?.status;
-      setMsg(e?.response?.data?.error || e?.response?.data?.message || (status ? `❌ Reject failed. (HTTP ${status})` : "❌ Reject failed."));
+
+      if (status === 401) {
+        handle401();
+        return;
+      }
+
+      setMsg(
+        e?.response?.data?.error ||
+          e?.response?.data?.message ||
+          (status ? `❌ Reject failed. (HTTP ${status})` : "❌ Reject failed.")
+      );
     }
   };
 
@@ -264,12 +407,20 @@ export default function MedicineMasterAdmin() {
   return (
     <Box>
       <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-        <Typography variant="h5" fontWeight={800}>Medicine Master</Typography>
+        <Typography variant="h5" fontWeight={800}>
+          Medicine Master
+        </Typography>
         <Stack direction="row" spacing={1}>
-          <Button variant={tab === "approved" ? "contained" : "outlined"} onClick={() => setTab("approved")}>
+          <Button
+            variant={tab === "approved" ? "contained" : "outlined"}
+            onClick={() => setTab("approved")}
+          >
             Approved
           </Button>
-          <Button variant={tab === "pending" ? "contained" : "outlined"} onClick={() => setTab("pending")}>
+          <Button
+            variant={tab === "pending" ? "contained" : "outlined"}
+            onClick={() => setTab("pending")}
+          >
             Pending
           </Button>
         </Stack>
@@ -283,7 +434,16 @@ export default function MedicineMasterAdmin() {
 
           {tab === "approved" && (
             <>
-              <Box sx={{ mt: 1, pb: 2, bgcolor: "#212325", border: "1px solid #1d8f72", borderRadius: 2, p: 2 }}>
+              <Box
+                sx={{
+                  mt: 1,
+                  pb: 2,
+                  bgcolor: "#212325",
+                  border: "1px solid #1d8f72",
+                  borderRadius: 2,
+                  p: 2,
+                }}
+              >
                 <Stack spacing={2}>
                   <FormControl fullWidth>
                     <InputLabel>Brand Type</InputLabel>
@@ -292,13 +452,11 @@ export default function MedicineMasterAdmin() {
                       value={form.productKind}
                       onChange={(e) => {
                         const v = e.target.value;
-                        setForm(f => ({
+                        setForm((f) => ({
                           ...f,
                           productKind: v,
                           brand: v === "generic" ? "" : f.brand,
-                          name: v === "generic"
-                            ? (f.name || f.composition || "")
-                            : (f.name || f.brand || "")
+                          name: v === "generic" ? f.name || f.composition || "" : f.name || f.brand || "",
                         }));
                       }}
                     >
@@ -311,13 +469,13 @@ export default function MedicineMasterAdmin() {
                     <BrandAutocomplete
                       value={form.brand}
                       onValueChange={(val) =>
-                        setForm(f => {
+                        setForm((f) => {
                           const nextBrand = keepUnlessExplicitClear(f.brand, val);
                           return { ...f, brand: nextBrand, name: f.name || nextBrand };
                         })
                       }
                       onPrefill={(p) =>
-                        setForm(f => ({
+                        setForm((f) => ({
                           ...f,
                           productKind: "branded",
                           name: f.name || p.name || f.brand,
@@ -335,28 +493,28 @@ export default function MedicineMasterAdmin() {
                     fullWidth
                     label="Medicine Name"
                     value={form.name}
-                    onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   />
 
                   <CompositionAutocomplete
                     value={form.composition}
                     onValueChange={(val) =>
-                      setForm(f => ({
+                      setForm((f) => ({
                         ...f,
                         composition: keepUnlessExplicitClear(f.composition, val),
-                        compositions: splitComps(val || f.composition || "")
+                        compositions: splitComps(val || f.composition || ""),
                       }))
                     }
                     onAddComposition={(c) =>
-                      setForm(f => {
+                      setForm((f) => {
                         const next = Array.from(new Set([...(f.compositions || []), c])).filter(Boolean);
                         return { ...f, compositions: next, composition: joinComps(next) };
                       })
                     }
                     compositions={form.compositions || []}
                     onRemoveComposition={(c) =>
-                      setForm(f => {
-                        const next = (f.compositions || []).filter(x => x !== c);
+                      setForm((f) => {
+                        const next = (f.compositions || []).filter((x) => x !== c);
                         return { ...f, compositions: next, composition: joinComps(next) };
                       })
                     }
@@ -366,7 +524,7 @@ export default function MedicineMasterAdmin() {
                     fullWidth
                     label="Company / Manufacturer"
                     value={form.company}
-                    onChange={(e) => setForm(f => ({ ...f, company: e.target.value }))}
+                    onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
                   />
 
                   <Grid container spacing={2}>
@@ -375,7 +533,7 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="Selling Price"
                         value={form.price}
-                        onChange={(e) => setForm(f => ({ ...f, price: e.target.value }))}
+                        onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
                       />
                     </Grid>
                     <Grid item xs={12} md={4}>
@@ -383,16 +541,11 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="MRP"
                         value={form.mrp}
-                        onChange={(e) => setForm(f => ({ ...f, mrp: e.target.value }))}
+                        onChange={(e) => setForm((f) => ({ ...f, mrp: e.target.value }))}
                       />
                     </Grid>
                     <Grid item xs={12} md={4}>
-                      <TextField
-                        fullWidth
-                        label="Discount (%)"
-                        value={form.discount}
-                        disabled
-                      />
+                      <TextField fullWidth label="Discount (%)" value={form.discount} disabled />
                     </Grid>
                   </Grid>
 
@@ -402,7 +555,7 @@ export default function MedicineMasterAdmin() {
                       multiple
                       label="Category"
                       value={form.category}
-                      onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))}
+                      onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                       renderValue={(selected) => (selected || []).join(", ")}
                     >
                       {CUSTOMER_CATEGORIES.map((c) => (
@@ -423,7 +576,7 @@ export default function MedicineMasterAdmin() {
                       fullWidth
                       label="Custom Category"
                       value={form.customCategory}
-                      onChange={(e) => setForm(f => ({ ...f, customCategory: e.target.value }))}
+                      onChange={(e) => setForm((f) => ({ ...f, customCategory: e.target.value }))}
                     />
                   )}
 
@@ -437,7 +590,7 @@ export default function MedicineMasterAdmin() {
                           onChange={(e) => {
                             const nextType = e.target.value;
                             const def = getDefaultPackForType(nextType);
-                            setForm(f => ({
+                            setForm((f) => ({
                               ...f,
                               type: nextType,
                               packCount: def.count,
@@ -445,7 +598,11 @@ export default function MedicineMasterAdmin() {
                             }));
                           }}
                         >
-                          {TYPE_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+                          {TYPE_OPTIONS.map((t) => (
+                            <MenuItem key={t} value={t}>
+                              {t}
+                            </MenuItem>
+                          ))}
                         </Select>
                       </FormControl>
                     </Grid>
@@ -458,7 +615,7 @@ export default function MedicineMasterAdmin() {
                           value={packLabel(form.packCount, form.packUnit) || ""}
                           onChange={(e) => {
                             const opt = normalizePackOpt(e.target.value);
-                            setForm(f => ({ ...f, packCount: opt.count, packUnit: opt.unit }));
+                            setForm((f) => ({ ...f, packCount: opt.count, packUnit: opt.unit }));
                           }}
                         >
                           <MenuItem value="">Select</MenuItem>
@@ -480,7 +637,7 @@ export default function MedicineMasterAdmin() {
                       fullWidth
                       label="Custom Type"
                       value={form.customType}
-                      onChange={(e) => setForm(f => ({ ...f, customType: e.target.value }))}
+                      onChange={(e) => setForm((f) => ({ ...f, customType: e.target.value }))}
                     />
                   )}
 
@@ -490,7 +647,7 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="Pack Count"
                         value={form.packCount}
-                        onChange={(e) => setForm(f => ({ ...f, packCount: e.target.value }))}
+                        onChange={(e) => setForm((f) => ({ ...f, packCount: e.target.value }))}
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
@@ -498,7 +655,7 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="Pack Unit (optional)"
                         value={form.packUnit}
-                        onChange={(e) => setForm(f => ({ ...f, packUnit: e.target.value }))}
+                        onChange={(e) => setForm((f) => ({ ...f, packUnit: e.target.value }))}
                       />
                     </Grid>
                   </Grid>
@@ -509,7 +666,9 @@ export default function MedicineMasterAdmin() {
                         control={
                           <Checkbox
                             checked={form.prescriptionRequired}
-                            onChange={(e) => setForm(f => ({ ...f, prescriptionRequired: e.target.checked }))}
+                            onChange={(e) =>
+                              setForm((f) => ({ ...f, prescriptionRequired: e.target.checked }))
+                            }
                           />
                         }
                         label="Prescription Required"
@@ -520,7 +679,7 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="HSN Code"
                         value={form.hsn}
-                        onChange={(e) => setForm(f => ({ ...f, hsn: e.target.value }))}
+                        onChange={(e) => setForm((f) => ({ ...f, hsn: e.target.value }))}
                       />
                     </Grid>
                     <Grid item xs={12} md={4}>
@@ -529,9 +688,13 @@ export default function MedicineMasterAdmin() {
                         <Select
                           label="GST Rate"
                           value={form.gstRate}
-                          onChange={(e) => setForm(f => ({ ...f, gstRate: e.target.value }))}
+                          onChange={(e) => setForm((f) => ({ ...f, gstRate: e.target.value }))}
                         >
-                          {[0, 5, 12, 18].map(g => <MenuItem key={g} value={g}>{g}%</MenuItem>)}
+                          {[0, 5, 12, 18].map((g) => (
+                            <MenuItem key={g} value={g}>
+                              {g}%
+                            </MenuItem>
+                          ))}
                         </Select>
                       </FormControl>
                     </Grid>
@@ -555,8 +718,12 @@ export default function MedicineMasterAdmin() {
                   </Stack>
 
                   <Stack direction="row" spacing={1}>
-                    <Button variant="contained" onClick={addMaster}>Add to Master</Button>
-                    <Button variant="outlined" onClick={fetchList}>Refresh</Button>
+                    <Button variant="contained" onClick={addMaster}>
+                      Add to Master
+                    </Button>
+                    <Button variant="outlined" onClick={fetchList}>
+                      Refresh
+                    </Button>
                     <Typography sx={{ ml: 1, alignSelf: "center" }}>{msg}</Typography>
                   </Stack>
                 </Stack>
@@ -568,7 +735,9 @@ export default function MedicineMasterAdmin() {
 
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mb: 2 }}>
             <TextField fullWidth label="Search" value={q} onChange={(e) => setQ(e.target.value)} />
-            <Button variant="outlined" onClick={fetchList}>Search</Button>
+            <Button variant="outlined" onClick={fetchList}>
+              Search
+            </Button>
           </Stack>
 
           <Stack spacing={1}>
@@ -583,10 +752,12 @@ export default function MedicineMasterAdmin() {
                       </Typography>
                       <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
                         <Chip size="small" label={m.productKind} />
-                        {m.prescriptionRequired ? <Chip size="small" color="warning" label="Rx Required" /> : null}
-                        {Array.isArray(m.category) ? m.category.slice(0, 4).map((c) => (
-                          <Chip key={c} size="small" label={c} />
-                        )) : null}
+                        {m.prescriptionRequired ? (
+                          <Chip size="small" color="warning" label="Rx Required" />
+                        ) : null}
+                        {Array.isArray(m.category)
+                          ? m.category.slice(0, 4).map((c) => <Chip key={c} size="small" label={c} />)
+                          : null}
                       </Stack>
                       <Typography variant="caption" color="text.secondary">
                         Status: {m.status} • By: {m.createdByType}
@@ -595,8 +766,12 @@ export default function MedicineMasterAdmin() {
 
                     {tab === "pending" && (
                       <Stack direction="row" spacing={1}>
-                        <Button variant="contained" onClick={() => approve(m._id)}>Approve</Button>
-                        <Button variant="outlined" color="error" onClick={() => reject(m._id)}>Reject</Button>
+                        <Button variant="contained" onClick={() => approve(m._id)}>
+                          Approve
+                        </Button>
+                        <Button variant="outlined" color="error" onClick={() => reject(m._id)}>
+                          Reject
+                        </Button>
                       </Stack>
                     )}
                   </Stack>
@@ -604,9 +779,7 @@ export default function MedicineMasterAdmin() {
               </Card>
             ))}
 
-            {list.length === 0 && (
-              <Typography color="text.secondary">No records.</Typography>
-            )}
+            {list.length === 0 && <Typography color="text.secondary">No records.</Typography>}
           </Stack>
 
           {msg ? <Typography sx={{ mt: 2 }}>{msg}</Typography> : null}
