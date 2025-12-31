@@ -1,3 +1,7 @@
+// src/components/admin/MedicineMasterAdmin.jsx
+// MedicineMasterAdmin.jsx (FULLY REPLACEABLE)
+// Make Admin Medicine Master form behave like PharmacyDashboard "Request New Medicine"
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import {
@@ -5,10 +9,22 @@ import {
   FormControlLabel, Checkbox, MenuItem, Select, InputLabel, FormControl
 } from "@mui/material";
 
-// ✅ FIX: Use CRA env (same as AdminDashboard)
+// ✅ Reuse same components used in PharmacyDashboard
+import BrandAutocomplete from "./fields/BrandAutocomplete";
+import CompositionAutocomplete from "./fields/CompositionAutocomplete";
+
+// ✅ Reuse same constants (as in PharmacyDashboard)
+import { TYPE_OPTIONS, PACK_SIZES_BY_TYPE } from "../constants/packSizes";
+import { CUSTOMER_CATEGORIES } from "../constants/customerCategories";
+
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
-const TYPE_OPTIONS = ["Tablet", "Capsule", "Syrup", "Injection", "Drops", "Cream", "Other"];
+// ---- helpers (same pattern as PharmacyDashboard) ----
+const splitComps = (s = "") => String(s).split("+").map(x => x.trim()).filter(Boolean);
+const joinComps = (arr = []) => arr.map(s => s.trim()).filter(Boolean).join(" + ");
+
+const keepUnlessExplicitClear = (prev, next) =>
+  next === null ? "" : (typeof next === "string" && next.trim() === "" ? prev : next);
 
 export default function MedicineMasterAdmin() {
   const token = localStorage.getItem("adminToken") || "";
@@ -17,28 +33,34 @@ export default function MedicineMasterAdmin() {
   const [tab, setTab] = useState("approved"); // approved | pending
   const [q, setQ] = useState("");
   const [list, setList] = useState([]);
+  const [msg, setMsg] = useState("");
 
+  // ✅ Admin form = Pharmacy-style
   const [form, setForm] = useState({
+    productKind: "branded", // branded | generic
     name: "",
     brand: "",
     composition: "",
+    compositions: [],
+
     company: "",
     price: "",
     mrp: "",
     discount: "",
-    category: "",
+
+    category: [],           // multi-select categories
+    customCategory: "",     // if "Other"
     type: "Tablet",
     customType: "",
-    prescriptionRequired: false,
-    productKind: "branded",
-    hsn: "3004",
-    gstRate: 5,
     packCount: "",
     packUnit: "",
+
+    prescriptionRequired: false,
+    hsn: "3004",
+    gstRate: 5,
   });
 
   const [images, setImages] = useState([]);
-  const [msg, setMsg] = useState("");
 
   const headers = useMemo(
     () => ({ Authorization: `Bearer ${token}` }),
@@ -53,18 +75,15 @@ export default function MedicineMasterAdmin() {
         { headers }
       );
       setList(res.data || []);
+      setMsg("");
     } catch (e) {
-      // ✅ Prevent blank screen due to unhandled errors
       setList([]);
       setMsg(e?.response?.data?.error || "❌ Failed to load medicines. Check API_BASE_URL / token.");
       console.error("MedicineMasterAdmin fetchList error:", e);
     }
   };
 
-  useEffect(() => {
-    fetchList();
-    // eslint-disable-next-line
-  }, [tab]);
+  useEffect(() => { fetchList(); /* eslint-disable-next-line */ }, [tab]);
 
   const uploadMany = async (files) => {
     const urls = [];
@@ -77,36 +96,71 @@ export default function MedicineMasterAdmin() {
     return urls;
   };
 
+  const computedCategory = () => {
+    const cats = Array.isArray(form.category) ? form.category : [];
+    if (cats.includes("Other")) {
+      const custom = (form.customCategory || "").trim();
+      return [...cats.filter(c => c !== "Other"), ...(custom ? [custom] : [])];
+    }
+    return cats;
+  };
+
+  const computedType = () => {
+    if (form.type === "Other") return (form.customType || "").trim() || "Other";
+    return form.type || "Tablet";
+  };
+
   const addMaster = async () => {
     try {
       setMsg("Uploading...");
       const imgUrls = images.length ? await uploadMany(images) : [];
 
+      const compositionValue =
+        form.compositions?.length ? joinComps(form.compositions) : (form.composition || "");
+
       const payload = {
-        ...form,
+        // identity
+        productKind: form.productKind,
+        name: (form.name || form.brand || compositionValue || "").trim(),
+        brand: form.productKind === "generic" ? "" : (form.brand || "").trim(),
+        composition: (compositionValue || "").trim(),
+        company: (form.company || "").trim(),
+
+        // commerce
         price: Number(form.price || 0),
         mrp: Number(form.mrp || 0),
         discount: Number(form.discount || 0),
+
+        // catalog
+        category: computedCategory(),
+        type: computedType(),
+        customType: form.type === "Other" ? (form.customType || "") : "",
+
+        // compliance
+        prescriptionRequired: !!form.prescriptionRequired,
+        hsn: String(form.hsn || "3004").replace(/[^\d]/g, "") || "3004",
         gstRate: Number(form.gstRate || 0),
+
+        // pack
         packCount: Number(form.packCount || 0),
+        packUnit: (form.packUnit || "").trim(),
+
+        // media
         images: imgUrls,
-        category: form.category
-          ? form.category.split(",").map(s => s.trim()).filter(Boolean)
-          : [],
-        ...(form.type === "Other"
-          ? { customType: form.customType || "" }
-          : { customType: "" }),
       };
 
       await axios.post(`${API_BASE_URL}/api/medicine-master/admin`, payload, { headers });
 
       setMsg("✅ Master medicine added!");
       setForm({
-        name: "", brand: "", composition: "", company: "",
-        price: "", mrp: "", discount: "",
-        category: "", type: "Tablet", customType: "",
-        prescriptionRequired: false, productKind: "branded",
-        hsn: "3004", gstRate: 5, packCount: "", packUnit: "",
+        productKind: "branded",
+        name: "", brand: "", composition: "", compositions: [],
+        company: "", price: "", mrp: "", discount: "",
+        category: [], customCategory: "",
+        type: "Tablet", customType: "",
+        packCount: "", packUnit: "",
+        prescriptionRequired: false,
+        hsn: "3004", gstRate: 5,
       });
       setImages([]);
       if (fileRef.current) fileRef.current.value = "";
@@ -135,13 +189,20 @@ export default function MedicineMasterAdmin() {
     }
   };
 
+  // pack size dropdown options based on type
+  const packOptions = PACK_SIZES_BY_TYPE?.[form.type] || [];
+
   return (
     <Box>
       <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
         <Typography variant="h5" fontWeight={800}>Medicine Master</Typography>
         <Stack direction="row" spacing={1}>
-          <Button variant={tab === "approved" ? "contained" : "outlined"} onClick={() => setTab("approved")}>Approved</Button>
-          <Button variant={tab === "pending" ? "contained" : "outlined"} onClick={() => setTab("pending")}>Pending</Button>
+          <Button variant={tab === "approved" ? "contained" : "outlined"} onClick={() => setTab("approved")}>
+            Approved
+          </Button>
+          <Button variant={tab === "pending" ? "contained" : "outlined"} onClick={() => setTab("pending")}>
+            Pending
+          </Button>
         </Stack>
       </Stack>
 
@@ -153,108 +214,252 @@ export default function MedicineMasterAdmin() {
 
           {tab === "approved" && (
             <>
-              <Grid container spacing={1}>
-                <Grid item xs={12} md={4}>
-                  <TextField fullWidth label="Name" value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })} />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField fullWidth label="Brand" value={form.brand}
-                    onChange={(e) => setForm({ ...form, brand: e.target.value })} />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField fullWidth label="Composition" value={form.composition}
-                    onChange={(e) => setForm({ ...form, composition: e.target.value })} />
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                  <TextField fullWidth label="Company" value={form.company}
-                    onChange={(e) => setForm({ ...form, company: e.target.value })} />
-                </Grid>
-                <Grid item xs={12} md={2}>
-                  <TextField fullWidth label="Price" value={form.price}
-                    onChange={(e) => setForm({ ...form, price: e.target.value })} />
-                </Grid>
-                <Grid item xs={12} md={2}>
-                  <TextField fullWidth label="MRP" value={form.mrp}
-                    onChange={(e) => setForm({ ...form, mrp: e.target.value })} />
-                </Grid>
-                <Grid item xs={12} md={2}>
-                  <TextField fullWidth label="Discount %" value={form.discount}
-                    onChange={(e) => setForm({ ...form, discount: e.target.value })} />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Category (comma separated)"
-                    value={form.category}
-                    onChange={(e) => setForm({ ...form, category: e.target.value })}
-                    placeholder="Fever, Pain, Cold"
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={3}>
+              {/* ✅ Pharmacy-style form */}
+              <Box sx={{ mt: 1, pb: 2 }} className="bg-white rounded-2xl border border-emerald-200 p-3 shadow-sm">
+                <Stack spacing={2}>
+                  {/* Brand Type */}
                   <FormControl fullWidth>
-                    <InputLabel>Type</InputLabel>
-                    <Select label="Type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                      {TYPE_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} md={3}>
-                  <TextField
-                    fullWidth
-                    label="Custom Type (if Other)"
-                    value={form.customType}
-                    disabled={form.type !== "Other"}
-                    onChange={(e) => setForm({ ...form, customType: e.target.value })}
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={3}>
-                  <FormControl fullWidth>
-                    <InputLabel>Product Kind</InputLabel>
+                    <InputLabel>Brand Type</InputLabel>
                     <Select
-                      label="Product Kind"
+                      label="Brand Type"
                       value={form.productKind}
-                      onChange={(e) => setForm({ ...form, productKind: e.target.value })}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setForm(f => ({
+                          ...f,
+                          productKind: v,
+                          brand: v === "generic" ? "" : f.brand,
+                          name: v === "generic"
+                            ? (f.name || f.composition || "")
+                            : (f.name || f.brand || "")
+                        }));
+                      }}
                     >
                       <MenuItem value="branded">Branded</MenuItem>
                       <MenuItem value="generic">Generic</MenuItem>
                     </Select>
                   </FormControl>
-                </Grid>
 
-                <Grid item xs={12} md={3}>
-                  <TextField fullWidth label="HSN" value={form.hsn}
-                    onChange={(e) => setForm({ ...form, hsn: e.target.value })} />
-                </Grid>
-                <Grid item xs={12} md={2}>
-                  <TextField fullWidth label="GST %" value={form.gstRate}
-                    onChange={(e) => setForm({ ...form, gstRate: e.target.value })} />
-                </Grid>
-                <Grid item xs={12} md={2}>
-                  <TextField fullWidth label="Pack Count" value={form.packCount}
-                    onChange={(e) => setForm({ ...form, packCount: e.target.value })} />
-                </Grid>
-                <Grid item xs={12} md={2}>
-                  <TextField fullWidth label="Pack Unit" value={form.packUnit}
-                    onChange={(e) => setForm({ ...form, packUnit: e.target.value })} placeholder="10 tablets / 60 ml" />
-                </Grid>
+                  {/* Brand (only for branded) */}
+                  {form.productKind === "branded" && (
+                    <BrandAutocomplete
+                      value={form.brand}
+                      onValueChange={(val) =>
+                        setForm(f => {
+                          const nextBrand = keepUnlessExplicitClear(f.brand, val);
+                          return { ...f, brand: nextBrand, name: f.name || nextBrand };
+                        })
+                      }
+                      onPrefill={(p) =>
+                        setForm(f => ({
+                          ...f,
+                          productKind: "branded",
+                          name: f.name || p.name || f.brand,
+                          type: p.type ?? f.type,
+                          packCount: (p.packCount ?? f.packCount) + "",
+                          packUnit: p.packUnit ?? f.packUnit,
+                          hsn: p.hsn ?? f.hsn,
+                          gstRate: p.gstRate ?? f.gstRate,
+                        }))
+                      }
+                    />
+                  )}
 
-                <Grid item xs={12} md={4}>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={form.prescriptionRequired}
-                        onChange={(e) => setForm({ ...form, prescriptionRequired: e.target.checked })}
-                      />
-                    }
-                    label="Prescription Required"
+                  {/* Name (always available) */}
+                  <TextField
+                    fullWidth
+                    label="Medicine Name"
+                    value={form.name}
+                    onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
                   />
-                </Grid>
 
-                <Grid item xs={12}>
+                  {/* Composition autocomplete (supports multi-composition) */}
+                  <CompositionAutocomplete
+                    value={form.composition}
+                    onValueChange={(val) =>
+                      setForm(f => ({
+                        ...f,
+                        composition: keepUnlessExplicitClear(f.composition, val),
+                        compositions: splitComps(val || f.composition || "")
+                      }))
+                    }
+                    onAddComposition={(c) =>
+                      setForm(f => {
+                        const next = Array.from(new Set([...(f.compositions || []), c])).filter(Boolean);
+                        return { ...f, compositions: next, composition: joinComps(next) };
+                      })
+                    }
+                    compositions={form.compositions || []}
+                    onRemoveComposition={(c) =>
+                      setForm(f => {
+                        const next = (f.compositions || []).filter(x => x !== c);
+                        return { ...f, compositions: next, composition: joinComps(next) };
+                      })
+                    }
+                  />
+
+                  <TextField
+                    fullWidth
+                    label="Company / Manufacturer"
+                    value={form.company}
+                    onChange={(e) => setForm(f => ({ ...f, company: e.target.value }))}
+                  />
+
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        label="Selling Price"
+                        value={form.price}
+                        onChange={(e) => setForm(f => ({ ...f, price: e.target.value }))}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        label="MRP"
+                        value={form.mrp}
+                        onChange={(e) => setForm(f => ({ ...f, mrp: e.target.value }))}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        label="Discount (%)"
+                        value={form.discount}
+                        onChange={(e) => setForm(f => ({ ...f, discount: e.target.value }))}
+                      />
+                    </Grid>
+                  </Grid>
+
+                  {/* Category (multi-select) */}
+                  <FormControl fullWidth>
+                    <InputLabel>Category</InputLabel>
+                    <Select
+                      multiple
+                      label="Category"
+                      value={form.category}
+                      onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))}
+                      renderValue={(selected) => (selected || []).join(", ")}
+                    >
+                      {CUSTOMER_CATEGORIES.map((c) => (
+                        <MenuItem key={c} value={c}>
+                          <Checkbox checked={form.category.indexOf(c) > -1} />
+                          <Typography>{c}</Typography>
+                        </MenuItem>
+                      ))}
+                      <MenuItem value="Other">
+                        <Checkbox checked={form.category.indexOf("Other") > -1} />
+                        <Typography>Other</Typography>
+                      </MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  {form.category.includes("Other") && (
+                    <TextField
+                      fullWidth
+                      label="Custom Category"
+                      value={form.customCategory}
+                      onChange={(e) => setForm(f => ({ ...f, customCategory: e.target.value }))}
+                    />
+                  )}
+
+                  {/* Type + pack */}
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <FormControl fullWidth>
+                        <InputLabel>Type</InputLabel>
+                        <Select
+                          label="Type"
+                          value={form.type}
+                          onChange={(e) => setForm(f => ({ ...f, type: e.target.value }))}
+                        >
+                          {TYPE_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <FormControl fullWidth>
+                        <InputLabel>Pack Size</InputLabel>
+                        <Select
+                          label="Pack Size"
+                          value={form.packUnit || ""}
+                          onChange={(e) => setForm(f => ({ ...f, packUnit: e.target.value }))}
+                        >
+                          <MenuItem value="">Select</MenuItem>
+                          {(packOptions || []).map((opt) => (
+                            <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  </Grid>
+
+                  {form.type === "Other" && (
+                    <TextField
+                      fullWidth
+                      label="Custom Type"
+                      value={form.customType}
+                      onChange={(e) => setForm(f => ({ ...f, customType: e.target.value }))}
+                    />
+                  )}
+
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Pack Count"
+                        value={form.packCount}
+                        onChange={(e) => setForm(f => ({ ...f, packCount: e.target.value }))}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Pack Unit (optional)"
+                        value={form.packUnit}
+                        onChange={(e) => setForm(f => ({ ...f, packUnit: e.target.value }))}
+                        placeholder="10 tablets / 60 ml"
+                      />
+                    </Grid>
+                  </Grid>
+
+                  {/* Rx + HSN/GST */}
+                  <Grid container spacing={2} alignItems="center">
+                    <Grid item xs={12} md={4}>
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={form.prescriptionRequired}
+                            onChange={(e) => setForm(f => ({ ...f, prescriptionRequired: e.target.checked }))}
+                          />
+                        }
+                        label="Prescription Required"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        label="HSN Code"
+                        value={form.hsn}
+                        onChange={(e) => setForm(f => ({ ...f, hsn: e.target.value }))}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>GST Rate</InputLabel>
+                        <Select
+                          label="GST Rate"
+                          value={form.gstRate}
+                          onChange={(e) => setForm(f => ({ ...f, gstRate: e.target.value }))}
+                        >
+                          {[0, 5, 12, 18].map(g => <MenuItem key={g} value={g}>{g}%</MenuItem>)}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  </Grid>
+
+                  {/* Images */}
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Button variant="outlined" component="label">
                       Upload Images
@@ -271,19 +476,20 @@ export default function MedicineMasterAdmin() {
                       {images.length ? `${images.length} selected` : "No images"}
                     </Typography>
                   </Stack>
-                </Grid>
-              </Grid>
 
-              <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-                <Button variant="contained" onClick={addMaster}>Add to Master</Button>
-                <Button variant="outlined" onClick={fetchList}>Refresh</Button>
-                <Typography sx={{ ml: 1, alignSelf: "center" }}>{msg}</Typography>
-              </Stack>
+                  <Stack direction="row" spacing={1}>
+                    <Button variant="contained" onClick={addMaster}>Add to Master</Button>
+                    <Button variant="outlined" onClick={fetchList}>Refresh</Button>
+                    <Typography sx={{ ml: 1, alignSelf: "center" }}>{msg}</Typography>
+                  </Stack>
+                </Stack>
+              </Box>
 
               <Divider sx={{ my: 2 }} />
             </>
           )}
 
+          {/* Search + list */}
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mb: 2 }}>
             <TextField fullWidth label="Search" value={q} onChange={(e) => setQ(e.target.value)} />
             <Button variant="outlined" onClick={fetchList}>Search</Button>
