@@ -112,7 +112,6 @@ export default function MedicineMasterAdmin() {
     try {
       const status = tab === "pending" ? "pending" : "approved";
 
-      // ✅ IMPORTANT: ensure correct endpoint (NOT cine-master)
       const res = await axios.get(
         API(`/api/medicine-master/admin/all?q=${encodeURIComponent(q)}&status=${status}`),
         { headers }
@@ -123,25 +122,42 @@ export default function MedicineMasterAdmin() {
     } catch (e) {
       const status = e?.response?.status;
       setList([]);
-      setMsg(e?.response?.data?.error || (status ? `❌ Failed to load medicines. (HTTP ${status})` : "❌ Failed to load medicines."));
+      setMsg(
+        e?.response?.data?.error ||
+        e?.response?.data?.message ||
+        (status ? `❌ Failed to load medicines. (HTTP ${status})` : "❌ Failed to load medicines.")
+      );
       console.error("MedicineMasterAdmin fetchList error:", e);
     }
   };
 
   useEffect(() => { fetchList(); /* eslint-disable-next-line */ }, [tab]);
 
+  // ✅ FIXED: use fetch for upload (bypasses any global axios JSON Content-Type)
   const uploadMany = async (files) => {
     const urls = [];
     for (const f of files) {
       const fd = new FormData();
+      // backend accepts: file/image/images/photo :contentReference[oaicite:2]{index=2}
       fd.append("file", f);
 
-      // ✅ FIX: this was becoming /api/api/upload in your console
-      const r = await axios.post(API("/api/upload"), fd, {
-        headers: { Authorization: `Bearer ${token}` } // don't force Content-Type, axios handles it
+      const resp = await fetch(API("/api/upload"), {
+        method: "POST",
+        headers: {
+          // do NOT set Content-Type (browser will set multipart boundary)
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: fd,
       });
 
-      if (r?.data?.url) urls.push(r.data.url);
+      const data = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        // backend sends { message: "..."} on upload errors :contentReference[oaicite:3]{index=3}
+        throw new Error(data?.message || data?.error || `Upload failed (HTTP ${resp.status})`);
+      }
+
+      if (data?.url) urls.push(data.url);
     }
     return urls;
   };
@@ -217,7 +233,8 @@ export default function MedicineMasterAdmin() {
       fetchList();
     } catch (e) {
       const status = e?.response?.status;
-      setMsg(e?.response?.data?.error || (status ? `❌ Failed to add master medicine. (HTTP ${status})` : "❌ Failed to add master medicine."));
+      const serverMsg = e?.response?.data?.error || e?.response?.data?.message;
+      setMsg(serverMsg || e?.message || (status ? `❌ Failed to add master medicine. (HTTP ${status})` : "❌ Failed to add master medicine."));
       console.error("MedicineMasterAdmin addMaster error:", e);
     }
   };
@@ -228,7 +245,7 @@ export default function MedicineMasterAdmin() {
       fetchList();
     } catch (e) {
       const status = e?.response?.status;
-      setMsg(e?.response?.data?.error || (status ? `❌ Approve failed. (HTTP ${status})` : "❌ Approve failed."));
+      setMsg(e?.response?.data?.error || e?.response?.data?.message || (status ? `❌ Approve failed. (HTTP ${status})` : "❌ Approve failed."));
     }
   };
 
@@ -238,7 +255,7 @@ export default function MedicineMasterAdmin() {
       fetchList();
     } catch (e) {
       const status = e?.response?.status;
-      setMsg(e?.response?.data?.error || (status ? `❌ Reject failed. (HTTP ${status})` : "❌ Reject failed."));
+      setMsg(e?.response?.data?.error || e?.response?.data?.message || (status ? `❌ Reject failed. (HTTP ${status})` : "❌ Reject failed."));
     }
   };
 
