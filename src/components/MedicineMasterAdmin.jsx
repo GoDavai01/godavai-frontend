@@ -27,7 +27,8 @@ const keepUnlessExplicitClear = (prev, next) =>
   next === null ? "" : (typeof next === "string" && next.trim() === "" ? prev : next);
 
 export default function MedicineMasterAdmin() {
-  const token = localStorage.getItem("adminToken") || "";
+  // ✅ FIX: support both token keys (common reason for 401/403 => "Failed to add master medicine")
+  const token = localStorage.getItem("adminToken") || localStorage.getItem("token") || "";
   const fileRef = useRef(null);
 
   const [tab, setTab] = useState("approved"); // approved | pending
@@ -66,6 +67,24 @@ export default function MedicineMasterAdmin() {
     () => ({ Authorization: `Bearer ${token}` }),
     [token]
   );
+
+  // ✅ FIX: auto-calc discount when MRP/Price changes (user will input only MRP + selling price)
+  useEffect(() => {
+    const mrp = Number(form.mrp || 0);
+    const price = Number(form.price || 0);
+
+    if (mrp > 0 && price >= 0 && price <= mrp) {
+      const disc = Math.round((((mrp - price) / mrp) * 100) * 100) / 100; // 2 decimals
+      // update only if changed, to avoid re-render loops
+      setForm(f => (String(f.discount) === String(disc) ? f : ({ ...f, discount: String(disc) })));
+    } else {
+      // if invalid values, keep discount blank (don’t force 0)
+      if (form.discount !== "") {
+        setForm(f => ({ ...f, discount: "" }));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.mrp, form.price]);
 
   const fetchList = async () => {
     try {
@@ -110,6 +129,39 @@ export default function MedicineMasterAdmin() {
     return form.type || "Tablet";
   };
 
+  // ✅ FIX (ONLY CHANGE): normalize pack options + render as label to avoid white page crash
+  const packLabel = (count, unit) => {
+    const c = String(count || "").trim();
+    const u = String(unit || "").trim().toLowerCase();
+    if (!c && !u) return "";
+    return u ? `${c} ${u}` : c;
+  };
+
+  // Accept "60 ml" or "10 tablets" or an object {count, unit, label}
+  const normalizePackOpt = (raw) => {
+    if (!raw) return { count: "", unit: "", label: "" };
+    if (typeof raw === "string") {
+      const m = raw.trim().match(/^(\d+)(?:\s*([A-Za-z]+)s?)?$/);
+      if (!m) return { count: "", unit: "", label: raw };
+      const [, count, unit = ""] = m;
+      const u = unit.toLowerCase();
+      const label = u ? `${count} ${u}` : `${count}`;
+      return { count, unit: u, label };
+    }
+    const count = String(raw.count ?? "").trim();
+    const unit = String(raw.unit ?? "").trim().toLowerCase();
+    const label = raw.label || (count && unit ? `${count} ${unit}` : String(raw.label || ""));
+    return { count, unit, label };
+  };
+
+  const getDefaultPackForType = (typeVal) => {
+    const opts = PACK_SIZES_BY_TYPE?.[typeVal] || [];
+    const first = opts?.[0];
+    const o = normalizePackOpt(first);
+    if (!o?.count && !o?.unit && !o?.label) return { count: "", unit: "" };
+    return { count: o.count || "", unit: o.unit || "" };
+  };
+
   const addMaster = async () => {
     try {
       setMsg("Uploading...");
@@ -129,6 +181,7 @@ export default function MedicineMasterAdmin() {
         // commerce
         price: Number(form.price || 0),
         mrp: Number(form.mrp || 0),
+        // ✅ ensure payload discount is always computed value
         discount: Number(form.discount || 0),
 
         // catalog
@@ -166,7 +219,10 @@ export default function MedicineMasterAdmin() {
       if (fileRef.current) fileRef.current.value = "";
       fetchList();
     } catch (e) {
-      setMsg(e?.response?.data?.error || "❌ Failed to add master medicine.");
+      // ✅ show better error if backend sends message
+      const serverMsg = e?.response?.data?.error;
+      const status = e?.response?.status;
+      setMsg(serverMsg || (status ? `❌ Failed to add master medicine. (HTTP ${status})` : "❌ Failed to add master medicine."));
       console.error("MedicineMasterAdmin addMaster error:", e);
     }
   };
@@ -187,31 +243,6 @@ export default function MedicineMasterAdmin() {
     } catch (e) {
       setMsg(e?.response?.data?.error || "❌ Reject failed.");
     }
-  };
-
-  // ✅ FIX (ONLY CHANGE): normalize pack options + render as label to avoid white page crash
-  const packLabel = (count, unit) => {
-    const c = String(count || "").trim();
-    const u = String(unit || "").trim().toLowerCase();
-    if (!c && !u) return "";
-    return u ? `${c} ${u}` : c;
-  };
-
-  // Accept "60 ml" or "10 tablets" or an object {count, unit, label}
-  const normalizePackOpt = (raw) => {
-    if (!raw) return { count: "", unit: "", label: "" };
-    if (typeof raw === "string") {
-      const m = raw.trim().match(/^(\d+)(?:\s*([A-Za-z]+)s?)?$/);
-      if (!m) return { count: "", unit: "", label: raw };
-      const [, count, unit = ""] = m;
-      const u = unit.toLowerCase();
-      const label = u ? `${count} ${u}` : `${count}`;
-      return { count, unit: u, label };
-    }
-    const count = String(raw.count ?? "").trim();
-    const unit = String(raw.unit ?? "").trim().toLowerCase();
-    const label = raw.label || (count && unit ? `${count} ${unit}` : String(raw.label || ""));
-    return { count, unit, label };
   };
 
   // pack size dropdown options based on type
@@ -241,9 +272,8 @@ export default function MedicineMasterAdmin() {
             <>
               {/* ✅ Pharmacy-style form */}
               <Box
-  sx={{ mt: 1, pb: 2, bgcolor: "#212325", border: "1px solid #1d8f72", borderRadius: 2, p: 2 }}
->
-
+                sx={{ mt: 1, pb: 2, bgcolor: "#212325", border: "1px solid #1d8f72", borderRadius: 2, p: 2 }}
+              >
                 <Stack spacing={2}>
                   {/* Brand Type */}
                   <FormControl fullWidth>
@@ -355,7 +385,7 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="Discount (%)"
                         value={form.discount}
-                        onChange={(e) => setForm(f => ({ ...f, discount: e.target.value }))}
+                        disabled
                       />
                     </Grid>
                   </Grid>
@@ -400,7 +430,17 @@ export default function MedicineMasterAdmin() {
                         <Select
                           label="Type"
                           value={form.type}
-                          onChange={(e) => setForm(f => ({ ...f, type: e.target.value }))}
+                          onChange={(e) => {
+                            const nextType = e.target.value;
+                            const def = getDefaultPackForType(nextType);
+                            setForm(f => ({
+                              ...f,
+                              type: nextType,
+                              // ✅ auto reset pack to a valid option when type changes
+                              packCount: def.count,
+                              packUnit: def.unit,
+                            }));
+                          }}
                         >
                           {TYPE_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
                         </Select>
