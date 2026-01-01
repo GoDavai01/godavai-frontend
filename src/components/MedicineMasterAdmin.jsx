@@ -18,6 +18,12 @@ import {
   Select,
   InputLabel,
   FormControl,
+
+  // ✅ ADDED (View dialog)
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 
 import BrandAutocomplete from "./fields/BrandAutocomplete";
@@ -127,6 +133,18 @@ export default function MedicineMasterAdmin() {
   const [q, setQ] = useState("");
   const [list, setList] = useState([]);
   const [msg, setMsg] = useState("");
+
+  // ✅ ADDED: View dialog state (ONLY for pending requests)
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewItem, setViewItem] = useState(null);
+  const openView = (item) => {
+    setViewItem(item);
+    setViewOpen(true);
+  };
+  const closeView = () => {
+    setViewOpen(false);
+    setViewItem(null);
+  };
 
   const [form, setForm] = useState({
     productKind: "branded",
@@ -766,6 +784,11 @@ export default function MedicineMasterAdmin() {
 
                     {tab === "pending" && (
                       <Stack direction="row" spacing={1}>
+                        {/* ✅ ADDED: View button */}
+                        <Button variant="outlined" onClick={() => openView(m)}>
+                          View
+                        </Button>
+
                         <Button variant="contained" onClick={() => approve(m._id)}>
                           Approve
                         </Button>
@@ -785,6 +808,189 @@ export default function MedicineMasterAdmin() {
           {msg ? <Typography sx={{ mt: 2 }}>{msg}</Typography> : null}
         </CardContent>
       </Card>
+
+      {/* ✅ ADDED: View Dialog (Pending Request Details + Images) */}
+      <Dialog open={viewOpen} onClose={closeView} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800 }}>Request Details</DialogTitle>
+
+        <DialogContent dividers sx={{ bgcolor: "#111", color: "#fff" }}>
+          {!viewItem ? (
+            <Typography sx={{ color: "#aaa" }}>No data</Typography>
+          ) : (
+            <Stack spacing={2}>
+              <Box>
+                <Typography fontWeight={800} fontSize={18}>
+                  {viewItem.name || "—"}
+                </Typography>
+                <Typography sx={{ color: "#aaa" }}>
+                  {viewItem.productKind || "—"} • {viewItem.type || "—"}
+                </Typography>
+              </Box>
+
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                <Box
+                  sx={{
+                    flex: 1,
+                    bgcolor: "#16181a",
+                    p: 2,
+                    borderRadius: 2,
+                    border: "1px solid #2b2f33",
+                  }}
+                >
+                  <Typography fontWeight={800} sx={{ mb: 1 }}>
+                    Basic Info
+                  </Typography>
+                  <Typography sx={{ color: "#ccc" }}>Brand: {viewItem.brand || "—"}</Typography>
+                  <Typography sx={{ color: "#ccc" }}>
+                    Composition: {viewItem.composition || "—"}
+                  </Typography>
+                  <Typography sx={{ color: "#ccc" }}>Company: {viewItem.company || "—"}</Typography>
+                  <Typography sx={{ color: "#ccc" }}>
+                    Category: {(viewItem.category || []).join(", ") || "—"}
+                  </Typography>
+                  <Typography sx={{ color: "#ccc" }}>
+                    Prescription Required: {viewItem.prescriptionRequired ? "Yes" : "No"}
+                  </Typography>
+                </Box>
+
+                <Box
+                  sx={{
+                    flex: 1,
+                    bgcolor: "#16181a",
+                    p: 2,
+                    borderRadius: 2,
+                    border: "1px solid #2b2f33",
+                  }}
+                >
+                  <Typography fontWeight={800} sx={{ mb: 1 }}>
+                    Pack / Tax
+                  </Typography>
+                  <Typography sx={{ color: "#ccc" }}>
+                    Pack: {viewItem.packCount || "—"} {viewItem.packUnit || ""}
+                  </Typography>
+                  <Typography sx={{ color: "#ccc" }}>HSN: {viewItem.hsn || "—"}</Typography>
+                  <Typography sx={{ color: "#ccc" }}>
+                    GST: {viewItem.gstRate ?? "—"}%
+                  </Typography>
+                </Box>
+              </Stack>
+
+              <Box
+                sx={{
+                  bgcolor: "#16181a",
+                  p: 2,
+                  borderRadius: 2,
+                  border: "1px solid #2b2f33",
+                }}
+              >
+                <Typography fontWeight={800} sx={{ mb: 1 }}>
+                  Pricing
+                </Typography>
+                <Typography sx={{ color: "#ccc" }}>Selling Price: ₹{viewItem.price ?? "—"}</Typography>
+                <Typography sx={{ color: "#ccc" }}>MRP: ₹{viewItem.mrp ?? "—"}</Typography>
+                <Typography sx={{ color: "#ccc" }}>Discount: {viewItem.discount ?? "—"}%</Typography>
+                {"stock" in viewItem && (
+                  <Typography sx={{ color: "#ccc" }}>Stock: {viewItem.stock ?? "—"}</Typography>
+                )}
+              </Box>
+
+              {/* IMAGES */}
+              <Box
+                sx={{
+                  bgcolor: "#16181a",
+                  p: 2,
+                  borderRadius: 2,
+                  border: "1px solid #2b2f33",
+                }}
+              >
+                <Typography fontWeight={800} sx={{ mb: 1 }}>
+                  Images
+                </Typography>
+
+                {Array.isArray(viewItem.images) && viewItem.images.length > 0 ? (
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", md: "1fr 1fr 1fr" },
+                      gap: 1.5,
+                    }}
+                  >
+                    {viewItem.images.map((url, idx) => (
+                      <Box
+                        key={idx}
+                        component="img"
+                        src={url}
+                        alt={`medicine-${idx}`}
+                        sx={{
+                          width: "100%",
+                          height: 160,
+                          objectFit: "cover",
+                          borderRadius: 2,
+                          border: "1px solid #2b2f33",
+                          bgcolor: "#0c0c0c",
+                        }}
+                      />
+                    ))}
+                  </Box>
+                ) : (
+                  <Typography sx={{ color: "#aaa" }}>No images uploaded</Typography>
+                )}
+              </Box>
+
+              {/* Optional: who requested */}
+              {(viewItem.requestedBy || viewItem.createdBy) && (
+                <Box
+                  sx={{
+                    bgcolor: "#16181a",
+                    p: 2,
+                    borderRadius: 2,
+                    border: "1px solid #2b2f33",
+                  }}
+                >
+                  <Typography fontWeight={800} sx={{ mb: 1 }}>
+                    Requested By
+                  </Typography>
+                  <Typography sx={{ color: "#ccc" }}>
+                    {viewItem.requestedBy?.name || viewItem.createdBy?.name || "—"}
+                  </Typography>
+                  <Typography sx={{ color: "#777" }}>
+                    {viewItem.requestedBy?.mobile || viewItem.createdBy?.mobile || ""}
+                  </Typography>
+                </Box>
+              )}
+            </Stack>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ bgcolor: "#0f0f0f" }}>
+          <Button onClick={closeView} variant="outlined">
+            Close
+          </Button>
+          {viewItem?._id && (
+            <>
+              <Button
+                onClick={() => {
+                  closeView();
+                  reject(viewItem._id);
+                }}
+                color="error"
+                variant="outlined"
+              >
+                Reject
+              </Button>
+              <Button
+                onClick={() => {
+                  closeView();
+                  approve(viewItem._id);
+                }}
+                variant="contained"
+              >
+                Approve
+              </Button>
+            </>
+          )}
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
