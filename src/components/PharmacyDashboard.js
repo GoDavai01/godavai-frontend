@@ -763,6 +763,25 @@ export default function PharmacyDashboard() {
     }
   };
 
+  const uploadMany = async (files) => {
+  const urls = [];
+  for (const f of files) {
+    const fd = new FormData();
+    fd.append("file", f);
+
+    const resp = await fetch(`${API_BASE_URL}/api/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    });
+
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data?.message || data?.error || `Upload failed (HTTP ${resp.status})`);
+    if (data?.url) urls.push(data.url);
+  }
+  return urls;
+};
+
   // ✅ NEW: Request medicine to master approval (same UI, different API)
   const handleRequestMedicine = async () => {
     if (
@@ -797,52 +816,42 @@ export default function PharmacyDashboard() {
           : (medForm.composition || "")
         );
 
-      if (medImages && medImages.length) {
-        data = new FormData();
-        data.append("name", medForm.name);
-        data.append("brand", safeBrand);
-        data.append("composition", compositionValue || "");
-        data.append("company", medForm.company || "");
-        data.append("price", medForm.price);
-        data.append("mrp", medForm.mrp);
-        data.append("discount", medForm.discount);
-        data.append("stock", medForm.stock);
-        data.append("category", JSON.stringify(finalCategories));
-        data.append("type", medForm.type || "Tablet");
-        if (medForm.type === "Other") data.append("customType", medForm.customType || "");
-        data.append("prescriptionRequired", medForm.prescriptionRequired);
+      const computedName = (medForm.name || safeBrand || compositionValue || "").trim();
+if (!computedName) {
+  setMedMsg("Medicine name is required.");
+  setLoading(false);
+  return;
+}
 
-        data.append("productKind", medForm.productKind);
-        data.append("hsn", medForm.hsn);
-        data.append("gstRate", medForm.gstRate);
-        data.append("packCount", medForm.packCount);
-        data.append("packUnit", medForm.packUnit);
+let imageUrls = [];
+if (medImages && medImages.length) {
+  imageUrls = await uploadMany(medImages); // ✅ upload first
+}
 
-        medImages.forEach(img => data.append("images", img));
-        headers = { Authorization: `Bearer ${token}` };
-      } else {
-        data = {
-          name: medForm.name,
-          brand: safeBrand,
-          composition: compositionValue || "",
-          company: medForm.company || "",
-          price: medForm.price,
-          mrp: medForm.mrp,
-          discount: medForm.discount,
-          stock: medForm.stock,
-          category: finalCategories,
-          type: medForm.type || "Tablet",
-          ...(medForm.type === "Other" && { customType: medForm.customType || "" }),
-          prescriptionRequired: medForm.prescriptionRequired,
+data = {
+  name: computedName,
+  brand: safeBrand,
+  composition: compositionValue || "",
+  company: medForm.company || "",
+  price: medForm.price,
+  mrp: medForm.mrp,
+  discount: medForm.discount,
+  stock: medForm.stock,
+  category: finalCategories,
+  type: medForm.type || "Tablet",
+  ...(medForm.type === "Other" ? { customType: medForm.customType || "" } : {}),
+  prescriptionRequired: medForm.prescriptionRequired,
 
-          productKind: medForm.productKind,
-          hsn: medForm.hsn,
-          gstRate: medForm.gstRate,
-          packCount: medForm.packCount,
-          packUnit: medForm.packUnit
-        };
-        headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
-      }
+  productKind: medForm.productKind,
+  hsn: medForm.hsn,
+  gstRate: medForm.gstRate,
+  packCount: medForm.packCount,
+  packUnit: medForm.packUnit,
+
+  images: imageUrls, // ✅ urls in JSON
+};
+
+headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
       await axios.post(`${API_BASE_URL}/api/medicine-master/request`, data, { headers });
 
