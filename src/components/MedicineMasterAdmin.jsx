@@ -284,39 +284,50 @@ export default function MedicineMasterAdmin() {
     sessionStorage.removeItem("authToken");
   };
 
-  // ✅ Discount auto-calc (Add form) — NOW comma-safe
+  // ✅ Selling Price auto-calc (Add form): MRP + Discount => Price (comma-safe)
   useEffect(() => {
     const mrp = parseMoney(form.mrp);
-    const price = parseMoney(form.price);
+    const discRaw = String(form.discount ?? "").trim();
 
-    if (mrp > 0 && price >= 0 && price <= mrp) {
-      const disc = Math.round((((mrp - price) / mrp) * 100) * 100) / 100;
+    // If discount field empty -> don't force price
+    if (!discRaw) return;
+
+    const disc = parseMoney(form.discount);
+
+    if (mrp > 0 && disc >= 0 && disc <= 100) {
+      const price = Math.round((mrp * (1 - disc / 100)) * 100) / 100;
       setForm((f) =>
-        String(f.discount) === String(disc) ? f : { ...f, discount: String(disc) }
+        String(f.price) === String(price) ? f : { ...f, price: String(price) }
       );
     } else {
-      if (form.discount !== "") setForm((f) => ({ ...f, discount: "" }));
+      // invalid inputs -> clear price
+      if (form.price !== "") setForm((f) => ({ ...f, price: "" }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.mrp, form.price]);
+  }, [form.mrp, form.discount]);
 
-  // ✅ Discount auto-calc (Edit form) — NOW comma-safe
+  // ✅ Selling Price auto-calc (Edit form): MRP + Discount => Price (comma-safe)
   useEffect(() => {
     if (!editOpen) return;
 
     const mrp = parseMoney(editForm.mrp);
-    const price = parseMoney(editForm.price);
+    const discRaw = String(editForm.discount ?? "").trim();
 
-    if (mrp > 0 && price >= 0 && price <= mrp) {
-      const disc = Math.round((((mrp - price) / mrp) * 100) * 100) / 100;
+    // If discount field empty -> don't force price
+    if (!discRaw) return;
+
+    const disc = parseMoney(editForm.discount);
+
+    if (mrp > 0 && disc >= 0 && disc <= 100) {
+      const price = Math.round((mrp * (1 - disc / 100)) * 100) / 100;
       setEditForm((f) =>
-        String(f.discount) === String(disc) ? f : { ...f, discount: String(disc) }
+        String(f.price) === String(price) ? f : { ...f, price: String(price) }
       );
     } else {
-      if (editForm.discount !== "") setEditForm((f) => ({ ...f, discount: "" }));
+      if (editForm.price !== "") setEditForm((f) => ({ ...f, price: "" }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editForm.mrp, editForm.price, editOpen]);
+  }, [editForm.mrp, editForm.discount, editOpen]);
 
   const fetchList = async () => {
     try {
@@ -773,6 +784,7 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="Selling Price"
                         value={form.price}
+                        disabled
                         onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
                       />
                     </Grid>
@@ -785,7 +797,12 @@ export default function MedicineMasterAdmin() {
                       />
                     </Grid>
                     <Grid item xs={12} md={4}>
-                      <TextField fullWidth label="Discount (%)" value={form.discount} disabled />
+                      <TextField
+                        fullWidth
+                        label="Discount (%)"
+                        value={form.discount}
+                        onChange={(e) => setForm((f) => ({ ...f, discount: e.target.value }))}
+                      />
                     </Grid>
                   </Grid>
 
@@ -1320,6 +1337,7 @@ export default function MedicineMasterAdmin() {
                   fullWidth
                   label="Selling Price"
                   value={editForm.price}
+                  disabled
                   onChange={(e) => setEditForm((f) => ({ ...f, price: e.target.value }))}
                 />
               </Grid>
@@ -1332,7 +1350,12 @@ export default function MedicineMasterAdmin() {
                 />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField fullWidth label="Discount (%)" value={editForm.discount} disabled />
+                <TextField
+                  fullWidth
+                  label="Discount (%)"
+                  value={editForm.discount}
+                  onChange={(e) => setEditForm((f) => ({ ...f, discount: e.target.value }))}
+                />
               </Grid>
             </Grid>
 
