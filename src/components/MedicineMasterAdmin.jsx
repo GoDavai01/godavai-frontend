@@ -237,6 +237,7 @@ export default function MedicineMasterAdmin() {
     setEditId(null);
     setEditNewImages([]);
     setEditExistingImages([]);
+    editLastEditedRef.current = null;
   };
 
   const [form, setForm] = useState({
@@ -284,50 +285,134 @@ export default function MedicineMasterAdmin() {
     sessionStorage.removeItem("authToken");
   };
 
-  // ✅ Selling Price auto-calc (Add form): MRP + Discount => Price (comma-safe)
+  // =========================
+  // ✅ PRICING (VICE-VERSA)
+  // =========================
+  const lastEditedRef = useRef(null); // "price" | "discount" | null
+  const editLastEditedRef = useRef(null); // "price" | "discount" | null
+
+  const round2 = (n) => Math.round(n * 100) / 100;
+
+  const calcPriceFromDiscount = (mrp, disc) => {
+    if (!(mrp > 0)) return "";
+    if (!(disc >= 0 && disc <= 100)) return "";
+    return String(round2(mrp * (1 - disc / 100)));
+  };
+
+  const calcDiscountFromPrice = (mrp, price) => {
+    if (!(mrp > 0)) return "";
+    if (!(price >= 0 && price <= mrp)) {
+      // still allow >mrp? if you want, remove this check
+      // but discount would become negative, so keeping safe
+      if (price > mrp) return "0";
+      return "";
+    }
+    const disc = ((mrp - price) / mrp) * 100;
+    return String(round2(disc));
+  };
+
+  // ✅ When MRP changes (Add form): decide based on last edited
   useEffect(() => {
     const mrp = parseMoney(form.mrp);
+    const last = lastEditedRef.current;
+
+    if (!(mrp > 0)) return;
+
+    if (last === "discount") {
+      const discRaw = String(form.discount ?? "").trim();
+      if (!discRaw) return;
+      const disc = parseMoney(form.discount);
+      const nextPrice = calcPriceFromDiscount(mrp, disc);
+      if (nextPrice !== "" && String(form.price) !== String(nextPrice)) {
+        setForm((f) => ({ ...f, price: nextPrice }));
+      }
+      return;
+    }
+
+    if (last === "price") {
+      const priceRaw = String(form.price ?? "").trim();
+      if (!priceRaw) return;
+      const price = parseMoney(form.price);
+      const nextDisc = calcDiscountFromPrice(mrp, price);
+      if (nextDisc !== "" && String(form.discount) !== String(nextDisc)) {
+        setForm((f) => ({ ...f, discount: nextDisc }));
+      }
+      return;
+    }
+
+    // none edited: prefer existing discount if present else price
     const discRaw = String(form.discount ?? "").trim();
+    if (discRaw) {
+      const disc = parseMoney(form.discount);
+      const nextPrice = calcPriceFromDiscount(mrp, disc);
+      if (nextPrice !== "" && String(form.price) !== String(nextPrice)) {
+        setForm((f) => ({ ...f, price: nextPrice }));
+      }
+      return;
+    }
 
-    // If discount field empty -> don't force price
-    if (!discRaw) return;
-
-    const disc = parseMoney(form.discount);
-
-    if (mrp > 0 && disc >= 0 && disc <= 100) {
-      const price = Math.round((mrp * (1 - disc / 100)) * 100) / 100;
-      setForm((f) =>
-        String(f.price) === String(price) ? f : { ...f, price: String(price) }
-      );
-    } else {
-      // invalid inputs -> clear price
-      if (form.price !== "") setForm((f) => ({ ...f, price: "" }));
+    const priceRaw = String(form.price ?? "").trim();
+    if (priceRaw) {
+      const price = parseMoney(form.price);
+      const nextDisc = calcDiscountFromPrice(mrp, price);
+      if (nextDisc !== "" && String(form.discount) !== String(nextDisc)) {
+        setForm((f) => ({ ...f, discount: nextDisc }));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.mrp, form.discount]);
+  }, [form.mrp]);
 
-  // ✅ Selling Price auto-calc (Edit form): MRP + Discount => Price (comma-safe)
+  // ✅ When MRP changes (Edit form)
   useEffect(() => {
     if (!editOpen) return;
 
     const mrp = parseMoney(editForm.mrp);
+    const last = editLastEditedRef.current;
+
+    if (!(mrp > 0)) return;
+
+    if (last === "discount") {
+      const discRaw = String(editForm.discount ?? "").trim();
+      if (!discRaw) return;
+      const disc = parseMoney(editForm.discount);
+      const nextPrice = calcPriceFromDiscount(mrp, disc);
+      if (nextPrice !== "" && String(editForm.price) !== String(nextPrice)) {
+        setEditForm((f) => ({ ...f, price: nextPrice }));
+      }
+      return;
+    }
+
+    if (last === "price") {
+      const priceRaw = String(editForm.price ?? "").trim();
+      if (!priceRaw) return;
+      const price = parseMoney(editForm.price);
+      const nextDisc = calcDiscountFromPrice(mrp, price);
+      if (nextDisc !== "" && String(editForm.discount) !== String(nextDisc)) {
+        setEditForm((f) => ({ ...f, discount: nextDisc }));
+      }
+      return;
+    }
+
     const discRaw = String(editForm.discount ?? "").trim();
+    if (discRaw) {
+      const disc = parseMoney(editForm.discount);
+      const nextPrice = calcPriceFromDiscount(mrp, disc);
+      if (nextPrice !== "" && String(editForm.price) !== String(nextPrice)) {
+        setEditForm((f) => ({ ...f, price: nextPrice }));
+      }
+      return;
+    }
 
-    // If discount field empty -> don't force price
-    if (!discRaw) return;
-
-    const disc = parseMoney(editForm.discount);
-
-    if (mrp > 0 && disc >= 0 && disc <= 100) {
-      const price = Math.round((mrp * (1 - disc / 100)) * 100) / 100;
-      setEditForm((f) =>
-        String(f.price) === String(price) ? f : { ...f, price: String(price) }
-      );
-    } else {
-      if (editForm.price !== "") setEditForm((f) => ({ ...f, price: "" }));
+    const priceRaw = String(editForm.price ?? "").trim();
+    if (priceRaw) {
+      const price = parseMoney(editForm.price);
+      const nextDisc = calcDiscountFromPrice(mrp, price);
+      if (nextDisc !== "" && String(editForm.discount) !== String(nextDisc)) {
+        setEditForm((f) => ({ ...f, discount: nextDisc }));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editForm.mrp, editForm.discount, editOpen]);
+  }, [editForm.mrp, editOpen]);
 
   const fetchList = async () => {
     try {
@@ -474,6 +559,7 @@ export default function MedicineMasterAdmin() {
       await axios.post(API("/api/medicine-master/admin"), payload, { headers });
 
       setMsg("✅ Master medicine added!");
+      lastEditedRef.current = null;
       setForm({
         productKind: "branded",
         name: "",
@@ -784,8 +870,18 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="Selling Price"
                         value={form.price}
-                        disabled
-                        onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          lastEditedRef.current = "price";
+                          setForm((f) => {
+                            const next = { ...f, price: v };
+                            const mrp = parseMoney(next.mrp);
+                            const price = parseMoney(v);
+                            const disc = calcDiscountFromPrice(mrp, price);
+                            if (disc !== "" && String(next.discount) !== String(disc)) next.discount = disc;
+                            return next;
+                          });
+                        }}
                       />
                     </Grid>
                     <Grid item xs={12} md={4}>
@@ -801,7 +897,18 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="Discount (%)"
                         value={form.discount}
-                        onChange={(e) => setForm((f) => ({ ...f, discount: e.target.value }))}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          lastEditedRef.current = "discount";
+                          setForm((f) => {
+                            const next = { ...f, discount: v };
+                            const mrp = parseMoney(next.mrp);
+                            const disc = parseMoney(v);
+                            const price = calcPriceFromDiscount(mrp, disc);
+                            if (price !== "" && String(next.price) !== String(price)) next.price = price;
+                            return next;
+                          });
+                        }}
                       />
                     </Grid>
                   </Grid>
@@ -1337,8 +1444,18 @@ export default function MedicineMasterAdmin() {
                   fullWidth
                   label="Selling Price"
                   value={editForm.price}
-                  disabled
-                  onChange={(e) => setEditForm((f) => ({ ...f, price: e.target.value }))}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    editLastEditedRef.current = "price";
+                    setEditForm((f) => {
+                      const next = { ...f, price: v };
+                      const mrp = parseMoney(next.mrp);
+                      const price = parseMoney(v);
+                      const disc = calcDiscountFromPrice(mrp, price);
+                      if (disc !== "" && String(next.discount) !== String(disc)) next.discount = disc;
+                      return next;
+                    });
+                  }}
                 />
               </Grid>
               <Grid item xs={12} md={4}>
@@ -1354,7 +1471,18 @@ export default function MedicineMasterAdmin() {
                   fullWidth
                   label="Discount (%)"
                   value={editForm.discount}
-                  onChange={(e) => setEditForm((f) => ({ ...f, discount: e.target.value }))}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    editLastEditedRef.current = "discount";
+                    setEditForm((f) => {
+                      const next = { ...f, discount: v };
+                      const mrp = parseMoney(next.mrp);
+                      const disc = parseMoney(v);
+                      const price = calcPriceFromDiscount(mrp, disc);
+                      if (price !== "" && String(next.price) !== String(price)) next.price = price;
+                      return next;
+                    });
+                  }}
                 />
               </Grid>
             </Grid>
