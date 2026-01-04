@@ -52,6 +52,18 @@ const joinComps = (arr = []) =>
 const keepUnlessExplicitClear = (prev, next) =>
   next === null ? "" : typeof next === "string" && next.trim() === "" ? prev : next;
 
+// ✅ NEW: parse money/number that may include commas (1,701.56) or spaces
+const parseMoney = (val) => {
+  if (val === null || val === undefined) return 0;
+  const s = String(val).trim();
+  if (!s) return 0;
+
+  // remove commas + spaces. Keep digits, dot and minus only.
+  const cleaned = s.replace(/,/g, "").replace(/[^\d.-]/g, "");
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : 0;
+};
+
 // ✅ pack helpers
 const packLabel = (count, unit) => {
   const c = String(count || "").trim();
@@ -272,10 +284,10 @@ export default function MedicineMasterAdmin() {
     sessionStorage.removeItem("authToken");
   };
 
-  // ✅ Discount auto-calc (Add form)
+  // ✅ Discount auto-calc (Add form) — NOW comma-safe
   useEffect(() => {
-    const mrp = Number(form.mrp || 0);
-    const price = Number(form.price || 0);
+    const mrp = parseMoney(form.mrp);
+    const price = parseMoney(form.price);
 
     if (mrp > 0 && price >= 0 && price <= mrp) {
       const disc = Math.round((((mrp - price) / mrp) * 100) * 100) / 100;
@@ -288,12 +300,12 @@ export default function MedicineMasterAdmin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.mrp, form.price]);
 
-  // ✅ Discount auto-calc (Edit form)
+  // ✅ Discount auto-calc (Edit form) — NOW comma-safe
   useEffect(() => {
     if (!editOpen) return;
 
-    const mrp = Number(editForm.mrp || 0);
-    const price = Number(editForm.price || 0);
+    const mrp = parseMoney(editForm.mrp);
+    const price = parseMoney(editForm.price);
 
     if (mrp > 0 && price >= 0 && price <= mrp) {
       const disc = Math.round((((mrp - price) / mrp) * 100) * 100) / 100;
@@ -429,9 +441,10 @@ export default function MedicineMasterAdmin() {
         composition: (compositionValue || "").trim(),
         company: (form.company || "").trim(),
 
-        price: Number(form.price || 0),
-        mrp: Number(form.mrp || 0),
-        discount: Number(form.discount || 0),
+        // ✅ comma-safe
+        price: parseMoney(form.price),
+        mrp: parseMoney(form.mrp),
+        discount: parseMoney(form.discount),
 
         category: computedCategory(),
         type: computedType(),
@@ -441,7 +454,7 @@ export default function MedicineMasterAdmin() {
         hsn: String(form.hsn || "3004").replace(/[^\d]/g, "") || "3004",
         gstRate: Number(form.gstRate || 0),
 
-        packCount: Number(form.packCount || 0),
+        packCount: parseMoney(form.packCount),
         packUnit: (form.packUnit || "").trim(),
 
         images: imgUrls,
@@ -515,9 +528,10 @@ export default function MedicineMasterAdmin() {
         composition: (compositionValue || "").trim(),
         company: (editForm.company || "").trim(),
 
-        price: Number(editForm.price || 0),
-        mrp: Number(editForm.mrp || 0),
-        discount: Number(editForm.discount || 0),
+        // ✅ comma-safe
+        price: parseMoney(editForm.price),
+        mrp: parseMoney(editForm.mrp),
+        discount: parseMoney(editForm.discount),
 
         category: computedEditCategory(),
         type: computedEditType(),
@@ -527,7 +541,7 @@ export default function MedicineMasterAdmin() {
         hsn: String(editForm.hsn || "3004").replace(/[^\d]/g, "") || "3004",
         gstRate: Number(editForm.gstRate || 0),
 
-        packCount: Number(editForm.packCount || 0),
+        packCount: parseMoney(editForm.packCount),
         packUnit: (editForm.packUnit || "").trim(),
 
         images: finalImages,
