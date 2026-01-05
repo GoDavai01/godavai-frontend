@@ -515,6 +515,47 @@ export default function AdminDashboard() {
     }
   };
 
+    // ✅ USER BLOCK/DELETE HELPERS (ADD THIS)
+  const isUserBlocked = (u) => !!(u?.isBlocked || u?.blocked || u?.active === false);
+
+  const toggleBlockUser = async (user) => {
+    try {
+      const blockedNow = isUserBlocked(user);
+      const nextBlocked = !blockedNow;
+
+      await axios.patch(
+        `${API_BASE_URL}/api/admin/users/${user._id}/block`,
+        { blocked: nextBlocked },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setUserList((prev) =>
+        prev.map((u) =>
+          u._id === user._id
+            ? { ...u, isBlocked: nextBlocked, blocked: nextBlocked, active: nextBlocked ? false : true }
+            : u
+        )
+      );
+
+      setMsg(nextBlocked ? "User blocked!" : "User unblocked!");
+    } catch {
+      setMsg("Failed to block/unblock user");
+    }
+  };
+
+  const deleteUser = async (userId) => {
+    if (!window.confirm("Are you sure you want to delete this user?")) return;
+    try {
+      await axios.delete(`${API_BASE_URL}/api/admin/users/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUserList((prev) => prev.filter((u) => u._id !== userId));
+      setMsg("User deleted!");
+    } catch {
+      setMsg("Failed to delete user");
+    }
+  };
+
   const handleSendNotification = async () => {
     setNotificationOpen(false);
     setNotificationData({ title: "", message: "", to: "all" });
@@ -771,9 +812,38 @@ export default function AdminDashboard() {
                 <Stack spacing={2}>
                   {userList.map(user => (
                     <Card key={user._id} sx={{ p: 2, bgcolor: "#23272a", borderRadius: 2 }}>
-                      <Typography fontWeight={700}>{user.name}</Typography>
-                      <Typography variant="body2" sx={{ color: "#FFD43B" }}>{user.email || user.mobile}</Typography>
-                    </Card>
+  <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+    <Box>
+      <Typography fontWeight={700}>{user.name}</Typography>
+      <Typography variant="body2" sx={{ color: "#FFD43B" }}>
+        {user.email || user.mobile}
+      </Typography>
+    </Box>
+
+    <Stack direction="row" spacing={1} alignItems="center">
+      {isUserBlocked(user) && <Chip size="small" label="Blocked" color="error" />}
+
+      <Button
+        size="small"
+        variant="outlined"
+        color={isUserBlocked(user) ? "success" : "warning"}
+        onClick={() => toggleBlockUser(user)}
+      >
+        {isUserBlocked(user) ? "Unblock" : "Block"}
+      </Button>
+
+      <Button
+        size="small"
+        variant="outlined"
+        color="error"
+        onClick={() => deleteUser(user._id)}
+      >
+        Delete
+      </Button>
+    </Stack>
+  </Stack>
+</Card>
+
                   ))}
                 </Stack>
               )}
