@@ -230,6 +230,10 @@ export default function MedicineMasterAdmin() {
   const [editExistingImages, setEditExistingImages] = useState([]); // urls
   const [editNewImages, setEditNewImages] = useState([]); // File[]
 
+  // ✅ Custom category inline edit (Edit Medicine modal)
+  const [editCatEditIdx, setEditCatEditIdx] = useState(null); // number | null
+  const [editCatEditValue, setEditCatEditValue] = useState("");
+
   const openEdit = (item) => {
     const rawCats = Array.isArray(item?.category) ? item.category : [];
     const hasOther = rawCats.includes("Other");
@@ -278,6 +282,8 @@ export default function MedicineMasterAdmin() {
     setEditExistingImages(Array.isArray(item?.images) ? item.images : []);
     setEditNewImages([]);
     if (editFileRef.current) editFileRef.current.value = "";
+    setEditCatEditIdx(null);
+    setEditCatEditValue("");
     setEditOpen(true);
   };
 
@@ -287,6 +293,8 @@ export default function MedicineMasterAdmin() {
     setEditNewImages([]);
     setEditExistingImages([]);
     editLastEditedRef.current = null;
+    setEditCatEditIdx(null);
+    setEditCatEditValue("");
   };
 
   const [form, setForm] = useState({
@@ -1758,20 +1766,101 @@ export default function MedicineMasterAdmin() {
                 </Stack>
 
                 {(editForm.customCategories || []).length ? (
-                  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-                    {(editForm.customCategories || []).map((c) => (
-                      <Chip
-                        key={c}
-                        label={c}
-                        onDelete={() =>
-                          setEditForm((f) => ({
-                            ...f,
-                            customCategories: (f.customCategories || []).filter((x) => x !== c),
-                          }))
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ flexWrap: "wrap", alignItems: "center" }}
+                  >
+                    {(editForm.customCategories || []).map((c, idx) => {
+                      const isEditing = editCatEditIdx === idx;
+
+                      const doSave = () => {
+                        const nextVal = String(editCatEditValue || "").trim();
+                        if (!nextVal) {
+                          // empty not allowed -> just cancel edit
+                          setEditCatEditIdx(null);
+                          setEditCatEditValue("");
+                          return;
                         }
-                        size="small"
-                      />
-                    ))}
+
+                        // prevent duplicates (excluding current index)
+                        const exists = (editForm.customCategories || []).some(
+                          (x, i) =>
+                            i !== idx &&
+                            String(x).trim().toLowerCase() === nextVal.toLowerCase()
+                        );
+                        if (exists) {
+                          // duplicate -> cancel edit (no other UX changes)
+                          setEditCatEditIdx(null);
+                          setEditCatEditValue("");
+                          return;
+                        }
+
+                        const updated = [...(editForm.customCategories || [])];
+                        updated[idx] = nextVal;
+
+                        setEditForm((f) => ({ ...f, customCategories: updated }));
+                        setEditCatEditIdx(null);
+                        setEditCatEditValue("");
+                      };
+
+                      const doCancel = () => {
+                        setEditCatEditIdx(null);
+                        setEditCatEditValue("");
+                      };
+
+                      if (isEditing) {
+                        return (
+                          <Stack
+                            key={`edit-${idx}`}
+                            direction="row"
+                            spacing={1}
+                            alignItems="center"
+                            sx={{ mb: 0.5 }}
+                          >
+                            <TextField
+                              size="small"
+                              value={editCatEditValue}
+                              autoFocus
+                              onChange={(e) => setEditCatEditValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") doSave();
+                                if (e.key === "Escape") doCancel();
+                              }}
+                              sx={{ minWidth: 260 }}
+                            />
+                            <Button size="small" variant="contained" onClick={doSave}>
+                              Save
+                            </Button>
+                            <Button size="small" variant="outlined" onClick={doCancel}>
+                              Cancel
+                            </Button>
+                          </Stack>
+                        );
+                      }
+
+                      return (
+                        <Chip
+                          key={`${c}-${idx}`}
+                          label={c}
+                          size="small"
+                          clickable
+                          onClick={() => {
+                            setEditCatEditIdx(idx);
+                            setEditCatEditValue(c);
+                          }}
+                          onDelete={() =>
+                            setEditForm((f) => ({
+                              ...f,
+                              customCategories: (f.customCategories || []).filter(
+                                (_, i) => i !== idx
+                              ),
+                            }))
+                          }
+                          sx={{ cursor: "pointer" }}
+                        />
+                      );
+                    })}
                   </Stack>
                 ) : null}
               </Stack>
