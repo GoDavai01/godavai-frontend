@@ -1296,62 +1296,62 @@ export default function MedicineMasterAdmin() {
               <Card key={m._id} sx={{ bgcolor: "#212325" }}>
                 <CardContent>
                   <Stack
-                    direction="row"
-                    spacing={2}
-                    alignItems="center"
-                    justifyContent="space-between"
-                  >
-                    <Box>
-                      <Typography fontWeight={800}>{m.name}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        ₹{m.price} / MRP ₹{m.mrp}
-                      </Typography>
-                      <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
-                        <Chip size="small" label={m.productKind} />
-                        {m.prescriptionRequired ? (
-                          <Chip size="small" color="warning" label="Rx Required" />
-                        ) : null}
-                        {Array.isArray(m.category)
-                          ? m.category
-                              .slice(0, 4)
-                              .map((c) => <Chip key={c} size="small" label={c} />)
-                          : null}
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary">
-                        Status: {m.status} • By: {m.createdByType}
-                      </Typography>
-                    </Box>
+  direction="row"
+  spacing={2}
+  alignItems="flex-start"
+  justifyContent="space-between"
+  sx={{ flexWrap: "nowrap" }}   // ✅ right buttons always stay visible
+>
+  <Box sx={{ flex: 1, minWidth: 0, pr: 2 }}> {/* ✅ left content shrink ho sakta hai */}
+    <Typography fontWeight={800}>{m.name}</Typography>
+    <Typography variant="body2" color="text.secondary">
+      ₹{m.price} / MRP ₹{m.mrp}
+    </Typography>
 
-                    {tab === "pending" ? (
-                      <Stack direction="row" spacing={1}>
-                        <Button variant="outlined" onClick={() => openView(m)}>
-                          View
-                        </Button>
-                        <Button variant="contained" onClick={() => approve(m._id)}>
-                          Approve
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          color="error"
-                          onClick={() => reject(m._id)}
-                        >
-                          Reject
-                        </Button>
-                      </Stack>
-                    ) : (
-                      <Stack direction="row" spacing={1}>
-                        <Button variant="outlined" onClick={() => openView(m)}>
-                          View
-                        </Button>
-                        <Button variant="contained" onClick={() => openEdit(m)}>
-                          Edit
-                        </Button>
-                        <Button variant="outlined" color="error" onClick={() => openDelete(m)}>
-                          Delete
-                        </Button>
-                      </Stack>
-                    )}
-                  </Stack>
+    <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
+      <Chip size="small" label={m.productKind} />
+      {m.prescriptionRequired ? (
+        <Chip size="small" color="warning" label="Rx Required" />
+      ) : null}
+      {Array.isArray(m.category)
+        ? m.category.slice(0, 4).map((c) => (
+            <Chip key={c} size="small" label={c} />
+          ))
+        : null}
+    </Stack>
+
+    <Typography variant="caption" color="text.secondary">
+      Status: {m.status} • By: {m.createdByType}
+    </Typography>
+  </Box>
+
+  {tab === "pending" ? (
+    <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}> {/* ✅ buttons never shrink */}
+      <Button variant="outlined" onClick={() => openView(m)}>
+        View
+      </Button>
+      <Button variant="contained" onClick={() => approve(m._id)}>
+        Approve
+      </Button>
+      <Button variant="outlined" color="error" onClick={() => reject(m._id)}>
+        Reject
+      </Button>
+    </Stack>
+  ) : (
+    <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}> {/* ✅ buttons never shrink */}
+      <Button variant="outlined" onClick={() => openView(m)}>
+        View
+      </Button>
+      <Button variant="contained" onClick={() => openEdit(m)}>
+        Edit
+      </Button>
+      <Button variant="outlined" color="error" onClick={() => openDelete(m)}>
+        Delete
+      </Button>
+    </Stack>
+  )}
+</Stack>
+
                 </CardContent>
               </Card>
             ))}
