@@ -133,6 +133,20 @@ const readToken = () => {
   return "";
 };
 
+// ✅ ONLY UI sizing for dropdowns (Edit modal Type + Pack Size)
+const EDIT_SELECT_SX = {
+  "& .MuiSelect-select": {
+    py: 1.25, // height bigger
+    minHeight: 22,
+    display: "flex",
+    alignItems: "center",
+    fontSize: 15, // text bigger so selected value is visible
+  },
+  "& .MuiOutlinedInput-notchedOutline": {
+    borderColor: "#2b2f33",
+  },
+};
+
 export default function MedicineMasterAdmin() {
   const fileRef = useRef(null);
   const editFileRef = useRef(null);
@@ -302,8 +316,6 @@ export default function MedicineMasterAdmin() {
   const calcDiscountFromPrice = (mrp, price) => {
     if (!(mrp > 0)) return "";
     if (!(price >= 0 && price <= mrp)) {
-      // still allow >mrp? if you want, remove this check
-      // but discount would become negative, so keeping safe
       if (price > mrp) return "0";
       return "";
     }
@@ -311,7 +323,6 @@ export default function MedicineMasterAdmin() {
     return String(round2(disc));
   };
 
-  // ✅ When MRP changes (Add form): decide based on last edited
   useEffect(() => {
     const mrp = parseMoney(form.mrp);
     const last = lastEditedRef.current;
@@ -340,7 +351,6 @@ export default function MedicineMasterAdmin() {
       return;
     }
 
-    // none edited: prefer existing discount if present else price
     const discRaw = String(form.discount ?? "").trim();
     if (discRaw) {
       const disc = parseMoney(form.discount);
@@ -362,7 +372,6 @@ export default function MedicineMasterAdmin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.mrp]);
 
-  // ✅ When MRP changes (Edit form)
   useEffect(() => {
     if (!editOpen) return;
 
@@ -449,7 +458,6 @@ export default function MedicineMasterAdmin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  // ✅ Upload with fetch
   const uploadMany = async (files) => {
     const urls = [];
 
@@ -537,7 +545,6 @@ export default function MedicineMasterAdmin() {
         composition: (compositionValue || "").trim(),
         company: (form.company || "").trim(),
 
-        // ✅ comma-safe
         price: parseMoney(form.price),
         mrp: parseMoney(form.mrp),
         discount: parseMoney(form.discount),
@@ -625,7 +632,6 @@ export default function MedicineMasterAdmin() {
         composition: (compositionValue || "").trim(),
         company: (editForm.company || "").trim(),
 
-        // ✅ comma-safe
         price: parseMoney(editForm.price),
         mrp: parseMoney(editForm.mrp),
         discount: parseMoney(editForm.discount),
@@ -1128,7 +1134,6 @@ export default function MedicineMasterAdmin() {
                       </Typography>
                     </Box>
 
-                    {/* ✅ ACTIONS */}
                     {tab === "pending" ? (
                       <Stack direction="row" spacing={1}>
                         <Button variant="outlined" onClick={() => openView(m)}>
@@ -1298,7 +1303,6 @@ export default function MedicineMasterAdmin() {
             Close
           </Button>
 
-          {/* Pending quick actions (unchanged behavior) */}
           {tab === "pending" && viewItem?._id && (
             <>
               <Button
@@ -1323,7 +1327,6 @@ export default function MedicineMasterAdmin() {
             </>
           )}
 
-          {/* Approved quick actions */}
           {tab === "approved" && viewItem?._id && (
             <>
               <Button
@@ -1524,7 +1527,10 @@ export default function MedicineMasterAdmin() {
                   <InputLabel>Type</InputLabel>
                   <Select
                     label="Type"
-                    value={editForm.type}
+                    value={editForm.type || ""}
+                    displayEmpty
+                    renderValue={(v) => (String(v || "").trim() ? v : "Select")}
+                    sx={EDIT_SELECT_SX}
                     onChange={(e) => {
                       const nextType = e.target.value;
                       const def = getDefaultPackForType(nextType);
@@ -1536,6 +1542,10 @@ export default function MedicineMasterAdmin() {
                       }));
                     }}
                   >
+                    {!TYPE_OPTIONS.includes(editForm.type) && editForm.type ? (
+                      <MenuItem value={editForm.type}>{editForm.type}</MenuItem>
+                    ) : null}
+
                     {TYPE_OPTIONS.map((t) => (
                       <MenuItem key={t} value={t}>
                         {t}
@@ -1551,6 +1561,9 @@ export default function MedicineMasterAdmin() {
                   <Select
                     label="Pack Size"
                     value={packLabel(editForm.packCount, editForm.packUnit) || ""}
+                    displayEmpty
+                    renderValue={(v) => (String(v || "").trim() ? v : "Select")}
+                    sx={EDIT_SELECT_SX}
                     onChange={(e) => {
                       const opt = normalizePackOpt(e.target.value);
                       setEditForm((f) => ({ ...f, packCount: opt.count, packUnit: opt.unit }));
