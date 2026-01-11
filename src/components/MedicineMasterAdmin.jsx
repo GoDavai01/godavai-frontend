@@ -67,11 +67,20 @@ const parseMoney = (val) => {
 // ✅ Category helpers (for edit only)
 const ALLOWED_CAT_SET = new Set([...(CUSTOMER_CATEGORIES || []), "Other"]);
 
+// ✅ UPDATED: extract MULTIPLE custom categories from category array
 const extractCustomCategoryFromCats = (cats = []) => {
   const arr = Array.isArray(cats) ? cats : [];
-  const custom = arr.find((c) => c && !ALLOWED_CAT_SET.has(c));
-  const cleaned = arr.filter((c) => c && ALLOWED_CAT_SET.has(c)); // keep only allowed + Other
-  return { cleaned, custom: custom || "" };
+
+  // all customs = those not in allowed set
+  const customs = arr
+    .filter((c) => c && !ALLOWED_CAT_SET.has(c))
+    .map((x) => String(x).trim())
+    .filter(Boolean);
+
+  // keep only allowed (including Other)
+  const cleaned = arr.filter((c) => c && ALLOWED_CAT_SET.has(c));
+
+  return { cleaned, customs };
 };
 
 // ✅ pack helpers
@@ -207,6 +216,7 @@ export default function MedicineMasterAdmin() {
 
     category: [],
     customCategory: "",
+    customCategories: [], // ✅ NEW list
     type: "Tablet",
     customType: "",
     packCount: "",
@@ -224,8 +234,17 @@ export default function MedicineMasterAdmin() {
     const rawCats = Array.isArray(item?.category) ? item.category : [];
     const hasOther = rawCats.includes("Other");
 
-    // ✅ if old data stored custom string inside category array, extract it
-    const { cleaned, custom } = extractCustomCategoryFromCats(rawCats);
+    // ✅ extract MULTIPLE customs from category array
+    const { cleaned, customs } = extractCustomCategoryFromCats(rawCats);
+
+    // ✅ also handle legacy: if someone saved one string like "Anxiety, Panic disorder"
+    const legacySplit = (arr) =>
+      (arr || [])
+        .flatMap((x) => String(x).split(","))
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+    const customList = legacySplit(customs);
 
     const compStr = String(item?.composition || "").trim();
 
@@ -243,7 +262,8 @@ export default function MedicineMasterAdmin() {
       discount: item?.discount ?? "",
 
       category: cleaned, // only allowed + Other
-      customCategory: hasOther ? custom : "", // custom text goes here
+      customCategory: "", // input box (start empty)
+      customCategories: hasOther ? customList : [], // ✅ list
 
       type: item?.type || "Tablet",
       customType: item?.customType || "",
@@ -283,6 +303,7 @@ export default function MedicineMasterAdmin() {
 
     category: [],
     customCategory: "",
+    customCategories: [], // ✅ NEW list
     type: "Tablet",
     customType: "",
     packCount: "",
@@ -515,14 +536,23 @@ export default function MedicineMasterAdmin() {
 
   const computedCategory = () => {
     const cats = Array.isArray(form.category) ? form.category : [];
+
     if (cats.includes("Other")) {
-      const custom = (form.customCategory || "").trim();
+      const customList = Array.from(
+        new Set(
+          (form.customCategories || [])
+            .map((s) => String(s).trim())
+            .filter(Boolean)
+        )
+      );
+
       return [
         ...cats.filter((c) => c !== "Other"),
-        ...(custom ? [custom] : []),
+        ...customList,
         "Other",
       ];
     }
+
     return cats;
   };
 
@@ -533,14 +563,23 @@ export default function MedicineMasterAdmin() {
 
   const computedEditCategory = () => {
     const cats = Array.isArray(editForm.category) ? editForm.category : [];
+
     if (cats.includes("Other")) {
-      const custom = (editForm.customCategory || "").trim();
+      const customList = Array.from(
+        new Set(
+          (editForm.customCategories || [])
+            .map((s) => String(s).trim())
+            .filter(Boolean)
+        )
+      );
+
       return [
         ...cats.filter((c) => c !== "Other"),
-        ...(custom ? [custom] : []),
+        ...customList,
         "Other",
       ];
     }
+
     return cats;
   };
 
@@ -611,6 +650,7 @@ export default function MedicineMasterAdmin() {
         discount: "",
         category: [],
         customCategory: "",
+        customCategories: [],
         type: "Tablet",
         customType: "",
         packCount: "",
@@ -981,7 +1021,16 @@ export default function MedicineMasterAdmin() {
                       multiple
                       label="Category"
                       value={form.category}
-                      onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                      onChange={(e) => {
+                        const next = e.target.value || [];
+                        const hasOther = Array.isArray(next) && next.includes("Other");
+                        setForm((f) => ({
+                          ...f,
+                          category: next,
+                          customCategory: hasOther ? f.customCategory : "",
+                          customCategories: hasOther ? (f.customCategories || []) : [],
+                        }));
+                      }}
                       renderValue={(selected) => (selected || []).join(", ")}
                     >
                       {CUSTOMER_CATEGORIES.map((c) => (
@@ -998,14 +1047,55 @@ export default function MedicineMasterAdmin() {
                   </FormControl>
 
                   {form.category.includes("Other") && (
-                    <TextField
-                      fullWidth
-                      label="Custom Category"
-                      value={form.customCategory}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, customCategory: e.target.value }))
-                      }
-                    />
+                    <Stack spacing={1}>
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                        <TextField
+                          fullWidth
+                          label="Custom Category"
+                          value={form.customCategory}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, customCategory: e.target.value }))
+                          }
+                          placeholder="Type one category (e.g. Anxiety)"
+                        />
+                        <Button
+                          variant="outlined"
+                          onClick={() => {
+                            const v = String(form.customCategory || "").trim();
+                            if (!v) return;
+                            setForm((f) => ({
+                              ...f,
+                              customCategories: Array.from(
+                                new Set([...(f.customCategories || []), v])
+                              ),
+                              customCategory: "",
+                            }));
+                          }}
+                        >
+                          + Add
+                        </Button>
+                      </Stack>
+
+                      {(form.customCategories || []).length ? (
+                        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                          {(form.customCategories || []).map((c) => (
+                            <Chip
+                              key={c}
+                              label={c}
+                              onDelete={() =>
+                                setForm((f) => ({
+                                  ...f,
+                                  customCategories: (f.customCategories || []).filter(
+                                    (x) => x !== c
+                                  ),
+                                }))
+                              }
+                              size="small"
+                            />
+                          ))}
+                        </Stack>
+                      ) : null}
+                    </Stack>
                   )}
 
                   <Grid container spacing={2}>
@@ -1619,6 +1709,7 @@ export default function MedicineMasterAdmin() {
                     category: cleaned,
                     // ✅ if Other unticked => clear customCategory (and it will not be saved)
                     customCategory: hasOther ? f.customCategory : "",
+                    customCategories: hasOther ? (f.customCategories || []) : [], // ✅ NEW
                   }));
                 }}
                 renderValue={(selected) => (selected || []).join(", ")}
@@ -1637,14 +1728,53 @@ export default function MedicineMasterAdmin() {
             </FormControl>
 
             {editForm.category.includes("Other") && (
-              <TextField
-                fullWidth
-                label="Custom Category"
-                value={editForm.customCategory}
-                onChange={(e) =>
-                  setEditForm((f) => ({ ...f, customCategory: e.target.value }))
-                }
-              />
+              <Stack spacing={1}>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                  <TextField
+                    fullWidth
+                    label="Custom Category"
+                    value={editForm.customCategory}
+                    onChange={(e) =>
+                      setEditForm((f) => ({ ...f, customCategory: e.target.value }))
+                    }
+                    placeholder="Type one category (e.g. Panic disorder)"
+                  />
+                  <Button
+                    variant="outlined"
+                    onClick={() => {
+                      const v = String(editForm.customCategory || "").trim();
+                      if (!v) return;
+                      setEditForm((f) => ({
+                        ...f,
+                        customCategories: Array.from(
+                          new Set([...(f.customCategories || []), v])
+                        ),
+                        customCategory: "",
+                      }));
+                    }}
+                  >
+                    + Add
+                  </Button>
+                </Stack>
+
+                {(editForm.customCategories || []).length ? (
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                    {(editForm.customCategories || []).map((c) => (
+                      <Chip
+                        key={c}
+                        label={c}
+                        onDelete={() =>
+                          setEditForm((f) => ({
+                            ...f,
+                            customCategories: (f.customCategories || []).filter((x) => x !== c),
+                          }))
+                        }
+                        size="small"
+                      />
+                    ))}
+                  </Stack>
+                ) : null}
+              </Stack>
             )}
 
             <Grid container spacing={2}>
