@@ -64,6 +64,16 @@ const parseMoney = (val) => {
   return Number.isFinite(num) ? num : 0;
 };
 
+// ✅ Category helpers (for edit only)
+const ALLOWED_CAT_SET = new Set([...(CUSTOMER_CATEGORIES || []), "Other"]);
+
+const extractCustomCategoryFromCats = (cats = []) => {
+  const arr = Array.isArray(cats) ? cats : [];
+  const custom = arr.find((c) => c && !ALLOWED_CAT_SET.has(c));
+  const cleaned = arr.filter((c) => c && ALLOWED_CAT_SET.has(c)); // keep only allowed + Other
+  return { cleaned, custom: custom || "" };
+};
+
 // ✅ pack helpers
 const packLabel = (count, unit) => {
   const c = String(count || "").trim();
@@ -211,8 +221,12 @@ export default function MedicineMasterAdmin() {
   const [editNewImages, setEditNewImages] = useState([]); // File[]
 
   const openEdit = (item) => {
-    const cat = Array.isArray(item?.category) ? item.category : [];
-    const hasOther = cat.includes("Other");
+    const rawCats = Array.isArray(item?.category) ? item.category : [];
+    const hasOther = rawCats.includes("Other");
+
+    // ✅ if old data stored custom string inside category array, extract it
+    const { cleaned, custom } = extractCustomCategoryFromCats(rawCats);
+
     const compStr = String(item?.composition || "").trim();
 
     setEditId(item?._id || null);
@@ -228,8 +242,9 @@ export default function MedicineMasterAdmin() {
       mrp: item?.mrp ?? "",
       discount: item?.discount ?? "",
 
-      category: cat,
-      customCategory: hasOther ? "" : "", // keep as-is (other custom stored as category text)
+      category: cleaned, // only allowed + Other
+      customCategory: hasOther ? custom : "", // custom text goes here
+
       type: item?.type || "Tablet",
       customType: item?.customType || "",
       packCount: item?.packCount ?? "",
@@ -428,7 +443,11 @@ export default function MedicineMasterAdmin() {
       const status = tab === "pending" ? "pending" : "approved";
 
       const res = await axios.get(
-        API(`/api/medicine-master/admin/all?q=${encodeURIComponent(q)}&status=${status}`),
+        API(
+          `/api/medicine-master/admin/all?q=${encodeURIComponent(
+            q
+          )}&status=${status}`
+        ),
         { headers }
       );
 
@@ -447,7 +466,9 @@ export default function MedicineMasterAdmin() {
       setMsg(
         e?.response?.data?.error ||
           e?.response?.data?.message ||
-          (status ? `❌ Failed to load medicines. (HTTP ${status})` : "❌ Failed to load medicines.")
+          (status
+            ? `❌ Failed to load medicines. (HTTP ${status})`
+            : "❌ Failed to load medicines.")
       );
       console.error("MedicineMasterAdmin fetchList error:", e);
     }
@@ -481,7 +502,9 @@ export default function MedicineMasterAdmin() {
       }
 
       if (!resp.ok) {
-        throw new Error(data?.message || data?.error || `Upload failed (HTTP ${resp.status})`);
+        throw new Error(
+          data?.message || data?.error || `Upload failed (HTTP ${resp.status})`
+        );
       }
 
       if (data?.url) urls.push(data.url);
@@ -494,7 +517,11 @@ export default function MedicineMasterAdmin() {
     const cats = Array.isArray(form.category) ? form.category : [];
     if (cats.includes("Other")) {
       const custom = (form.customCategory || "").trim();
-      return [...cats.filter((c) => c !== "Other"), ...(custom ? [custom] : []), "Other"];
+      return [
+        ...cats.filter((c) => c !== "Other"),
+        ...(custom ? [custom] : []),
+        "Other",
+      ];
     }
     return cats;
   };
@@ -508,13 +535,18 @@ export default function MedicineMasterAdmin() {
     const cats = Array.isArray(editForm.category) ? editForm.category : [];
     if (cats.includes("Other")) {
       const custom = (editForm.customCategory || "").trim();
-      return [...cats.filter((c) => c !== "Other"), ...(custom ? [custom] : []), "Other"];
+      return [
+        ...cats.filter((c) => c !== "Other"),
+        ...(custom ? [custom] : []),
+        "Other",
+      ];
     }
     return cats;
   };
 
   const computedEditType = () => {
-    if (editForm.type === "Other") return (editForm.customType || "").trim() || "Other";
+    if (editForm.type === "Other")
+      return (editForm.customType || "").trim() || "Other";
     return editForm.type || "Tablet";
   };
 
@@ -602,7 +634,9 @@ export default function MedicineMasterAdmin() {
       setMsg(
         serverMsg ||
           e?.message ||
-          (status ? `❌ Failed to add master medicine. (HTTP ${status})` : "❌ Failed to add master medicine.")
+          (status
+            ? `❌ Failed to add master medicine. (HTTP ${status})`
+            : "❌ Failed to add master medicine.")
       );
       console.error("MedicineMasterAdmin addMaster error:", e);
     }
@@ -628,7 +662,8 @@ export default function MedicineMasterAdmin() {
       const payload = {
         productKind: editForm.productKind,
         name: (editForm.name || editForm.brand || compositionValue || "").trim(),
-        brand: editForm.productKind === "generic" ? "" : (editForm.brand || "").trim(),
+        brand:
+          editForm.productKind === "generic" ? "" : (editForm.brand || "").trim(),
         composition: (compositionValue || "").trim(),
         company: (editForm.company || "").trim(),
 
@@ -650,7 +685,9 @@ export default function MedicineMasterAdmin() {
         images: finalImages,
       };
 
-      await axios.patch(API(`/api/medicine-master/admin/${editId}`), payload, { headers });
+      await axios.patch(API(`/api/medicine-master/admin/${editId}`), payload, {
+        headers,
+      });
 
       setMsg("✅ Updated!");
       closeEdit();
@@ -682,7 +719,9 @@ export default function MedicineMasterAdmin() {
       if (!delItem?._id) return;
 
       setMsg("Deleting...");
-      await axios.delete(API(`/api/medicine-master/admin/${delItem._id}`), { headers });
+      await axios.delete(API(`/api/medicine-master/admin/${delItem._id}`), {
+        headers,
+      });
       setMsg("✅ Deleted!");
       closeDelete();
       fetchList();
@@ -749,7 +788,13 @@ export default function MedicineMasterAdmin() {
 
   return (
     <Box>
-      <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+      <Stack
+        direction="row"
+        spacing={1}
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ mb: 2 }}
+      >
         <Typography variant="h5" fontWeight={800}>
           Medicine Master
         </Typography>
@@ -772,7 +817,9 @@ export default function MedicineMasterAdmin() {
       <Card sx={{ mb: 2, bgcolor: "#16181a" }}>
         <CardContent>
           <Typography fontWeight={800} sx={{ mb: 1 }}>
-            {tab === "approved" ? "Add Master Medicine (Admin)" : "Pending Requests (Approve/Reject)"}
+            {tab === "approved"
+              ? "Add Master Medicine (Admin)"
+              : "Pending Requests (Approve/Reject)"}
           </Typography>
 
           {tab === "approved" && (
@@ -799,7 +846,10 @@ export default function MedicineMasterAdmin() {
                           ...f,
                           productKind: v,
                           brand: v === "generic" ? "" : f.brand,
-                          name: v === "generic" ? f.name || f.composition || "" : f.name || f.brand || "",
+                          name:
+                            v === "generic"
+                              ? f.name || f.composition || ""
+                              : f.name || f.brand || "",
                         }));
                       }}
                     >
@@ -850,7 +900,9 @@ export default function MedicineMasterAdmin() {
                     }
                     onAddComposition={(c) =>
                       setForm((f) => {
-                        const next = Array.from(new Set([...(f.compositions || []), c])).filter(Boolean);
+                        const next = Array.from(
+                          new Set([...(f.compositions || []), c])
+                        ).filter(Boolean);
                         return { ...f, compositions: next, composition: joinComps(next) };
                       })
                     }
@@ -884,7 +936,8 @@ export default function MedicineMasterAdmin() {
                             const mrp = parseMoney(next.mrp);
                             const price = parseMoney(v);
                             const disc = calcDiscountFromPrice(mrp, price);
-                            if (disc !== "" && String(next.discount) !== String(disc)) next.discount = disc;
+                            if (disc !== "" && String(next.discount) !== String(disc))
+                              next.discount = disc;
                             return next;
                           });
                         }}
@@ -895,7 +948,9 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="MRP"
                         value={form.mrp}
-                        onChange={(e) => setForm((f) => ({ ...f, mrp: e.target.value }))}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, mrp: e.target.value }))
+                        }
                       />
                     </Grid>
                     <Grid item xs={12} md={4}>
@@ -911,7 +966,8 @@ export default function MedicineMasterAdmin() {
                             const mrp = parseMoney(next.mrp);
                             const disc = parseMoney(v);
                             const price = calcPriceFromDiscount(mrp, disc);
-                            if (price !== "" && String(next.price) !== String(price)) next.price = price;
+                            if (price !== "" && String(next.price) !== String(price))
+                              next.price = price;
                             return next;
                           });
                         }}
@@ -946,7 +1002,9 @@ export default function MedicineMasterAdmin() {
                       fullWidth
                       label="Custom Category"
                       value={form.customCategory}
-                      onChange={(e) => setForm((f) => ({ ...f, customCategory: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, customCategory: e.target.value }))
+                      }
                     />
                   )}
 
@@ -985,14 +1043,21 @@ export default function MedicineMasterAdmin() {
                           value={packLabel(form.packCount, form.packUnit) || ""}
                           onChange={(e) => {
                             const opt = normalizePackOpt(e.target.value);
-                            setForm((f) => ({ ...f, packCount: opt.count, packUnit: opt.unit }));
+                            setForm((f) => ({
+                              ...f,
+                              packCount: opt.count,
+                              packUnit: opt.unit,
+                            }));
                           }}
                         >
                           <MenuItem value="">Select</MenuItem>
                           {(packOptions || []).map((raw) => {
                             const o = normalizePackOpt(raw);
                             return (
-                              <MenuItem key={o.label || JSON.stringify(raw)} value={o.label}>
+                              <MenuItem
+                                key={o.label || JSON.stringify(raw)}
+                                value={o.label}
+                              >
                                 {o.label}
                               </MenuItem>
                             );
@@ -1007,7 +1072,9 @@ export default function MedicineMasterAdmin() {
                       fullWidth
                       label="Custom Type"
                       value={form.customType}
-                      onChange={(e) => setForm((f) => ({ ...f, customType: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, customType: e.target.value }))
+                      }
                     />
                   )}
 
@@ -1017,7 +1084,9 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="Pack Count"
                         value={form.packCount}
-                        onChange={(e) => setForm((f) => ({ ...f, packCount: e.target.value }))}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, packCount: e.target.value }))
+                        }
                       />
                     </Grid>
                     <Grid item xs={12} md={6}>
@@ -1025,7 +1094,9 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="Pack Unit (optional)"
                         value={form.packUnit}
-                        onChange={(e) => setForm((f) => ({ ...f, packUnit: e.target.value }))}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, packUnit: e.target.value }))
+                        }
                       />
                     </Grid>
                   </Grid>
@@ -1037,7 +1108,10 @@ export default function MedicineMasterAdmin() {
                           <Checkbox
                             checked={form.prescriptionRequired}
                             onChange={(e) =>
-                              setForm((f) => ({ ...f, prescriptionRequired: e.target.checked }))
+                              setForm((f) => ({
+                                ...f,
+                                prescriptionRequired: e.target.checked,
+                              }))
                             }
                           />
                         }
@@ -1049,7 +1123,9 @@ export default function MedicineMasterAdmin() {
                         fullWidth
                         label="HSN Code"
                         value={form.hsn}
-                        onChange={(e) => setForm((f) => ({ ...f, hsn: e.target.value }))}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, hsn: e.target.value }))
+                        }
                       />
                     </Grid>
                     <Grid item xs={12} md={4}>
@@ -1058,7 +1134,9 @@ export default function MedicineMasterAdmin() {
                         <Select
                           label="GST Rate"
                           value={form.gstRate}
-                          onChange={(e) => setForm((f) => ({ ...f, gstRate: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, gstRate: e.target.value }))
+                          }
                         >
                           {[0, 5, 12, 18].map((g) => (
                             <MenuItem key={g} value={g}>
@@ -1104,7 +1182,12 @@ export default function MedicineMasterAdmin() {
           )}
 
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mb: 2 }}>
-            <TextField fullWidth label="Search" value={q} onChange={(e) => setQ(e.target.value)} />
+            <TextField
+              fullWidth
+              label="Search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
             <Button variant="outlined" onClick={fetchList}>
               Search
             </Button>
@@ -1114,7 +1197,12 @@ export default function MedicineMasterAdmin() {
             {list.map((m) => (
               <Card key={m._id} sx={{ bgcolor: "#212325" }}>
                 <CardContent>
-                  <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
+                  <Stack
+                    direction="row"
+                    spacing={2}
+                    alignItems="center"
+                    justifyContent="space-between"
+                  >
                     <Box>
                       <Typography fontWeight={800}>{m.name}</Typography>
                       <Typography variant="body2" color="text.secondary">
@@ -1126,7 +1214,9 @@ export default function MedicineMasterAdmin() {
                           <Chip size="small" color="warning" label="Rx Required" />
                         ) : null}
                         {Array.isArray(m.category)
-                          ? m.category.slice(0, 4).map((c) => <Chip key={c} size="small" label={c} />)
+                          ? m.category
+                              .slice(0, 4)
+                              .map((c) => <Chip key={c} size="small" label={c} />)
                           : null}
                       </Stack>
                       <Typography variant="caption" color="text.secondary">
@@ -1142,7 +1232,11 @@ export default function MedicineMasterAdmin() {
                         <Button variant="contained" onClick={() => approve(m._id)}>
                           Approve
                         </Button>
-                        <Button variant="outlined" color="error" onClick={() => reject(m._id)}>
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          onClick={() => reject(m._id)}
+                        >
                           Reject
                         </Button>
                       </Stack>
@@ -1202,11 +1296,15 @@ export default function MedicineMasterAdmin() {
                   <Typography fontWeight={800} sx={{ mb: 1 }}>
                     Basic Info
                   </Typography>
-                  <Typography sx={{ color: "#ccc" }}>Brand: {viewItem.brand || "—"}</Typography>
+                  <Typography sx={{ color: "#ccc" }}>
+                    Brand: {viewItem.brand || "—"}
+                  </Typography>
                   <Typography sx={{ color: "#ccc" }}>
                     Composition: {viewItem.composition || "—"}
                   </Typography>
-                  <Typography sx={{ color: "#ccc" }}>Company: {viewItem.company || "—"}</Typography>
+                  <Typography sx={{ color: "#ccc" }}>
+                    Company: {viewItem.company || "—"}
+                  </Typography>
                   <Typography sx={{ color: "#ccc" }}>
                     Category: {(viewItem.category || []).join(", ") || "—"}
                   </Typography>
@@ -1248,9 +1346,13 @@ export default function MedicineMasterAdmin() {
                 <Typography fontWeight={800} sx={{ mb: 1 }}>
                   Pricing
                 </Typography>
-                <Typography sx={{ color: "#ccc" }}>Selling Price: ₹{viewItem.price ?? "—"}</Typography>
+                <Typography sx={{ color: "#ccc" }}>
+                  Selling Price: ₹{viewItem.price ?? "—"}
+                </Typography>
                 <Typography sx={{ color: "#ccc" }}>MRP: ₹{viewItem.mrp ?? "—"}</Typography>
-                <Typography sx={{ color: "#ccc" }}>Discount: {viewItem.discount ?? "—"}%</Typography>
+                <Typography sx={{ color: "#ccc" }}>
+                  Discount: {viewItem.discount ?? "—"}%
+                </Typography>
               </Box>
 
               <Box
@@ -1370,7 +1472,10 @@ export default function MedicineMasterAdmin() {
                     ...f,
                     productKind: v,
                     brand: v === "generic" ? "" : f.brand,
-                    name: v === "generic" ? f.name || f.composition || "" : f.name || f.brand || "",
+                    name:
+                      v === "generic"
+                        ? f.name || f.composition || ""
+                        : f.name || f.brand || "",
                   }));
                 }}
               >
@@ -1421,7 +1526,9 @@ export default function MedicineMasterAdmin() {
               }
               onAddComposition={(c) =>
                 setEditForm((f) => {
-                  const next = Array.from(new Set([...(f.compositions || []), c])).filter(Boolean);
+                  const next = Array.from(new Set([...(f.compositions || []), c])).filter(
+                    Boolean
+                  );
                   return { ...f, compositions: next, composition: joinComps(next) };
                 })
               }
@@ -1455,7 +1562,8 @@ export default function MedicineMasterAdmin() {
                       const mrp = parseMoney(next.mrp);
                       const price = parseMoney(v);
                       const disc = calcDiscountFromPrice(mrp, price);
-                      if (disc !== "" && String(next.discount) !== String(disc)) next.discount = disc;
+                      if (disc !== "" && String(next.discount) !== String(disc))
+                        next.discount = disc;
                       return next;
                     });
                   }}
@@ -1482,7 +1590,8 @@ export default function MedicineMasterAdmin() {
                       const mrp = parseMoney(next.mrp);
                       const disc = parseMoney(v);
                       const price = calcPriceFromDiscount(mrp, disc);
-                      if (price !== "" && String(next.price) !== String(price)) next.price = price;
+                      if (price !== "" && String(next.price) !== String(price))
+                        next.price = price;
                       return next;
                     });
                   }}
@@ -1496,7 +1605,22 @@ export default function MedicineMasterAdmin() {
                 multiple
                 label="Category"
                 value={editForm.category}
-                onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
+                onChange={(e) => {
+                  const nextRaw = e.target.value || [];
+                  const next = Array.isArray(nextRaw) ? nextRaw : [nextRaw];
+
+                  // remove any non-allowed values if they somehow appear
+                  const cleaned = next.filter((c) => ALLOWED_CAT_SET.has(c));
+
+                  const hasOther = cleaned.includes("Other");
+
+                  setEditForm((f) => ({
+                    ...f,
+                    category: cleaned,
+                    // ✅ if Other unticked => clear customCategory (and it will not be saved)
+                    customCategory: hasOther ? f.customCategory : "",
+                  }));
+                }}
                 renderValue={(selected) => (selected || []).join(", ")}
               >
                 {CUSTOMER_CATEGORIES.map((c) => (
@@ -1517,7 +1641,9 @@ export default function MedicineMasterAdmin() {
                 fullWidth
                 label="Custom Category"
                 value={editForm.customCategory}
-                onChange={(e) => setEditForm((f) => ({ ...f, customCategory: e.target.value }))}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, customCategory: e.target.value }))
+                }
               />
             )}
 
@@ -1691,9 +1817,7 @@ export default function MedicineMasterAdmin() {
                         size="small"
                         variant="contained"
                         color="error"
-                        onClick={() =>
-                          setEditExistingImages((arr) => arr.filter((x) => x !== url))
-                        }
+                        onClick={() => setEditExistingImages((arr) => arr.filter((x) => x !== url))}
                         sx={{ position: "absolute", top: 8, right: 8 }}
                       >
                         Remove
@@ -1741,8 +1865,7 @@ export default function MedicineMasterAdmin() {
         <DialogTitle sx={{ fontWeight: 900 }}>Delete Medicine?</DialogTitle>
         <DialogContent dividers>
           <Typography>
-            Do you really want to delete{" "}
-            <b>{delItem?.name || "this medicine"}</b>?
+            Do you really want to delete <b>{delItem?.name || "this medicine"}</b>?
           </Typography>
           <Typography sx={{ mt: 1, color: "text.secondary" }}>
             This will remove it from Master + Pharmacy Inventory + User/Medicine list everywhere.
