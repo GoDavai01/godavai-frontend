@@ -22,10 +22,7 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:500
 const DEEP = "#0C5A3E";
 const ACCENT = "#00C875";
 
-const ICONS = {
-  pharmacy: "/images/pharmacy-modern.png",
-  medicine: "/images/medicine-modern.svg",
-};
+
 
 const CATEGORIES = [
   { label: "Fever",      emoji: "🌡️" },
