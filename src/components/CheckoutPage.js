@@ -20,7 +20,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import {
   IndianRupee,
   Upload,
-  Tag,
   Loader2,
   Plus,
   Minus,

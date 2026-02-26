@@ -859,8 +859,8 @@ export default function DeliveryDashboard() {
     return () => {
       if (es) es.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     // include orders.length so if new order appears via poll, we won't keep stale modal
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loggedIn, partner?._id, orders.length]);
 
   // NEW: countdown for offer
