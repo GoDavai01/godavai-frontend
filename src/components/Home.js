@@ -11,10 +11,9 @@ import { useNavigate } from "react-router-dom";
 import { useLocation } from "../context/LocationContext";
 import BottomNavBar from "./BottomNavBar";
 import PrescriptionUploadModal from "./PrescriptionUploadModal";
-import Navbar from "./Navbar";
 import {
   UploadCloud, Clock, ChevronRight, MapPin,
-  Search, Mic, RefreshCw, AlertTriangle,
+  Search, Mic, RefreshCw, AlertTriangle, User,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 
@@ -25,7 +24,7 @@ const ACCENT = "#00C875";
 
 const ICONS = {
   pharmacy: "/images/pharmacy-modern.png",
-  medicine: "https://img.freepik.com/free-vector/medicine-bottle-pills-isolated_1284-42391.jpg?w=400",
+  medicine: "/images/medicine-modern.svg",
 };
 
 const CATEGORIES = [
@@ -80,11 +79,13 @@ function isMedicineInCategory(med, cat) {
     .some((c) => c.includes(t) || t.includes(c));
 }
 
+const PILL_FALLBACK = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><rect width="80" height="80" rx="16" fill="#E8F5EF"/><text x="40" y="50" text-anchor="middle" font-size="38" font-family="Apple Color Emoji,Segoe UI Emoji">💊</text></svg>')}`;
+
 function getImageUrl(img) {
-  if (!img) return ICONS.medicine;
+  if (!img) return PILL_FALLBACK;
   if (typeof img === "string" && img.startsWith("/uploads/")) return `${API_BASE_URL}${img}`;
-  if (typeof img === "string" && (img.startsWith("http://") || img.startsWith("https://"))) return img;
-  return ICONS.medicine;
+  if (typeof img === "string" && img.startsWith("http")) return img;
+  return PILL_FALLBACK;
 }
 
 function formatDist(ph) {
@@ -186,7 +187,7 @@ function MedCard({ med, onAdd, onOpen, canDeliver }) {
           src={src}
           alt={med.brand || med.name || "Medicine"}
           loading="lazy"
-          onError={() => setSrc(ICONS.medicine)}
+          onError={() => setSrc(PILL_FALLBACK)}
           style={{ width: "100%", height: "100%", objectFit: "contain" }}
         />
       </div>
@@ -833,10 +834,6 @@ export default function Home() {
     .sort((a, b) => b.medicines.length - a.medicines.length);
 
   const userName = user?.name?.split(" ")?.[0] || "there";
-  const locationDisplay = currentAddress?.shortAddress
-    || currentAddress?.area
-    || currentAddress?.city
-    || "your location";
 
   // ── Render ────────────────────────────────────────────────
   return (
@@ -873,43 +870,57 @@ export default function Home() {
           pointerEvents: "none",
         }} />
 
-        {/* Top row — location + avatar */}
-        <Navbar />
-
-        <div style={{ padding: "4px 20px 0" }}>
-          {/* Location chip */}
-          <motion.button
-            whileTap={{ scale: 0.97 }}
+        {/* ── TOP BAR: Location + Profile (replaces Navbar on Home) ── */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "14px 18px 10px",
+        }}>
+          <button
+            onClick={() => navigate("/profile")}
             style={{
-              display: "flex", alignItems: "center", gap: 6,
-              background: "rgba(255,255,255,0.1)",
-              border: "1px solid rgba(255,255,255,0.18)",
-              borderRadius: 100, padding: "5px 12px 5px 8px",
-              cursor: "pointer", marginBottom: 12,
+              display: "flex", alignItems: "center", gap: 8,
+              background: "none", border: "none", cursor: "pointer", flex: 1, minWidth: 0,
             }}
           >
-            <div style={{
-              width: 22, height: 22, borderRadius: "50%",
-              background: ACCENT,
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <MapPin style={{ width: 12, height: 12, color: DEEP }} />
-            </div>
-            <div>
+            <MapPin style={{ width: 18, height: 18, color: ACCENT, flexShrink: 0 }} />
+            <div style={{ minWidth: 0, textAlign: "left" }}>
               <div style={{ fontSize: 9, fontWeight: 700, color: ACCENT, textTransform: "uppercase", letterSpacing: "0.8px" }}>
                 DELIVERING TO
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#fff", fontFamily: "'Sora',sans-serif" }}>
-                {locationDisplay.length > 28 ? locationDisplay.slice(0, 28) + "…" : locationDisplay} ▾
+              <div style={{
+                fontSize: 13, fontWeight: 700, color: "#fff",
+                fontFamily: "'Sora',sans-serif",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                maxWidth: 240,
+              }}>
+                {currentAddress?.formatted
+                  ? currentAddress.formatted.length > 38
+                    ? currentAddress.formatted.slice(0, 38) + "…"
+                    : currentAddress.formatted
+                  : "Set delivery location"} ▾
               </div>
             </div>
-          </motion.button>
+          </button>
+          <button
+            onClick={() => navigate("/profile")}
+            style={{
+              width: 38, height: 38, borderRadius: "50%",
+              background: "rgba(255,255,255,0.15)",
+              border: "1.5px solid rgba(255,255,255,0.3)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", flexShrink: 0, marginLeft: 8,
+            }}
+          >
+            <User style={{ width: 18, height: 18, color: "#fff" }} />
+          </button>
+        </div>
 
+        <div style={{ padding: "0 20px 0" }}>
           {/* Greeting */}
-          <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 24, fontWeight: 800, color: "#fff", lineHeight: 1.2, marginBottom: 4 }}>
+          <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 22, fontWeight: 800, color: "#fff", lineHeight: 1.2, marginBottom: 4 }}>
             Hi, {userName}! <span style={{ color: ACCENT }}>👋</span>
           </div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", marginBottom: 16 }}>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", marginBottom: 16, fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
             What medicine do you need today?
           </div>
 
@@ -918,21 +929,21 @@ export default function Home() {
             whileTap={{ scale: 0.98 }}
             onClick={() => navigate("/search")}
             style={{
-              width: "100%", height: 52,
+              width: "100%", height: 50,
               background: "#fff",
-              borderRadius: 16,
-              display: "flex", alignItems: "center", gap: 12,
+              borderRadius: 14,
+              display: "flex", alignItems: "center", gap: 10,
               padding: "0 14px",
               boxShadow: "0 6px 24px rgba(0,0,0,0.14)",
               border: "none", cursor: "pointer", textAlign: "left",
             }}
           >
-            <Search style={{ width: 18, height: 18, color: "#8BA898", flexShrink: 0 }} />
+            <Search style={{ width: 17, height: 17, color: "#8BA898", flexShrink: 0 }} />
             <span style={{ flex: 1, fontSize: 14, color: "#8BA898", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
               Search medicines, brands, generics…
             </span>
             <div style={{
-              width: 34, height: 34, borderRadius: 10,
+              width: 32, height: 32, borderRadius: 9,
               background: "#E8F5EF",
               display: "flex", alignItems: "center", justifyContent: "center",
               flexShrink: 0,
