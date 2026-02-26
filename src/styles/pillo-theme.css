@@ -1,41 +1,101 @@
+/* =========================================================
+   GoDavaii Design System — 2030 Edition
+   Sora (headings) + Plus Jakarta Sans (body)
+   ========================================================= */
+
 :root {
-  /* BRAND — deep green across bars and primary CTAs */
-  --brand-green: #0E5E43;
-  --gd-deep:     #0E5E43;
+  --font-heading: 'Sora', system-ui, sans-serif;
+  --font-body:    'Plus Jakarta Sans', system-ui, sans-serif;
 
-  /* Gradients (kept solid deep green so app bars stay on-brand) */
+  /* BRAND */
+  --brand-green: #0C5A3E;
+  --brand-mid:   #0E7A4F;
+  --brand-accent:#00D97E;
+  --gd-deep:     #0C5A3E;
+
   --pillo-grad-from: var(--brand-green);
-  --pillo-grad-via:  var(--brand-green);
-  --pillo-grad-to:   var(--brand-green);
+  --pillo-grad-via:  var(--brand-mid);
+  --pillo-grad-to:   var(--brand-mid);
 
-  /* Content text on white (must be DARK, not white) */
-  --pillo-active-text: #0E5E43;
-  --pillo-icon-accent: #0E5E43;
-
-  /* Buttons / states */
+  --pillo-active-text: #0C5A3E;
+  --pillo-icon-accent: #0C5A3E;
   --pillo-primary:     var(--brand-green);
   --pillo-primary-700: #0A4631;
 
-  /* Surfaces / borders / rings */
   --pillo-surface:        #ffffff;
-  --pillo-surface-border: rgba(14, 94, 67, 0.18);
-  --pillo-ring:           rgba(14, 94, 67, 0.22); /* used by focus ring helpers */
+  --pillo-surface-border: rgba(12, 90, 62, 0.14);
+  --pillo-ring:           rgba(12, 90, 62, 0.22);
+  --pillo-page-bg:        #F2F7F4;
 
-  /* Text tokens (used by custom classes) */
-  --text-strong: #0B1720; /* slate-950-ish */
-  --text:        #1F2937; /* slate-800 */
-  --text-muted:  #6B7280; /* slate-500 */
+  --text-strong: #0B1F16;
+  --text:        #1C3327;
+  --text-muted:  #6B9E88;
 
-  /* Chip (e.g., in top nav) */
   --pillo-chip-bg:   rgba(255,255,255,0.16);
   --pillo-chip-text: #ffffff;
+
+  --radius-sm:   10px;
+  --radius-md:   16px;
+  --radius-lg:   20px;
+  --radius-xl:   24px;
+  --radius-full: 999px;
+
+  --shadow-card:  0 2px 16px rgba(12,90,62,0.08);
+  --shadow-float: 0 10px 32px rgba(12,90,62,0.28);
 
   color-scheme: light;
 }
 
-/* Optional: shared focus ring for native elements */
+/* Global font */
+body {
+  font-family: var(--font-body);
+  background: var(--pillo-page-bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6,
+.font-heading, .font-sora {
+  font-family: var(--font-heading);
+}
+
+/* Focus ring */
 :where(button, [role="button"], input, select, textarea, a):focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--pillo-ring);
-  border-radius: 12px;
+  box-shadow: 0 0 0 2.5px var(--pillo-ring);
+  border-radius: var(--radius-sm);
+}
+
+/* Scrollbar hide */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* MUI overrides */
+.MuiButton-containedPrimary {
+  background: var(--brand-green) !important;
+  font-family: var(--font-heading) !important;
+  font-weight: 700 !important;
+  border-radius: var(--radius-full) !important;
+}
+.MuiButton-root {
+  font-family: var(--font-body) !important;
+  border-radius: var(--radius-md) !important;
+}
+.MuiChip-root {
+  font-family: var(--font-body) !important;
+  font-weight: 600 !important;
+}
+.MuiTypography-root { font-family: var(--font-body) !important; }
+.MuiTypography-h1,
+.MuiTypography-h2,
+.MuiTypography-h3,
+.MuiTypography-h4 { font-family: var(--font-heading) !important; }
+
+/* Card base */
+.gd-card {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--pillo-surface-border);
+  box-shadow: var(--shadow-card);
 }
