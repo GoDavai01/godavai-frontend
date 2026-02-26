@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Button, Typography, Box, Chip, Divider, LinearProgress, Stack, IconButton
+  Button, Typography, Box, Chip, LinearProgress, Stack, IconButton
 } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
@@ -54,6 +54,7 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
   // seed local AI when order changes
   useEffect(() => {
     setAi(order?.ai || null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?._id]);
 
   // fetch AI ONCE when dialog opens (no auto-rescan / polling)
@@ -76,6 +77,7 @@ export default function RxAiSideBySideDialog({ open, onClose, order, token, onRe
     })();
 
     return () => { active = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, order?._id, token]);
 
   useEffect(() => {

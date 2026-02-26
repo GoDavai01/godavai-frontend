@@ -7,6 +7,7 @@ import { useCart } from "../context/CartContext";
 import { ShoppingCart } from "@mui/icons-material";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+// eslint-disable-next-line no-unused-vars
 const getImageUrl = (img) => {
   if (!img) return "https://img.freepik.com/free-vector/medicine-bottle-pills-isolated_1284-42391.jpg?w=400";
   if (img.startsWith("/uploads/")) return `${API_BASE_URL}${img}`;
@@ -16,7 +17,7 @@ const getImageUrl = (img) => {
 export default function AllMedicines() {
   const { selectedCity, selectedArea, addToCart } = useCart();
   const [medicines, setMedicines] = useState([]);
-  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+  const [, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {

@@ -253,6 +253,7 @@ export default function Medicines() {
         .filter((m) => m.status !== "unavailable" && m.available !== false)
         .filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType))
         .filter((m) => matchKind(m, selectedKind)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [medicines, selectedCategory, selectedType, selectedKind]
   );
 

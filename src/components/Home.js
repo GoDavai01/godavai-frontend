@@ -13,13 +13,10 @@ import BottomNavBar from "./BottomNavBar";
 import PrescriptionUploadModal from "./PrescriptionUploadModal";
 import Navbar from "./Navbar";
 import {
-  UploadCloud, Pill, Stethoscope, Clock, ChevronRight, MapPin,
-  X, Search, Mic, Zap, Gift, Star, Package, ArrowRight,
-  TrendingUp, RefreshCw, AlertTriangle,
+  UploadCloud, Clock, ChevronRight, MapPin,
+  Search, Mic, RefreshCw, AlertTriangle,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
-import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
 
 // ─── Constants ───────────────────────────────────────────────
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -654,7 +651,6 @@ export default function Home() {
   const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
   const [selectedMed, setSelectedMed] = useState(null);
   const [userCoords, setUserCoords] = useState(null);
-  const [searchFocused, setSearchFocused] = useState(false);
 
   const popupTimeout = useRef(null);
   const noMedicinesTimer = useRef(null);
@@ -675,6 +671,7 @@ export default function Home() {
     if (!localDone && (!user.profileCompleted || missingRequired)) {
       navigate("/profile?setup=1", { replace: true });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?._id]);
 
   // ── Location ──
@@ -784,6 +781,7 @@ export default function Home() {
         return m;
       });
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCategory, pharmaciesNearby]);
 
   // ── Fallback meds timer ──
@@ -1080,7 +1078,7 @@ export default function Home() {
               onClick={() => setSelectedCategory("")}
               style={{
                 flexShrink: 0, height: 38, padding: "0 16px",
-                borderRadius: 100, border: "none", cursor: "pointer",
+                borderRadius: 100, cursor: "pointer",
                 fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 700,
                 background: !selectedCategory ? DEEP : "#fff",
                 color: !selectedCategory ? "#fff" : "#4A6B5A",
@@ -1100,7 +1098,7 @@ export default function Home() {
                   onClick={() => handleCategoryClick(label)}
                   style={{
                     flexShrink: 0, height: 38, padding: "0 16px",
-                    borderRadius: 100, border: "none", cursor: "pointer",
+                    borderRadius: 100, cursor: "pointer",
                     fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 600,
                     background: active ? DEEP : "#fff",
                     color: active ? "#fff" : "#4A6B5A",

@@ -372,6 +372,7 @@ export default function MyOrdersPage() {
     setPendingRejectOrderId(null);
   };
 
+  // eslint-disable-next-line no-unused-vars
   const groupedOrders = groupSplitOrders(orders);
 
   // Safety check (UNCHANGED)

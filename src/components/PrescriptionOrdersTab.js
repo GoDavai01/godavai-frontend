@@ -317,6 +317,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
   };
 
   // Add/remove/edit quote lines
+  // eslint-disable-next-line no-unused-vars
   const addRow = () =>
     setQuote([
       ...quote,

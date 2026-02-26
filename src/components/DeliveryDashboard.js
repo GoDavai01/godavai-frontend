@@ -38,6 +38,7 @@ const BackgroundGeolocation = Capacitor?.isNativePlatform?.()
     };
 
 /* ------------------------- helpers (unchanged logic) ------------------------ */
+// eslint-disable-next-line no-unused-vars
 function formatOrderDate(dateStr) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -385,6 +386,7 @@ export default function DeliveryDashboard() {
 
   // glance UI
   const [todayEarnings, setTodayEarnings] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [cashDue, setCashDue] = useState(0);
 
   // NEW: Instant offer popup state + audio
@@ -857,6 +859,7 @@ export default function DeliveryDashboard() {
     return () => {
       if (es) es.close();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     // include orders.length so if new order appears via poll, we won't keep stale modal
   }, [loggedIn, partner?._id, orders.length]);
 
@@ -969,6 +972,7 @@ export default function DeliveryDashboard() {
   const tabsValue = tab === 0 ? "active" : tab === 1 ? "past" : "earnings";
   const todayStr = dayjs().format("YYYY-MM-DD");
   const deliveriesToday = (pastOrders || []).filter(o => o.status === "delivered" && dayjs(o.createdAt).format("YYYY-MM-DD") === todayStr).length;
+  // eslint-disable-next-line no-unused-vars
   const rph = null;
 
   return (

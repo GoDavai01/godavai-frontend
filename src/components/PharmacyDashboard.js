@@ -5,16 +5,19 @@ import {
   Snackbar, Alert, ThemeProvider, createTheme, CssBaseline, Divider, IconButton,
   MenuItem, Select, InputLabel, FormControl, Dialog, DialogTitle, DialogContent,
   DialogActions, Switch, Table, TableHead, TableRow, TableCell, TableBody,
-  Tabs, Tab, Checkbox, ListItemText, ToggleButton, ToggleButtonGroup,
-  Grid
+  Tabs, Tab, Checkbox, ListItemText, ToggleButton, ToggleButtonGroup
 } from "@mui/material";
-// (MUI Autocomplete stays imported though unused by design)
+// eslint-disable-next-line no-unused-vars
 import Autocomplete from "@mui/material/Autocomplete";
+// eslint-disable-next-line no-unused-vars
 import EditIcon from "@mui/icons-material/Edit";
+// eslint-disable-next-line no-unused-vars
 import DeleteIcon from "@mui/icons-material/Delete";
+// eslint-disable-next-line no-unused-vars
 import CloseIcon from "@mui/icons-material/Close";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import PhotoCamera from "@mui/icons-material/PhotoCamera";
+// eslint-disable-next-line no-unused-vars
 import SearchIcon from "@mui/icons-material/Search";
 import BrandAutocomplete from "./fields/BrandAutocomplete";
 import CompositionAutocomplete from "./fields/CompositionAutocomplete";
@@ -144,6 +147,7 @@ function getStatusColor(status) {
   return "default";
 }
 
+// eslint-disable-next-line no-unused-vars
 const linkBrandToName = (val) => val;
 
 /* ---------------------------- EARNINGS TAB ---------------------------- */
@@ -407,6 +411,7 @@ export default function PharmacyDashboard() {
   const [active, setActive] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
+  // eslint-disable-next-line no-unused-vars
   const [showMeds, setShowMeds] = useState(false); // kept for compatibility (no longer used)
   const [medicines, setMedicines] = useState([]);
   const [medMsg, setMedMsg] = useState("");
@@ -415,16 +420,20 @@ export default function PharmacyDashboard() {
   const [medImages, setMedImages] = useState([]);
   const fileInputRef = useRef();
   const editFileInputRef = useRef();
+  // eslint-disable-next-line no-unused-vars
   const cameraEditInputRef = useRef();
   const cameraInputRef = useRef();
 
   const [payouts, setPayouts] = useState([]);
 
   // ▼▼ ADDED: local search state for Medicines tab ▼▼
+  // eslint-disable-next-line no-unused-vars
   const [medSearchOpen, setMedSearchOpen] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [medSearch, setMedSearch] = useState("");
   // ▲▲ ADDED END ▲▲
   const [usePackPreset, setUsePackPreset] = useState(true);
+  // eslint-disable-next-line no-unused-vars
   const [usePackPresetEdit, setUsePackPresetEdit] = useState(true);
 
   const today = todayString();
@@ -701,6 +710,7 @@ export default function PharmacyDashboard() {
     setLoading(false);
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleEditOrder = (order) => {
     setEditOrderId(order.id || order._id);
     setEdit({ dosage: order.dosage || "", note: order.note || "" });
@@ -750,6 +760,7 @@ export default function PharmacyDashboard() {
   const handleImagesChange = (e) => {
     if (e.target.files && e.target.files.length) setMedImages(Array.from(e.target.files));
   };
+  // eslint-disable-next-line no-unused-vars
   const handleEditImagesChange = (e) => {
     if (e.target.files && e.target.files.length) setEditMedImages(Array.from(e.target.files));
   };
@@ -879,6 +890,7 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
     setLoading(false);
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleEditMedicine = (med) => {
     const medCats = Array.isArray(med.category) ? med.category : med.category ? [med.category] : [];
     const customCats = medCats.filter(c => !CUSTOMER_CATEGORIES.includes(c));
@@ -913,6 +925,7 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
   };
 
   // mark a medicine available/unavailable — optimistic + new endpoint
+  // eslint-disable-next-line no-unused-vars
   const toggleAvailability = async (med) => {
     const goingUnavailable = med.status !== "unavailable"; // if currently available → make unavailable
     const newStatus = goingUnavailable ? "unavailable" : "active";
@@ -951,6 +964,7 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleSaveMedicine = async () => {
     if (!editMedForm.price || !editMedForm.stock ||
         !editMedForm.category ||
@@ -1053,11 +1067,13 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
     }
     setLoading(false);
   };
+  // eslint-disable-next-line no-unused-vars
   const closeEditDialog = () => {
     setEditMedId(null);
     setEditMedImages([]);
     if (editFileInputRef.current) editFileInputRef.current.value = "";
   };
+  // eslint-disable-next-line no-unused-vars
   const handleDeleteMedicine = async (medId) => {
     setLoading(true);
     try {

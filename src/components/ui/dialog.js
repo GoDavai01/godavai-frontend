@@ -103,6 +103,7 @@ export function DialogFooter({ className = "", ...props }) {
   return <div className={cn("mt-6 flex justify-end gap-2", className)} {...props} />;
 }
 
-export function DialogTitle({ className = "", ...props }) {
-  return <h2 className={cn("text-xl font-bold mb-2", className)} {...props} />;
+export function DialogTitle({ className = "", children, ...props }) {
+  // eslint-disable-next-line jsx-a11y/heading-has-content
+  return <h2 className={cn("text-xl font-bold mb-2", className)} {...props}>{children}</h2>;
 }

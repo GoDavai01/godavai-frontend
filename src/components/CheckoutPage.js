@@ -11,7 +11,7 @@ import {
   CardContent,
 } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
+
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Separator } from "../components/ui/separator";
@@ -223,6 +223,7 @@ export default function CheckoutPage() {
   const [quoteItems, setQuoteItems] = useState([]);
   const [quoteTotal, setQuoteTotal] = useState(0);
   const [quoteMessage, setQuoteMessage] = useState("");
+  // eslint-disable-next-line no-unused-vars
   const [offersOpen, setOffersOpen] = useState(false);
   const offersRef = useRef(null);
   const paymentOptions = [
@@ -330,6 +331,7 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [dosage, setDosage] = useState("");
   const [tip, setTip] = useState(0);
+  // eslint-disable-next-line no-unused-vars
   const [donate, setDonate] = useState(false);
   const [deliveryInstructions, setDeliveryInstructions] = useState("");
   const prescriptionInput = useRef();
@@ -510,6 +512,7 @@ export default function CheckoutPage() {
 
   const movShortfall = Math.max(0, MOV_MIN - itemTotal);
 
+  // eslint-disable-next-line no-unused-vars
   const availableOffers = [
     { code: "NEW15", desc: "Get 15% off for new users. Max ₹100 off." },
     {

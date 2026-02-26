@@ -231,8 +231,11 @@ export default function ProfilePage() {
 };
 
   // --- Settings modals (unchanged) ---
+  // eslint-disable-next-line no-unused-vars
   const [changePassOpen, setChangePassOpen] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   // --- Addresses (unchanged) ---

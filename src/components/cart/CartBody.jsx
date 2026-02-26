@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Separator } from "../../components/ui/separator";
-import { Badge } from "../../components/ui/badge";
+
 import { Trash2, Plus, Minus, Pencil } from "lucide-react";
 import { useCart } from "../../context/CartContext";
 

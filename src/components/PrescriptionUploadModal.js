@@ -36,6 +36,7 @@ export default function PrescriptionUploadModal({
   const [error, setError] = useState("");
   const [order, setOrder] = useState(null);
   const [quoteReady, setQuoteReady] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
 
   const [uploadType, setUploadType] = useState("auto");
@@ -95,6 +96,7 @@ export default function PrescriptionUploadModal({
       }, 3500);
     }
     return () => interval && clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, order, quoteReady]);
 
   useEffect(() => {

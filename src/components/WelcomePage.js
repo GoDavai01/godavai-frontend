@@ -2,7 +2,7 @@
 // Shows nothing; immediately routes after Android system splash.
 // Keeps your body/html flags so global bars stay hidden during the handoff.
 
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function WelcomePage() {

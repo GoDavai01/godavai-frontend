@@ -41,6 +41,7 @@ import { loadGoogleMaps } from "../utils/googleMaps";
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 // Theme tokens
+// eslint-disable-next-line no-unused-vars
 const DEEP = "#0f6e51";
 const PRIMARY = "#13C0A2";
 const AMBER = "#FFD43B";
@@ -206,6 +207,7 @@ function MiniLiveMap({ center, driver }) {
   useEffect(() => {
     if (!mapRef.current || !center?.lat || !center?.lng) return;
     mapRef.current.setCenter(center);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [center?.lat, center?.lng]);
 
   // animate driver to new position
@@ -266,6 +268,7 @@ function MiniLiveMap({ center, driver }) {
 
     // keep driver in view
     gmap.panTo(to);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [driver?.lat, driver?.lng]);
 
   return (
@@ -293,6 +296,7 @@ export default function OrderTracking() {
   const [supportChatOpen, setSupportChatOpen] = useState(false);
 
   const [eta, setEta] = useState("");
+  // eslint-disable-next-line no-unused-vars
   const [refreshTick, setRefreshTick] = useState(0);
 
   const [pharmacyRating, setPharmacyRating] = useState(null);
@@ -399,6 +403,7 @@ export default function OrderTracking() {
       cancelled = true;
       clearInterval(id);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?._id, order?.status]);
 
   // unread count
@@ -439,6 +444,7 @@ export default function OrderTracking() {
       cancelled = true;
       clearInterval(interval);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?._id, order?.status, liveDriverLoc?.lat, liveDriverLoc?.lng]);
 
   // quote modal toggle

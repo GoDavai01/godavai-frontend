@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Button, Stack, Typography, Box, CircularProgress, Avatar
+  TextField, Button, Stack, Typography, Box, CircularProgress
 } from "@mui/material";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import ChatBubbleIcon from "@mui/icons-material/ChatBubble";
