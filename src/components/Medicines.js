@@ -27,11 +27,10 @@ const bottomDock = (hasCart) =>
 
 /** Image util */
 const getImageUrl = (img) => {
-  if (!img)
-    return "https://img.freepik.com/free-vector/medicine-bottle-pills-isolated_1284-42391.jpg?w=400";
+  if (!img) return null;
   if (img.startsWith("/uploads/")) return `${API_BASE_URL}${img}`;
   if (img.startsWith("http://") || img.startsWith("https://")) return img;
-  return img;
+  return null;
 };
 
 // -- ensure a description exists (calls backend once and saves it) --
@@ -42,6 +41,26 @@ async function ensureDescription(apiBase, medId) {
   } catch {
     return "";
   }
+}
+
+// ─── Medicine card image with emoji fallback ──────────────────
+function MedCardImage({ src, alt }) {
+  const [failed, setFailed] = React.useState(!src);
+  if (failed || !src) {
+    return (
+      <div className="h-full w-full grid place-items-center" style={{ fontSize: 40, background: "linear-gradient(135deg,#E8F5EF,#D1EDE0)", borderRadius: 12 }}>
+        💊
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="h-full w-full object-contain"
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 const allCategories = ["All", ...CUSTOMER_CATEGORIES];
@@ -253,7 +272,6 @@ export default function Medicines() {
         .filter((m) => m.status !== "unavailable" && m.available !== false)
         .filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType))
         .filter((m) => matchKind(m, selectedKind)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [medicines, selectedCategory, selectedType, selectedKind]
   );
 
@@ -439,7 +457,7 @@ export default function Medicines() {
                         }}
                         title="Know more"
                       >
-                        <img src={getImageUrl(med.img)} alt={med.name} className="h-full w-full object-contain" />
+                        <MedCardImage src={getImageUrl(med.img)} alt={med.name} />
                         {med.prescriptionRequired && (
                           <span
                             className="
