@@ -15,13 +15,30 @@ html, body, #root {
 }
 *, *::before, *::after { box-sizing: border-box; }
 
+/* ─── ANIMATED PAGE BACKGROUND ──────────────────────── */
+body {
+  background: linear-gradient(135deg, #F2F7F4 0%, #E8F5EF 25%, #F0F9FF 50%, #F5F3FF 75%, #F2F7F4 100%);
+  background-size: 400% 400%;
+  animation: meshShift 25s ease infinite;
+}
+
+@keyframes meshShift {
+  0%, 100% { background-position: 0% 50%; }
+  25% { background-position: 100% 0%; }
+  50% { background-position: 50% 100%; }
+  75% { background-position: 0% 50%; }
+}
+
 /* 4) App container (kept for desktop views) */
 .gd-container {
   max-width: 480px;
   margin: 40px auto;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.09);
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 22px;
+  box-shadow: 0 4px 24px rgba(12,90,62,0.06), 0 1px 4px rgba(0,0,0,0.03);
+  border: 1px solid rgba(12,90,62,0.06);
   padding: 24px;
   padding-bottom: 80px; /* for BottomNavBar */
 }
@@ -32,8 +49,10 @@ html, body, #root {
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
 }
 .qty-btns button {
-  padding: 4px 10px; font-size: 18px; background: #0a1128; color: #fff;
-  border: 0; border-radius: 8px; cursor: pointer;
+  padding: 4px 10px; font-size: 18px;
+  background: linear-gradient(135deg, #0C5A3E, #0E7A4F);
+  color: #fff; border: 0; border-radius: 10px; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(12,90,62,0.25);
 }
 .qty-btns span { font-size: 18px; }
 
@@ -51,12 +70,13 @@ html.gd-welcome #root,
 html.gd-welcome #root > * {
   background: #0E5E43 !important;
   background-image: none !important;
+  animation: none !important;
 }
 html.gd-welcome [class*="bg-gradient"],
 html.gd-welcome [style*="gradient"] { background-image: none !important; }
 
 /* ──────────────────────────────────────────────────────────
-   MODERN UI HELPERS (use in className on your components)
+   MODERN UI HELPERS — 2030 Futuristic Edition
    ────────────────────────────────────────────────────────── */
 
 /* Typography — strong, legible, mobile-first */
@@ -66,34 +86,78 @@ html.gd-welcome [style*="gradient"] { background-image: none !important; }
 .body        { @apply text-sm text-slate-700; }
 .muted       { @apply text-sm text-slate-500; }
 
-/* Section rhythm (fixes “hugging” between header and sections) */
-.section      { @apply mb-6; }                   /* wrapper spacing */
+/* Section rhythm */
+.section      { @apply mb-6; }
 .section-head { @apply flex items-center gap-3 py-2; }
-.section-card { @apply mt-3 rounded-2xl border border-slate-200 bg-white; }
+.section-card { @apply mt-3 rounded-3xl border border-slate-100 bg-white/90 backdrop-blur-lg; }
 
-/* Cards */
-.card-soft    { @apply rounded-2xl border border-slate-200 bg-white p-3 shadow-sm; }
+/* Cards — Glass morphism */
+.card-soft    { @apply rounded-3xl border border-white/40 bg-white/85 backdrop-blur-lg p-3 shadow-card; }
+.card-glass   { @apply rounded-3xl border border-white/30 bg-white/70 backdrop-blur-xl p-4 shadow-card; }
 
 /* Icon tile in section headers (deep-green accent on white) */
 .icon-tile { @apply h-9 w-9 grid place-items-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100; }
 
-/* Buttons (attach to shadcn <Button className="…">) */
-.btn-primary-emerald { @apply bg-emerald-600 hover:bg-emerald-700 active:scale-[.98] text-white font-bold transition; }
-.btn-outline-soft    { @apply border border-slate-200 text-slate-900 hover:bg-slate-50 active:scale-[.98]; }
-.btn-danger-outline  { @apply border border-red-200 text-red-600 hover:bg-red-50 active:scale-[.98]; }
-.btn-ghost-soft      { @apply text-slate-900 hover:bg-slate-50 active:scale-[.98]; }
+/* Buttons */
+.btn-primary-emerald { @apply bg-gradient-to-r from-brand-green to-brand-mid hover:from-brand-deep hover:to-brand-green active:scale-[.97] text-white font-bold transition-all shadow-color rounded-full; }
+.btn-outline-soft    { @apply border border-slate-200/60 text-slate-900 hover:bg-white/50 active:scale-[.97] backdrop-blur-sm rounded-full; }
+.btn-danger-outline  { @apply border border-red-200 text-red-600 hover:bg-red-50 active:scale-[.97] rounded-full; }
+.btn-ghost-soft      { @apply text-slate-900 hover:bg-white/40 active:scale-[.97] rounded-full; }
 
-/* Inputs — subtle, modern outline */
-.gd-input { @apply bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[var(--pillo-ring)] focus:border-slate-300; }
+/* Inputs — Glass morphism style */
+.gd-input {
+  @apply bg-white/80 backdrop-blur-sm border border-white/40 rounded-2xl;
+  @apply focus:ring-2 focus:ring-brand-accent/35 focus:border-brand-mid/30;
+  color: #0B1720;
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.gd-input:focus {
+  background: rgba(255,255,255,0.95);
+  box-shadow: 0 0 0 3px rgba(0,217,126,0.15), 0 4px 16px rgba(12,90,62,0.08);
+}
 
-/* Chips / badges (fallback if not using shadcn Badge) */
-.gd-chip       { @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold; }
-.gd-chip-brand { @apply bg-emerald-600 text-white; }
-.gd-chip-soft  { @apply bg-emerald-50 text-emerald-700 border border-emerald-100; }
+/* Chips / badges */
+.gd-chip       { @apply inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-sm; }
+.gd-chip-brand { @apply bg-gradient-to-r from-brand-green to-brand-mid text-white shadow-glow-sm; }
+.gd-chip-soft  { @apply bg-emerald-50/80 text-emerald-700 border border-emerald-100/50 backdrop-blur-sm; }
+.gd-chip-glass { @apply bg-white/30 text-white border border-white/20 backdrop-blur-lg; }
+
+/* ─── GRADIENT BORDER UTILITY ───────────────────────── */
+.border-gradient {
+  border: double 1.5px transparent;
+  background-image: linear-gradient(white, white), linear-gradient(135deg, #00D97E, #00E5FF);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+
+/* ─── FROSTED NAVBAR ─────────────────────────────────── */
+.gd-navbar-glass {
+  background: rgba(12, 90, 62, 0.92);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid rgba(0, 217, 126, 0.12);
+}
+
+/* ─── FLOATING ISLAND NAV ────────────────────────────── */
+.gd-island {
+  background: rgba(12, 90, 62, 0.92);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(0, 217, 126, 0.15);
+  box-shadow:
+    0 12px 40px rgba(0,0,0,0.20),
+    0 0 0 1px rgba(0,217,126,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+}
 
 /* Mobile tweaks */
 @media (max-width: 600px) {
-  .gd-container { margin: 0 auto; border-radius: 0; box-shadow: none; max-width: 100vw; padding: 16px 12px 88px; }
+  .gd-container {
+    margin: 0 auto; border-radius: 0; box-shadow: none;
+    max-width: 100vw; padding: 16px 12px 88px;
+    backdrop-filter: none;
+    background: rgba(255,255,255,0.95);
+  }
   button { font-size: 16px; font-weight: 700; }
   * { -webkit-tap-highlight-color: rgba(0,0,0,0); }
 }
@@ -102,28 +166,22 @@ html.gd-welcome [style*="gradient"] { background-image: none !important; }
 .no-scrollbar::-webkit-scrollbar{ display:none; }
 .no-scrollbar{ -ms-overflow-style:none; scrollbar-width:none; }
 
-/* Center the text inside shadcn Select while keeping the chevron at the right */
+/* Center the text inside shadcn Select */
 .select-center { position: relative; }
-/* The built-in chevron icon gets absolutely positioned to the right */
 .select-center svg {
   position: absolute !important;
-  right: 12px;
-  top: 50%;
+  right: 12px; top: 50%;
   transform: translateY(-50%);
-  pointer-events: none;
-  opacity: .6;
+  pointer-events: none; opacity: .6;
 }
-/* Make the selected value span fill and center */
 .select-center [data-placeholder],
 .select-center span {
-  width: 100%;
-  text-align: center;
+  width: 100%; text-align: center;
 }
 
-/* ===== iOS Safari: stop auto-darkening of form controls in modals ===== */
+/* ===== iOS Safari: stop auto-darkening ===== */
 .force-light, .force-light * { color-scheme: light !important; }
 
-/* Stronger overrides for iOS (WebKit) */
 @supports (-webkit-touch-callout: none) {
   .force-light input,
   .force-light select,
@@ -131,7 +189,7 @@ html.gd-welcome [style*="gradient"] { background-image: none !important; }
   .force-light [role="textbox"] {
     background-color: #fff !important;
     color: #0B1720 !important;
-    -webkit-text-fill-color: #0B1720 !important; /* iOS autofill text */
+    -webkit-text-fill-color: #0B1720 !important;
   }
   .force-light input:-webkit-autofill {
     -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
@@ -139,8 +197,7 @@ html.gd-welcome [style*="gradient"] { background-image: none !important; }
   }
 }
 
-/* Optional: make the base input explicitly light everywhere */
 .gd-input {
   color: #0B1720;
-  background-color: #fff;
+  background-color: rgba(255,255,255,0.85);
 }

@@ -189,20 +189,31 @@ function MedCard({ med, onAdd, onOpen, canDeliver }) {
   return (
     <motion.div
       whileTap={{ scale: 0.97 }}
+      whileHover={{ y: -3, boxShadow: "0 12px 32px rgba(12,90,62,0.12), 0 0 0 1px rgba(0,217,126,0.08)" }}
       onClick={() => onOpen?.(med)}
       style={{
         width: 220, flexShrink: 0, cursor: "pointer",
-        background: "#fff",
-        borderRadius: 20,
-        border: "1.5px solid rgba(12,90,62,0.10)",
-        boxShadow: "0 2px 16px rgba(12,90,62,0.08)",
+        background: "rgba(255,255,255,0.88)",
+        backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+        borderRadius: 22,
+        border: "1px solid rgba(12,90,62,0.06)",
+        boxShadow: "0 4px 24px rgba(12,90,62,0.06), 0 1px 4px rgba(0,0,0,0.03)",
         padding: 14,
         display: "flex", alignItems: "center", gap: 12,
+        position: "relative", overflow: "hidden",
+        transition: "all 0.25s cubic-bezier(0.22, 1, 0.36, 1)",
       }}
     >
+      {/* Subtle gradient overlay */}
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: "inherit",
+        background: "linear-gradient(135deg, rgba(0,217,126,0.03), transparent 60%)",
+        pointerEvents: "none",
+      }} />
+
       <MedImage med={med} size={70} />
 
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
         <div style={{
           fontFamily: "'Sora', sans-serif",
           fontSize: 13, fontWeight: 700, color: "#0B1F16",
@@ -228,7 +239,9 @@ function MedCard({ med, onAdd, onOpen, canDeliver }) {
           {discount && (
             <span style={{
               fontSize: 10, fontWeight: 700, color: "#059669",
-              background: "#ECFDF5", padding: "1px 6px", borderRadius: 100,
+              background: "linear-gradient(135deg, #ECFDF5, #D1FAE5)",
+              padding: "2px 8px", borderRadius: 100,
+              border: "1px solid rgba(5,150,105,0.1)",
             }}>
               {discount}% OFF
             </span>
@@ -243,17 +256,18 @@ function MedCard({ med, onAdd, onOpen, canDeliver }) {
             <Clock style={{ width: 10, height: 10 }} /> ≤30 min
           </span>
           <motion.button
-            whileTap={{ scale: 0.88 }}
+            whileTap={{ scale: 0.85 }}
             onClick={(e) => { e.stopPropagation(); if (canDeliver) onAdd(med); }}
             disabled={!canDeliver}
             style={{
-              height: 28, paddingLeft: 12, paddingRight: 12,
+              height: 30, paddingLeft: 14, paddingRight: 14,
               borderRadius: 100, border: "none",
               cursor: canDeliver ? "pointer" : "not-allowed",
-              background: canDeliver ? DEEP : "#E2E8F0",
+              background: canDeliver ? `linear-gradient(135deg, ${DEEP}, ${MID})` : "#E2E8F0",
               color: canDeliver ? "#fff" : "#94A3B8",
               fontSize: 12, fontWeight: 700, fontFamily: "'Sora',sans-serif",
-              boxShadow: canDeliver ? "0 2px 8px rgba(12,90,62,0.3)" : "none",
+              boxShadow: canDeliver ? "0 4px 14px rgba(12,90,62,0.30)" : "none",
+              transition: "all 0.2s",
             }}
           >
             + Add
@@ -269,22 +283,31 @@ function PharmacyCard({ ph, onClick }) {
   return (
     <motion.div
       whileTap={{ scale: 0.95 }}
+      whileHover={{ y: -3 }}
       onClick={onClick}
       style={{
-        flexShrink: 0, width: 130, cursor: "pointer",
-        background: "#fff",
-        borderRadius: 20,
-        border: "1.5px solid rgba(12,90,62,0.10)",
-        boxShadow: "0 2px 12px rgba(12,90,62,0.07)",
+        flexShrink: 0, width: 135, cursor: "pointer",
+        background: "rgba(255,255,255,0.85)",
+        backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+        borderRadius: 22,
+        border: "1px solid rgba(12,90,62,0.06)",
+        boxShadow: "0 4px 20px rgba(12,90,62,0.06), 0 1px 3px rgba(0,0,0,0.02)",
         padding: "18px 12px",
         display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+        position: "relative", overflow: "hidden",
+        transition: "all 0.25s cubic-bezier(0.22, 1, 0.36, 1)",
       }}
     >
       <div style={{
-        width: 50, height: 50, borderRadius: 16,
+        position: "absolute", top: -20, right: -20, width: 60, height: 60,
+        borderRadius: "50%", background: "radial-gradient(circle, rgba(0,217,126,0.08), transparent)",
+        pointerEvents: "none",
+      }} />
+      <div style={{
+        width: 52, height: 52, borderRadius: 18,
         background: "linear-gradient(135deg,#E8F5EF,#C6E8D8)",
         display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 26,
+        fontSize: 26, boxShadow: "0 4px 12px rgba(12,90,62,0.08)",
       }}>
         🏥
       </div>
@@ -302,7 +325,10 @@ function PharmacyCard({ ph, onClick }) {
         </span>
         <span style={{
           fontSize: 9, fontWeight: 700, color: "#059669",
-          background: "#ECFDF5", padding: "2px 8px", borderRadius: 100,
+          background: "linear-gradient(135deg, #ECFDF5, #D1FAE5)",
+          padding: "3px 10px", borderRadius: 100,
+          border: "1px solid rgba(5,150,105,0.1)",
+          boxShadow: "0 0 8px rgba(0,217,126,0.12)",
         }}>
           ● Open
         </span>
@@ -316,48 +342,63 @@ function BannerCard({ banner }) {
   return (
     <motion.div
       whileTap={{ scale: 0.97 }}
+      whileHover={{ y: -2 }}
       style={{
-        flexShrink: 0, width: 268, height: 122,
-        borderRadius: 20,
+        flexShrink: 0, width: 275, height: 130,
+        borderRadius: 24,
         background: banner.grad,
         position: "relative", overflow: "hidden",
         cursor: "pointer",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
       }}
     >
+      {/* Glass decorative elements */}
       <div style={{
         position: "absolute", right: -24, top: -24,
-        width: 120, height: 120, borderRadius: "50%",
-        background: "rgba(255,255,255,0.07)",
+        width: 130, height: 130, borderRadius: "50%",
+        background: "rgba(255,255,255,0.08)",
+        filter: "blur(1px)",
       }} />
       <div style={{
-        position: "absolute", right: 16, bottom: -28,
-        width: 70, height: 70, borderRadius: "50%",
+        position: "absolute", right: 20, bottom: -30,
+        width: 80, height: 80, borderRadius: "50%",
         background: "rgba(255,255,255,0.04)",
       }} />
+      {/* Top sheen */}
+      <div style={{
+        position: "absolute", inset: "0 0 auto 0", height: 60,
+        background: "linear-gradient(180deg, rgba(255,255,255,0.08), transparent)",
+        pointerEvents: "none",
+      }} />
+
       <div style={{ padding: "16px 18px", position: "relative", zIndex: 1 }}>
         <div style={{
-          fontSize: 10, fontWeight: 700, letterSpacing: "0.6px",
-          textTransform: "uppercase", color: ACCENT,
-          background: "rgba(0,217,126,0.15)",
-          padding: "2px 8px", borderRadius: 100,
+          fontSize: 10, fontWeight: 700, letterSpacing: "0.8px",
+          textTransform: "uppercase", color: "#00FFB2",
+          background: "rgba(0,255,178,0.12)",
+          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+          padding: "3px 10px", borderRadius: 100,
           display: "inline-block", marginBottom: 8,
           fontFamily: "'Sora',sans-serif",
+          border: "1px solid rgba(0,255,178,0.15)",
         }}>
           {banner.tag}
         </div>
         <div style={{
           fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 800,
           color: "#fff", lineHeight: 1.3, whiteSpace: "pre-line",
+          textShadow: "0 1px 4px rgba(0,0,0,0.15)",
         }}>
           {banner.title}
         </div>
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 3 }}>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.50)", marginTop: 4 }}>
           {banner.sub}
         </div>
       </div>
       <div style={{
-        position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
-        fontSize: 42, opacity: 0.75, lineHeight: 1,
+        position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)",
+        fontSize: 44, opacity: 0.80, lineHeight: 1,
+        filter: "drop-shadow(0 4px 8px rgba(0,0,0,0.15))",
       }}>
         {banner.emoji}
       </div>
@@ -384,10 +425,11 @@ function ActiveOrderBar({ order, onClick }) {
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
       style={{
-        width: "100%", borderRadius: 20, overflow: "hidden",
-        background: "linear-gradient(135deg,#0C5A3E,#0E7A4F)",
-        boxShadow: "0 8px 28px rgba(12,90,62,0.30)",
+        width: "100%", borderRadius: 24, overflow: "hidden",
+        background: "linear-gradient(135deg, #0C5A3E 0%, #041F15 50%, #0E7A4F 100%)",
+        boxShadow: "0 12px 32px rgba(12,90,62,0.30), 0 0 0 1px rgba(0,217,126,0.08)",
         border: "none", cursor: "pointer", textAlign: "left",
+        position: "relative",
       }}
     >
       <div style={{ padding: "14px 16px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -824,7 +866,9 @@ export default function Home() {
     <div style={{
       minHeight: "100vh", width: "100%", maxWidth: 480,
       margin: "0 auto",
-      background: "#F2F7F4",
+      background: "linear-gradient(180deg, #F2F7F4 0%, #E8F5EF 30%, #F0F9FF 60%, #F5F3FF 80%, #F2F7F4 100%)",
+      backgroundSize: "100% 400%",
+      animation: "meshShift 25s ease infinite",
       paddingBottom: 120,
       position: "relative",
       overflowX: "hidden",
@@ -833,22 +877,31 @@ export default function Home() {
 
       {/* ══════════ HERO HEADER ══════════ */}
       <div style={{
-        background: `linear-gradient(160deg, ${DEEP} 0%, #0A4631 100%)`,
-        paddingBottom: 24,
+        background: `linear-gradient(160deg, ${DEEP} 0%, #041F15 40%, #0A4631 100%)`,
+        paddingBottom: 28,
         position: "relative",
         overflow: "hidden",
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
+        boxShadow: "0 16px 48px rgba(12,90,62,0.25), 0 0 0 1px rgba(0,217,126,0.06)",
       }}>
-        {/* Decorative ambient blobs */}
+        {/* Decorative ambient orbs */}
         <div style={{
-          position: "absolute", right: -50, top: -50,
-          width: 220, height: 220, borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(0,217,126,0.12) 0%, transparent 70%)",
-          pointerEvents: "none",
+          position: "absolute", right: -60, top: -60,
+          width: 260, height: 260, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(0,217,126,0.15) 0%, rgba(0,229,255,0.05) 40%, transparent 70%)",
+          pointerEvents: "none", animation: "orbFloat 8s ease-in-out infinite",
         }} />
         <div style={{
-          position: "absolute", left: -70, bottom: -60,
-          width: 200, height: 200, borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(0,0,0,0.18) 0%, transparent 70%)",
+          position: "absolute", left: -80, bottom: -70,
+          width: 240, height: 240, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(168,85,247,0.08) 0%, transparent 70%)",
+          pointerEvents: "none", animation: "orbFloat 10s ease-in-out infinite reverse",
+        }} />
+        {/* Top sheen overlay */}
+        <div style={{
+          position: "absolute", inset: "0 0 auto 0", height: 80,
+          background: "linear-gradient(180deg, rgba(255,255,255,0.06), transparent)",
           pointerEvents: "none",
         }} />
 
@@ -864,45 +917,59 @@ export default function Home() {
             onClick={() => setLocationModalOpen(true)}
             style={{
               display: "flex", alignItems: "center", gap: 8,
-              background: "rgba(255,255,255,0.10)",
-              border: "1px solid rgba(255,255,255,0.16)",
-              borderRadius: 14, padding: "8px 12px",
+              background: "rgba(255,255,255,0.08)",
+              backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 16, padding: "9px 13px",
               cursor: "pointer", flex: 1, minWidth: 0,
+              transition: "all 0.2s",
             }}
           >
             <div style={{
-              width: 28, height: 28, borderRadius: 8,
-              background: ACCENT,
+              position: "relative",
+              width: 30, height: 30, borderRadius: 10,
+              background: `linear-gradient(135deg, ${ACCENT}, #00E5FF)`,
               display: "flex", alignItems: "center", justifyContent: "center",
               flexShrink: 0,
+              boxShadow: "0 0 16px rgba(0,217,126,0.35)",
             }}>
-              <MapPin style={{ width: 14, height: 14, color: DEEP }} />
+              <MapPin style={{ width: 14, height: 14, color: "#041F15" }} />
+              {/* Live pulse */}
+              <div style={{
+                position: "absolute", top: -2, right: -2,
+                width: 8, height: 8, borderRadius: "50%",
+                background: "#00FFB2", border: "1.5px solid #041F15",
+                animation: "glowPulse 2s ease-in-out infinite",
+              }} />
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: ACCENT, textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: `${ACCENT}CC`, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 1 }}>
                 DELIVERING TO
               </div>
               <div style={{
-                fontSize: 12, fontWeight: 700, color: "#fff",
+                fontSize: 13, fontWeight: 700, color: "#fff",
                 fontFamily: "'Sora',sans-serif",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
               }}>
                 {locationText}
               </div>
             </div>
-            <ChevronDown style={{ width: 14, height: 14, color: "rgba(255,255,255,0.5)", flexShrink: 0 }} />
+            <ChevronDown style={{ width: 14, height: 14, color: "rgba(255,255,255,0.45)", flexShrink: 0 }} />
           </motion.button>
 
           {/* Profile avatar */}
           <motion.button
-            whileTap={{ scale: 0.94 }}
+            whileTap={{ scale: 0.90 }}
             onClick={() => navigate("/profile")}
             style={{
-              width: 40, height: 40, borderRadius: 13,
-              background: "rgba(255,255,255,0.15)",
-              border: "1.5px solid rgba(255,255,255,0.25)",
+              width: 42, height: 42, borderRadius: 14,
+              background: "rgba(255,255,255,0.08)",
+              backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+              border: "1.5px solid rgba(255,255,255,0.15)",
               display: "flex", alignItems: "center", justifyContent: "center",
               cursor: "pointer", flexShrink: 0,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+              transition: "all 0.2s",
             }}
           >
             <User style={{ width: 18, height: 18, color: "#fff" }} />
@@ -930,21 +997,31 @@ export default function Home() {
             whileTap={{ scale: 0.98 }}
             onClick={() => navigate("/search")}
             style={{
-              width: "100%", height: 50,
-              background: "#fff", borderRadius: 15,
+              width: "100%", height: 52,
+              background: "rgba(255,255,255,0.95)",
+              backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+              borderRadius: 18,
               display: "flex", alignItems: "center", gap: 10,
               padding: "0 14px",
-              boxShadow: "0 8px 28px rgba(0,0,0,0.16)",
-              border: "none", cursor: "pointer",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.3)",
+              cursor: "pointer",
             }}
           >
-            <Search style={{ width: 17, height: 17, color: "#94A3B8", flexShrink: 0 }} />
-            <span style={{ flex: 1, fontSize: 14, color: "#94A3B8", textAlign: "left", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-              Search medicines, brands, generics…
+            <div style={{
+              width: 34, height: 34, borderRadius: 11,
+              background: "linear-gradient(135deg, #E8F5EF, #D1EDE0)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Search style={{ width: 15, height: 15, color: DEEP }} />
+            </div>
+            <span style={{ flex: 1, fontSize: 14, color: "#94A3B8", textAlign: "left", fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 500 }}>
+              Search medicines, brands, generics...
             </span>
             <div style={{
-              width: 32, height: 32, borderRadius: 9,
-              background: "#E8F5EF",
+              width: 34, height: 34, borderRadius: 11,
+              background: `linear-gradient(135deg, ${ACCENT}20, #00E5FF15)`,
+              border: "1px solid rgba(0,217,126,0.15)",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
               <Mic style={{ width: 14, height: 14, color: DEEP }} />
@@ -952,7 +1029,7 @@ export default function Home() {
           </motion.button>
         </div>
 
-        {/* ── STATS STRIP ── */}
+        {/* ── STATS STRIP — glass bento ── */}
         <div style={{ margin: "16px 18px 0", display: "flex", gap: 8 }}>
           {[
             { icon: "🏥", label: `${pharmaciesNearby.length || "—"}+ Pharmacies`, sub: "near you" },
@@ -961,15 +1038,16 @@ export default function Home() {
           ].map((s, i) => (
             <div key={i} style={{
               flex: 1,
-              background: "rgba(255,255,255,0.10)",
-              border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: 14, padding: "9px 0",
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
-              backdropFilter: "blur(10px)",
+              background: "rgba(255,255,255,0.06)",
+              backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              borderRadius: 16, padding: "10px 0",
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+              transition: "all 0.2s",
             }}>
-              <span style={{ fontSize: 16 }}>{s.icon}</span>
-              <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 10, fontWeight: 800, color: "#fff" }}>{s.label}</span>
-              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>{s.sub}</span>
+              <span style={{ fontSize: 18, filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.15))" }}>{s.icon}</span>
+              <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 10, fontWeight: 800, color: "#fff", letterSpacing: "-0.2px" }}>{s.label}</span>
+              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.40)", fontWeight: 500 }}>{s.sub}</span>
             </div>
           ))}
         </div>
@@ -1000,35 +1078,44 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* ── QUICK ACTIONS ── */}
-        <div style={{ marginBottom: 24 }}>
+        {/* ── QUICK ACTIONS — Glass Bento Grid ── */}
+        <div style={{ marginBottom: 26 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
             {[
-              { label: "Upload Rx",  emoji: "📋", bg: `linear-gradient(135deg,${DEEP},${MID})`,     onClick: () => setPrescriptionModalOpen(true) },
-              { label: "Medicines",  emoji: "💊", bg: "linear-gradient(135deg,#0891B2,#0EA5E9)",  onClick: () => navigate("/pharmacies-near-you") },
-              { label: "Consult",    emoji: "🩺", bg: "linear-gradient(135deg,#D97706,#F59E0B)",  onClick: () => navigate("/doctors") },
-              { label: "Offers",     emoji: "🎁", bg: "linear-gradient(135deg,#DC2626,#F87171)",  onClick: () => {} },
+              { label: "Upload Rx",  emoji: "📋", bg: `linear-gradient(135deg,${DEEP},${MID})`,   glow: "rgba(12,90,62,0.3)",  onClick: () => setPrescriptionModalOpen(true) },
+              { label: "Medicines",  emoji: "💊", bg: "linear-gradient(135deg,#0891B2,#0EA5E9)", glow: "rgba(8,145,178,0.3)", onClick: () => navigate("/pharmacies-near-you") },
+              { label: "Consult",    emoji: "🩺", bg: "linear-gradient(135deg,#D97706,#F59E0B)", glow: "rgba(217,119,6,0.3)", onClick: () => navigate("/doctors") },
+              { label: "Offers",     emoji: "🎁", bg: "linear-gradient(135deg,#DC2626,#F87171)", glow: "rgba(220,38,38,0.3)", onClick: () => {} },
             ].map((act) => (
               <motion.button
                 key={act.label}
-                whileTap={{ scale: 0.90 }}
+                whileTap={{ scale: 0.88 }}
+                whileHover={{ y: -2 }}
                 onClick={act.onClick}
                 style={{
-                  display: "flex", flexDirection: "column", alignItems: "center", gap: 7,
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
                   background: "none", border: "none", cursor: "pointer", padding: 0,
                 }}
               >
                 <div style={{
-                  width: 58, height: 58, borderRadius: 20,
+                  width: 60, height: 60, borderRadius: 22,
                   background: act.bg,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: 26,
-                  boxShadow: "0 6px 18px rgba(0,0,0,0.13)",
+                  boxShadow: `0 8px 24px ${act.glow}, 0 2px 8px rgba(0,0,0,0.06)`,
+                  position: "relative",
+                  overflow: "hidden",
                 }}>
-                  {act.emoji}
+                  {/* Inner glass sheen */}
+                  <div style={{
+                    position: "absolute", inset: 0,
+                    background: "linear-gradient(135deg, rgba(255,255,255,0.2), transparent 60%)",
+                    borderRadius: "inherit",
+                  }} />
+                  <span style={{ position: "relative", zIndex: 1 }}>{act.emoji}</span>
                 </div>
                 <span style={{
-                  fontSize: 11, fontWeight: 700, color: "#374151",
+                  fontSize: 11, fontWeight: 700, color: "#1C3327",
                   fontFamily: "'Sora',sans-serif", textAlign: "center", lineHeight: 1.2,
                 }}>
                   {act.label}
@@ -1177,17 +1264,22 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── ORDER AGAIN ── */}
+        {/* ── ORDER AGAIN — Glass Card ── */}
         <div style={{ marginBottom: 32 }}>
           <SectionRow title="Order Again" badge="Quick Reorder" />
           <motion.div
             whileTap={{ scale: 0.98 }}
+            whileHover={{ y: -2 }}
             style={{
-              background: "#fff", borderRadius: 20,
-              border: "1.5px solid rgba(12,90,62,0.10)",
-              boxShadow: "0 2px 14px rgba(12,90,62,0.07)",
+              background: "rgba(255,255,255,0.85)",
+              backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+              borderRadius: 24,
+              border: "1px solid rgba(12,90,62,0.06)",
+              boxShadow: "0 4px 24px rgba(12,90,62,0.06), 0 1px 4px rgba(0,0,0,0.03)",
               padding: "18px",
               display: "flex", alignItems: "center", gap: 14,
+              position: "relative", overflow: "hidden",
+              transition: "all 0.25s cubic-bezier(0.22, 1, 0.36, 1)",
             }}
           >
             <div style={{
@@ -1210,18 +1302,26 @@ export default function Home() {
             </div>
             {lastOrder && (
               <motion.button
-                whileTap={{ scale: 0.92 }}
+                whileTap={{ scale: 0.90 }}
                 onClick={() => navigate("/orders")}
                 style={{
-                  height: 38, padding: "0 16px",
-                  background: DEEP, color: "#fff",
+                  height: 38, padding: "0 18px",
+                  background: `linear-gradient(135deg, ${DEEP}, ${MID})`,
+                  color: "#fff",
                   borderRadius: 100, border: "none", cursor: "pointer",
                   fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 700,
                   flexShrink: 0, display: "flex", alignItems: "center", gap: 5,
-                  boxShadow: "0 3px 12px rgba(12,90,62,0.28)",
+                  boxShadow: "0 4px 16px rgba(12,90,62,0.30), 0 0 12px rgba(0,217,126,0.10)",
+                  position: "relative", overflow: "hidden",
                 }}
               >
-                <RefreshCw style={{ width: 12, height: 12 }} /> Reorder
+                <div style={{
+                  position: "absolute", inset: 0, borderRadius: "inherit",
+                  background: "linear-gradient(135deg, rgba(255,255,255,0.12), transparent 60%)",
+                  pointerEvents: "none",
+                }} />
+                <RefreshCw style={{ width: 12, height: 12, position: "relative", zIndex: 1 }} />
+                <span style={{ position: "relative", zIndex: 1 }}>Reorder</span>
               </motion.button>
             )}
           </motion.div>
@@ -1229,34 +1329,44 @@ export default function Home() {
 
       </div>
 
-      {/* ══════════ FLOATING UPLOAD Rx CTA ══════════ */}
+      {/* ══════════ FLOATING UPLOAD Rx CTA — Neon Glow ══════════ */}
       <motion.div
         className="fixed z-[1201] flex justify-end"
         style={{ bottom: dockBottom, left: 0, right: 0, padding: "0 18px", pointerEvents: "none" }}
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
       >
         <motion.button
-          whileTap={{ scale: 0.95 }}
+          whileTap={{ scale: 0.93 }}
+          whileHover={{ scale: 1.02 }}
           onClick={() => setPrescriptionModalOpen(true)}
           style={{
             pointerEvents: "auto",
             display: "inline-flex", alignItems: "center", gap: 10,
-            height: 52, paddingLeft: 14, paddingRight: 22,
+            height: 54, paddingLeft: 14, paddingRight: 24,
             borderRadius: 100, border: "none", cursor: "pointer",
-            background: `linear-gradient(135deg,${DEEP},${MID})`,
-            boxShadow: "0 10px 32px rgba(12,90,62,0.42)",
+            background: `linear-gradient(135deg, ${DEEP}, ${MID})`,
+            boxShadow: "0 10px 32px rgba(12,90,62,0.40), 0 0 20px rgba(0,217,126,0.15)",
+            position: "relative", overflow: "hidden",
           }}
         >
+          {/* Inner sheen */}
           <div style={{
-            width: 34, height: 34, borderRadius: "50%",
-            background: "rgba(255,255,255,0.20)",
+            position: "absolute", inset: 0, borderRadius: "inherit",
+            background: "linear-gradient(135deg, rgba(255,255,255,0.12), transparent 60%)",
+            pointerEvents: "none",
+          }} />
+          <div style={{
+            width: 36, height: 36, borderRadius: "50%",
+            background: "rgba(255,255,255,0.15)",
+            backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
             display: "flex", alignItems: "center", justifyContent: "center",
+            border: "1px solid rgba(255,255,255,0.15)",
           }}>
             <UploadCloud style={{ width: 17, height: 17, color: "#fff" }} />
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "'Sora',sans-serif" }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "'Sora',sans-serif", position: "relative", zIndex: 1 }}>
             Upload Prescription
           </span>
         </motion.button>
@@ -1287,6 +1397,25 @@ export default function Home() {
       />
 
       <BottomNavBar />
+
+      {/* CSS Keyframes for animations */}
+      <style>{`
+        @keyframes orbFloat {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33%      { transform: translate(10px, -15px) scale(1.05); }
+          66%      { transform: translate(-8px, 10px) scale(0.95); }
+        }
+        @keyframes glowPulse {
+          0%, 100% { box-shadow: 0 0 8px rgba(0,255,178,0.3); }
+          50%      { box-shadow: 0 0 16px rgba(0,255,178,0.5); }
+        }
+        @keyframes meshShift {
+          0%, 100% { background-position: 0% 50%; }
+          25%      { background-position: 100% 0%; }
+          50%      { background-position: 50% 100%; }
+          75%      { background-position: 0% 50%; }
+        }
+      `}</style>
     </div>
   );
 }

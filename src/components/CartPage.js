@@ -1,9 +1,9 @@
-// src/components/CartPage.js
+// src/components/CartPage.js — GoDavaii 2030 Ultra-Futuristic UI
 import React, { useEffect, useState } from "react";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { Badge } from "../components/ui/badge";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShoppingBag } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useNavigate } from "react-router-dom";
 import CartBody from "./cart/CartBody";
@@ -70,13 +70,38 @@ export default function CartPage() {
 
   if (!cart.length) {
     return (
-      <div className="max-w-md mx-auto pt-10 pb-24 px-3 text-center">
-        <div className="text-2xl font-extrabold bg-gradient-to-r from-teal-600 to-emerald-600 bg-clip-text text-transparent">
-          Your cart is empty.
+      <div className="max-w-md mx-auto pt-16 pb-24 px-4 text-center">
+        <div style={{
+          width: 80, height: 80, borderRadius: 24,
+          background: "rgba(0,217,126,0.08)",
+          border: "1px solid rgba(0,217,126,0.12)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          margin: "0 auto 20px",
+        }}>
+          <ShoppingBag style={{ width: 36, height: 36, color: "#0C5A3E" }} />
         </div>
+        <h2 style={{
+          fontFamily: "'Sora',sans-serif",
+          fontSize: 22, fontWeight: 800,
+          background: "linear-gradient(135deg, #0C5A3E, #00D97E)",
+          WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+          marginBottom: 8,
+        }}>
+          Your cart is empty
+        </h2>
+        <p style={{ fontSize: 14, color: "#94A3B8", marginBottom: 24 }}>
+          Add medicines to get started
+        </p>
         <Button
-          className="mt-4 rounded-full px-6 py-5 font-extrabold bg-teal-500 hover:bg-teal-600"
-          onClick={() => navigate("/medicines")}
+          onClick={() => navigate("/pharmacies-near-you")}
+          style={{
+            borderRadius: 100, padding: "12px 28px",
+            fontWeight: 700, fontSize: 14,
+            background: "linear-gradient(135deg, #0C5A3E, #0E7A4F)",
+            color: "#fff",
+            boxShadow: "0 6px 20px rgba(12,90,62,0.30), 0 0 10px rgba(0,217,126,0.10)",
+            fontFamily: "'Sora',sans-serif",
+          }}
         >
           Browse Medicines
         </Button>
@@ -86,7 +111,13 @@ export default function CartPage() {
 
   return (
     <div className="max-w-md mx-auto mt-4 mb-24 px-3">
-      <h1 className="text-3xl font-black mb-3 tracking-wide bg-gradient-to-r from-teal-600 to-emerald-600 bg-clip-text text-transparent">
+      <h1 style={{
+        fontFamily: "'Sora',sans-serif",
+        fontSize: 28, fontWeight: 900, letterSpacing: "-0.5px",
+        background: "linear-gradient(135deg, #0C5A3E, #00D97E)",
+        WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+        marginBottom: 14,
+      }}>
         Cart
       </h1>
 
@@ -101,32 +132,60 @@ export default function CartPage() {
         openSelectDialog={() => setSelectDialogOpen(true)}
       />
 
-      {/* Select pharmacy dialog (unchanged logic) */}
+      {/* Select pharmacy dialog */}
       <Dialog open={selectDialogOpen} onOpenChange={setSelectDialogOpen}>
-        <DialogContent className="max-w-sm rounded-2xl">
+        <DialogContent style={{
+          maxWidth: 380, borderRadius: 24,
+          background: "rgba(255,255,255,0.95)",
+          backdropFilter: "blur(24px)",
+          border: "1px solid rgba(12,90,62,0.06)",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.15)",
+        }}>
           <DialogHeader>
-            <DialogTitle className="font-extrabold">Select a Pharmacy</DialogTitle>
+            <DialogTitle style={{
+              fontFamily: "'Sora',sans-serif", fontWeight: 800,
+              fontSize: 18, color: "#0B1F16",
+            }}>
+              Select a Pharmacy
+            </DialogTitle>
           </DialogHeader>
 
           <div className="mt-2">
             {loadingPharmacies ? (
-              <div className="flex items-center gap-2 text-sm text-zinc-500">
-                <Loader2 className="h-4 w-4 animate-spin text-teal-500" />
-                Loading pharmacies…
+              <div className="flex items-center gap-2 text-sm" style={{ color: "#94A3B8" }}>
+                <Loader2 className="h-4 w-4 animate-spin" style={{ color: "#0C5A3E" }} />
+                Loading pharmacies...
               </div>
             ) : pharmacies.length === 0 ? (
-              <div className="text-sm text-zinc-500">No eligible pharmacies found.</div>
+              <div className="text-sm" style={{ color: "#94A3B8" }}>No eligible pharmacies found.</div>
             ) : (
               <div className="space-y-2">
                 {pharmacies.map((ph) => (
                   <button
                     key={ph._id}
                     onClick={() => handleSelectPharmacy(ph)}
-                    className="w-full text-left px-3 py-2 rounded-lg border hover:bg-zinc-50 transition flex items-center justify-between"
+                    style={{
+                      width: "100%", textAlign: "left",
+                      padding: "12px 14px", borderRadius: 16,
+                      border: selectedPharmacy?._id === ph._id
+                        ? "1.5px solid rgba(0,217,126,0.3)"
+                        : "1px solid rgba(12,90,62,0.08)",
+                      background: selectedPharmacy?._id === ph._id
+                        ? "rgba(0,217,126,0.04)"
+                        : "rgba(255,255,255,0.6)",
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      cursor: "pointer",
+                      transition: "all 0.2s",
+                    }}
                   >
-                    <span className="font-medium">{ph.name}</span>
+                    <span style={{ fontWeight: 600, color: "#0B1F16", fontSize: 14 }}>{ph.name}</span>
                     {selectedPharmacy?._id === ph._id && (
-                      <Badge className="bg-teal-500">Selected</Badge>
+                      <Badge style={{
+                        background: "linear-gradient(135deg, #0C5A3E, #0E7A4F)",
+                        color: "#fff", borderRadius: 100, fontSize: 11,
+                      }}>
+                        Selected
+                      </Badge>
                     )}
                   </button>
                 ))}
@@ -138,7 +197,10 @@ export default function CartPage() {
             <Button
               variant="outline"
               onClick={() => setSelectDialogOpen(false)}
-              className="font-semibold"
+              style={{
+                fontWeight: 600, borderRadius: 100,
+                border: "1px solid rgba(12,90,62,0.12)",
+              }}
             >
               Cancel
             </Button>
