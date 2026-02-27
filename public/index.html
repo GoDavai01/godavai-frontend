@@ -1,52 +1,58 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-  <meta charset="utf-8" />
-  <link rel="icon" type="image/x-icon" href="%PUBLIC_URL%/favicon.ico" />
-  <link rel="apple-touch-icon" sizes="192x192" href="%PUBLIC_URL%/logo192.png" />
-  <link rel="apple-touch-icon" sizes="512x512" href="%PUBLIC_URL%/logo512.png" />
-  <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#0E5E43" />
-  <meta name="description" content="GoDavaii - Fastest Medicine Delivery" />
-  <title>GoDavaii - Fastest Medicine Delivery</title>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/x-icon" href="%PUBLIC_URL%/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="192x192" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="%PUBLIC_URL%/logo512.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0E5E43" />
+    <meta name="description" content="GoDavaii - Fastest Medicine Delivery" />
+    <title>GoDavaii - Fastest Medicine Delivery</title>
 
-  <!-- Fonts: Sora (headings) + Plus Jakarta Sans (body) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    <!-- ✅ Google Fonts — Sora + Plus Jakarta Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
-  <!-- OneSignal Web Push SDK -->
-  <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async=""></script>
-  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-  <!-- Force deep-green on "/" before the app hydrates -->
-<script>
-  (function () {
-    var p = location.pathname.replace(/\/+$/, "");
-    if (p === "" || p === "/") {
-      document.documentElement.classList.add("gd-welcome");
-    }
-  })();
-</script>
-<style>
-  /* Nuclear option: kill any gradient on the welcome route */
-  html.gd-welcome,
-  html.gd-welcome body,
-  html.gd-welcome #root,
-  html.gd-welcome #root > * {
-    background: #0E5E43 !important;
-    background-image: none !important;
-  }
-  /* If an old Tailwind gradient class sneaks in on any child, neutralize it */
-  html.gd-welcome [class*="bg-gradient"],
-  html.gd-welcome [style*="gradient"] {
-    background-image: none !important;
-  }
-</style>
+    <!-- OneSignal + Razorpay — only once -->
+    <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async=""></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
-</head>
-  <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async=""></script>
-  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <!-- Force deep-green on "/" before the app hydrates -->
+    <script>
+      (function () {
+        var p = location.pathname.replace(/\/+$/, "");
+        if (p === "" || p === "/") {
+          document.documentElement.classList.add("gd-welcome");
+        }
+      })();
+    </script>
+
+    <style>
+      /* Kill gradient on welcome route */
+      html.gd-welcome,
+      html.gd-welcome body,
+      html.gd-welcome #root,
+      html.gd-welcome #root > * {
+        background: #0E5E43 !important;
+        background-image: none !important;
+      }
+      html.gd-welcome [class*="bg-gradient"],
+      html.gd-welcome [style*="gradient"] {
+        background-image: none !important;
+      }
+
+      /* ✅ Global font baseline */
+      * { box-sizing: border-box; }
+      body {
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+    </style>
+  </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
