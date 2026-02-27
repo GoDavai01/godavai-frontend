@@ -451,6 +451,19 @@ export default function MyOrdersPage() {
     .filter(o => ["delivered","confirmed"].includes(o.status))
     .reduce((sum, o) => sum + (Number(o.total) || getTotalPrice(o) || 0), 0);
 
+  // Total Savings: sum of (mrp - price)*qty across all delivered orders
+  const totalSavings = orders
+    .filter(o => ["delivered","confirmed"].includes(o.status))
+    .reduce((sum, o) => {
+      const items = Array.isArray(o.items) ? o.items : [];
+      return sum + items.reduce((s, i) => {
+        const mrp = Number(i.mrp || i.originalPrice || 0);
+        const price = Number(i.price || 0);
+        const qty = Number(i.quantity || i.qty || 1);
+        return s + (mrp > price ? (mrp - price) * qty : 0);
+      }, 0);
+    }, 0);
+
   // ══════════════════════════════════════════════════════════
   // RENDER ORDER CARD — ALL LOGIC IDENTICAL, elite visual
   // ══════════════════════════════════════════════════════════
@@ -876,9 +889,11 @@ export default function MyOrdersPage() {
           <div style={{ display: "flex", gap: 10, marginBottom: 18, position: "relative" }}>
             <StatTile emoji="🎉" label="DELIVERED" value={deliveredCount} />
             <StatTile emoji="⚡" label="ACTIVE" value={activeOrders.length} />
-            {totalSpent > 0 && (
+            {totalSavings > 0 ? (
+              <StatTile emoji="🤑" label="YOU SAVED" value={`₹${Math.round(totalSavings)}`} />
+            ) : totalSpent > 0 ? (
               <StatTile emoji="💸" label="TOTAL SPENT" value={`₹${Math.round(totalSpent)}`} />
-            )}
+            ) : null}
           </div>
         )}
 
@@ -925,6 +940,47 @@ export default function MyOrdersPage() {
 
       {/* ═══ CONTENT ═══ */}
       <div style={{ padding: "16px 14px 0" }}>
+        {/* ── Quick Reorder strip (last 3 delivered orders) ── */}
+        {!loading && activeTab === "all" && pastOrders.length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#94A3B8", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: 10 }}>
+              🔄 Quick Reorder
+            </div>
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 4 }}>
+              {pastOrders.slice(0, 4).map((o) => {
+                const pharmacyName = o.pharmacy?.name || String(o.pharmacy || "").slice(0,12);
+                const itemCount = Array.isArray(o.items) ? o.items.length : 0;
+                const firstItem = Array.isArray(o.items) && o.items[0] ? (o.items[0].name || o.items[0].medicineName || "") : "";
+                return (
+                  <motion.button
+                    key={`qr-${o._id}`}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleOrderAgain(o)}
+                    style={{
+                      flexShrink: 0, background: "#fff",
+                      border: "1.5px solid rgba(12,90,62,0.10)",
+                      borderRadius: 16, padding: "10px 14px",
+                      cursor: "pointer", textAlign: "left",
+                      minWidth: 140, maxWidth: 160,
+                      boxShadow: "0 2px 10px rgba(12,90,62,0.07)",
+                    }}
+                  >
+                    <div style={{ fontSize: 11, fontWeight: 800, color: "#0A1F14", fontFamily: "'Sora',sans-serif", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      🏥 {pharmacyName}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#64748B", marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {firstItem}{itemCount > 1 ? ` +${itemCount - 1} more` : ""}
+                    </div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: DEEP, background: "#E8F5EF", padding: "2px 8px", borderRadius: 100, display: "inline-block", border: `1px solid ${ACCENT}40` }}>
+                      Reorder →
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {loading ? (
           /* Skeleton */
           <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 4 }}>
