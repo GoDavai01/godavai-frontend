@@ -11,7 +11,6 @@ import axios from "axios";
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 const DEEP  = "#0C5A3E";
-const MID   = "#0E7A4F";
 const ACCENT = "#00D97E";
 
 export default function Navbar({

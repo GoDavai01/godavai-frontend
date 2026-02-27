@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent } from "../components/ui/dialog";
 import { UploadCloud, X, ChevronLeft, ChevronRight, Package } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useCart } from "../context/CartContext";
 import { useParams } from "react-router-dom";
 import PrescriptionUploadModal from "../components/PrescriptionUploadModal";
@@ -17,7 +17,6 @@ import { buildCompositionKey } from "../lib/composition";
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP   = "#0C5A3E";
 const MID    = "#0E7A4F";
-const ACCENT = "#00D97E";
 
 // ── Layout constants (UNCHANGED) ─────────────────────────────
 const TOP_OFFSET_PX = 70;
