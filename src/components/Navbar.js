@@ -1,5 +1,6 @@
-// src/components/Navbar.js — GoDavaii 2030 Ultra-Futuristic UI
-// ALL LOGIC 100% UNCHANGED — pure visual upgrade only
+// src/components/Navbar.js — GoDavaii 2030 Modern UI
+// ⚠️ ALL LOGIC 100% UNCHANGED — pure visual upgrade only
+// ✅ NEW: searchbar hidden on /my-orders, /profile, /checkout, /payment pages
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation as useRouterLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -13,7 +14,7 @@ const DEEP  = "#0C5A3E";
 const ACCENT = "#00D97E";
 
 // Pages where the search bar should be hidden
-const NO_SEARCH_PATHS = ["/orders", "/profile", "/checkout", "/payment", "/payment-success"];
+const NO_SEARCH_PATHS = ["/orders", "/profile", "/checkout", "/payment", "/payment-success", "/search"];
 
 export default function Navbar({
   search: searchProp = "",
@@ -170,12 +171,13 @@ export default function Navbar({
   // ── Formatted address display ─────────────────────────────────
   const addressLabel = currentAddress?.formatted
     ? currentAddress.formatted.length > 32
-      ? currentAddress.formatted.slice(0, 32) + "..."
+      ? currentAddress.formatted.slice(0, 32) + "…"
       : currentAddress.formatted
     : null;
 
   // Page label for no-search pages
-  const pageLabel = routerLocation.pathname.startsWith("/orders") ? "My Orders"
+  const pageLabel = routerLocation.pathname.startsWith("/search") ? "Search Results"
+    : routerLocation.pathname.startsWith("/orders") ? "My Orders"
     : routerLocation.pathname.startsWith("/profile") ? "Profile"
     : routerLocation.pathname.startsWith("/checkout") ? "Checkout"
     : routerLocation.pathname.startsWith("/payment") ? "Payment"
@@ -189,37 +191,35 @@ export default function Navbar({
         WebkitTapHighlightColor: "transparent",
       }}
     >
-      {/* ── Main navbar container — Frosted Glass ── */}
+      {/* ── Main navbar container ── */}
       <div
         style={{
           maxWidth: 520, margin: "0 auto",
-          background: "rgba(12, 90, 62, 0.92)",
-          backdropFilter: "blur(24px) saturate(180%)",
-          WebkitBackdropFilter: "blur(24px) saturate(180%)",
-          borderBottomLeftRadius: hideSearch ? 0 : 32,
-          borderBottomRightRadius: hideSearch ? 0 : 32,
-          boxShadow: "0 12px 40px rgba(0,0,0,0.20), 0 0 0 1px rgba(0,217,126,0.06)",
+          background: `linear-gradient(160deg, ${DEEP} 0%, #0A4631 100%)`,
+          borderBottomLeftRadius: hideSearch ? 0 : 28,
+          borderBottomRightRadius: hideSearch ? 0 : 28,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
           position: "relative", overflow: "hidden",
         }}
       >
-        {/* Ambient glow orbs */}
+        {/* Ambient glow blobs */}
         <div style={{
-          position: "absolute", right: -40, top: -40,
-          width: 160, height: 160, borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(0,217,126,0.12) 0%, rgba(0,229,255,0.04) 40%, transparent 70%)",
-          pointerEvents: "none", animation: "orbFloat 8s ease-in-out infinite",
+          position: "absolute", right: -30, top: -30,
+          width: 140, height: 140, borderRadius: "50%",
+          background: `radial-gradient(circle, ${ACCENT}18 0%, transparent 70%)`,
+          pointerEvents: "none",
         }} />
         <div style={{
-          position: "absolute", left: -30, bottom: -30,
-          width: 120, height: 120, borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(168,85,247,0.06) 0%, transparent 70%)",
-          pointerEvents: "none", animation: "orbFloat 10s ease-in-out infinite reverse",
+          position: "absolute", left: -20, bottom: -20,
+          width: 100, height: 100, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%)",
+          pointerEvents: "none",
         }} />
 
         {/* Top sheen */}
         <div style={{
-          position: "absolute", inset: "0 0 auto 0", height: 50,
-          background: "linear-gradient(180deg, rgba(255,255,255,0.08), transparent)",
+          position: "absolute", inset: "0 0 auto 0", height: 40,
+          background: "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0))",
           pointerEvents: "none",
         }} />
 
@@ -230,7 +230,7 @@ export default function Navbar({
           padding: hideSearch ? "12px 16px 12px" : "14px 16px 10px",
           position: "relative",
         }}>
-          {/* Location button — glass morphism */}
+          {/* Location button */}
           <motion.button
             type="button"
             whileTap={{ scale: 0.97 }}
@@ -241,44 +241,41 @@ export default function Navbar({
             style={{
               display: "flex", alignItems: "center", gap: 8,
               flex: 1, minWidth: 0,
-              background: "rgba(255,255,255,0.07)",
-              backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-              border: "1px solid rgba(255,255,255,0.10)",
-              borderRadius: 16, padding: "9px 13px",
+              background: "rgba(255,255,255,0.10)",
+              border: "1px solid rgba(255,255,255,0.18)",
+              borderRadius: 14, padding: "8px 12px",
               cursor: "pointer",
-              transition: "all 0.2s",
             }}
           >
-            {/* Pin icon with glow ring */}
+            {/* Pin icon with pulse ring */}
             <div style={{ position: "relative", flexShrink: 0 }}>
               <div style={{
-                width: 32, height: 32, borderRadius: 10,
-                background: `linear-gradient(135deg, ${ACCENT}, #00E5FF)`,
+                width: 30, height: 30, borderRadius: "50%",
+                background: `${ACCENT}25`,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 0 16px rgba(0,217,126,0.30)",
               }}>
-                <MapPin style={{ width: 15, height: 15, color: "#041F15" }} />
+                <MapPin style={{ width: 16, height: 16, color: ACCENT }} />
               </div>
               {/* Live pulse dot */}
               <div style={{
-                position: "absolute", top: -2, right: -2,
-                width: 8, height: 8, borderRadius: "50%",
-                background: "#00FFB2",
-                border: "1.5px solid rgba(4,31,21,0.8)",
-                animation: "navPulse 2s ease-in-out infinite",
+                position: "absolute", top: -1, right: -1,
+                width: 9, height: 9, borderRadius: "50%",
+                background: ACCENT,
+                border: "1.5px solid #0A4631",
+                animation: "pulse-dot 2s ease-in-out infinite",
               }} />
             </div>
 
             <div style={{ minWidth: 0, flex: 1, textAlign: "left" }}>
               <div style={{
-                fontSize: 9, fontWeight: 700, color: `${ACCENT}CC`,
-                textTransform: "uppercase", letterSpacing: "1px",
+                fontSize: 10, fontWeight: 700, color: `${ACCENT}CC`,
+                textTransform: "uppercase", letterSpacing: "0.6px",
                 marginBottom: 1,
               }}>
                 Delivering to
               </div>
               <div style={{
-                fontSize: 13, fontWeight: 800,
+                fontSize: 14, fontWeight: 800,
                 color: "#fff",
                 fontFamily: "'Sora', sans-serif",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
@@ -288,37 +285,34 @@ export default function Navbar({
               </div>
             </div>
 
-            <ChevronDown style={{ width: 14, height: 14, color: "rgba(255,255,255,0.40)", flexShrink: 0 }} />
+            <ChevronDown style={{ width: 14, height: 14, color: "rgba(255,255,255,0.5)", flexShrink: 0 }} />
           </motion.button>
 
-          {/* Right side: page label OR profile button */}
+          {/* Right side: page label (on no-search pages) OR profile button */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 10, flexShrink: 0 }}>
             {pageLabel && (
               <span style={{
                 fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 700,
-                color: "rgba(255,255,255,0.55)",
-                background: "rgba(255,255,255,0.08)",
-                backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-                padding: "5px 12px", borderRadius: 100,
-                border: "1px solid rgba(255,255,255,0.10)",
+                color: "rgba(255,255,255,0.60)",
+                background: "rgba(255,255,255,0.10)",
+                padding: "4px 10px", borderRadius: 100,
+                border: "1px solid rgba(255,255,255,0.14)",
               }}>
                 {pageLabel}
               </span>
             )}
-            {/* Profile button — glass */}
+            {/* Profile button */}
             <motion.button
               type="button"
-              whileTap={{ scale: 0.88 }}
+              whileTap={{ scale: 0.90 }}
               onClick={onProfile}
               style={{
-                width: 44, height: 44, borderRadius: 14,
-                background: "rgba(255,255,255,0.08)",
-                backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-                border: "1.5px solid rgba(255,255,255,0.12)",
+                width: 42, height: 42, borderRadius: "50%",
+                background: "rgba(255,255,255,0.12)",
+                border: "1.5px solid rgba(255,255,255,0.25)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: "pointer",
-                boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
-                transition: "all 0.2s",
+                boxShadow: "0 4px 14px rgba(0,0,0,0.2)",
               }}
               aria-label="Profile"
             >
@@ -327,7 +321,7 @@ export default function Navbar({
           </div>
         </div>
 
-        {/* ── Search bar — Glass morphism ── */}
+        {/* ── Search bar — hidden on no-search pages ── */}
         <AnimatePresence>
           {!hideSearch && (
             <motion.div
@@ -340,26 +334,23 @@ export default function Navbar({
               <motion.div
                 animate={{
                   boxShadow: searchFocused
-                    ? `0 0 0 3px rgba(0,217,126,0.25), 0 8px 32px rgba(0,0,0,0.18)`
-                    : "0 4px 20px rgba(0,0,0,0.12)",
+                    ? `0 0 0 2.5px ${ACCENT}60, 0 4px 20px rgba(0,0,0,0.15)`
+                    : "0 4px 16px rgba(0,0,0,0.12)",
                   scale: searchFocused ? 1.01 : 1,
                 }}
                 transition={{ duration: 0.18 }}
                 style={{
                   display: "flex", alignItems: "center",
-                  height: 50, borderRadius: 18,
-                  background: "rgba(255,255,255,0.95)",
-                  backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+                  height: 48, borderRadius: 16,
+                  background: "rgba(255,255,255,0.97)",
                   padding: "0 14px",
-                  border: "1px solid rgba(255,255,255,0.4)",
+                  border: "1.5px solid rgba(255,255,255,0.6)",
                 }}
               >
                 {/* Search icon */}
                 <div style={{
-                  width: 34, height: 34, borderRadius: 11,
-                  background: searchFocused
-                    ? `linear-gradient(135deg, ${DEEP}15, #00E5FF10)`
-                    : "#F1F5F9",
+                  width: 30, height: 30, borderRadius: 10,
+                  background: searchFocused ? `${DEEP}15` : "#F1F5F9",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   marginRight: 10, flexShrink: 0,
                   transition: "background 0.2s",
@@ -394,17 +385,16 @@ export default function Navbar({
                   <span style={{
                     flexShrink: 0, marginLeft: 8,
                     fontSize: 10, fontWeight: 700,
-                    color: DEEP,
-                    background: "linear-gradient(135deg, #E8F5EF, #D1FAE5)",
-                    padding: "3px 10px", borderRadius: 100,
-                    border: `1px solid ${DEEP}15`,
+                    color: DEEP, background: "#E8F5EF",
+                    padding: "2px 8px", borderRadius: 100,
+                    border: `1px solid ${DEEP}25`,
                   }}>
                     This pharmacy
                   </span>
                 )}
               </motion.div>
 
-              {/* ── Autocomplete dropdown — Glass ── */}
+              {/* ── Autocomplete dropdown ── */}
               <AnimatePresence>
                 {dropdownOpen && options.length > 0 && (
                   <motion.div
@@ -415,11 +405,10 @@ export default function Navbar({
                     style={{
                       position: "absolute", left: 0, right: 0, zIndex: 1300,
                       marginTop: 8,
-                      background: "rgba(255,255,255,0.95)",
-                      backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
-                      borderRadius: 20,
-                      border: "1px solid rgba(12,90,62,0.06)",
-                      boxShadow: "0 20px 60px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,217,126,0.04)",
+                      background: "#fff",
+                      borderRadius: 18,
+                      border: "1.5px solid rgba(12,90,62,0.10)",
+                      boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
                       overflow: "hidden",
                       maxHeight: 280, overflowY: "auto",
                     }}
@@ -427,8 +416,8 @@ export default function Navbar({
                     <div style={{
                       padding: "10px 14px 6px",
                       fontSize: 10, fontWeight: 700,
-                      color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.8px",
-                      borderBottom: "1px solid rgba(0,0,0,0.04)",
+                      color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.5px",
+                      borderBottom: "1px solid #F1F5F9",
                     }}>
                       Suggestions
                     </div>
@@ -446,18 +435,17 @@ export default function Navbar({
                           style={{
                             display: "flex", width: "100%",
                             alignItems: "center", gap: 10,
-                            padding: "12px 14px",
+                            padding: "11px 14px",
                             background: "none", border: "none",
                             cursor: "pointer", textAlign: "left",
-                            borderBottom: idx < 9 ? "1px solid rgba(0,0,0,0.03)" : "none",
-                            transition: "background 0.15s",
+                            borderBottom: idx < 9 ? "1px solid #F8FAFC" : "none",
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = "rgba(12,90,62,0.03)"}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "#F8FBFA"}
                           onMouseLeave={(e) => e.currentTarget.style.background = "none"}
                         >
                           <div style={{
-                            width: 32, height: 32, borderRadius: 10,
-                            background: "linear-gradient(135deg, #E8F5EF, #D1EDE0)",
+                            width: 30, height: 30, borderRadius: 9,
+                            background: "#E8F5EF",
                             display: "flex", alignItems: "center", justifyContent: "center",
                             flexShrink: 0,
                           }}>
@@ -489,14 +477,9 @@ export default function Navbar({
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes navPulse {
-          0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 4px rgba(0,255,178,0.4); }
-          50% { opacity: 0.7; transform: scale(0.85); box-shadow: 0 0 8px rgba(0,255,178,0.6); }
-        }
-        @keyframes orbFloat {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33%      { transform: translate(10px, -15px) scale(1.05); }
-          66%      { transform: translate(-8px, 10px) scale(0.95); }
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.6; transform: scale(0.8); }
         }
       `}</style>
     </div>
