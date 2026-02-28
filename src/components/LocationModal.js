@@ -661,28 +661,3 @@ export default function LocationModal({ open, onClose, onSelect }) {
     </>
   );
 }
-
-// Re-export GPS ring for use in other components if needed
-function GPSRing({ size = 80, color = ACCENT }) {
-  return (
-    <div style={{ position: "relative", width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      {[1, 2, 3].map((i) => (
-        <div key={i} style={{
-          position: "absolute",
-          width: size * (0.5 + i * 0.18), height: size * (0.5 + i * 0.18),
-          borderRadius: "50%", border: `1.5px solid ${color}`,
-          opacity: 0,
-          animation: `gpsRing 2.4s ease-out ${i * 0.6}s infinite`,
-        }} />
-      ))}
-      <div style={{
-        width: size * 0.5, height: size * 0.5, borderRadius: "50%",
-        background: `linear-gradient(135deg, ${DEEP}, ${MID})`,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        boxShadow: `0 0 20px ${color}60`, zIndex: 1,
-      }}>
-        <Navigation style={{ width: size * 0.22, height: size * 0.22, color: "#fff" }} />
-      </div>
-    </div>
-  );
-}
