@@ -2,15 +2,14 @@
 // ✅ ALL LOGIC 100% UNCHANGED (detect, autocomplete, drop-pin, geocode)
 // ✅ NEW: Uses context isDetecting / locationError / refreshLocation
 // ✅ NEW: 2030 glassmorphic design, animated GPS state, permission screens
+// src/components/LocationModal.jsx — GoDavaii 2030 Elite
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import axios from "axios";
 import { MapPin, LocateFixed, X, Search, Navigation, AlertCircle, CheckCircle2, ChevronRight } from "lucide-react";
 import { loadGoogleMaps } from "../utils/googleMaps";
 import { useLocation } from "../context/LocationContext";
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP   = "#0C5A3E";
 const MID    = "#0E7A4F";
 const ACCENT = "#00D97E";
