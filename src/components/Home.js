@@ -25,8 +25,7 @@ import axios from "axios";
 import {
   UploadCloud, Clock, ChevronRight, MapPin, Search, Mic, MicOff,
   RefreshCw, AlertTriangle, ChevronDown, User, X, TrendingUp,
-  Sparkles, Star, ShieldCheck, Brain, FlaskConical, Stethoscope,
-  Heart, Activity, FileText, Shield,
+  Sparkles, ShieldCheck, Brain, Shield,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 
