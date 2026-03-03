@@ -1,10 +1,9 @@
 // src/components/Navbar.js — GoDavaii 2035 Health OS
 // ✅ ALL LOGIC 100% UNCHANGED — pure visual + route upgrades
-// ✅ FIXED: Returns null on /medicines/* and /search (these pages have their own headers)
-// ✅ UPDATED: placeholder "Search Medicines, Doctors, Labs..." (unified marketplace)
-// ✅ UPDATED: NO_SEARCH_PATHS expanded for all pages with own search
+// ✅ FIXED: Returns null on /medicines/* and /search (own headers)
+// ✅ ADDED: /doctors and /lab-tests to NO_SEARCH_PATHS
+// ✅ ADDED: pageLabel for "Doctors" and "Lab Tests"
 // ✅ KEPT: Autocomplete, location modal, pharmacy-scoped search, portal dropdown
-// ✅ KEPT: All API calls, all state, all effects
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation as useRouterLocation } from "react-router-dom";
@@ -18,20 +17,17 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:500
 const DEEP   = "#0C5A3E";
 const ACCENT  = "#00D97E";
 
-// ─────────────────────────────────────────────────────────────
 // Pages where the ENTIRE Navbar should be hidden
-// (these pages render their own header + search bar)
-// ─────────────────────────────────────────────────────────────
 const HIDE_ENTIRE_NAVBAR = [
-  "/medicines",   // Medicines.js has its own header + inline search
-  "/search",      // SearchResults.js has its own header + search bar
+  "/medicines",
+  "/search",
 ];
 
-// Pages where only the search bar portion should be hidden
-// (Navbar still shows location row + profile button)
+// Pages where only the search bar is hidden (location + profile still show)
 const NO_SEARCH_PATHS = [
   "/orders", "/profile", "/checkout", "/payment",
   "/payment-success", "/ai", "/health",
+  "/doctors", "/lab-tests",
 ];
 
 export default function Navbar({
@@ -44,7 +40,6 @@ export default function Navbar({
   const routerLocation = useRouterLocation();
   const { currentAddress, setCurrentAddress } = useLocation();
 
-  // ── ALL STATE UNCHANGED ──────────────────────────────────
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [search, setSearch] = useState(searchProp);
   const [options, setOptions] = useState([]);
@@ -56,22 +51,16 @@ export default function Navbar({
   const boxRef   = useRef(null);
   const inputRef = useRef(null);
 
-  // ─────────────────────────────────────────────────────────
-  // 🆕 FIX: If current page has its own header, hide entire Navbar
-  // ─────────────────────────────────────────────────────────
   const shouldHideEntirely = HIDE_ENTIRE_NAVBAR.some((p) =>
     routerLocation.pathname.startsWith(p)
   );
-
   const hideSearch = NO_SEARCH_PATHS.some((p) => routerLocation.pathname.startsWith(p));
 
-  // Detect if we're on /medicines/:pharmacyId — UNCHANGED
   const activePharmacyId = useMemo(() => {
     const m = routerLocation.pathname.match(/^\/medicines\/([a-fA-F0-9]{24})/);
     return m?.[1] || null;
   }, [routerLocation.pathname]);
 
-  // Load pharmacy name for placeholder — UNCHANGED
   useEffect(() => {
     let cancel = false;
     async function run() {
@@ -88,7 +77,6 @@ export default function Navbar({
     return () => { cancel = true; };
   }, [activePharmacyId]);
 
-  // 2035: Unified marketplace placeholder
   const placeholder = useMemo(() => {
     if (routerLocation.pathname.startsWith("/medicines")) {
       return pharmacyName ? `Search in ${pharmacyName}` : "Search in this pharmacy";
@@ -152,7 +140,6 @@ export default function Navbar({
     return () => { controller.abort(); clearTimeout(t); };
   }, [search, routerLocation.pathname, currentAddress?.city, activePharmacyId]);
 
-  // Click outside — UNCHANGED
   useEffect(() => {
     const onDown = (e) => {
       if (!boxRef.current) return;
@@ -166,7 +153,6 @@ export default function Navbar({
     };
   }, []);
 
-  // Handlers — ALL UNCHANGED
   const handleInput = (val) => { setSearch(val); onSearchChange(val); };
 
   const handleSelect = (val) => {
@@ -190,30 +176,25 @@ export default function Navbar({
     }
   };
 
-  // Formatted address display
   const addressLabel = currentAddress?.formatted
     ? currentAddress.formatted.length > 32
       ? currentAddress.formatted.slice(0, 32) + "…"
       : currentAddress.formatted
     : null;
 
-  // Page label for no-search pages
-  const pageLabel = routerLocation.pathname.startsWith("/orders")   ? "My Orders"
-    : routerLocation.pathname.startsWith("/profile")  ? "Profile"
-    : routerLocation.pathname.startsWith("/checkout") ? "Checkout"
-    : routerLocation.pathname.startsWith("/payment")  ? "Payment"
-    : routerLocation.pathname.startsWith("/ai")       ? "GoDavaii AI"
-    : routerLocation.pathname.startsWith("/health")   ? "Health Vault"
+  const pageLabel = routerLocation.pathname.startsWith("/orders")    ? "My Orders"
+    : routerLocation.pathname.startsWith("/profile")   ? "Profile"
+    : routerLocation.pathname.startsWith("/checkout")  ? "Checkout"
+    : routerLocation.pathname.startsWith("/payment")   ? "Payment"
+    : routerLocation.pathname.startsWith("/ai")        ? "GoDavaii AI"
+    : routerLocation.pathname.startsWith("/health")    ? "Health Vault"
+    : routerLocation.pathname.startsWith("/doctors")   ? "Doctors"
+    : routerLocation.pathname.startsWith("/lab-tests") ? "Lab Tests"
     : null;
 
-  // ─────────────────────────────────────────────────────────
-  // 🆕 FIX: Don't render Navbar at all on pages with own headers
-  // This eliminates the double search bar / double header issue
-  // ─────────────────────────────────────────────────────────
   if (shouldHideEntirely) {
     return (
       <>
-        {/* Still render LocationModal so it's accessible from anywhere */}
         <LocationModal
           open={locationModalOpen}
           onClose={() => setLocationModalOpen(false)}
@@ -223,7 +204,6 @@ export default function Navbar({
     );
   }
 
-  // ── RENDER ────────────────────────────────────────────────
   return (
     <div
       style={{
@@ -241,115 +221,52 @@ export default function Navbar({
           position: "relative", overflow: "hidden",
         }}
       >
-        {/* Ambient glow blobs */}
-        <div style={{
-          position: "absolute", right: -30, top: -30,
-          width: 140, height: 140, borderRadius: "50%",
-          background: `radial-gradient(circle, ${ACCENT}18 0%, transparent 70%)`,
-          pointerEvents: "none",
-        }} />
-        <div style={{
-          position: "absolute", left: -20, bottom: -20,
-          width: 100, height: 100, borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%)",
-          pointerEvents: "none",
-        }} />
+        <div style={{ position: "absolute", right: -30, top: -30, width: 140, height: 140, borderRadius: "50%", background: `radial-gradient(circle, ${ACCENT}18 0%, transparent 70%)`, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", left: -20, bottom: -20, width: 100, height: 100, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.06) 0%, transparent 70%)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", inset: "0 0 auto 0", height: 40, background: "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0))", pointerEvents: "none" }} />
 
-        {/* Top sheen */}
+        {/* Top row: location + profile */}
         <div style={{
-          position: "absolute", inset: "0 0 auto 0", height: 40,
-          background: "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0))",
-          pointerEvents: "none",
-        }} />
-
-        {/* ── Top row: location + profile ── */}
-        <div style={{
-          display: "flex", alignItems: "center",
-          justifyContent: "space-between",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: hideSearch ? "12px 16px 12px" : "14px 16px 10px",
           position: "relative",
         }}>
-          {/* Location button */}
           <motion.button
-            type="button"
-            whileTap={{ scale: 0.97 }}
-            onClick={() => {
-              if (window?.navigator?.vibrate) navigator.vibrate(8);
-              setLocationModalOpen(true);
-            }}
+            type="button" whileTap={{ scale: 0.97 }}
+            onClick={() => { if (window?.navigator?.vibrate) navigator.vibrate(8); setLocationModalOpen(true); }}
             style={{
               display: "flex", alignItems: "center", gap: 8,
               flex: 1, minWidth: 0,
               background: "rgba(255,255,255,0.10)",
               border: "1px solid rgba(255,255,255,0.18)",
-              borderRadius: 14, padding: "8px 12px",
-              cursor: "pointer",
+              borderRadius: 14, padding: "8px 12px", cursor: "pointer",
             }}
           >
             <div style={{ position: "relative", flexShrink: 0 }}>
-              <div style={{
-                width: 30, height: 30, borderRadius: "50%",
-                background: `${ACCENT}25`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
+              <div style={{ width: 30, height: 30, borderRadius: "50%", background: `${ACCENT}25`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <MapPin style={{ width: 16, height: 16, color: ACCENT }} />
               </div>
-              <div style={{
-                position: "absolute", top: -1, right: -1,
-                width: 9, height: 9, borderRadius: "50%",
-                background: ACCENT,
-                border: "1.5px solid #0A4631",
-                animation: "pulse-dot 2s ease-in-out infinite",
-              }} />
+              <div style={{ position: "absolute", top: -1, right: -1, width: 9, height: 9, borderRadius: "50%", background: ACCENT, border: "1.5px solid #0A4631", animation: "pulse-dot 2s ease-in-out infinite" }} />
             </div>
-
             <div style={{ minWidth: 0, flex: 1, textAlign: "left" }}>
-              <div style={{
-                fontSize: 10, fontWeight: 700, color: `${ACCENT}CC`,
-                textTransform: "uppercase", letterSpacing: "0.6px",
-                marginBottom: 1,
-              }}>
-                Delivering to
-              </div>
-              <div style={{
-                fontSize: 14, fontWeight: 800,
-                color: "#fff",
-                fontFamily: "'Sora', sans-serif",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                letterSpacing: "-0.2px",
-              }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: `${ACCENT}CC`, textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: 1 }}>Delivering to</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#fff", fontFamily: "'Sora', sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: "-0.2px" }}>
                 {addressLabel || "Set delivery location"}
               </div>
             </div>
-
             <ChevronDown style={{ width: 14, height: 14, color: "rgba(255,255,255,0.5)", flexShrink: 0 }} />
           </motion.button>
 
-          {/* Right side */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 10, flexShrink: 0 }}>
             {pageLabel && (
-              <span style={{
-                fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 700,
-                color: "rgba(255,255,255,0.60)",
-                background: "rgba(255,255,255,0.10)",
-                padding: "4px 10px", borderRadius: 100,
-                border: "1px solid rgba(255,255,255,0.14)",
-              }}>
+              <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.60)", background: "rgba(255,255,255,0.10)", padding: "4px 10px", borderRadius: 100, border: "1px solid rgba(255,255,255,0.14)" }}>
                 {pageLabel}
               </span>
             )}
             <motion.button
-              type="button"
-              whileTap={{ scale: 0.90 }}
+              type="button" whileTap={{ scale: 0.90 }}
               onClick={onProfile}
-              style={{
-                width: 42, height: 42, borderRadius: "50%",
-                background: "rgba(255,255,255,0.12)",
-                border: "1.5px solid rgba(255,255,255,0.25)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer",
-                boxShadow: "0 4px 14px rgba(0,0,0,0.2)",
-              }}
+              style={{ width: 42, height: 42, borderRadius: "50%", background: "rgba(255,255,255,0.12)", border: "1.5px solid rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 4px 14px rgba(0,0,0,0.2)" }}
               aria-label="Profile"
             >
               <CircleUserRound style={{ width: 22, height: 22, color: "#fff" }} />
@@ -357,7 +274,7 @@ export default function Navbar({
           </div>
         </div>
 
-        {/* ── Search bar — hidden on no-search pages ── */}
+        {/* Search bar — hidden on no-search pages */}
         <AnimatePresence>
           {!hideSearch && (
             <motion.div
@@ -369,66 +286,35 @@ export default function Navbar({
             >
               <motion.div
                 animate={{
-                  boxShadow: searchFocused
-                    ? `0 0 0 2.5px ${ACCENT}60, 0 4px 20px rgba(0,0,0,0.15)`
-                    : "0 4px 16px rgba(0,0,0,0.12)",
+                  boxShadow: searchFocused ? `0 0 0 2.5px ${ACCENT}60, 0 4px 20px rgba(0,0,0,0.15)` : "0 4px 16px rgba(0,0,0,0.12)",
                   scale: searchFocused ? 1.01 : 1,
                 }}
                 transition={{ duration: 0.18 }}
-                style={{
-                  display: "flex", alignItems: "center",
-                  height: 48, borderRadius: 16,
-                  background: "rgba(255,255,255,0.97)",
-                  padding: "0 14px",
-                  border: "1.5px solid rgba(255,255,255,0.6)",
-                }}
+                style={{ display: "flex", alignItems: "center", height: 48, borderRadius: 16, background: "rgba(255,255,255,0.97)", padding: "0 14px", border: "1.5px solid rgba(255,255,255,0.6)" }}
               >
-                <div style={{
-                  width: 30, height: 30, borderRadius: 10,
-                  background: searchFocused ? `${DEEP}15` : "#F1F5F9",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  marginRight: 10, flexShrink: 0,
-                  transition: "background 0.2s",
-                }}>
+                <div style={{ width: 30, height: 30, borderRadius: 10, background: searchFocused ? `${DEEP}15` : "#F1F5F9", display: "flex", alignItems: "center", justifyContent: "center", marginRight: 10, flexShrink: 0, transition: "background 0.2s" }}>
                   {loading
                     ? <Loader2 style={{ width: 15, height: 15, color: DEEP, animation: "spin 0.8s linear infinite" }} />
                     : <Search style={{ width: 15, height: 15, color: searchFocused ? DEEP : "#94A3B8" }} />
                   }
                 </div>
-
                 <input
-                  ref={inputRef}
-                  value={search}
+                  ref={inputRef} value={search}
                   onChange={(e) => handleInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   onFocus={() => { setSearchFocused(true); options.length > 0 && setDropdownOpen(true); }}
                   onBlur={() => setSearchFocused(false)}
                   placeholder={placeholder}
-                  style={{
-                    flex: 1, height: "100%",
-                    background: "transparent",
-                    border: "none", outline: "none",
-                    fontSize: 15, fontWeight: 600,
-                    color: "#0B1F16",
-                    fontFamily: "'Plus Jakarta Sans', sans-serif",
-                    letterSpacing: "-0.1px",
-                  }}
+                  style={{ flex: 1, height: "100%", background: "transparent", border: "none", outline: "none", fontSize: 15, fontWeight: 600, color: "#0B1F16", fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: "-0.1px" }}
                 />
-
                 {activePharmacyId && !loading && (
-                  <span style={{
-                    flexShrink: 0, marginLeft: 8,
-                    fontSize: 10, fontWeight: 700,
-                    color: DEEP, background: "#E8F5EF",
-                    padding: "2px 8px", borderRadius: 100,
-                    border: `1px solid ${DEEP}25`,
-                  }}>
+                  <span style={{ flexShrink: 0, marginLeft: 8, fontSize: 10, fontWeight: 700, color: DEEP, background: "#E8F5EF", padding: "2px 8px", borderRadius: 100, border: `1px solid ${DEEP}25` }}>
                     This pharmacy
                   </span>
                 )}
               </motion.div>
 
-              {/* ── Autocomplete dropdown ── */}
+              {/* Autocomplete dropdown */}
               <AnimatePresence>
                 {dropdownOpen && options.length > 0 && (
                   <motion.div
@@ -436,60 +322,28 @@ export default function Navbar({
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.97 }}
                     transition={{ duration: 0.15, ease: "easeOut" }}
-                    style={{
-                      position: "absolute", left: 0, right: 0, zIndex: 1300,
-                      marginTop: 8,
-                      background: "#fff",
-                      borderRadius: 18,
-                      border: "1.5px solid rgba(12,90,62,0.10)",
-                      boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
-                      overflow: "hidden",
-                      maxHeight: 280, overflowY: "auto",
-                    }}
+                    style={{ position: "absolute", left: 0, right: 0, zIndex: 1300, marginTop: 8, background: "#fff", borderRadius: 18, border: "1.5px solid rgba(12,90,62,0.10)", boxShadow: "0 20px 60px rgba(0,0,0,0.18)", overflow: "hidden", maxHeight: 280, overflowY: "auto" }}
                   >
-                    <div style={{
-                      padding: "10px 14px 6px",
-                      fontSize: 10, fontWeight: 700,
-                      color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.5px",
-                      borderBottom: "1px solid #F1F5F9",
-                    }}>
+                    <div style={{ padding: "10px 14px 6px", fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.5px", borderBottom: "1px solid #F1F5F9" }}>
                       Suggestions
                     </div>
                     {options
                       .map((opt) => typeof opt === "string" ? opt : opt?.label || opt?.value || opt?.name || "")
-                      .filter((label) => label && label.trim().length > 0)
-                      .filter((label, i, arr) => arr.indexOf(label) === i)
+                      .filter((l) => l && l.trim().length > 0)
+                      .filter((l, i, a) => a.indexOf(l) === i)
                       .slice(0, 10)
                       .map((label, idx) => (
                         <motion.button
-                          key={`${label}-${idx}`}
-                          type="button"
-                          whileTap={{ scale: 0.98 }}
+                          key={`${label}-${idx}`} type="button" whileTap={{ scale: 0.98 }}
                           onClick={() => handleSelect(label)}
-                          style={{
-                            display: "flex", width: "100%",
-                            alignItems: "center", gap: 10,
-                            padding: "11px 14px",
-                            background: "none", border: "none",
-                            cursor: "pointer", textAlign: "left",
-                            borderBottom: idx < 9 ? "1px solid #F8FAFC" : "none",
-                          }}
+                          style={{ display: "flex", width: "100%", alignItems: "center", gap: 10, padding: "11px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", borderBottom: idx < 9 ? "1px solid #F8FAFC" : "none" }}
                           onMouseEnter={(e) => e.currentTarget.style.background = "#F8FBFA"}
                           onMouseLeave={(e) => e.currentTarget.style.background = "none"}
                         >
-                          <div style={{
-                            width: 30, height: 30, borderRadius: 9,
-                            background: "#E8F5EF",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            flexShrink: 0,
-                          }}>
+                          <div style={{ width: 30, height: 30, borderRadius: 9, background: "#E8F5EF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                             <Search style={{ width: 13, height: 13, color: DEEP }} />
                           </div>
-                          <span style={{
-                            fontSize: 14, fontWeight: 600, color: "#0B1F16",
-                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                            fontFamily: "'Plus Jakarta Sans', sans-serif",
-                          }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "#0B1F16", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                             {label}
                           </span>
                         </motion.button>
@@ -502,7 +356,6 @@ export default function Navbar({
         </AnimatePresence>
       </div>
 
-      {/* Location modal — UNCHANGED */}
       <LocationModal
         open={locationModalOpen}
         onClose={() => setLocationModalOpen(false)}
@@ -511,10 +364,7 @@ export default function Navbar({
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes pulse-dot {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.6; transform: scale(0.8); }
-        }
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.8); } }
       `}</style>
     </div>
   );

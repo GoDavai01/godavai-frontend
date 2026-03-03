@@ -1,21 +1,27 @@
 // src/components/BottomNavBar.js — GoDavaii 2035 Health OS
-// ✅ UPGRADED: 3-tab → 5-tab Health OS navigation
-// ✅ NEW: Search (marketplace), AI assistant, Orders quick access
-// ✅ REMOVED: "Medicines" → /pharmacies-near-you (pharmacy-first route GONE)
-// ✅ REMOVED: "Doctor" standalone tab (merged into /search?tab=doctors)
-// ✅ KEPT: All animation logic, haptics, spring physics, memo
+// ✅ FIXED DUPLICACY: Removed Profile & Search — they live in Navbar
+// ✅ NEW: 5-tab: Home, Medicines, AI (center hero), Doctor, Lab Test
+// ✅ AI center tab — elevated, glow animation, stands out
+// ✅ KEPT: Spring physics, haptics, memo, burst animation
+// ─────────────────────────────────────────────────────────
+// WHY: Navbar already has Location + Profile + Search bar
+//       → bottom bar has ZERO overlap now
 
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { LazyMotion, domAnimation, m, useReducedMotion } from "framer-motion";
-import { Home, Search, Sparkles, ClipboardList, User } from "lucide-react";
+import { Home, Pill, Sparkles, Stethoscope, FlaskConical } from "lucide-react";
+
+const DEEP = "#0C5A3E";
+const MID = "#0E7A4F";
+const ACC = "#00D97E";
 
 const navs = [
-  { label: "Home",    path: "/home",    icon: Home },
-  { label: "Search",  path: "/search",  icon: Search },
-  { label: "AI",      path: "/ai",      icon: Sparkles },
-  { label: "Orders",  path: "/orders",  icon: ClipboardList },
-  { label: "Profile", path: "/profile", icon: User },
+  { label: "Home",      path: "/home",      icon: Home,         isCenter: false },
+  { label: "Medicines", path: "/search",    icon: Pill,         isCenter: false },
+  { label: "AI",        path: "/ai",        icon: Sparkles,     isCenter: true  },
+  { label: "Doctor",    path: "/doctors",   icon: Stethoscope,  isCenter: false },
+  { label: "Lab Test",  path: "/lab-tests", icon: FlaskConical, isCenter: false },
 ];
 
 function BottomNavBarImpl() {
@@ -23,34 +29,65 @@ function BottomNavBarImpl() {
   const location = useLocation();
   const shouldReduce = useReducedMotion();
 
-  const activeIdx = Math.max(
-    0,
-    navs.findIndex((n) => location.pathname.startsWith(n.path))
-  );
-  const [burstIdx, setBurstIdx] = useState(null);
+  const activeIdx = (() => {
+    const idx = navs.findIndex((n) => location.pathname.startsWith(n.path));
+    if (idx >= 0) return idx;
+    if (location.pathname.startsWith("/medicines")) return 1;
+    if (location.pathname.startsWith("/search")) return 1;
+    if (location.pathname.startsWith("/pharmacies")) return 1;
+    return 0;
+  })();
 
+  const [burstIdx, setBurstIdx] = useState(null);
   const spring = { type: "spring", stiffness: 520, damping: 34, mass: 0.55 };
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-[1201] mx-auto w-full max-w-[520px] select-none"
-      style={{ WebkitTapHighlightColor: "transparent" }}
+      style={{
+        position: "fixed",
+        insetInline: 0,
+        bottom: 0,
+        zIndex: 1201,
+        maxWidth: 520,
+        margin: "0 auto",
+        width: "100%",
+        userSelect: "none",
+        WebkitTapHighlightColor: "transparent",
+      }}
     >
       <div
-        className="relative overflow-hidden border-t border-[color:rgba(255,255,255,0.20)] shadow-[0_-10px_24px_-10px_rgba(0,0,0,0.28)] pb-[max(0.6rem,env(safe-area-inset-bottom))]"
-        style={{ background: "linear-gradient(160deg, #0C5A3E 0%, #083D28 100%)" }}
+        style={{
+          position: "relative",
+          overflow: "hidden",
+          borderTop: "1px solid rgba(255,255,255,0.12)",
+          boxShadow: "0 -8px 32px -8px rgba(0,0,0,0.28)",
+          paddingBottom: "max(0.6rem, env(safe-area-inset-bottom))",
+          background: `linear-gradient(160deg, ${DEEP} 0%, #083D28 100%)`,
+        }}
       >
-        <div className="relative px-2 pt-2 pb-1">
-          <div className="relative grid grid-cols-5 gap-1">
-            {/* Frosted inner surface */}
-            <div className="pointer-events-none absolute inset-0 -z-10">
-              <div className="absolute inset-x-1 bottom-1 top-1 rounded-3xl border border-white/15 bg-white/10 backdrop-blur-[6px]" />
-            </div>
+        {/* Top accent line */}
+        <div
+          style={{
+            position: "absolute", top: 0, left: "10%", right: "10%",
+            height: 1,
+            background: `linear-gradient(90deg, transparent, ${ACC}40, transparent)`,
+            pointerEvents: "none",
+          }}
+        />
 
+        <div style={{ position: "relative", padding: "6px 6px 2px" }}>
+          <div
+            style={{
+              position: "relative",
+              display: "grid",
+              gridTemplateColumns: "repeat(5, 1fr)",
+              gap: 2,
+            }}
+          >
             {navs.map((item, idx) => {
               const Icon = item.icon;
               const active = idx === activeIdx;
-              const isAI = item.label === "AI";
+              const isCenter = item.isCenter;
 
               return (
                 <button
@@ -60,20 +97,75 @@ function BottomNavBarImpl() {
                     setBurstIdx(idx);
                     navigate(item.path);
                   }}
-                  className="relative isolate flex min-h-[52px] flex-col items-center justify-center rounded-2xl text-white font-extrabold focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:rgba(255,255,255,0.6)]"
+                  style={{
+                    position: "relative",
+                    isolation: "isolate",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    minHeight: isCenter ? 56 : 52,
+                    borderRadius: isCenter ? 20 : 16,
+                    color: "#fff",
+                    fontWeight: 800,
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    outline: "none",
+                    padding: 0,
+                    marginTop: isCenter ? -8 : 0,
+                  }}
                   aria-current={active ? "page" : undefined}
                   aria-label={item.label}
                 >
-                  {/* Active pill */}
-                  {active && (
+                  {/* Active pill — non-center tabs */}
+                  {active && !isCenter && (
                     <LazyMotion features={domAnimation}>
                       <m.span
                         layoutId="gd-neo-pill"
                         transition={spring}
-                        className="absolute inset-0 -z-10 rounded-2xl bg-white/15 border border-white/25"
-                        style={{ backdropFilter: "blur(2px)" }}
+                        style={{
+                          position: "absolute", inset: 0, zIndex: -1,
+                          borderRadius: 16,
+                          background: "rgba(255,255,255,0.12)",
+                          border: "1px solid rgba(255,255,255,0.18)",
+                          backdropFilter: "blur(2px)",
+                        }}
                       />
                     </LazyMotion>
+                  )}
+
+                  {/* Center AI tab — elevated bg */}
+                  {isCenter && (
+                    <div
+                      style={{
+                        position: "absolute", inset: -2, zIndex: -1,
+                        borderRadius: 20,
+                        background: active
+                          ? `linear-gradient(135deg, ${ACC}, #00E5FF)`
+                          : `linear-gradient(135deg, ${MID}, ${DEEP})`,
+                        border: active
+                          ? `2px solid ${ACC}`
+                          : "2px solid rgba(255,255,255,0.15)",
+                        boxShadow: active
+                          ? `0 4px 20px ${ACC}60, 0 0 30px ${ACC}25`
+                          : "0 4px 12px rgba(0,0,0,0.25)",
+                        transition: "all 0.3s ease",
+                      }}
+                    />
+                  )}
+
+                  {/* AI glow pulse */}
+                  {isCenter && active && (
+                    <div
+                      style={{
+                        position: "absolute", inset: -6, zIndex: -2,
+                        borderRadius: 24,
+                        background: `radial-gradient(circle at center, ${ACC}30 0%, transparent 70%)`,
+                        animation: "gdAIGlow 2s ease-in-out infinite",
+                        pointerEvents: "none",
+                      }}
+                    />
                   )}
 
                   {/* Click burst */}
@@ -85,38 +177,44 @@ function BottomNavBarImpl() {
                         animate={{ opacity: 0, scale: 1.6 }}
                         transition={{ duration: 0.45, ease: "easeOut" }}
                         onAnimationComplete={() => setBurstIdx(null)}
-                        className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full"
                         style={{
-                          background:
-                            "radial-gradient(circle, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.0) 70%)",
+                          position: "absolute",
+                          left: "50%", top: "50%",
+                          width: 40, height: 40,
+                          transform: "translate(-50%, -50%)",
+                          borderRadius: "50%",
+                          pointerEvents: "none", zIndex: -1,
+                          background: "radial-gradient(circle, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 70%)",
                         }}
                       />
                     </LazyMotion>
                   )}
 
-                  {/* AI tab special glow when active */}
-                  {isAI && active && (
-                    <div
-                      className="pointer-events-none absolute inset-0 -z-10 rounded-2xl"
-                      style={{
-                        background:
-                          "radial-gradient(circle at center, rgba(0,217,126,0.25) 0%, transparent 70%)",
-                        animation: "gdAIGlow 2s ease-in-out infinite",
-                      }}
-                    />
-                  )}
-
                   <Icon
-                    className={`mb-0.5 h-[19px] w-[19px] transition-transform ${
-                      active
-                        ? "scale-[1.08] drop-shadow-[0_3px_12px_rgba(255,255,255,0.55)]"
-                        : ""
-                    }`}
+                    style={{
+                      width: isCenter ? 22 : 19,
+                      height: isCenter ? 22 : 19,
+                      marginBottom: 2,
+                      transition: "transform 0.2s",
+                      transform: active ? "scale(1.08)" : "scale(1)",
+                      filter: active
+                        ? isCenter
+                          ? "drop-shadow(0 2px 8px rgba(0,0,0,0.3))"
+                          : "drop-shadow(0 3px 12px rgba(255,255,255,0.55))"
+                        : "none",
+                      color: isCenter && active ? DEEP : "#fff",
+                    }}
                   />
                   <span
-                    className={`text-[11px] leading-tight ${
-                      active ? "opacity-100" : "opacity-80"
-                    }`}
+                    style={{
+                      fontSize: isCenter ? 10 : 10.5,
+                      lineHeight: 1.2,
+                      fontFamily: "'Sora', sans-serif",
+                      fontWeight: active ? 800 : 600,
+                      opacity: active ? 1 : 0.7,
+                      color: isCenter && active ? DEEP : "#fff",
+                      letterSpacing: "-0.1px",
+                    }}
                   >
                     {item.label}
                   </span>
@@ -129,8 +227,8 @@ function BottomNavBarImpl() {
 
       <style>{`
         @keyframes gdAIGlow {
-          0%, 100% { opacity: 0.6; }
-          50% { opacity: 1; }
+          0%, 100% { opacity: 0.5; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.05); }
         }
       `}</style>
     </div>

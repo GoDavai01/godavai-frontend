@@ -1,5 +1,6 @@
 // src/components/Medicines.js — GoDavaii 2035 Health OS Marketplace
 // ✅ ALL BUSINESS LOGIC 100% UNCHANGED — zero API changes
+// ✅ FIXED: MRP "₹2297 0" bug — added hasValidMrp() guard
 // ✅ UPGRADED: Pharmacy name hidden from MedCards (marketplace model)
 // ✅ NEW: "Fulfilled by GoDavaii" trust badge in detail dialog
 // ✅ NEW: Bottom sheet for cart pharmacy conflict (replaces alert())
@@ -28,6 +29,13 @@ const ACC  = "#00D97E";
 
 const bottomDock = (hasCart) =>
   `calc(${hasCart ? 144 : 72}px + env(safe-area-inset-bottom,0px) + 12px)`;
+
+/* ── MRP display helper (BUG FIX) ─────────────────────────── */
+function hasValidMrp(med) {
+  const mrp = Number(med?.mrp);
+  const price = Number(med?.price);
+  return mrp > 0 && price > 0 && price < mrp;
+}
 
 /* ── Image util (UNCHANGED logic) ─────────────────────────── */
 const getImageUrl = (img) => {
@@ -219,8 +227,8 @@ function CartConflictSheet({ open, onSwitch, onCancel }) {
 
 /* ── Medicine Card — 2035 Marketplace (pharmacy name HIDDEN) ── */
 function MedCard({ med, canDeliver, onTap, onAdd }) {
-  const hasDiscount = med.mrp && Number(med.price) < Number(med.mrp);
-  const discountPct = hasDiscount ? Math.round(((med.mrp - med.price) / med.mrp) * 100) : null;
+  const showMrp = hasValidMrp(med);
+  const discountPct = showMrp ? Math.round(((med.mrp - med.price) / med.mrp) * 100) : null;
   const isGeneric = !med.brand || String(med.brand).trim() === "";
 
   return (
@@ -269,7 +277,7 @@ function MedCard({ med, canDeliver, onTap, onAdd }) {
             }}>Generic</span>
           )}
         </div>
-        {hasDiscount && (
+        {showMrp && discountPct > 0 && (
           <div style={{
             position: "absolute", top: 8, right: 8,
             fontSize: 9.5, fontWeight: 800,
@@ -314,6 +322,7 @@ function MedCard({ med, canDeliver, onTap, onAdd }) {
           Fulfilled by GoDavaii
         </div>
 
+        {/* ✅ MRP FIX: Only show MRP if mrp > 0 AND price < mrp */}
         <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 10 }}>
           <span style={{
             fontFamily: "'Sora',sans-serif",
@@ -322,7 +331,7 @@ function MedCard({ med, canDeliver, onTap, onAdd }) {
           }}>
             ₹{med.price}
           </span>
-          {med.mrp && Number(med.price) < Number(med.mrp) && (
+          {showMrp && (
             <span style={{ fontSize: 11, color: "#CBD5E1", textDecoration: "line-through", fontWeight: 500 }}>
               ₹{med.mrp}
             </span>
@@ -896,11 +905,12 @@ export default function Medicines() {
                   </div>
                 ))}
 
+                {/* ✅ MRP FIX in detail dialog too */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0" }}>
                   <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 26, fontWeight: 800, color: DEEP }}>
                     ₹{selectedMed.price}
                   </span>
-                  {selectedMed.mrp && selectedMed.price < selectedMed.mrp && (
+                  {hasValidMrp(selectedMed) && (
                     <>
                       <span style={{ fontSize: 14, color: "#CBD5E1", textDecoration: "line-through" }}>₹{selectedMed.mrp}</span>
                       <span style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: `linear-gradient(135deg,${DEEP},${MID})`, padding: "3px 10px", borderRadius: 100 }}>
