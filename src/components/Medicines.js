@@ -1,8 +1,9 @@
-// src/pages/Medicines.js — GoDavaii 2035 Health OS Marketplace
+// src/components/Medicines.js — GoDavaii 2035 Health OS Marketplace
 // ✅ ALL BUSINESS LOGIC 100% UNCHANGED — zero API changes
 // ✅ UPGRADED: Pharmacy name hidden from MedCards (marketplace model)
 // ✅ NEW: "Fulfilled by GoDavaii" trust badge in detail dialog
 // ✅ NEW: Bottom sheet for cart pharmacy conflict (replaces alert())
+// ✅ FIXED: No double search bar — Navbar returns null on /medicines/*
 // ✅ KEPT: Full-width 2-col grid, horizontal category chips, generic suggestions
 // ✅ KEPT: All filters, all API calls, all state, prescription upload FAB
 
@@ -119,14 +120,13 @@ function Chip({ label, active, onClick, icon }) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   🆕 Cart Conflict Bottom Sheet (replaces alert())
+   Cart Conflict Bottom Sheet (replaces alert())
    ═══════════════════════════════════════════════════════════ */
 function CartConflictSheet({ open, onSwitch, onCancel }) {
   return (
     <AnimatePresence>
       {open && (
         <>
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -139,7 +139,6 @@ function CartConflictSheet({ open, onSwitch, onCancel }) {
               WebkitBackdropFilter: "blur(4px)",
             }}
           />
-          {/* Sheet */}
           <motion.div
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
@@ -154,12 +153,10 @@ function CartConflictSheet({ open, onSwitch, onCancel }) {
               boxShadow: "0 -20px 60px rgba(0,0,0,0.20)",
             }}
           >
-            {/* Drag handle */}
             <div style={{
               width: 40, height: 4, borderRadius: 100,
               background: "#E2E8F0", margin: "0 auto 20px",
             }} />
-
             <div style={{ textAlign: "center", marginBottom: 20 }}>
               <div style={{
                 width: 56, height: 56, borderRadius: 18,
@@ -181,7 +178,6 @@ function CartConflictSheet({ open, onSwitch, onCancel }) {
                 Switch to add this medicine — your current cart will be cleared.
               </div>
             </div>
-
             <div style={{ display: "flex", gap: 10 }}>
               <motion.button
                 whileTap={{ scale: 0.97 }}
@@ -242,7 +238,6 @@ function MedCard({ med, canDeliver, onTap, onAdd }) {
         height: "100%",
       }}
     >
-      {/* Image area */}
       <button
         onClick={onTap}
         style={{
@@ -254,8 +249,6 @@ function MedCard({ med, canDeliver, onTap, onAdd }) {
         }}
       >
         <MedCardImage src={getImageUrl(med.img)} alt={med.name} />
-
-        {/* Top-left badges */}
         <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 4 }}>
           {med.prescriptionRequired && (
             <span style={{
@@ -276,8 +269,6 @@ function MedCard({ med, canDeliver, onTap, onAdd }) {
             }}>Generic</span>
           )}
         </div>
-
-        {/* Discount badge */}
         {hasDiscount && (
           <div style={{
             position: "absolute", top: 8, right: 8,
@@ -292,9 +283,7 @@ function MedCard({ med, canDeliver, onTap, onAdd }) {
         )}
       </button>
 
-      {/* Info area — 🆕 pharmacy name REMOVED, "Fulfilled by GoDavaii" added */}
       <div style={{ padding: "10px 12px 12px", flex: 1, display: "flex", flexDirection: "column" }}>
-        {/* Name */}
         <div
           onClick={onTap}
           title={med.brand || med.name}
@@ -315,7 +304,7 @@ function MedCard({ med, canDeliver, onTap, onAdd }) {
           {med.brand || med.name}
         </div>
 
-        {/* 🆕 2035: "Fulfilled by GoDavaii" replaces pharmacy/company name */}
+        {/* 2035: "Fulfilled by GoDavaii" replaces pharmacy/company name */}
         <div style={{
           fontSize: 10, color: "#059669", fontWeight: 600,
           display: "flex", alignItems: "center", gap: 3,
@@ -325,7 +314,6 @@ function MedCard({ med, canDeliver, onTap, onAdd }) {
           Fulfilled by GoDavaii
         </div>
 
-        {/* Price row */}
         <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 10 }}>
           <span style={{
             fontFamily: "'Sora',sans-serif",
@@ -341,7 +329,6 @@ function MedCard({ med, canDeliver, onTap, onAdd }) {
           )}
         </div>
 
-        {/* Bottom row: category + add button */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto" }}>
           {Array.isArray(med.category) && med.category[0] ? (
             <span style={{
@@ -538,7 +525,6 @@ export default function Medicines() {
     return arr;
   }, [selectedMed]);
 
-  /* ── openMed helper ────────────────────────────────────── */
   const openMed = async (med) => {
     setSelectedMed(med);
     setActiveImg(0);
@@ -566,9 +552,8 @@ export default function Medicines() {
       fontFamily: "'Plus Jakarta Sans',sans-serif",
     }}>
 
-      {/* ═══ STICKY HEADER ═══ */}
+      {/* ═══ STICKY HEADER (this page's OWN header — Navbar is hidden) ═══ */}
       <div style={{ flexShrink: 0, zIndex: 20 }}>
-        {/* 🆕 2035: Header shows "Fulfilled by GoDavaii" instead of raw pharmacy name */}
         <div style={{
           padding: "14px 16px 10px",
           background: `linear-gradient(135deg,${DEEP} 0%,#083D28 100%)`,
@@ -588,7 +573,6 @@ export default function Medicines() {
                   <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 800, color: "#fff", letterSpacing: "-0.3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {pharmacy.name}
                   </div>
-                  {/* 🆕 2035: Marketplace trust line */}
                   <div style={{ fontSize: 11, color: ACC, marginTop: 2, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
                     <ShieldCheck style={{ width: 11, height: 11 }} />
                     Fulfilled by GoDavaii · Verified Partner
@@ -794,7 +778,7 @@ export default function Medicines() {
                 )}
               </div>
 
-              {/* 🆕 2035: "Fulfilled by GoDavaii" trust banner in detail dialog */}
+              {/* "Fulfilled by GoDavaii" trust banner */}
               <div style={{
                 margin: "0 16px", marginTop: 12,
                 background: "linear-gradient(135deg, #ECFDF5, #D1FAE5)",
@@ -950,7 +934,7 @@ export default function Medicines() {
         </DialogContent>
       </Dialog>
 
-      {/* ═══ Generic Suggestion Modal (UNCHANGED) ═══ */}
+      {/* Generic Suggestion Modal (UNCHANGED) */}
       <GenericSuggestionModal
         open={genericSugg.open}
         onOpenChange={(o) => setGenericSugg((s) => ({ ...s, open: o }))}
@@ -973,7 +957,7 @@ export default function Medicines() {
         onKeep={() => setGenericSugg({ open: false, brand: null, generics: [] })}
       />
 
-      {/* 🆕 2035: Bottom sheet for cart pharmacy conflict (replaces alert()) */}
+      {/* Bottom sheet for cart pharmacy conflict */}
       <CartConflictSheet
         open={!!conflict}
         onSwitch={() => {
@@ -984,7 +968,7 @@ export default function Medicines() {
         onCancel={() => dismissConflict()}
       />
 
-      {/* ═══ Upload Prescription FAB (UNCHANGED logic) ═══ */}
+      {/* Upload Prescription FAB (UNCHANGED logic) */}
       <motion.div
         style={{
           position: "fixed", left: 0, right: 0, zIndex: 1201,

@@ -71,8 +71,7 @@ export const CartProvider = ({ children }) => {
     return localStorage.getItem("selectedArea") || "";
   });
 
-  // 🆕 2035: Conflict state for bottom-sheet UI instead of alert()
-  // When set, a bottom sheet can display: { pendingMedicine, existingPharmacy, newPharmacy }
+  // 2035: Conflict state for bottom-sheet UI instead of alert()
   const [conflict, setConflict] = useState(null);
 
   useEffect(() => {
@@ -103,7 +102,6 @@ export const CartProvider = ({ children }) => {
             (typeof medicine.pharmacy === "object" && medicine.pharmacy._id)))
       )
     ) {
-      // Fallback alert for truly invalid data
       alert("Medicine or pharmacy not specified. Please select a valid medicine with pharmacy.");
       return;
     }
@@ -129,7 +127,7 @@ export const CartProvider = ({ children }) => {
           : selectedPharmacy;
 
       if (cartPharmacyId && pharmacyId && cartPharmacyId !== pharmacyId) {
-        // 🆕 2035: Instead of alert(), set conflict state for bottom sheet
+        // 2035: Instead of alert(), set conflict state for bottom sheet
         setConflict({
           pendingMedicine: medicine,
           existingPharmacyId: cartPharmacyId,
@@ -138,7 +136,6 @@ export const CartProvider = ({ children }) => {
         return prev; // Don't add — wait for user decision
       }
 
-      // Check if medicine already in cart
       const exists = prev.find((item) => item._id === medicine._id);
       if (exists) {
         return prev.map((item) =>
@@ -152,7 +149,7 @@ export const CartProvider = ({ children }) => {
     });
   }, [selectedPharmacy]);
 
-  // 🆕 2035: Force-add after user confirms "Switch & Add" in bottom sheet
+  // 2035: Force-add after user confirms "Switch & Add" in bottom sheet
   const addToCartForced = useCallback((medicine) => {
     setCart([]);
     setSelectedPharmacy(
@@ -164,7 +161,7 @@ export const CartProvider = ({ children }) => {
     setConflict(null);
   }, []);
 
-  // 🆕 2035: Dismiss conflict (user chose "Keep current cart")
+  // 2035: Dismiss conflict (user chose "Keep current cart")
   const dismissConflict = useCallback(() => {
     setConflict(null);
   }, []);
@@ -216,14 +213,14 @@ export const CartProvider = ({ children }) => {
         selectedPharmacy,
         setSelectedPharmacy,
         addToCart,
-        addToCartForced,       // 🆕 2035
+        addToCartForced,
         removeFromCart,
         changeQuantity,
         clearCart,
         removeOneFromCart,
         clearCartAndPharmacy,
-        conflict,              // 🆕 2035: { pendingMedicine, existingPharmacyId, newPharmacyId } | null
-        dismissConflict,       // 🆕 2035
+        conflict,
+        dismissConflict,
         selectedCity,
         setSelectedCity,
         selectedArea,

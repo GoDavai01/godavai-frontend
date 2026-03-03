@@ -1,8 +1,8 @@
 // src/components/Navbar.js — GoDavaii 2035 Health OS
 // ✅ ALL LOGIC 100% UNCHANGED — pure visual + route upgrades
+// ✅ FIXED: Returns null on /medicines/* and /search (these pages have their own headers)
 // ✅ UPDATED: placeholder "Search Medicines, Doctors, Labs..." (unified marketplace)
-// ✅ UPDATED: /pharmacies-near-you references → /search
-// ✅ UPDATED: NO_SEARCH_PATHS includes /ai, /health
+// ✅ UPDATED: NO_SEARCH_PATHS expanded for all pages with own search
 // ✅ KEPT: Autocomplete, location modal, pharmacy-scoped search, portal dropdown
 // ✅ KEPT: All API calls, all state, all effects
 
@@ -18,10 +18,20 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:500
 const DEEP   = "#0C5A3E";
 const ACCENT  = "#00D97E";
 
-// Pages where the search bar should be hidden
+// ─────────────────────────────────────────────────────────────
+// Pages where the ENTIRE Navbar should be hidden
+// (these pages render their own header + search bar)
+// ─────────────────────────────────────────────────────────────
+const HIDE_ENTIRE_NAVBAR = [
+  "/medicines",   // Medicines.js has its own header + inline search
+  "/search",      // SearchResults.js has its own header + search bar
+];
+
+// Pages where only the search bar portion should be hidden
+// (Navbar still shows location row + profile button)
 const NO_SEARCH_PATHS = [
   "/orders", "/profile", "/checkout", "/payment",
-  "/payment-success", "/search", "/ai", "/health",
+  "/payment-success", "/ai", "/health",
 ];
 
 export default function Navbar({
@@ -45,6 +55,13 @@ export default function Navbar({
 
   const boxRef   = useRef(null);
   const inputRef = useRef(null);
+
+  // ─────────────────────────────────────────────────────────
+  // 🆕 FIX: If current page has its own header, hide entire Navbar
+  // ─────────────────────────────────────────────────────────
+  const shouldHideEntirely = HIDE_ENTIRE_NAVBAR.some((p) =>
+    routerLocation.pathname.startsWith(p)
+  );
 
   const hideSearch = NO_SEARCH_PATHS.some((p) => routerLocation.pathname.startsWith(p));
 
@@ -71,12 +88,11 @@ export default function Navbar({
     return () => { cancel = true; };
   }, [activePharmacyId]);
 
-  // 🆕 2035: Unified marketplace placeholder
+  // 2035: Unified marketplace placeholder
   const placeholder = useMemo(() => {
     if (routerLocation.pathname.startsWith("/medicines")) {
       return pharmacyName ? `Search in ${pharmacyName}` : "Search in this pharmacy";
     }
-    // 2035 unified search placeholder
     return "Search medicines, doctors, labs...";
   }, [routerLocation.pathname, pharmacyName]);
 
@@ -150,7 +166,7 @@ export default function Navbar({
     };
   }, []);
 
-  // Handlers — ALL UNCHANGED (except route update)
+  // Handlers — ALL UNCHANGED
   const handleInput = (val) => { setSearch(val); onSearchChange(val); };
 
   const handleSelect = (val) => {
@@ -182,14 +198,30 @@ export default function Navbar({
     : null;
 
   // Page label for no-search pages
-  const pageLabel = routerLocation.pathname.startsWith("/search")    ? "Search Results"
-    : routerLocation.pathname.startsWith("/orders")   ? "My Orders"
+  const pageLabel = routerLocation.pathname.startsWith("/orders")   ? "My Orders"
     : routerLocation.pathname.startsWith("/profile")  ? "Profile"
     : routerLocation.pathname.startsWith("/checkout") ? "Checkout"
     : routerLocation.pathname.startsWith("/payment")  ? "Payment"
     : routerLocation.pathname.startsWith("/ai")       ? "GoDavaii AI"
     : routerLocation.pathname.startsWith("/health")   ? "Health Vault"
     : null;
+
+  // ─────────────────────────────────────────────────────────
+  // 🆕 FIX: Don't render Navbar at all on pages with own headers
+  // This eliminates the double search bar / double header issue
+  // ─────────────────────────────────────────────────────────
+  if (shouldHideEntirely) {
+    return (
+      <>
+        {/* Still render LocationModal so it's accessible from anywhere */}
+        <LocationModal
+          open={locationModalOpen}
+          onClose={() => setLocationModalOpen(false)}
+          onSelect={handleAddressChange}
+        />
+      </>
+    );
+  }
 
   // ── RENDER ────────────────────────────────────────────────
   return (
