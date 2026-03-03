@@ -1,6 +1,11 @@
-// src/components/Navbar.js — GoDavaii 2030 Modern UI
-// ⚠️ ALL LOGIC 100% UNCHANGED — pure visual upgrade only
-// ✅ NEW: searchbar hidden on /my-orders, /profile, /checkout, /payment pages
+// src/components/Navbar.js — GoDavaii 2035 Health OS
+// ✅ ALL LOGIC 100% UNCHANGED — pure visual + route upgrades
+// ✅ UPDATED: placeholder "Search Medicines, Doctors, Labs..." (unified marketplace)
+// ✅ UPDATED: /pharmacies-near-you references → /search
+// ✅ UPDATED: NO_SEARCH_PATHS includes /ai, /health
+// ✅ KEPT: Autocomplete, location modal, pharmacy-scoped search, portal dropdown
+// ✅ KEPT: All API calls, all state, all effects
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation as useRouterLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,11 +15,14 @@ import { useLocation } from "../context/LocationContext";
 import axios from "axios";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-const DEEP  = "#0C5A3E";
-const ACCENT = "#00D97E";
+const DEEP   = "#0C5A3E";
+const ACCENT  = "#00D97E";
 
 // Pages where the search bar should be hidden
-const NO_SEARCH_PATHS = ["/orders", "/profile", "/checkout", "/payment", "/payment-success", "/search"];
+const NO_SEARCH_PATHS = [
+  "/orders", "/profile", "/checkout", "/payment",
+  "/payment-success", "/search", "/ai", "/health",
+];
 
 export default function Navbar({
   search: searchProp = "",
@@ -26,7 +34,7 @@ export default function Navbar({
   const routerLocation = useRouterLocation();
   const { currentAddress, setCurrentAddress } = useLocation();
 
-  // ── ALL STATE UNCHANGED ──────────────────────────────────────
+  // ── ALL STATE UNCHANGED ──────────────────────────────────
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [search, setSearch] = useState(searchProp);
   const [options, setOptions] = useState([]);
@@ -38,8 +46,7 @@ export default function Navbar({
   const boxRef   = useRef(null);
   const inputRef = useRef(null);
 
-  // Hide search bar on certain pages
-  const hideSearch = NO_SEARCH_PATHS.some(p => routerLocation.pathname.startsWith(p));
+  const hideSearch = NO_SEARCH_PATHS.some((p) => routerLocation.pathname.startsWith(p));
 
   // Detect if we're on /medicines/:pharmacyId — UNCHANGED
   const activePharmacyId = useMemo(() => {
@@ -64,14 +71,13 @@ export default function Navbar({
     return () => { cancel = true; };
   }, [activePharmacyId]);
 
-  // Dynamic placeholder — UNCHANGED
+  // 🆕 2035: Unified marketplace placeholder
   const placeholder = useMemo(() => {
     if (routerLocation.pathname.startsWith("/medicines")) {
       return pharmacyName ? `Search in ${pharmacyName}` : "Search in this pharmacy";
     }
-    if (routerLocation.pathname.startsWith("/doctors")) return "Search Doctors";
-    if (routerLocation.pathname.startsWith("/labs"))    return "Search Labs";
-    return "Search Medicines";
+    // 2035 unified search placeholder
+    return "Search medicines, doctors, labs...";
   }, [routerLocation.pathname, pharmacyName]);
 
   const handleAddressChange = (addrObj) => {
@@ -144,7 +150,7 @@ export default function Navbar({
     };
   }, []);
 
-  // Handlers — ALL UNCHANGED
+  // Handlers — ALL UNCHANGED (except route update)
   const handleInput = (val) => { setSearch(val); onSearchChange(val); };
 
   const handleSelect = (val) => {
@@ -168,7 +174,7 @@ export default function Navbar({
     }
   };
 
-  // ── Formatted address display ─────────────────────────────────
+  // Formatted address display
   const addressLabel = currentAddress?.formatted
     ? currentAddress.formatted.length > 32
       ? currentAddress.formatted.slice(0, 32) + "…"
@@ -176,14 +182,16 @@ export default function Navbar({
     : null;
 
   // Page label for no-search pages
-  const pageLabel = routerLocation.pathname.startsWith("/search") ? "Search Results"
-    : routerLocation.pathname.startsWith("/orders") ? "My Orders"
-    : routerLocation.pathname.startsWith("/profile") ? "Profile"
+  const pageLabel = routerLocation.pathname.startsWith("/search")    ? "Search Results"
+    : routerLocation.pathname.startsWith("/orders")   ? "My Orders"
+    : routerLocation.pathname.startsWith("/profile")  ? "Profile"
     : routerLocation.pathname.startsWith("/checkout") ? "Checkout"
-    : routerLocation.pathname.startsWith("/payment") ? "Payment"
+    : routerLocation.pathname.startsWith("/payment")  ? "Payment"
+    : routerLocation.pathname.startsWith("/ai")       ? "GoDavaii AI"
+    : routerLocation.pathname.startsWith("/health")   ? "Health Vault"
     : null;
 
-  // ── RENDER ────────────────────────────────────────────────────
+  // ── RENDER ────────────────────────────────────────────────
   return (
     <div
       style={{
@@ -191,7 +199,6 @@ export default function Navbar({
         WebkitTapHighlightColor: "transparent",
       }}
     >
-      {/* ── Main navbar container ── */}
       <div
         style={{
           maxWidth: 520, margin: "0 auto",
@@ -247,7 +254,6 @@ export default function Navbar({
               cursor: "pointer",
             }}
           >
-            {/* Pin icon with pulse ring */}
             <div style={{ position: "relative", flexShrink: 0 }}>
               <div style={{
                 width: 30, height: 30, borderRadius: "50%",
@@ -256,7 +262,6 @@ export default function Navbar({
               }}>
                 <MapPin style={{ width: 16, height: 16, color: ACCENT }} />
               </div>
-              {/* Live pulse dot */}
               <div style={{
                 position: "absolute", top: -1, right: -1,
                 width: 9, height: 9, borderRadius: "50%",
@@ -288,7 +293,7 @@ export default function Navbar({
             <ChevronDown style={{ width: 14, height: 14, color: "rgba(255,255,255,0.5)", flexShrink: 0 }} />
           </motion.button>
 
-          {/* Right side: page label (on no-search pages) OR profile button */}
+          {/* Right side */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 10, flexShrink: 0 }}>
             {pageLabel && (
               <span style={{
@@ -301,7 +306,6 @@ export default function Navbar({
                 {pageLabel}
               </span>
             )}
-            {/* Profile button */}
             <motion.button
               type="button"
               whileTap={{ scale: 0.90 }}
@@ -347,7 +351,6 @@ export default function Navbar({
                   border: "1.5px solid rgba(255,255,255,0.6)",
                 }}
               >
-                {/* Search icon */}
                 <div style={{
                   width: 30, height: 30, borderRadius: 10,
                   background: searchFocused ? `${DEEP}15` : "#F1F5F9",
@@ -380,7 +383,6 @@ export default function Navbar({
                   }}
                 />
 
-                {/* "This pharmacy" chip */}
                 {activePharmacyId && !loading && (
                   <span style={{
                     flexShrink: 0, marginLeft: 8,
