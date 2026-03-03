@@ -7,7 +7,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useCart } from "../context/CartContext";
-import { ShieldCheck, ShoppingCart, AlertTriangle, Package } from "lucide-react";
+import { ShieldCheck, ShoppingCart, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
