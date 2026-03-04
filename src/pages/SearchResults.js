@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { Search, ArrowLeft, ShieldCheck, X, ChevronLeft, ChevronRight, Package, Mic } from "lucide-react";
+import { Search, ArrowLeft, ShieldCheck, X, ChevronLeft, ChevronRight, Mic } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCart } from "../context/CartContext";
 import { Dialog, DialogContent } from "../components/ui/dialog";
@@ -200,7 +200,7 @@ export default function SearchResults() {
   const navigate = useNavigate();
   const inputRef = useRef(null);
 
-  const { cart, addToCart } = useCart();
+  const { addToCart } = useCart();
 
   const [medicines, setMedicines]         = useState([]);
   const [autoSuggestions, setAutoSuggestions] = useState([]);
