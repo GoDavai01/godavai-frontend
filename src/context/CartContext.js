@@ -1,10 +1,9 @@
-// src/context/CartContext.js — GoDavaii 2035 Health OS
-// ✅ KEPT: 100% of existing logic (addToCart, removeFromCart, etc.)
-// ✅ UPGRADED: alert() for pharmacy conflict → triggers onConflict callback
-// ✅ NEW: clearCartAndPharmacy (was already present, now also clears localStorage)
-// ✅ NEW: onConflict state for bottom-sheet integration
-// ✅ NEW: addToCartForced() — force-add after conflict resolution
-// ✅ KEPT: normalizeMedicine, localStorage persistence, all state
+// src/context/CartContext.js — GoDavaii 2035 HealthOS (Customer-Side)
+// ✅ Pharmacy/Chemist concept REMOVED from customer cart flow
+// ✅ Single delivery only (no delivery options UI)
+// ✅ Cart stores only product info (medicineId, name, price, qty, etc.)
+// ✅ No alerts() — silent safe guards
+// ✅ localStorage persistence kept
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 
@@ -18,33 +17,44 @@ function safeParse(json, fallback) {
   }
 }
 
-function normalizeMedicine(medicine) {
+const toNum = (v, d = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+};
+
+function normalizeMedicine(m) {
+  const id = m?.medId || m?.medicineId || m?._id || m?.id;
+  if (!id) return null;
+
   return {
-    medicineId: medicine.medId || medicine.medicineId || medicine._id,
-    pharmacyId:
-      medicine.pharmacyId ||
-      (typeof medicine.pharmacy === "object"
-        ? medicine.pharmacy._id
-        : medicine.pharmacy),
-    name: medicine.name,
-    price: medicine.price,
-    quantity: medicine.quantity || 1,
-    img: medicine.img || "",
-    brand: medicine.brand || "",
-    mrp: medicine.mrp || "",
-    category: Array.isArray(medicine.category)
-      ? medicine.category
-      : medicine.category
-        ? [medicine.category]
-        : [],
-    composition: medicine.composition || "",
-    company: medicine.company || "",
-    type: medicine.type || "",
-    packCount: medicine.packCount || "",
-    packUnit: medicine.packUnit || "",
-    prescriptionRequired: medicine.prescriptionRequired || false,
-    productKind: medicine.productKind || "",
-    _id: medicine.medId || medicine.medicineId || medicine._id,
+    _id: id,
+    medicineId: id,
+
+    // product fields
+    name: String(m?.name || ""),
+    brand: String(m?.brand || ""),
+    company: String(m?.company || ""),
+    composition: String(m?.composition || m?.compositionKey || ""),
+    compositionKey: String(m?.compositionKey || ""),
+
+    packCount: m?.packCount || "",
+    packUnit: m?.packUnit || "",
+
+    // numeric pricing
+    price: toNum(m?.price ?? m?.sellingPrice ?? m?.salePrice ?? m?.mrp, 0),
+    mrp: toNum(m?.mrp, 0),
+
+    img: m?.img || "",
+    category: Array.isArray(m?.category) ? m.category : m?.category ? [m.category] : [],
+    type: m?.type || "",
+
+    prescriptionRequired: !!m?.prescriptionRequired,
+    productKind: m?.productKind || "",
+
+    quantity: toNum(m?.quantity ?? m?.qty, 1),
+
+    // stable cart line id
+    lineId: m?.lineId || `${id}`,
   };
 }
 
@@ -55,12 +65,7 @@ export const CartProvider = ({ children }) => {
     return saved ? safeParse(saved, []) : [];
   });
 
-  const [selectedPharmacy, setSelectedPharmacy] = useState(() => {
-    if (typeof window === "undefined") return null;
-    const saved = localStorage.getItem("selectedPharmacy");
-    return saved ? safeParse(saved, null) : null;
-  });
-
+  // Location selectors kept (your existing APIs use these sometimes)
   const [selectedCity, setSelectedCity] = useState(() => {
     if (typeof window === "undefined") return "Delhi";
     return localStorage.getItem("selectedCity") || "Delhi";
@@ -71,138 +76,71 @@ export const CartProvider = ({ children }) => {
     return localStorage.getItem("selectedArea") || "";
   });
 
-  // 2035: Conflict state for bottom-sheet UI instead of alert()
-  const [conflict, setConflict] = useState(null);
-
   useEffect(() => {
+    if (typeof window === "undefined") return;
     localStorage.setItem("cart", JSON.stringify(cart));
   }, [cart]);
 
   useEffect(() => {
-    localStorage.setItem("selectedPharmacy", JSON.stringify(selectedPharmacy));
-  }, [selectedPharmacy]);
-
-  useEffect(() => {
+    if (typeof window === "undefined") return;
     localStorage.setItem("selectedCity", selectedCity || "");
   }, [selectedCity]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     localStorage.setItem("selectedArea", selectedArea || "");
   }, [selectedArea]);
 
-  // ── MAIN LOGIC: Single pharmacy enforcement ──────────────
   const addToCart = useCallback((medicine) => {
-    if (
-      !medicine ||
-      !(medicine._id || medicine.medId || medicine.medicineId) ||
-      !(
-        medicine.pharmacyId ||
-        (medicine.pharmacy &&
-          (typeof medicine.pharmacy === "string" ||
-            (typeof medicine.pharmacy === "object" && medicine.pharmacy._id)))
-      )
-    ) {
-      alert("Medicine or pharmacy not specified. Please select a valid medicine with pharmacy.");
-      return;
-    }
+    const nm = normalizeMedicine(medicine);
+    if (!nm) return;
 
     setCart((prev) => {
-      const pharmacyId =
-        typeof medicine.pharmacy === "object"
-          ? medicine.pharmacy._id
-          : medicine.pharmacy;
-
-      if (prev.length === 0) {
-        setSelectedPharmacy(
-          medicine.pharmacyObj ||
-          medicine.pharmacyObject ||
-          (typeof medicine.pharmacy === "object" ? medicine.pharmacy : null)
-        );
-        return [{ ...normalizeMedicine(medicine), quantity: 1 }];
-      }
-
-      const cartPharmacyId =
-        typeof selectedPharmacy === "object"
-          ? selectedPharmacy?._id
-          : selectedPharmacy;
-
-      if (cartPharmacyId && pharmacyId && cartPharmacyId !== pharmacyId) {
-        // 2035: Instead of alert(), set conflict state for bottom sheet
-        setConflict({
-          pendingMedicine: medicine,
-          existingPharmacyId: cartPharmacyId,
-          newPharmacyId: pharmacyId,
-        });
-        return prev; // Don't add — wait for user decision
-      }
-
-      const exists = prev.find((item) => item._id === medicine._id);
+      const exists = prev.find((x) => x._id === nm._id);
       if (exists) {
-        return prev.map((item) =>
-          item._id === medicine._id
-            ? { ...normalizeMedicine(item), quantity: item.quantity + 1 }
-            : item
+        return prev.map((x) =>
+          x._id === nm._id ? { ...x, quantity: toNum(x.quantity, 1) + 1 } : x
         );
       }
-
-      return [...prev, { ...normalizeMedicine(medicine), quantity: 1 }];
+      return [...prev, { ...nm, quantity: 1 }];
     });
-  }, [selectedPharmacy]);
-
-  // 2035: Force-add after user confirms "Switch & Add" in bottom sheet
-  const addToCartForced = useCallback((medicine) => {
-    setCart([]);
-    setSelectedPharmacy(
-      medicine.pharmacyObj ||
-      medicine.pharmacyObject ||
-      (typeof medicine.pharmacy === "object" ? medicine.pharmacy : null)
-    );
-    setCart([{ ...normalizeMedicine(medicine), quantity: 1 }]);
-    setConflict(null);
-  }, []);
-
-  // 2035: Dismiss conflict (user chose "Keep current cart")
-  const dismissConflict = useCallback(() => {
-    setConflict(null);
   }, []);
 
   const removeOneFromCart = useCallback((medicine) => {
+    const id = medicine?._id || medicine?.medicineId || medicine?.medId;
+    if (!id) return;
+
     setCart((prev) =>
       prev
-        .map((item) =>
-          item._id === medicine._id
-            ? { ...item, quantity: item.quantity - 1 }
-            : item
-        )
-        .filter((item) => item.quantity > 0)
+        .map((x) => (x._id === id ? { ...x, quantity: toNum(x.quantity, 1) - 1 } : x))
+        .filter((x) => toNum(x.quantity, 0) > 0)
     );
   }, []);
 
   const removeFromCart = useCallback((medicine) => {
-    setCart((prev) => prev.filter((item) => item._id !== medicine._id));
+    const id = medicine?._id || medicine?.medicineId || medicine?.medId;
+    if (!id) return;
+
+    setCart((prev) => prev.filter((x) => x._id !== id));
   }, []);
 
   const changeQuantity = useCallback((medicine, qty) => {
-    setCart((prev) =>
-      prev.map((item) =>
-        item._id === medicine._id
-          ? { ...item, quantity: Math.max(1, qty) }
-          : item
-      )
-    );
-  }, []);
+    const id = medicine?._id || medicine?.medicineId || medicine?.medId;
+    if (!id) return;
 
-  const clearCartAndPharmacy = useCallback(() => {
-    setCart([]);
-    setSelectedPharmacy(null);
-    setConflict(null);
-    localStorage.removeItem("cart");
-    localStorage.removeItem("selectedPharmacy");
+    const q = Math.max(1, toNum(qty, 1));
+    setCart((prev) => prev.map((x) => (x._id === id ? { ...x, quantity: q } : x)));
   }, []);
 
   const clearCart = useCallback(() => {
     setCart([]);
-    setConflict(null);
+  }, []);
+
+  const clearCartAndStorage = useCallback(() => {
+    setCart([]);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("cart");
+    }
   }, []);
 
   return (
@@ -210,17 +148,14 @@ export const CartProvider = ({ children }) => {
       value={{
         cart,
         setCart,
-        selectedPharmacy,
-        setSelectedPharmacy,
+
         addToCart,
-        addToCartForced,
+        removeOneFromCart,
         removeFromCart,
         changeQuantity,
         clearCart,
-        removeOneFromCart,
-        clearCartAndPharmacy,
-        conflict,
-        dismissConflict,
+        clearCartAndStorage,
+
         selectedCity,
         setSelectedCity,
         selectedArea,

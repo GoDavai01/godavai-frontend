@@ -1,13 +1,7 @@
 // src/App.js
 import React, { useEffect } from "react";
 import axios from "axios";
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  useLocation,
-  useNavigate, // ⬅ added
-} from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import "./i18n";
 import { ThemeProvider } from "./context/ThemeContext";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -42,31 +36,26 @@ import MyOrdersPage from "./components/MyOrdersPage";
 import OrderTracking from "./components/OrderTracking";
 import NotFound from "./components/NotFound";
 import SearchResults from "./pages/SearchResults";
-// import AllMedicines from "./pages/AllMedicines";  // REMOVED — using Medicines instead
 import { LocationProvider } from "./context/LocationContext";
-
 import ProtectedRoute from "./components/ProtectedRoute";
 
-// === NEW: legal pages ===
+// legal pages
 import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
 import Terms from "./pages/legal/Terms";
 import Refunds from "./pages/legal/Refunds";
 import Cookies from "./pages/legal/Cookies";
 import DeleteAccount from "./pages/legal/DeleteAccount";
 
-// === NEW: Android hardware Back support ===
+// Android Back
 import { App as CapApp } from "@capacitor/app";
 import { useAndroidBack } from "./hooks/useAndroidBack";
 
-// === ADD: Capacitor LocalNotifications for Android notification channel ===
+// Notifications / Push
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
-
-// 🔔 Push (FCM) registration + native HTTP for token POST
 import { PushNotifications } from "@capacitor/push-notifications";
 import { CapacitorHttp } from "@capacitor/core";
 
-// Simple app-wide event bus to inform components when a push is tapped
 const subscribers = new Set();
 export function onAppEvent(cb) {
   subscribers.add(cb);
@@ -76,21 +65,15 @@ export function emitAppEvent(evt) {
   subscribers.forEach((cb) => cb(evt));
 }
 
-// Root routes where Back should offer "double-back to exit"
 const ROOT_ROUTES = new Set(["/", "/home", "/otp-login"]);
 
-// Shell that attaches global hardware-Back behavior
 function AppShell({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
 
   useAndroidBack({
     onBack: () => {
-      // If not on a root route, go back in history
-      if (!ROOT_ROUTES.has(location.pathname)) {
-        navigate(-1);
-      }
-      // else: fall through — the hook will handle double-back to exit
+      if (!ROOT_ROUTES.has(location.pathname)) navigate(-1);
     },
     onExit: () => CapApp.exitApp(),
   });
@@ -102,22 +85,17 @@ function AppContent() {
   const location = useLocation();
   const hideNavbar = location.pathname === "/" || location.pathname === "/home";
 
-  // FORCE deep green when you're on "/"
   React.useEffect(() => {
     const isWelcome = location.pathname === "/";
     document.documentElement.classList.toggle("gd-welcome", isWelcome);
     return () => document.documentElement.classList.remove("gd-welcome");
   }, [location.pathname]);
 
-  // --- Production-ready: Only set axios default once per token change ---
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (token) {
-      axios.defaults.headers.common["Authorization"] = "Bearer " + token;
-    } else {
-      delete axios.defaults.headers.common["Authorization"];
-    }
-  }, []); // [] means only on mount
+    if (token) axios.defaults.headers.common["Authorization"] = "Bearer " + token;
+    else delete axios.defaults.headers.common["Authorization"];
+  }, []);
 
   return (
     <>
@@ -131,7 +109,7 @@ function AppContent() {
         <Route path="/orders/:orderId" element={<OrderTracking />} />
         <Route path="/test-standalone" element={<StepperStandalone />} />
 
-        {/* === NEW: public legal routes (no auth) === */}
+        {/* legal */}
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/refunds" element={<Refunds />} />
@@ -140,7 +118,6 @@ function AppContent() {
 
         <Route path="*" element={<NotFound />} />
 
-        {/* Protected routes - user must be logged in */}
         <Route element={<MainLayout />}>
           <Route
             path="/home"
@@ -150,6 +127,18 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
+          {/* ✅ 2035 marketplace default */}
+          <Route
+            path="/medicines"
+            element={
+              <ProtectedRoute>
+                <Medicines />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* optional legacy/debug */}
           <Route
             path="/medicines/:pharmacyId"
             element={
@@ -158,6 +147,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/cart"
             element={
@@ -166,6 +156,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/pharmacy/dashboard"
             element={
@@ -182,6 +173,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/admin/dashboard"
             element={
@@ -198,6 +190,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/delivery/dashboard"
             element={
@@ -222,6 +215,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/profile"
             element={
@@ -230,6 +224,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/pharmacies-near-you"
             element={
@@ -238,6 +233,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/checkout"
             element={
@@ -246,6 +242,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/payment"
             element={
@@ -262,6 +259,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/orders"
             element={
@@ -270,6 +268,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/search"
             element={
@@ -278,6 +277,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/all-medicines"
             element={
@@ -288,6 +288,7 @@ function AppContent() {
           />
         </Route>
       </Routes>
+
       {!hideNavbar && <BottomNavBar />}
       <ViewCartBar />
     </>
@@ -295,7 +296,6 @@ function AppContent() {
 }
 
 function App() {
-  // Create high-importance notification channel once on native Android
   useEffect(() => {
     if (!Capacitor?.isNativePlatform?.()) return;
     if (Capacitor.getPlatform?.() !== "android") return;
@@ -307,8 +307,8 @@ function App() {
           id: "gd_orders",
           name: "Order Alerts",
           description: "New orders and urgent pharmacy notifications",
-          importance: 5, // IMPORTANCE_HIGH
-          visibility: 1, // VISIBILITY_PUBLIC
+          importance: 5,
+          visibility: 1,
           sound: "default",
           vibration: true,
           lights: true,
@@ -317,43 +317,31 @@ function App() {
     })();
   }, []);
 
-  // 🔔 Register for FCM push on native (Android) and send token to backend
   useEffect(() => {
     (async () => {
       try {
         if (!Capacitor?.isNativePlatform?.()) return;
-        // Ask permission
         const perm = await PushNotifications.requestPermissions();
         if (perm.receive !== "granted") return;
         await PushNotifications.register();
 
-        // Save token
         PushNotifications.addListener("registration", async (token) => {
           try {
             const jwt = localStorage.getItem("token");
             if (!jwt) return;
             await CapacitorHttp.post({
-              url:
-                (process.env.REACT_APP_API_BASE_URL || "http://localhost:5000") +
-                "/api/prescriptions/register-fcm",
-              headers: {
-                Authorization: "Bearer " + jwt,
-                "Content-Type": "application/json",
-              },
+              url: (process.env.REACT_APP_API_BASE_URL || "http://localhost:5000") + "/api/prescriptions/register-fcm",
+              headers: { Authorization: "Bearer " + jwt, "Content-Type": "application/json" },
               data: { token: token?.value || token },
             });
           } catch {}
         });
 
-        // When user taps a notification, tell the app
-        PushNotifications.addListener(
-          "pushNotificationActionPerformed",
-          (action) => {
-            const orderId = action?.notification?.data?.orderId;
-            if (!orderId) return;
-            emitAppEvent({ type: "OPEN_RX_QUOTE", orderId });
-          }
-        );
+        PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+          const orderId = action?.notification?.data?.orderId;
+          if (!orderId) return;
+          emitAppEvent({ type: "OPEN_RX_QUOTE", orderId });
+        });
       } catch {}
     })();
   }, []);
@@ -365,7 +353,6 @@ function App() {
         <AuthProvider>
           <CartProvider>
             <Router>
-              {/* Attach hardware-Back handling around your whole app */}
               <AppShell>
                 <AppContent />
               </AppShell>
