@@ -533,14 +533,7 @@ export default function Medicines() {
     return groups.includes(selected);
   };
 
-    const matchKind = (med, kind) => {
-      if (kind === "All") return true;
-      if (kind === "Generic") return isGenericItem(med);
-      if (kind === "Branded") return !isGenericItem(med);
-      return true;
-    };
-
-    const filteredMeds = useMemo(() => {
+  const filteredMeds = useMemo(() => {
   const isGenericLocal = (m) =>
     m?.productKind === "generic" || !m?.brand || String(m.brand).trim() === "";
 
