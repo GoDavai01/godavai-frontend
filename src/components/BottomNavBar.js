@@ -18,7 +18,7 @@ const ACC = "#00D97E";
 
 const navs = [
   { label: "Home",      path: "/home",      icon: Home,         isCenter: false },
-  { label: "Medicines", path: "/search",    icon: Pill,         isCenter: false },
+  { label: "Medicines", path: "/all-medicines", icon: Pill,      isCenter: false },
   { label: "AI",        path: "/ai",        icon: Sparkles,     isCenter: true  },
   { label: "Doctor",    path: "/doctors",   icon: Stethoscope,  isCenter: false },
   { label: "Lab Test",  path: "/lab-tests", icon: FlaskConical, isCenter: false },
@@ -34,6 +34,7 @@ function BottomNavBarImpl() {
     if (idx >= 0) return idx;
     if (location.pathname.startsWith("/medicines")) return 1;
     if (location.pathname.startsWith("/search")) return 1;
+    if (location.pathname.startsWith("/all-medicines")) return 1;
     if (location.pathname.startsWith("/pharmacies")) return 1;
     return 0;
   })();

@@ -761,7 +761,8 @@ export default function Home() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
             {[
               { label: "Upload Rx", emoji: "📋", bg: `linear-gradient(135deg,${DEEP},${MID})`, glow: "rgba(12,90,62,0.30)", onClick: () => setPrescriptionModalOpen(true) },
-              { label: "Medicines", emoji: "💊", bg: "linear-gradient(135deg,#0891B2,#0EA5E9)", glow: "rgba(8,145,178,0.26)", onClick: () => navigate("/search") },
+              // ✅ PATCH: Medicines quick action -> /all-medicines
+              { label: "Medicines", emoji: "💊", bg: "linear-gradient(135deg,#0891B2,#0EA5E9)", glow: "rgba(8,145,178,0.26)", onClick: () => navigate("/all-medicines") },
               { label: "Consult", emoji: "🩺", bg: "linear-gradient(135deg,#D97706,#F59E0B)", glow: "rgba(217,119,6,0.26)", onClick: () => navigate("/search?tab=doctors") },
               { label: "Lab Tests", emoji: "🧪", bg: "linear-gradient(135deg,#7C3AED,#A855F7)", glow: "rgba(124,58,237,0.26)", onClick: () => navigate("/search?tab=labs") },
               { label: "GoDavaii AI", emoji: "🧠", bg: "linear-gradient(135deg,#DC2626,#F87171)", glow: "rgba(220,38,38,0.24)", onClick: () => navigate("/ai") },
@@ -832,7 +833,11 @@ export default function Home() {
 
         {/* ✅ Top medicines near you — PRODUCT FIRST, NO PHARMACY NAMES */}
         <div style={{ marginBottom: 20 }}>
-          <Section title={selectedCategory ? `${selectedCategory} picks near you` : "Top medicines near you"} onSeeAll={() => navigate("/search")} />
+          {/* ✅ PATCH: title text capitalization + See all -> /all-medicines */}
+          <Section
+            title={selectedCategory ? `${selectedCategory} picks near you` : "Top Medicines Near You"}
+            onSeeAll={() => navigate("/all-medicines")}
+          />
           {topMedsNearYou.length > 0 ? (
             <div style={{ display: "flex", gap: 12, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 6 }}>
               {topMedsNearYou.map((med, i) => (
