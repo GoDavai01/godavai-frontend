@@ -42,7 +42,7 @@ import MyOrdersPage from "./components/MyOrdersPage";
 import OrderTracking from "./components/OrderTracking";
 import NotFound from "./components/NotFound";
 import SearchResults from "./pages/SearchResults";
-import AllMedicines from "./pages/AllMedicines";
+// import AllMedicines from "./pages/AllMedicines";  // REMOVED — using Medicines instead
 import { LocationProvider } from "./context/LocationContext";
 
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -68,8 +68,13 @@ import { CapacitorHttp } from "@capacitor/core";
 
 // Simple app-wide event bus to inform components when a push is tapped
 const subscribers = new Set();
-export function onAppEvent(cb){ subscribers.add(cb); return () => subscribers.delete(cb); }
-export function emitAppEvent(evt){ subscribers.forEach(cb => cb(evt)); }
+export function onAppEvent(cb) {
+  subscribers.add(cb);
+  return () => subscribers.delete(cb);
+}
+export function emitAppEvent(evt) {
+  subscribers.forEach((cb) => cb(evt));
+}
 
 // Root routes where Back should offer "double-back to exit"
 const ROOT_ROUTES = new Set(["/", "/home", "/otp-login"]);
@@ -277,7 +282,7 @@ function AppContent() {
             path="/all-medicines"
             element={
               <ProtectedRoute>
-                <AllMedicines />
+                <Medicines />
               </ProtectedRoute>
             }
           />
@@ -328,19 +333,27 @@ function App() {
             const jwt = localStorage.getItem("token");
             if (!jwt) return;
             await CapacitorHttp.post({
-              url: (process.env.REACT_APP_API_BASE_URL || "http://localhost:5000") + "/api/prescriptions/register-fcm",
-              headers: { Authorization: "Bearer " + jwt, "Content-Type": "application/json" },
+              url:
+                (process.env.REACT_APP_API_BASE_URL || "http://localhost:5000") +
+                "/api/prescriptions/register-fcm",
+              headers: {
+                Authorization: "Bearer " + jwt,
+                "Content-Type": "application/json",
+              },
               data: { token: token?.value || token },
             });
           } catch {}
         });
 
         // When user taps a notification, tell the app
-        PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
-          const orderId = action?.notification?.data?.orderId;
-          if (!orderId) return;
-          emitAppEvent({ type: "OPEN_RX_QUOTE", orderId });
-        });
+        PushNotifications.addListener(
+          "pushNotificationActionPerformed",
+          (action) => {
+            const orderId = action?.notification?.data?.orderId;
+            if (!orderId) return;
+            emitAppEvent({ type: "OPEN_RX_QUOTE", orderId });
+          }
+        );
       } catch {}
     })();
   }, []);
