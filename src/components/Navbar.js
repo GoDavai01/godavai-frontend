@@ -21,13 +21,14 @@ const ACCENT  = "#00D97E";
 const HIDE_ENTIRE_NAVBAR = [
   "/medicines",
   "/search",
+  "/all-medicines",
 ];
 
 // Pages where only the search bar is hidden (location + profile still show)
 const NO_SEARCH_PATHS = [
   "/orders", "/profile", "/checkout", "/payment",
   "/payment-success", "/ai", "/health",
-  "/doctors", "/lab-tests", "/all-medicines",
+  "/doctors", "/lab-tests",
 ];
 
 export default function Navbar({

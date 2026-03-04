@@ -1,5 +1,6 @@
 // src/components/Medicines.js — GoDavaii 2035 Health OS Marketplace
-// ✅ ALL BUSINESS LOGIC 100% UNCHANGED — zero API changes
+// ✅ DUAL MODE: pharmacyId present = single pharmacy | absent = ALL nearby merged
+// ✅ MARKETPLACE: fetches /api/medicines/all, dedupes, shows flat catalog
 // ✅ FIXED: MRP "₹2297 0" bug — added hasValidMrp() guard
 // ✅ UPGRADED: Pharmacy name hidden from MedCards (marketplace model)
 // ✅ NEW: "Fulfilled by GoDavaii" trust badge in detail dialog
@@ -386,6 +387,9 @@ export default function Medicines() {
   const { currentAddress } = useLocation();
   const scrollRef = useRef(null);
 
+  // ✅ MARKETPLACE MODE: when no pharmacyId, show ALL nearby medicines merged
+  const isMarketplace = !pharmacyId;
+
   /* ── State (ALL UNCHANGED) ─────────────────────────────── */
   const [pharmacy, setPharmacy]         = useState(null);
   const [medicines, setMedicines]       = useState([]);
@@ -431,16 +435,18 @@ export default function Medicines() {
     ).sort((a, b) => Number(a.price || a.mrp || 0) - Number(b.price || b.mrp || 0));
     return { brand, generics: list.slice(0, 5) };
   }
-  const askedKey = (phId, key) => `GENERIC_ASKED_${phId}_${key}`;
+  const askedKey = (phId, key) => `GENERIC_ASKED_${phId || "marketplace"}_${key}`;
   function shouldAsk(med) {
     if (isGenericItem(med)) return false;
     const key = compKeyOf(med);
     if (!key) return false;
-    return !sessionStorage.getItem(askedKey(pharmacyId, key));
+    const phId = pharmacyId || med.pharmacy?._id || med.pharmacy || "marketplace";
+    return !sessionStorage.getItem(askedKey(phId, key));
   }
   function markAsked(med) {
     const key = compKeyOf(med);
-    if (key) sessionStorage.setItem(askedKey(pharmacyId, key), "1");
+    const phId = pharmacyId || med.pharmacy?._id || med.pharmacy || "marketplace";
+    if (key) sessionStorage.setItem(askedKey(phId, key), "1");
   }
   async function addWithGenericCheck(med) {
     if (!canDeliver) { alert("Delivery isn't available right now."); return; }
@@ -448,7 +454,8 @@ export default function Medicines() {
     if (!shouldAsk(med)) return;
     markAsked(med);
     const key = compKeyOf(med);
-    let data = await fetchGenericsFromApi(pharmacyId, key, med._id);
+    const medPhId = pharmacyId || med.pharmacy?._id || med.pharmacy;
+    let data = medPhId ? await fetchGenericsFromApi(medPhId, key, med._id) : null;
     if (!data || !Array.isArray(data.generics) || data.generics.length === 0) {
       data = findGenericsLocally(medicines, med);
     } else { data.brand = data.brand || med; }
@@ -459,7 +466,7 @@ export default function Medicines() {
 
   const medTypes = useMedTypeChips(medicines);
 
-  /* ── Effects (ALL UNCHANGED) ───────────────────────────── */
+  /* ── Effects ─────────────────────────────────────────────── */
   useEffect(() => {
     const lat = Number(currentAddress?.lat);
     const lng = Number(currentAddress?.lng);
@@ -470,23 +477,51 @@ export default function Medicines() {
       .catch(() => setCanDeliver(false));
   }, [currentAddress]);
 
+  // Fetch pharmacy info (only when single-pharmacy mode)
   useEffect(() => {
+    if (isMarketplace) { setPharmacy(null); return; }
     (async () => {
       try {
         const r = await axios.get(`${API}/api/pharmacies?id=${pharmacyId}`);
         if (Array.isArray(r.data)) setPharmacy(r.data[0]);
       } catch { setPharmacy(null); }
     })();
-  }, [pharmacyId]);
+  }, [pharmacyId, isMarketplace]);
 
+  // Fetch medicines — single pharmacy OR all nearby
   useEffect(() => {
     setLoading(true);
-    axios
-      .get(`${API}/api/medicines?pharmacyId=${pharmacyId}&onlyAvailable=1`)
-      .then((res) => setMedicines(res.data || []))
-      .catch(() => setMedicines([]))
-      .finally(() => setLoading(false));
-  }, [pharmacyId]);
+    if (isMarketplace) {
+      // ✅ MARKETPLACE: fetch ALL medicines from nearby pharmacies
+      const city = currentAddress?.city || localStorage.getItem("city") || "";
+      const params = new URLSearchParams();
+      if (city) params.append("city", city);
+      axios
+        .get(`${API}/api/medicines/all?${params.toString()}`)
+        .then((res) => {
+          const meds = res.data || [];
+          // Dedupe by (brand||name + composition) — keep cheapest
+          const seen = new Map();
+          for (const m of meds) {
+            const key = `${(m.brand || m.name || "").toLowerCase()}|${(m.composition || "").toLowerCase()}`;
+            const existing = seen.get(key);
+            if (!existing || (Number(m.price) || 0) < (Number(existing.price) || 0)) {
+              seen.set(key, m);
+            }
+          }
+          setMedicines(Array.from(seen.values()));
+        })
+        .catch(() => setMedicines([]))
+        .finally(() => setLoading(false));
+    } else {
+      // Single pharmacy mode (existing)
+      axios
+        .get(`${API}/api/medicines?pharmacyId=${pharmacyId}&onlyAvailable=1`)
+        .then((res) => setMedicines(res.data || []))
+        .catch(() => setMedicines([]))
+        .finally(() => setLoading(false));
+    }
+  }, [pharmacyId, isMarketplace, currentAddress?.city]);
 
   /* ── Filters (ALL UNCHANGED) ───────────────────────────── */
   const matchCategory = (med, selected) => {
@@ -571,13 +606,23 @@ export default function Medicines() {
           <div style={{ position: "absolute", right: -40, top: -40, width: 140, height: 140, borderRadius: "50%", background: `radial-gradient(circle,${ACC}12,transparent 65%)`, pointerEvents: "none" }} />
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, position: "relative" }}>
-            <motion.button whileTap={{ scale: 0.90 }} onClick={() => navigate(-1)}
+            <motion.button whileTap={{ scale: 0.90 }} onClick={() => isMarketplace ? navigate("/home") : navigate(-1)}
               style={{ width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
               <ArrowLeft style={{ width: 16, height: 16, color: "#fff" }} />
             </motion.button>
 
             <div style={{ flex: 1, minWidth: 0 }}>
-              {pharmacy ? (
+              {isMarketplace ? (
+                <>
+                  <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 800, color: "#fff", letterSpacing: "-0.3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    All Medicines
+                  </div>
+                  <div style={{ fontSize: 11, color: ACC, marginTop: 2, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                    <ShieldCheck style={{ width: 11, height: 11 }} />
+                    Fulfilled by GoDavaii · {currentAddress?.city || "Near You"}
+                  </div>
+                </>
+              ) : pharmacy ? (
                 <>
                   <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 800, color: "#fff", letterSpacing: "-0.3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {pharmacy.name}
