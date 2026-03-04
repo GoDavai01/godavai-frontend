@@ -533,38 +533,49 @@ export default function Medicines() {
     return groups.includes(selected);
   };
 
-  const matchKind = (med, kind) => {
-    if (kind === "All") return true;
-    if (kind === "Generic") return isGenericItem(med);
-    if (kind === "Branded") return !isGenericItem(med);
+    const matchKind = (med, kind) => {
+      if (kind === "All") return true;
+      if (kind === "Generic") return isGenericItem(med);
+      if (kind === "Branded") return !isGenericItem(med);
+      return true;
+    };
+
+    const filteredMeds = useMemo(() => {
+  const isGenericLocal = (m) =>
+    m?.productKind === "generic" || !m?.brand || String(m.brand).trim() === "";
+
+  const kindOk = (m) => {
+    if (selectedKind === "All") return true;
+    if (selectedKind === "Generic") return isGenericLocal(m);
+    if (selectedKind === "Branded") return !isGenericLocal(m);
     return true;
   };
 
-  const filteredMeds = useMemo(() => {
-    let meds = medicines
-      .filter((m) => m.status !== "unavailable" && m.available !== false)
-      .filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType))
-      .filter((m) => matchKind(m, selectedKind));
+  let meds = medicines
+    .filter((m) => m.status !== "unavailable" && m.available !== false)
+    .filter((m) => matchCategory(m, selectedCategory) && matchType(m, selectedType))
+    .filter((m) => kindOk(m));
 
-    if (searchQ.trim()) {
-      const q = searchQ.trim().toLowerCase();
-      meds = meds.filter((m) => {
-        const fields = [
-          m.name,
-          m.brand,
-          m.company,
-          m.composition,
-          Array.isArray(m.category) ? m.category.join(" ") : m.category,
-        ]
-          .filter(Boolean)
-          .map(String)
-          .join(" ")
-          .toLowerCase();
-        return fields.includes(q);
-      });
-    }
-    return meds;
-  }, [medicines, selectedCategory, selectedType, selectedKind, searchQ]);
+  if (searchQ.trim()) {
+    const q = searchQ.trim().toLowerCase();
+    meds = meds.filter((m) => {
+      const fields = [
+        m.name,
+        m.brand,
+        m.company,
+        m.composition,
+        Array.isArray(m.category) ? m.category.join(" ") : m.category,
+      ]
+        .filter(Boolean)
+        .map(String)
+        .join(" ")
+        .toLowerCase();
+      return fields.includes(q);
+    });
+  }
+
+  return meds;
+}, [medicines, selectedCategory, selectedType, selectedKind, searchQ]);
 
   const images = useMemo(() => {
     if (!selectedMed) return [];

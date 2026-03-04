@@ -1,7 +1,7 @@
 // src/components/CartPage.js — 2035 Customer Cart (NO pharmacy selection)
 import React from "react";
 import { Button } from "../components/ui/button";
-import { Loader2, ShoppingBag } from "lucide-react";
+import { ShoppingBag } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useNavigate } from "react-router-dom";
 import CartBody from "./cart/CartBody";
