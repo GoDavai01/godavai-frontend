@@ -1,4 +1,9 @@
-// src/App.js
+// src/App.js — GoDavaii 2035 HealthOS (AllMedicines + PharmaciesNearYou "BAND")
+// ✅ /all-medicines -> Medicines (already)
+// ✅ /pharmacies-near-you -> Medicines (redirect-like)
+// ✅ PharmaciesNearYou import REMOVED
+// ✅ Everything else unchanged
+
 import React, { useEffect } from "react";
 import axios from "axios";
 import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from "react-router-dom";
@@ -28,7 +33,7 @@ import PharmacyRegistrationStepper from "./components/PharmacyRegistrationSteppe
 import StepperStandalone from "./components/StepperStandalone";
 import AdminRegistration from "./components/AdminRegistration";
 import ProfilePage from "./components/ProfilePage";
-import PharmaciesNearYou from "./pages/PharmaciesNearYou";
+// ❌ REMOVED: import PharmaciesNearYou from "./pages/PharmaciesNearYou";
 import CheckoutPage from "./components/CheckoutPage";
 import PaymentPage from "./components/PaymentPage";
 import PaymentSuccess from "./components/PaymentSuccess";
@@ -225,11 +230,12 @@ function AppContent() {
             }
           />
 
+          {/* ✅ BAND: PharmaciesNearYou route now points to marketplace */}
           <Route
             path="/pharmacies-near-you"
             element={
               <ProtectedRoute>
-                <PharmaciesNearYou />
+                <Medicines />
               </ProtectedRoute>
             }
           />
@@ -278,6 +284,7 @@ function AppContent() {
             }
           />
 
+          {/* ✅ BAND: AllMedicines route already points to marketplace */}
           <Route
             path="/all-medicines"
             element={
