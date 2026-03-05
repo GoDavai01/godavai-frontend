@@ -375,6 +375,7 @@ function HomeSearch({ currentAddress, navigate }) {
   const [micSupported] = useState(() => !!(window.SpeechRecognition || window.webkitSpeechRecognition));
   const inputRef = useRef(null);
   const wrapRef = useRef(null);
+  const dropdownRef = useRef(null);
   const recognitionRef = useRef(null);
   const [anchor, setAnchor] = useState({ top: 0, left: 0, width: 0 });
 
@@ -411,23 +412,33 @@ function HomeSearch({ currentAddress, navigate }) {
   }, [query, currentAddress?.city]);
 
   useEffect(() => {
-    const h = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setFocused(false); };
+    const h = (e) => {
+      const inInput = wrapRef.current?.contains(e.target);
+      const inDropdown = dropdownRef.current?.contains(e.target);
+      if (!inInput && !inDropdown) setFocused(false);
+    };
     document.addEventListener("mousedown", h);
     document.addEventListener("touchstart", h, { passive: true });
     return () => { document.removeEventListener("mousedown", h); document.removeEventListener("touchstart", h); };
   }, []);
 
+  const navigateToMedicineSearch = useCallback((term) => {
+    const q = String(term || "").trim();
+    if (!q) return;
+    navigate(`/all-medicines?q=${encodeURIComponent(q)}`);
+  }, [navigate]);
+
   const startMic = useCallback(() => {
     if (!micSupported) return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR(); rec.lang = "hi-IN,en-IN"; rec.interimResults = false; recognitionRef.current = rec; setMicActive(true);
-    rec.onresult = (e) => { const t = e.results[0][0].transcript; setQuery(t); setMicActive(false); setTimeout(() => navigate(`/search?q=${encodeURIComponent(t)}`), 250); };
+    rec.onresult = (e) => { const t = e.results[0][0].transcript; setQuery(t); setMicActive(false); setTimeout(() => navigateToMedicineSearch(t), 250); };
     rec.onerror = () => setMicActive(false); rec.onend = () => setMicActive(false); rec.start();
-  }, [micSupported, navigate]);
+  }, [micSupported, navigateToMedicineSearch]);
   const stopMic = useCallback(() => { recognitionRef.current?.stop(); setMicActive(false); }, []);
 
-  const handleSelect = (val) => { const v = typeof val === "string" ? val : val?.name || val?.label || val?.brand || ""; if (!v) return; setQuery(v); setFocused(false); navigate(`/search?q=${encodeURIComponent(v)}`); };
-  const handleKeyDown = (e) => { if (e.key === "Enter" && query.trim()) { setFocused(false); navigate(`/search?q=${encodeURIComponent(query.trim())}`); } if (e.key === "Escape") setFocused(false); };
+  const handleSelect = (val) => { const v = typeof val === "string" ? val : val?.name || val?.label || val?.brand || ""; if (!v) return; setQuery(v); setFocused(false); navigateToMedicineSearch(v); };
+  const handleKeyDown = (e) => { if (e.key === "Enter" && query.trim()) { setFocused(false); navigateToMedicineSearch(query.trim()); } if (e.key === "Escape") setFocused(false); };
 
   const labels = options.map((o) => (typeof o === "string" ? o : o?.name || o?.label || o?.brand || "")).filter((l) => l?.trim()).filter((l, i, a) => a.indexOf(l) === i).slice(0, 8);
   const dropOpen = focused && (loading || labels.length > 0 || !query);
@@ -435,7 +446,7 @@ function HomeSearch({ currentAddress, navigate }) {
   const dropdown = (
     <AnimatePresence>
       {dropOpen && (
-        <motion.div initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.16 }}
+        <motion.div ref={dropdownRef} initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ duration: 0.16 }}
           style={{ position: "fixed", top: anchor.top, left: anchor.left, width: anchor.width, zIndex: 99999, borderRadius: 20, background: "rgba(255,255,255,0.98)", backdropFilter: "blur(20px)", border: "1.5px solid rgba(12,90,62,0.12)", boxShadow: "0 28px 70px rgba(0,0,0,0.24)", overflow: "hidden" }}>
           <div style={{ padding: "10px 16px 6px", display: "flex", alignItems: "center", gap: 6, borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
             {query ? <Sparkles style={{ width: 11, height: 11, color: ACCENT }} /> : <TrendingUp style={{ width: 11, height: 11, color: "#94A3B8" }} />}
@@ -456,7 +467,7 @@ function HomeSearch({ currentAddress, navigate }) {
           ))}
           {query && (
             <div style={{ padding: "10px 12px 12px" }}>
-              <motion.button whileTap={{ scale: 0.98 }} onClick={() => { setFocused(false); navigate(`/search?q=${encodeURIComponent(query.trim())}`); }}
+              <motion.button whileTap={{ scale: 0.98 }} onClick={() => { setFocused(false); navigateToMedicineSearch(query.trim()); }}
                 style={{ width: "100%", height: 42, borderRadius: 14, border: "none", background: `linear-gradient(135deg,${DEEP},${MID})`, color: "#fff", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 1000, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, boxShadow: "0 6px 18px rgba(12,90,62,0.25)" }}>
                 <Search style={{ width: 14, height: 14 }} /> Search "{query}"
               </motion.button>

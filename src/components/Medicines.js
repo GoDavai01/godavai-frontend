@@ -18,10 +18,10 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCart } from "../context/CartContext";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation as useRouterLocation } from "react-router-dom";
 import PrescriptionUploadModal from "../components/PrescriptionUploadModal";
 import axios from "axios";
-import { useLocation } from "../context/LocationContext";
+import { useLocation as useAppLocation } from "../context/LocationContext";
 import { CUSTOMER_CATEGORIES } from "../constants/customerCategories";
 import { TYPE_OPTIONS } from "../constants/packSizes";
 import GenericSuggestionModal from "../components/generics/GenericSuggestionModal";
@@ -354,9 +354,14 @@ function MedCard({ med, canDeliver, onTap, onAdd }) {
 export default function Medicines() {
   const { pharmacyId } = useParams();
   const navigate = useNavigate();
+  const routerLocation = useRouterLocation();
   const { cart, addToCart, removeFromCart } = useCart();
-  const { currentAddress } = useLocation();
+  const { currentAddress } = useAppLocation();
   const scrollRef = useRef(null);
+  const initialQuery = useMemo(
+    () => (new URLSearchParams(routerLocation.search).get("q") || "").trim(),
+    [routerLocation.search]
+  );
 
   // Customer default is marketplace (no pharmacyId)
   const isMarketplace = !pharmacyId;
@@ -373,8 +378,13 @@ export default function Medicines() {
   const [canDeliver, setCanDeliver] = useState(true);
   const [genericSugg, setGenericSugg] = useState({ open: false, brand: null, generics: [] });
   const [activeImg, setActiveImg] = useState(0);
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQ, setSearchQ] = useState("");
+  const [showSearch, setShowSearch] = useState(!!initialQuery);
+  const [searchQ, setSearchQ] = useState(initialQuery);
+
+  useEffect(() => {
+    setSearchQ(initialQuery);
+    setShowSearch(!!initialQuery);
+  }, [initialQuery]);
 
   const isGenericItem = (m) =>
     m?.productKind === "generic" || !m?.brand || String(m.brand).trim() === "";
