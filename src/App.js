@@ -41,6 +41,7 @@ import MyOrdersPage from "./components/MyOrdersPage";
 import OrderTracking from "./components/OrderTracking";
 import NotFound from "./components/NotFound";
 import SearchResults from "./pages/SearchResults";
+import GoDavaiiAI from "./pages/GoDavaiiAI";
 import { LocationProvider } from "./context/LocationContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -280,6 +281,15 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <SearchResults />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/ai"
+            element={
+              <ProtectedRoute>
+                <GoDavaiiAI />
               </ProtectedRoute>
             }
           />

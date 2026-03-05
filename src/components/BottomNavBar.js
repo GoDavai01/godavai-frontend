@@ -20,8 +20,8 @@ const navs = [
   { label: "Home",      path: "/home",      icon: Home,         isCenter: false },
   { label: "Medicines", path: "/all-medicines", icon: Pill,      isCenter: false },
   { label: "AI",        path: "/ai",        icon: Sparkles,     isCenter: true  },
-  { label: "Doctor",    path: "/doctors",   icon: Stethoscope,  isCenter: false },
-  { label: "Lab Test",  path: "/lab-tests", icon: FlaskConical, isCenter: false },
+  { label: "Doctor",    path: "/search?tab=doctors",   icon: Stethoscope,  isCenter: false },
+  { label: "Lab Test",  path: "/search?tab=labs", icon: FlaskConical, isCenter: false },
 ];
 
 function BottomNavBarImpl() {
@@ -30,10 +30,15 @@ function BottomNavBarImpl() {
   const shouldReduce = useReducedMotion();
 
   const activeIdx = (() => {
+    if (location.pathname.startsWith("/search")) {
+      const tab = new URLSearchParams(location.search).get("tab");
+      if (tab === "doctors") return 3;
+      if (tab === "labs") return 4;
+      return 1;
+    }
     const idx = navs.findIndex((n) => location.pathname.startsWith(n.path));
     if (idx >= 0) return idx;
     if (location.pathname.startsWith("/medicines")) return 1;
-    if (location.pathname.startsWith("/search")) return 1;
     if (location.pathname.startsWith("/all-medicines")) return 1;
     if (location.pathname.startsWith("/pharmacies")) return 1;
     return 0;
