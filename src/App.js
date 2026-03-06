@@ -42,6 +42,7 @@ import OrderTracking from "./components/OrderTracking";
 import NotFound from "./components/NotFound";
 import SearchResults from "./pages/SearchResults";
 import GoDavaiiAI from "./pages/GoDavaiiAI";
+import HealthVault from "./pages/HealthVault";
 import { LocationProvider } from "./context/LocationContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -294,6 +295,15 @@ function AppContent() {
             }
           />
 
+          <Route
+            path="/health"
+            element={
+              <ProtectedRoute>
+                <HealthVault />
+              </ProtectedRoute>
+            }
+          />
+
           {/* ✅ BAND: AllMedicines route already points to marketplace */}
           <Route
             path="/all-medicines"
@@ -362,7 +372,7 @@ function App() {
       } catch {}
     })();
   }, []);
-
+  
   return (
     <ThemeProvider>
       <CssBaseline />
