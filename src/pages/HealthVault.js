@@ -135,7 +135,8 @@ export default function HealthVault() {
   const [conditionInput, setConditionInput] = useState("");
   const [allergyInput, setAllergyInput] = useState("");
   const [medInput, setMedInput] = useState({ name: "", dose: "", timing: "" });
-  const [reportInput, setReportInput] = useState({ title: "", type: "", date: "" });
+  const [reportInput, setReportInput] = useState({ title: "", type: "", date: "", category: "Lab Report" });
+  const [reportFile, setReportFile] = useState(null);
 
   const activeMember = useMemo(
     () => vault.members.find((m) => m.id === vault.activeMemberId) || vault.members[0],
@@ -196,6 +197,23 @@ export default function HealthVault() {
     setShowNewMember(false);
   }
 
+  function removeMember(id) {
+    setVault((prev) => {
+      if (prev.members.length <= 1) {
+        setStatus("At least one profile is required");
+        return prev;
+      }
+      const target = prev.members.find((m) => m.id === id);
+      if (target?.relation === "Self") {
+        setStatus("Self profile cannot be deleted");
+        return prev;
+      }
+      const members = prev.members.filter((m) => m.id !== id);
+      const activeMemberId = prev.activeMemberId === id ? members[0]?.id : prev.activeMemberId;
+      return { ...prev, members, activeMemberId };
+    });
+  }
+
   async function saveVault() {
     setSaving(true);
     setStatus("");
@@ -231,9 +249,18 @@ export default function HealthVault() {
   }
 
   function addReport() {
-    if (!reportInput.title.trim()) return;
-    patchActiveMember({ reports: [...(activeMember.reports || []), { ...reportInput, id: String(Date.now()) }] });
-    setReportInput({ title: "", type: "", date: "" });
+    if (!reportInput.title.trim() && !reportFile) return;
+    const report = {
+      ...reportInput,
+      title: reportInput.title.trim() || reportFile?.name || "Untitled report",
+      id: String(Date.now()),
+      fileName: reportFile?.name || "",
+      mimeType: reportFile?.type || "",
+      fileSize: reportFile?.size || 0,
+    };
+    patchActiveMember({ reports: [...(activeMember.reports || []), report] });
+    setReportInput({ title: "", type: "", date: "", category: "Lab Report" });
+    setReportFile(null);
   }
 
   if (!activeMember) return null;
@@ -264,24 +291,43 @@ export default function HealthVault() {
         >
           <div style={{ display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 4 }}>
             {vault.members.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setVault((p) => ({ ...p, activeMemberId: m.id }))}
-                style={{
-                  flexShrink: 0,
-                  height: 34,
-                  borderRadius: 999,
-                  border: m.id === vault.activeMemberId ? "none" : "1px solid rgba(12,90,62,0.18)",
-                  background: m.id === vault.activeMemberId ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff",
-                  color: m.id === vault.activeMemberId ? "#fff" : "#1E3A2E",
-                  padding: "0 12px",
-                  fontSize: 11.5,
-                  fontWeight: 800,
-                  cursor: "pointer",
-                }}
-              >
-                {m.profile?.name || "Unnamed"} · {m.relation || "Member"}
-              </button>
+              <div key={m.id} style={{ display: "inline-flex", alignItems: "center", borderRadius: 999, overflow: "hidden", border: m.id === vault.activeMemberId ? "none" : "1px solid rgba(12,90,62,0.18)" }}>
+                <button
+                  onClick={() => setVault((p) => ({ ...p, activeMemberId: m.id }))}
+                  style={{
+                    flexShrink: 0,
+                    height: 34,
+                    border: "none",
+                    background: m.id === vault.activeMemberId ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff",
+                    color: m.id === vault.activeMemberId ? "#fff" : "#1E3A2E",
+                    padding: "0 12px",
+                    fontSize: 11.5,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  {m.profile?.name || "Unnamed"} · {m.relation || "Member"}
+                </button>
+                {m.relation !== "Self" && (
+                  <button
+                    onClick={() => removeMember(m.id)}
+                    style={{
+                      width: 30,
+                      height: 34,
+                      border: "none",
+                      borderLeft: "1px solid rgba(12,90,62,0.12)",
+                      background: m.id === vault.activeMemberId ? "rgba(255,255,255,0.16)" : "#F8FAFC",
+                      color: m.id === vault.activeMemberId ? "#fff" : "#B91C1C",
+                      cursor: "pointer",
+                      display: "grid",
+                      placeItems: "center",
+                    }}
+                    aria-label="Delete member"
+                  >
+                    <X style={{ width: 12, height: 12 }} />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
 
@@ -391,7 +437,12 @@ export default function HealthVault() {
               <div key={r.id} style={{ border: "1px solid #E2E8F0", borderRadius: 12, padding: 10, background: "#fff", display: "flex", justifyContent: "space-between", gap: 8 }}>
                 <div>
                   <div style={{ fontSize: 12.5, fontWeight: 900, color: "#0B1F16" }}>{r.title}</div>
-                  <div style={{ fontSize: 11.5, color: "#64748B", fontWeight: 700 }}>{r.type || "Report"} {r.date ? `· ${r.date}` : ""}</div>
+                  <div style={{ fontSize: 11.5, color: "#64748B", fontWeight: 700 }}>{r.category || r.type || "Report"} {r.date ? `· ${r.date}` : ""}</div>
+                  {(r.fileName || r.mimeType) && (
+                    <div style={{ fontSize: 10.5, color: "#0F766E", fontWeight: 800, marginTop: 2 }}>
+                      {r.fileName || "Attached file"} {r.fileSize ? `(${Math.round(r.fileSize / 1024)} KB)` : ""}
+                    </div>
+                  )}
                 </div>
                 <button onClick={() => patchActiveMember({ reports: activeMember.reports.filter((x) => x.id !== r.id) })} style={{ border: "none", background: "transparent", color: "#B91C1C", cursor: "pointer" }}>
                   <X style={{ width: 14, height: 14 }} />
@@ -404,6 +455,28 @@ export default function HealthVault() {
             <input value={reportInput.type} onChange={(e) => setReportInput((p) => ({ ...p, type: e.target.value }))} placeholder="Type" style={textInputStyle()} />
             <input value={reportInput.date} onChange={(e) => setReportInput((p) => ({ ...p, date: e.target.value }))} placeholder="Date" style={textInputStyle()} />
             <button onClick={addReport} style={miniBtnStyle()}><Plus style={{ width: 14, height: 14 }} /></button>
+          </div>
+          <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
+            <select value={reportInput.category} onChange={(e) => setReportInput((p) => ({ ...p, category: e.target.value }))} style={{ ...textInputStyle(), width: 160 }}>
+              <option>Lab Report</option>
+              <option>Prescription</option>
+              <option>Discharge Summary</option>
+              <option>Imaging Report</option>
+              <option>Other Document</option>
+            </select>
+            <label style={{ ...textInputStyle(), width: "auto", display: "inline-flex", alignItems: "center", cursor: "pointer", padding: "0 10px", gap: 6 }}>
+              <FileText style={{ width: 13, height: 13, color: DEEP }} />
+              <span style={{ fontSize: 11.5, fontWeight: 800, color: "#14532D" }}>{reportFile ? "Change file" : "Attach file"}</span>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,.doc,.docx" style={{ display: "none" }} onChange={(e) => setReportFile(e.target.files?.[0] || null)} />
+            </label>
+            {reportFile && (
+              <div style={{ fontSize: 11, fontWeight: 800, color: "#0F766E" }}>
+                {reportFile.name}
+              </div>
+            )}
+          </div>
+          <div style={{ marginTop: 6, fontSize: 11, color: "#64748B", fontWeight: 700 }}>
+            You can add old lab reports, prescriptions, and medical documents for future AI analysis.
           </div>
         </Card>
 
@@ -438,4 +511,3 @@ function toggleBtn(active) {
     cursor: "pointer",
   };
 }
-
