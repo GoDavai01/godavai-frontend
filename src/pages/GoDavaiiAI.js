@@ -66,20 +66,10 @@ function buildCompactHistory(messages) {
   }));
 }
 
-function renderAssistantText(text) {
+function cleanAssistantText(text) {
   return String(text || "")
-    .split("\n")
-    .map((line, i) => {
-      const m = line.match(/^(Assessment|Next steps|Red flags|When to see doctor)\s*:\s*(.*)$/i);
-      if (m) {
-        return (
-          <div key={i} style={{ marginBottom: 8 }}>
-            <strong>{m[1]}:</strong> {m[2]}
-          </div>
-        );
-      }
-      return <div key={i}>{line}</div>;
-    });
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "");
 }
 
 export default function GoDavaiiAI() {
@@ -311,7 +301,7 @@ export default function GoDavaiiAI() {
             {messages.map((m, i) => (
               <motion.div key={`${m.role}-${i}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 10, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
                 <div style={{ maxWidth: "90%", whiteSpace: "pre-line", borderRadius: 14, padding: "10px 12px", fontSize: 13, lineHeight: 1.55, fontWeight: 650, color: m.role === "user" ? "#fff" : "#1F2937", background: m.role === "user" ? `linear-gradient(135deg,${DEEP},${MID})` : "#F8FAFC", border: m.role === "user" ? "none" : "1px solid #E2E8F0", position: "relative" }}>
-                  {m.role === "assistant" ? renderAssistantText(m.text) : m.text}
+                  {m.role === "assistant" ? cleanAssistantText(m.text) : m.text}
                   {m.role === "assistant" && (
                     <button onClick={() => speak(m.text)} style={{ marginTop: 7, display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid #E2E8F0", borderRadius: 999, background: "#fff", padding: "3px 8px", fontSize: 10.5, fontWeight: 800, color: "#0F766E", cursor: "pointer" }}>
                       <Volume2 style={{ width: 11, height: 11 }} /> Audio
