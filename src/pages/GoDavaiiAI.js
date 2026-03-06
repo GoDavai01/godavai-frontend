@@ -158,11 +158,22 @@ export default function GoDavaiiAI() {
         const r = await axios.post(url, payload, { timeout: 18000 });
         const text = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
         if (String(text).trim()) return text;
-      } catch {
-        // try next
+      } catch (err) {
+        console.error("Chat AI failed:", url, getApiErrorMessage(err));
       }
     }
     return fallbackReply(messageText, focus, language, whoFor);
+  }
+
+  function getApiErrorMessage(err) {
+    const data = err?.response?.data;
+    return (
+      data?.error ||
+      data?.details ||
+      data?.message ||
+      err?.message ||
+      "File analyze nahi ho payi. Please retry."
+    );
   }
 
   async function askBackendWithFile(messageText, history, file) {
@@ -176,16 +187,28 @@ export default function GoDavaiiAI() {
       `${API}/api/ai/assistant/analyze-file`,
       `${API}/api/ai/analyze-file`,
     ];
+
+    let lastErr = null;
+
     for (const url of urls) {
       try {
-        const r = await axios.post(url, fd, { timeout: 25000 });
+        const r = await axios.post(url, fd, {
+          timeout: 60000,
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+
         const text = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
         if (String(text).trim()) return text;
-      } catch {
-        // try next
+
+        lastErr = new Error("Empty reply from backend");
+      } catch (err) {
+        lastErr = err;
+        console.error("File AI failed:", url, getApiErrorMessage(err));
       }
     }
-    return "File receive ho gaya, lekin backend file-AI endpoint abhi unavailable lag raha hai. Aap report/prescription text paste karo, main turant explain karta hoon.";
+
+    const msg = getApiErrorMessage(lastErr);
+    return `File analysis issue: ${msg}\n\nPlease retry once.`;
   }
 
   async function sendMessage() {
@@ -334,4 +357,3 @@ export default function GoDavaiiAI() {
     </div>
   );
 }
-
