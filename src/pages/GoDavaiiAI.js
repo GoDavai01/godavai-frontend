@@ -78,6 +78,7 @@ export default function GoDavaiiAI() {
   const [micOn, setMicOn] = useState(false);
   const [voiceAutoPlay, setVoiceAutoPlay] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
+  const [reuseAttachment, setReuseAttachment] = useState(true);
   const recognitionRef = useRef(null);
   const fileRef = useRef(null);
 
@@ -197,6 +198,9 @@ export default function GoDavaiiAI() {
           headers: { "Content-Type": "multipart/form-data" },
         });
 
+        const parsed = r?.data?.parsed;
+        if (parsed) console.log("file parsed:", parsed);
+
         const text = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
         if (String(text).trim()) return text;
 
@@ -213,10 +217,11 @@ export default function GoDavaiiAI() {
 
   async function sendMessage() {
     const msg = input.trim();
-    if (!msg && !attachedFile) return;
+    const activeFile = reuseAttachment ? attachedFile : null;
+    if (!msg && !activeFile) return;
     if (loading) return;
 
-    const userBubbleText = attachedFile ? `${msg || "(No text)"}\n[Attached: ${attachedFile.name}]` : msg;
+    const userBubbleText = activeFile ? `${msg || "(No text)"}\n[Attached: ${activeFile.name}]` : msg;
     const nextMessages = [...messages, { role: "user", text: userBubbleText }];
     setMessages(nextMessages);
     setInput("");
@@ -224,13 +229,12 @@ export default function GoDavaiiAI() {
 
     try {
       const history = buildCompactHistory(nextMessages);
-      const reply = attachedFile
-        ? await askBackendWithFile(msg, history, attachedFile)
+      const reply = activeFile
+        ? await askBackendWithFile(msg, history, activeFile)
         : await askBackend(msg, history);
       setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
       if (voiceAutoPlay) speak(reply);
     } finally {
-      setAttachedFile(null);
       setLoading(false);
     }
   }
@@ -308,9 +312,27 @@ export default function GoDavaiiAI() {
           <div style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 7, padding: "6px 10px", borderRadius: 999, background: "#ECFDF5", border: "1px solid #A7F3D0", fontSize: 11.5, fontWeight: 800, color: "#065F46" }}>
             <Paperclip style={{ width: 12, height: 12 }} />
             {attachedFile.name}
+            <span style={{ fontSize: 10, fontWeight: 900, color: "#0F766E", background: "#D1FAE5", border: "1px solid #A7F3D0", borderRadius: 999, padding: "1px 6px" }}>
+              Persistent
+            </span>
             <button onClick={() => setAttachedFile(null)} style={{ border: "none", background: "transparent", cursor: "pointer", padding: 0, display: "grid", placeItems: "center" }}>
               <X style={{ width: 12, height: 12, color: "#065F46" }} />
             </button>
+          </div>
+        )}
+
+        {attachedFile && (
+          <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              id="reuse-attachment"
+              type="checkbox"
+              checked={reuseAttachment}
+              onChange={(e) => setReuseAttachment(e.target.checked)}
+              style={{ width: 14, height: 14 }}
+            />
+            <label htmlFor="reuse-attachment" style={{ fontSize: 11, fontWeight: 800, color: "#3F5F4F", cursor: "pointer" }}>
+              Use same report for next message
+            </label>
           </div>
         )}
 
@@ -337,7 +359,7 @@ export default function GoDavaiiAI() {
             <motion.button whileTap={{ scale: 0.92 }} onClick={handleMicToggle} style={{ width: 46, height: 38, borderRadius: 12, border: "none", background: micOn ? "linear-gradient(135deg,#DC2626,#EF4444)" : "#E2F8EE", color: micOn ? "#fff" : "#14532D", cursor: "pointer" }}>
               {micOn ? <MicOff style={{ width: 16, height: 16, margin: "0 auto" }} /> : <Mic style={{ width: 16, height: 16, margin: "0 auto" }} />}
             </motion.button>
-            <motion.button whileTap={{ scale: 0.92 }} onClick={sendMessage} disabled={loading || (!input.trim() && !attachedFile)} style={{ width: 46, height: 46, borderRadius: 14, border: "none", background: loading || (!input.trim() && !attachedFile) ? "#E2E8F0" : `linear-gradient(135deg,${DEEP},${MID})`, color: loading || (!input.trim() && !attachedFile) ? "#94A3B8" : "#fff", cursor: loading || (!input.trim() && !attachedFile) ? "not-allowed" : "pointer", boxShadow: loading || (!input.trim() && !attachedFile) ? "none" : "0 8px 20px rgba(12,90,62,0.24)" }}>
+            <motion.button whileTap={{ scale: 0.92 }} onClick={sendMessage} disabled={loading || (!input.trim() && !(reuseAttachment && attachedFile))} style={{ width: 46, height: 46, borderRadius: 14, border: "none", background: loading || (!input.trim() && !(reuseAttachment && attachedFile)) ? "#E2E8F0" : `linear-gradient(135deg,${DEEP},${MID})`, color: loading || (!input.trim() && !(reuseAttachment && attachedFile)) ? "#94A3B8" : "#fff", cursor: loading || (!input.trim() && !(reuseAttachment && attachedFile)) ? "not-allowed" : "pointer", boxShadow: loading || (!input.trim() && !(reuseAttachment && attachedFile)) ? "none" : "0 8px 20px rgba(12,90,62,0.24)" }}>
               <Send style={{ width: 17, height: 17, margin: "0 auto" }} />
             </motion.button>
           </div>
