@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CalendarDays,
@@ -6,20 +7,22 @@ import {
   Clock3,
   Filter,
   IndianRupee,
+  Landmark,
   MapPin,
   PhoneCall,
   Search,
   Star,
   Stethoscope,
   Video,
+  Wallet,
   X,
 } from "lucide-react";
 
+const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0C5A3E";
 const MID = "#0E7A4F";
 const ACC = "#00D97E";
-
-const SPECIALTIES = [
+const FALLBACK_SPECIALTIES = [
   "All",
   "General Physician",
   "Pediatrics",
@@ -30,18 +33,6 @@ const SPECIALTIES = [
   "Orthopedics",
   "Psychiatry",
 ];
-
-const DOCTORS = [
-  { id: "d1", name: "Dr. Riya Sharma", specialty: "General Physician", rating: 4.8, exp: 11, languages: ["Hindi", "English"], city: "Delhi", feeVideo: 499, feeInPerson: 700, clinic: "CarePoint Clinic, Karol Bagh", tags: ["Fever", "Infection", "BP"] },
-  { id: "d2", name: "Dr. Arjun Menon", specialty: "Cardiology", rating: 4.9, exp: 15, languages: ["English", "Hindi"], city: "Delhi", feeVideo: 899, feeInPerson: 1400, clinic: "Metro Heart Center, CP", tags: ["ECG", "BP", "Cholesterol"] },
-  { id: "d3", name: "Dr. Kavya Patel", specialty: "Dermatology", rating: 4.7, exp: 9, languages: ["Hindi", "English", "Gujarati"], city: "Delhi", feeVideo: 599, feeInPerson: 850, clinic: "SkinHub, Rajouri Garden", tags: ["Acne", "Hair", "Allergy"] },
-  { id: "d4", name: "Dr. Nikhil Bansal", specialty: "Pediatrics", rating: 4.8, exp: 12, languages: ["Hindi", "English"], city: "Delhi", feeVideo: 549, feeInPerson: 780, clinic: "HappyKids Clinic, Pitampura", tags: ["Child Fever", "Vaccination"] },
-  { id: "d5", name: "Dr. Sana Iqbal", specialty: "Gynecology", rating: 4.8, exp: 10, languages: ["Hindi", "English", "Urdu"], city: "Delhi", feeVideo: 699, feeInPerson: 1100, clinic: "WomenCare, Lajpat Nagar", tags: ["PCOS", "Pregnancy", "Hormones"] },
-  { id: "d6", name: "Dr. Pranav Rao", specialty: "Orthopedics", rating: 4.6, exp: 13, languages: ["English", "Hindi"], city: "Delhi", feeVideo: 649, feeInPerson: 999, clinic: "Joint & Bone, Dwarka", tags: ["Back Pain", "Knee", "Sports"] },
-];
-
-const SLOT_POOL = ["09:00 AM", "09:30 AM", "10:00 AM", "11:00 AM", "12:30 PM", "04:00 PM", "05:30 PM", "07:00 PM"];
-const ORDER_KEY = "gd_doctor_appointments_v1";
 
 function next7Days() {
   const arr = [];
@@ -58,18 +49,13 @@ function next7Days() {
   return arr;
 }
 
-function safeReadLocal() {
-  try {
-    const raw = localStorage.getItem(ORDER_KEY);
-    const parsed = JSON.parse(raw || "[]");
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+function userHeaders() {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-function saveLocal(appointments) {
-  localStorage.setItem(ORDER_KEY, JSON.stringify(appointments));
+function mapModeForBackend(mode) {
+  return mode === "call" ? "call" : mode;
 }
 
 function Glass({ children, style }) {
@@ -90,7 +76,7 @@ function Glass({ children, style }) {
 }
 
 function DoctorCard({ doctor, mode, onBook }) {
-  const fee = mode === "video" ? doctor.feeVideo : doctor.feeInPerson;
+  const fee = mode === "video" ? doctor.feeVideo : mode === "call" ? doctor.feeCall : doctor.feeInPerson;
   return (
     <Glass style={{ padding: 14, marginBottom: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
@@ -102,11 +88,13 @@ function DoctorCard({ doctor, mode, onBook }) {
             background: "linear-gradient(135deg,#E8F5EF,#D1FAE5)",
             display: "grid",
             placeItems: "center",
-            fontSize: 20,
+            fontSize: 18,
             flexShrink: 0,
+            fontWeight: 900,
+            color: DEEP,
           }}
         >
-          👨‍⚕️
+          DR
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 900, color: "#0B1F16", fontSize: 14.5 }}>{doctor.name}</div>
@@ -116,7 +104,7 @@ function DoctorCard({ doctor, mode, onBook }) {
               <Star style={{ width: 11, height: 11 }} /> {doctor.rating}
             </span>
             <span style={{ fontSize: 10.5, color: "#64748B", fontWeight: 700 }}>{doctor.exp} yrs exp</span>
-            <span style={{ fontSize: 10.5, color: "#64748B", fontWeight: 700 }}>{doctor.languages.join(", ")}</span>
+            <span style={{ fontSize: 10.5, color: "#64748B", fontWeight: 700 }}>{(doctor.languages || []).join(", ")}</span>
           </div>
         </div>
       </div>
@@ -126,7 +114,7 @@ function DoctorCard({ doctor, mode, onBook }) {
       </div>
 
       <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {doctor.tags.map((tag) => (
+        {(doctor.tags || []).map((tag) => (
           <span key={`${doctor.id}-${tag}`} style={{ padding: "4px 9px", borderRadius: 999, background: "#F0FDF4", border: "1px solid #D1FAE5", color: "#065F46", fontSize: 10, fontWeight: 800 }}>
             {tag}
           </span>
@@ -137,7 +125,9 @@ function DoctorCard({ doctor, mode, onBook }) {
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <IndianRupee style={{ width: 14, height: 14, color: DEEP }} />
           <span style={{ fontFamily: "'Sora',sans-serif", fontWeight: 900, color: DEEP, fontSize: 15 }}>{fee}</span>
-          <span style={{ fontSize: 11, color: "#64748B", fontWeight: 700 }}>{mode === "video" ? "Video consult" : "Clinic visit"}</span>
+          <span style={{ fontSize: 11, color: "#64748B", fontWeight: 700 }}>
+            {mode === "video" ? "Video consult" : mode === "call" ? "Audio consult" : "Clinic visit"}
+          </span>
         </div>
         <motion.button
           whileTap={{ scale: 0.95 }}
@@ -167,71 +157,168 @@ export default function Doctors() {
   const [specialty, setSpecialty] = useState("All");
   const [mode, setMode] = useState("video");
   const [sort, setSort] = useState("soonest");
-  const [appointments, setAppointments] = useState(() => safeReadLocal());
+  const [specialties, setSpecialties] = useState(FALLBACK_SPECIALTIES);
+  const [doctors, setDoctors] = useState([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [appointments, setAppointments] = useState([]);
+  const [loadingAppts, setLoadingAppts] = useState(false);
+  const [error, setError] = useState("");
+
   const [bookingDoctor, setBookingDoctor] = useState(null);
   const [bookingDate, setBookingDate] = useState(next7Days()[0]?.iso || "");
-  const [bookingSlot, setBookingSlot] = useState(SLOT_POOL[0]);
+  const [bookingSlot, setBookingSlot] = useState("");
+  const [slotOptions, setSlotOptions] = useState([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const [patientType, setPatientType] = useState("self");
   const [patientName, setPatientName] = useState("");
   const [reason, setReason] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [bookingLoading, setBookingLoading] = useState(false);
 
   const dateList = useMemo(() => next7Days(), []);
 
-  const visibleDoctors = useMemo(() => {
-    let list = [...DOCTORS];
-    if (specialty !== "All") list = list.filter((d) => d.specialty === specialty);
-    if (query.trim()) {
-      const q = query.trim().toLowerCase();
-      list = list.filter(
-        (d) =>
-          d.name.toLowerCase().includes(q) ||
-          d.specialty.toLowerCase().includes(q) ||
-          d.tags.join(" ").toLowerCase().includes(q)
-      );
+  useEffect(() => {
+    async function loadSpecialties() {
+      try {
+        const r = await axios.get(`${API}/api/doctors/specialties`);
+        const list = Array.isArray(r.data) ? r.data : [];
+        if (list.length) setSpecialties(list);
+      } catch (_) {
+        setSpecialties(FALLBACK_SPECIALTIES);
+      }
     }
-    if (sort === "rating") list.sort((a, b) => b.rating - a.rating);
-    if (sort === "fee") {
-      list.sort((a, b) =>
-        (mode === "video" ? a.feeVideo : a.feeInPerson) -
-        (mode === "video" ? b.feeVideo : b.feeInPerson)
-      );
+    loadSpecialties();
+  }, []);
+
+  useEffect(() => {
+    async function loadDoctors() {
+      setLoadingDoctors(true);
+      setError("");
+      try {
+        const r = await axios.get(`${API}/api/doctors/list`, {
+          params: {
+            q: query || undefined,
+            specialty: specialty === "All" ? undefined : specialty,
+            sort,
+            mode: mapModeForBackend(mode),
+            limit: 60,
+          },
+        });
+        setDoctors(Array.isArray(r?.data?.doctors) ? r.data.doctors : []);
+      } catch (err) {
+        setError(err?.response?.data?.error || "Failed to load doctors.");
+        setDoctors([]);
+      } finally {
+        setLoadingDoctors(false);
+      }
     }
-    return list;
+    loadDoctors();
   }, [query, specialty, sort, mode]);
 
-  const upcoming = useMemo(
-    () =>
-      [...appointments]
-        .sort((a, b) => new Date(`${a.date} ${a.slot}`) - new Date(`${b.date} ${b.slot}`))
-        .slice(0, 6),
-    [appointments]
-  );
+  async function loadMyConsults() {
+    setLoadingAppts(true);
+    try {
+      const r = await axios.get(`${API}/api/consults/my`, { headers: userHeaders() });
+      const list = Array.isArray(r?.data?.consults) ? r.data.consults : [];
+      setAppointments(list);
+    } catch (_) {
+      setAppointments([]);
+    } finally {
+      setLoadingAppts(false);
+    }
+  }
 
-  function bookNow() {
-    if (!bookingDoctor || !bookingDate || !bookingSlot) return;
-    const chosenDate = dateList.find((d) => d.iso === bookingDate);
-    const row = {
-      id: `${Date.now()}`,
-      doctorId: bookingDoctor.id,
-      doctorName: bookingDoctor.name,
-      specialty: bookingDoctor.specialty,
-      mode,
-      date: bookingDate,
-      dateLabel: chosenDate?.full || bookingDate,
-      slot: bookingSlot,
-      patientType,
-      patientName: patientName.trim() || (patientType === "self" ? "Self" : "Family Member"),
-      reason: reason.trim() || "General consultation",
-      fee: mode === "video" ? bookingDoctor.feeVideo : bookingDoctor.feeInPerson,
-      status: "confirmed",
-    };
-    const next = [row, ...appointments];
-    setAppointments(next);
-    saveLocal(next);
-    setBookingDoctor(null);
-    setReason("");
-    setPatientName("");
-    setPatientType("self");
+  useEffect(() => {
+    loadMyConsults();
+  }, []);
+
+  async function loadSlotsForDoctor(doctorId, date) {
+    if (!doctorId || !date) return;
+    setSlotsLoading(true);
+    try {
+      const r = await axios.get(`${API}/api/doctors/${doctorId}/slots`, {
+        params: { date, mode: mapModeForBackend(mode) },
+      });
+      const slots = Array.isArray(r?.data?.slots)
+        ? r.data.slots
+        : Array.isArray(r?.data?.availability?.[0]?.slots)
+          ? r.data.availability[0].slots
+          : [];
+      const onlyAvailable = slots.filter((s) => s?.available).map((s) => s.slot);
+      setSlotOptions(onlyAvailable);
+      setBookingSlot(onlyAvailable[0] || "");
+    } catch (_) {
+      setSlotOptions([]);
+      setBookingSlot("");
+    } finally {
+      setSlotsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (bookingDoctor?.id && bookingDate) {
+      loadSlotsForDoctor(bookingDoctor.id, bookingDate);
+    }
+  }, [bookingDoctor?.id, bookingDate, mode]);
+
+  const upcoming = useMemo(() => {
+    return [...appointments]
+      .filter((a) => ["pending_payment", "confirmed", "accepted"].includes(a.status))
+      .sort((a, b) => new Date(`${a.date} ${a.slot}`) - new Date(`${b.date} ${b.slot}`))
+      .slice(0, 6);
+  }, [appointments]);
+
+  async function bookNow() {
+    if (!bookingDoctor || !bookingDate || !bookingSlot || !paymentMethod) return;
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setError("Please login again to book consultation.");
+      return;
+    }
+
+    setBookingLoading(true);
+    setError("");
+    try {
+      const createRes = await axios.post(
+        `${API}/api/consults/create`,
+        {
+          doctorId: bookingDoctor.id,
+          mode: mapModeForBackend(mode),
+          date: bookingDate,
+          slot: bookingSlot,
+          patientType,
+          patientName: patientName.trim() || (patientType === "self" ? "Self" : "Family Member"),
+          reason: reason.trim() || "General consultation",
+          paymentMethod,
+        },
+        { headers: userHeaders() }
+      );
+
+      const consult = createRes?.data?.consult;
+      const paymentRef = createRes?.data?.paymentIntent?.paymentRef || consult?.paymentRef || "";
+      if (!consult?.id) throw new Error("Consult hold failed");
+
+      const transactionId = `TXN-${Date.now()}`;
+      await axios.post(`${API}/api/payments/verify`, {
+        consultId: consult.id,
+        paymentRef,
+        paymentMethod,
+        transactionId,
+      });
+
+      setBookingDoctor(null);
+      setReason("");
+      setPatientName("");
+      setPatientType("self");
+      setPaymentMethod("");
+      setBookingSlot("");
+      setSlotOptions([]);
+      await loadMyConsults();
+    } catch (err) {
+      setError(err?.response?.data?.error || err?.message || "Booking failed.");
+    } finally {
+      setBookingLoading(false);
+    }
   }
 
   return (
@@ -245,11 +332,13 @@ export default function Doctors() {
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 18, fontWeight: 900 }}>Doctor Consult</div>
               <div style={{ fontSize: 11.5, fontWeight: 700, color: "rgba(255,255,255,0.72)" }}>
-                Book video or in-person appointment in 3 steps.
+                Book video, audio, or in-person appointment with payment lock.
               </div>
             </div>
           </div>
         </Glass>
+
+        {error && <div style={{ marginTop: 8, fontSize: 12, color: "#B91C1C", fontWeight: 800 }}>{error}</div>}
 
         <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
           <div style={{ flex: 1, position: "relative" }}>
@@ -307,7 +396,7 @@ export default function Doctors() {
         </div>
 
         <div style={{ marginTop: 8, display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none" }}>
-          {SPECIALTIES.map((s) => (
+          {specialties.map((s) => (
             <button
               key={s}
               onClick={() => setSpecialty(s)}
@@ -333,7 +422,9 @@ export default function Doctors() {
       <div style={{ padding: "0 14px 8px" }}>
         <Glass style={{ padding: "10px 12px", marginBottom: 12 }}>
           <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 900, color: "#0F172A", marginBottom: 6 }}>Upcoming Appointments</div>
-          {upcoming.length === 0 ? (
+          {loadingAppts ? (
+            <div style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>Loading appointments...</div>
+          ) : upcoming.length === 0 ? (
             <div style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>No appointment yet. Select a doctor and book your first slot.</div>
           ) : (
             upcoming.map((a) => (
@@ -355,24 +446,33 @@ export default function Doctors() {
                     <Clock3 style={{ width: 12, height: 12 }} /> {a.slot}
                   </span>
                   <span style={{ fontSize: 10.5, color: "#475569", fontWeight: 800 }}>Patient: {a.patientName}</span>
+                  <span style={{ fontSize: 10.5, color: "#475569", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <Wallet style={{ width: 12, height: 12 }} /> Paid via {a.paymentMethod || "-"}
+                  </span>
                 </div>
               </div>
             ))
           )}
         </Glass>
 
-        {visibleDoctors.map((doctor) => (
-          <DoctorCard
-            key={doctor.id}
-            doctor={doctor}
-            mode={mode === "call" ? "video" : mode}
-            onBook={() => {
-              setBookingDoctor(doctor);
-              setBookingDate(dateList[0]?.iso || "");
-              setBookingSlot(SLOT_POOL[0]);
-            }}
-          />
-        ))}
+        {loadingDoctors ? (
+          <Glass style={{ padding: 12, fontSize: 12, fontWeight: 700, color: "#64748B" }}>Loading doctors...</Glass>
+        ) : (
+          doctors.map((doctor) => (
+            <DoctorCard
+              key={doctor.id}
+              doctor={doctor}
+              mode={mode}
+              onBook={() => {
+                setBookingDoctor(doctor);
+                setBookingDate(dateList[0]?.iso || "");
+                setBookingSlot("");
+                setSlotOptions([]);
+                setPaymentMethod("");
+              }}
+            />
+          ))
+        )}
       </div>
 
       <AnimatePresence>
@@ -406,11 +506,17 @@ export default function Doctors() {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7, marginBottom: 10 }}>
-                {SLOT_POOL.map((slot) => (
-                  <button key={slot} onClick={() => setBookingSlot(slot)} style={{ height: 32, borderRadius: 9, border: bookingSlot === slot ? "none" : "1px solid #D1D5DB", background: bookingSlot === slot ? "#DCFCE7" : "#fff", color: bookingSlot === slot ? "#166534" : "#0F172A", fontSize: 10.5, fontWeight: 800, cursor: "pointer" }}>
-                    {slot}
-                  </button>
-                ))}
+                {slotsLoading ? (
+                  <div style={{ gridColumn: "1 / span 4", fontSize: 11, fontWeight: 700, color: "#64748B" }}>Loading slots...</div>
+                ) : slotOptions.length === 0 ? (
+                  <div style={{ gridColumn: "1 / span 4", fontSize: 11, fontWeight: 700, color: "#B91C1C" }}>No available slots for selected date.</div>
+                ) : (
+                  slotOptions.map((slot) => (
+                    <button key={slot} onClick={() => setBookingSlot(slot)} style={{ height: 32, borderRadius: 9, border: bookingSlot === slot ? "none" : "1px solid #D1D5DB", background: bookingSlot === slot ? "#DCFCE7" : "#fff", color: bookingSlot === slot ? "#166534" : "#0F172A", fontSize: 10.5, fontWeight: 800, cursor: "pointer" }}>
+                      {slot}
+                    </button>
+                  ))
+                )}
               </div>
 
               <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
@@ -439,11 +545,61 @@ export default function Doctors() {
                 onChange={(e) => setReason(e.target.value)}
                 rows={2}
                 placeholder="Reason/symptoms (optional)"
-                style={{ width: "100%", borderRadius: 10, border: "1.5px solid #D1D5DB", padding: 10, fontSize: 12, fontWeight: 700, resize: "none", marginBottom: 10, outline: "none" }}
+                style={{ width: "100%", borderRadius: 10, border: "1.5px solid #D1D5DB", padding: 10, fontSize: 12, fontWeight: 700, resize: "none", marginBottom: 8, outline: "none" }}
               />
 
-              <button onClick={bookNow} style={{ width: "100%", height: 42, border: "none", borderRadius: 12, background: `linear-gradient(135deg,${DEEP},${MID})`, color: "#fff", fontWeight: 900, fontFamily: "'Sora',sans-serif", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
-                <CheckCircle2 style={{ width: 15, height: 15 }} /> Confirm Booking
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 900, color: "#0F172A", marginBottom: 6 }}>Payment Method</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
+                  {[
+                    { key: "upi", label: "UPI", icon: <Wallet style={{ width: 12, height: 12 }} /> },
+                    { key: "card", label: "Card", icon: <Landmark style={{ width: 12, height: 12 }} /> },
+                    { key: "netbanking", label: "Netbank", icon: <Landmark style={{ width: 12, height: 12 }} /> },
+                  ].map((p) => (
+                    <button
+                      key={p.key}
+                      onClick={() => setPaymentMethod(p.key)}
+                      style={{
+                        height: 34,
+                        borderRadius: 9,
+                        border: paymentMethod === p.key ? "none" : "1px solid #D1D5DB",
+                        background: paymentMethod === p.key ? "#DCFCE7" : "#fff",
+                        color: paymentMethod === p.key ? "#166534" : "#1F2937",
+                        fontSize: 11,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 4,
+                      }}
+                    >
+                      {p.icon} {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={bookNow}
+                disabled={!paymentMethod || !bookingSlot || bookingLoading}
+                style={{
+                  width: "100%",
+                  height: 42,
+                  border: "none",
+                  borderRadius: 12,
+                  background: paymentMethod && bookingSlot && !bookingLoading ? `linear-gradient(135deg,${DEEP},${MID})` : "#CBD5E1",
+                  color: "#fff",
+                  fontWeight: 900,
+                  fontFamily: "'Sora',sans-serif",
+                  cursor: paymentMethod && bookingSlot && !bookingLoading ? "pointer" : "not-allowed",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 7,
+                }}
+              >
+                <CheckCircle2 style={{ width: 15, height: 15 }} /> {bookingLoading ? "Processing..." : "Pay and Confirm Booking"}
               </button>
             </motion.div>
           </>

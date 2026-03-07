@@ -44,6 +44,9 @@ import SearchResults from "./pages/SearchResults";
 import GoDavaiiAI from "./pages/GoDavaiiAI";
 import HealthVault from "./pages/HealthVault";
 import Doctors from "./pages/Doctors";
+import DoctorRegister from "./pages/DoctorRegister";
+import DoctorLogin from "./pages/DoctorLogin";
+import DoctorDashboard from "./pages/DoctorDashboard";
 import { LocationProvider } from "./context/LocationContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -310,6 +313,33 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <Doctors />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/doctor/register"
+            element={
+              <ProtectedRoute>
+                <DoctorRegister />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/doctor/login"
+            element={
+              <ProtectedRoute>
+                <DoctorLogin />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/doctor/dashboard"
+            element={
+              <ProtectedRoute>
+                <DoctorDashboard />
               </ProtectedRoute>
             }
           />

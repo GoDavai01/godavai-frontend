@@ -28,7 +28,7 @@ const HIDE_ENTIRE_NAVBAR = [
 const NO_SEARCH_PATHS = [
   "/orders", "/profile", "/checkout", "/payment",
   "/payment-success", "/ai", "/health",
-  "/doctors", "/lab-tests",
+  "/doctors", "/doctor", "/lab-tests",
 ];
 
 export default function Navbar({
@@ -190,6 +190,7 @@ export default function Navbar({
     : routerLocation.pathname.startsWith("/ai")        ? "GoDavaii AI"
     : routerLocation.pathname.startsWith("/health")    ? "Health Vault"
     : routerLocation.pathname.startsWith("/doctors")   ? "Doctors"
+    : routerLocation.pathname.startsWith("/doctor")    ? "Doctor Portal"
     : routerLocation.pathname.startsWith("/lab-tests") ? "Lab Tests"
     : routerLocation.pathname.startsWith("/all-medicines") ? "All Medicines"
     : null;

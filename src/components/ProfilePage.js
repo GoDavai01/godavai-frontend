@@ -23,7 +23,7 @@ import { ChevronRight, Shield, FileText, ScrollText, Cookie, UserX } from "lucid
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Pencil, Plus, ChevronDown, Mail, Home, History, BadgeCheck, Wallet, Settings,
-  Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera, Calendar
+  Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera, Calendar, Stethoscope
 } from "lucide-react";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -76,7 +76,7 @@ export default function ProfilePage() {
 
   const [openSections, setOpenSections] = useState({
     addresses: true, wallet: false, orders: false, badges: false, personalization: false,
-    settings: false, pharmacist: false, delivery: false, support: false, refer: false, legal: false,
+    settings: false, pharmacist: false, doctor: false, delivery: false, support: false, refer: false, legal: false,
   });
   const toggleSection = (key) => setOpenSections((p) => ({ ...p, [key]: !p[key] }));
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
@@ -820,6 +820,35 @@ export default function ProfilePage() {
             onClick={() => navigate("/pharmacy/register")}
           >
             {t("Register as Pharmacist")}
+          </Button>
+        </div>
+      </Section>
+
+      <Section
+        icon={<Stethoscope className="h-5 w-5 text-emerald-600" />}
+        title="Doctor Portal"
+        expanded={openSections.doctor}
+        onToggle={() => toggleSection("doctor")}
+      >
+        <div className="mt-1 flex flex-col sm:flex-row gap-2">
+          <Button
+            className="min-w-[220px] btn-primary-emerald !font-bold w-full sm:w-auto"
+            onClick={() => {
+              if (localStorage.getItem("doctorToken")) {
+                navigate("/doctor/dashboard");
+              } else {
+                navigate("/doctor/login");
+              }
+            }}
+          >
+            Go to Doctor Dashboard
+          </Button>
+          <Button
+            variant="outline"
+            className="min-w-[220px] btn-outline-soft !font-bold w-full sm:w-auto"
+            onClick={() => navigate("/doctor/register")}
+          >
+            Register as Doctor
           </Button>
         </div>
       </Section>
