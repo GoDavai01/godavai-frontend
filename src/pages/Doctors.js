@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -232,7 +232,7 @@ export default function Doctors() {
     loadMyConsults();
   }, []);
 
-  async function loadSlotsForDoctor(doctorId, date) {
+  const loadSlotsForDoctor = useCallback(async (doctorId, date) => {
     if (!doctorId || !date) return;
     setSlotsLoading(true);
     try {
@@ -253,13 +253,13 @@ export default function Doctors() {
     } finally {
       setSlotsLoading(false);
     }
-  }
+  }, [mode]);
 
   useEffect(() => {
     if (bookingDoctor?.id && bookingDate) {
       loadSlotsForDoctor(bookingDoctor.id, bookingDate);
     }
-  }, [bookingDoctor?.id, bookingDate, mode]);
+  }, [bookingDoctor?.id, bookingDate, loadSlotsForDoctor]);
 
   const upcoming = useMemo(() => {
     return [...appointments]
