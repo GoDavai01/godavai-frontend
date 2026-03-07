@@ -84,7 +84,7 @@ export default function GoDavaiiAI() {
   const [micOn, setMicOn] = useState(false);
   const [voiceAutoPlay, setVoiceAutoPlay] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
-  const [reuseAttachment, setReuseAttachment] = useState(true);
+  const [reuseAttachment, setReuseAttachment] = useState(false);
   const recognitionRef = useRef(null);
   const fileRef = useRef(null);
 
@@ -155,11 +155,13 @@ export default function GoDavaiiAI() {
       history,
       context: profileContext,
     };
+
     const urls = [
       `${API}/api/ai/assistant/chat`,
       `${API}/api/ai/chat`,
       `${API}/api/ai/assistant`,
     ];
+
     for (const url of urls) {
       try {
         const r = await axios.post(url, payload, { timeout: 18000 });
@@ -169,6 +171,7 @@ export default function GoDavaiiAI() {
         console.error("Chat AI failed:", url, getApiErrorMessage(err));
       }
     }
+
     return fallbackReply(messageText, focus, language, whoFor);
   }
 
@@ -223,7 +226,8 @@ export default function GoDavaiiAI() {
 
   async function sendMessage() {
     const msg = input.trim();
-    const activeFile = reuseAttachment ? attachedFile : null;
+    const activeFile = reuseAttachment ? attachedFile : attachedFile;
+
     if (!msg && !activeFile) return;
     if (loading) return;
 
@@ -238,8 +242,14 @@ export default function GoDavaiiAI() {
       const reply = activeFile
         ? await askBackendWithFile(msg, history, activeFile)
         : await askBackend(msg, history);
+
       setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
+
       if (voiceAutoPlay) speak(reply);
+
+      if (activeFile) {
+        setReuseAttachment(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -266,27 +276,89 @@ export default function GoDavaiiAI() {
       <div style={{ padding: 14 }}>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, scrollbarWidth: "none" }}>
           {FOCUS.map((m) => (
-            <button key={m.key} onClick={() => setFocus(m.key)} style={{ flexShrink: 0, height: 34, borderRadius: 999, border: focus === m.key ? "none" : "1.5px solid rgba(12,90,62,0.16)", background: focus === m.key ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff", color: focus === m.key ? "#fff" : "#1E3A2E", padding: "0 13px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>{m.label}</button>
+            <button
+              key={m.key}
+              onClick={() => setFocus(m.key)}
+              style={{
+                flexShrink: 0,
+                height: 34,
+                borderRadius: 999,
+                border: focus === m.key ? "none" : "1.5px solid rgba(12,90,62,0.16)",
+                background: focus === m.key ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff",
+                color: focus === m.key ? "#fff" : "#1E3A2E",
+                padding: "0 13px",
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: "pointer"
+              }}
+            >
+              {m.label}
+            </button>
           ))}
         </div>
 
         <div style={{ marginTop: 8, display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" }}>
           {TARGETS.map((t) => (
-            <button key={t.key} onClick={() => setWhoFor(t.key)} style={{ flexShrink: 0, height: 30, borderRadius: 999, border: whoFor === t.key ? "none" : "1px solid rgba(12,90,62,0.18)", background: whoFor === t.key ? DEEP : "rgba(255,255,255,0.88)", color: whoFor === t.key ? "#fff" : "#244636", padding: "0 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>{t.label}</button>
+            <button
+              key={t.key}
+              onClick={() => setWhoFor(t.key)}
+              style={{
+                flexShrink: 0,
+                height: 30,
+                borderRadius: 999,
+                border: whoFor === t.key ? "none" : "1px solid rgba(12,90,62,0.18)",
+                background: whoFor === t.key ? DEEP : "rgba(255,255,255,0.88)",
+                color: whoFor === t.key ? "#fff" : "#244636",
+                padding: "0 10px",
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: "pointer"
+              }}
+            >
+              {t.label}
+            </button>
           ))}
+
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 800, color: "#426756", marginLeft: 4 }}>
             <Languages style={{ width: 13, height: 13 }} />
             {LANGS.map((l) => (
-              <button key={l.code} onClick={() => setLanguage(l.code)} style={{ height: 26, borderRadius: 999, border: language === l.code ? "none" : "1px solid rgba(12,90,62,0.18)", background: language === l.code ? DEEP : "rgba(255,255,255,0.86)", color: language === l.code ? "#fff" : "#244636", padding: "0 9px", fontSize: 10.5, fontWeight: 800, cursor: "pointer" }}>{l.label}</button>
+              <button
+                key={l.code}
+                onClick={() => setLanguage(l.code)}
+                style={{
+                  height: 26,
+                  borderRadius: 999,
+                  border: language === l.code ? "none" : "1px solid rgba(12,90,62,0.18)",
+                  background: language === l.code ? DEEP : "rgba(255,255,255,0.86)",
+                  color: language === l.code ? "#fff" : "#244636",
+                  padding: "0 9px",
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  cursor: "pointer"
+                }}
+              >
+                {l.label}
+              </button>
             ))}
           </div>
         </div>
 
         {whoFor === "family" && (
-          <input value={familyLabel} onChange={(e) => setFamilyLabel(e.target.value)} placeholder="Family member name (eg: Mom)" style={{ marginTop: 8, width: "100%", height: 38, borderRadius: 10, border: "1px solid rgba(12,90,62,0.2)", padding: "0 10px", fontSize: 12.5, fontWeight: 700 }} />
+          <input
+            value={familyLabel}
+            onChange={(e) => setFamilyLabel(e.target.value)}
+            placeholder="Family member name (eg: Mom)"
+            style={{ marginTop: 8, width: "100%", height: 38, borderRadius: 10, border: "1px solid rgba(12,90,62,0.2)", padding: "0 10px", fontSize: 12.5, fontWeight: 700 }}
+          />
         )}
+
         {whoFor === "new" && (
-          <input value={customProfile} onChange={(e) => setCustomProfile(e.target.value)} placeholder="New profile note (age, gender, condition)" style={{ marginTop: 8, width: "100%", height: 38, borderRadius: 10, border: "1px solid rgba(12,90,62,0.2)", padding: "0 10px", fontSize: 12.5, fontWeight: 700 }} />
+          <input
+            value={customProfile}
+            onChange={(e) => setCustomProfile(e.target.value)}
+            placeholder="New profile note (age, gender, condition)"
+            style={{ marginTop: 8, width: "100%", height: 38, borderRadius: 10, border: "1px solid rgba(12,90,62,0.2)", padding: "0 10px", fontSize: 12.5, fontWeight: 700 }}
+          />
         )}
 
         <div style={{ marginTop: 10, background: "#FFF7ED", border: "1px solid #FED7AA", borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "flex-start", gap: 8 }}>
@@ -299,8 +371,27 @@ export default function GoDavaiiAI() {
         <div style={{ marginTop: 12, background: "rgba(255,255,255,0.95)", border: "1px solid rgba(12,90,62,0.12)", borderRadius: 16, minHeight: 360, maxHeight: "50vh", overflowY: "auto", padding: 12 }}>
           <AnimatePresence initial={false}>
             {messages.map((m, i) => (
-              <motion.div key={`${m.role}-${i}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 10, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
-                <div style={{ maxWidth: "90%", whiteSpace: "pre-line", borderRadius: 14, padding: "10px 12px", fontSize: 13, lineHeight: 1.55, fontWeight: 650, color: m.role === "user" ? "#fff" : "#1F2937", background: m.role === "user" ? `linear-gradient(135deg,${DEEP},${MID})` : "#F8FAFC", border: m.role === "user" ? "none" : "1px solid #E2E8F0", position: "relative" }}>
+              <motion.div
+                key={`${m.role}-${i}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={{ marginBottom: 10, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}
+              >
+                <div
+                  style={{
+                    maxWidth: "90%",
+                    whiteSpace: "pre-line",
+                    borderRadius: 14,
+                    padding: "10px 12px",
+                    fontSize: 13,
+                    lineHeight: 1.55,
+                    fontWeight: 650,
+                    color: m.role === "user" ? "#fff" : "#1F2937",
+                    background: m.role === "user" ? `linear-gradient(135deg,${DEEP},${MID})` : "#F8FAFC",
+                    border: m.role === "user" ? "none" : "1px solid #E2E8F0",
+                    position: "relative"
+                  }}
+                >
                   {m.role === "assistant" ? cleanAssistantText(m.text) : m.text}
                   {m.role === "assistant" && (
                     <button onClick={() => speak(m.text)} style={{ marginTop: 7, display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid #E2E8F0", borderRadius: 999, background: "#fff", padding: "3px 8px", fontSize: 10.5, fontWeight: 800, color: "#0F766E", cursor: "pointer" }}>
@@ -311,6 +402,7 @@ export default function GoDavaiiAI() {
               </motion.div>
             ))}
           </AnimatePresence>
+
           {loading && <div style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>Thinking...</div>}
         </div>
 
@@ -342,7 +434,13 @@ export default function GoDavaiiAI() {
           </div>
         )}
 
-        <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.csv" style={{ display: "none" }} onChange={(e) => setAttachedFile(e.target.files?.[0] || null)} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg,.txt,.csv"
+          style={{ display: "none" }}
+          onChange={(e) => setAttachedFile(e.target.files?.[0] || null)}
+        />
 
         <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
           <textarea
@@ -358,14 +456,31 @@ export default function GoDavaiiAI() {
               }
             }}
           />
+
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <motion.button whileTap={{ scale: 0.92 }} onClick={() => fileRef.current?.click()} style={{ width: 46, height: 38, borderRadius: 12, border: "1px solid rgba(12,90,62,0.2)", background: "#fff", color: "#14532D", cursor: "pointer" }}>
               <Paperclip style={{ width: 16, height: 16, margin: "0 auto" }} />
             </motion.button>
+
             <motion.button whileTap={{ scale: 0.92 }} onClick={handleMicToggle} style={{ width: 46, height: 38, borderRadius: 12, border: "none", background: micOn ? "linear-gradient(135deg,#DC2626,#EF4444)" : "#E2F8EE", color: micOn ? "#fff" : "#14532D", cursor: "pointer" }}>
               {micOn ? <MicOff style={{ width: 16, height: 16, margin: "0 auto" }} /> : <Mic style={{ width: 16, height: 16, margin: "0 auto" }} />}
             </motion.button>
-            <motion.button whileTap={{ scale: 0.92 }} onClick={sendMessage} disabled={loading || (!input.trim() && !(reuseAttachment && attachedFile))} style={{ width: 46, height: 46, borderRadius: 14, border: "none", background: loading || (!input.trim() && !(reuseAttachment && attachedFile)) ? "#E2E8F0" : `linear-gradient(135deg,${DEEP},${MID})`, color: loading || (!input.trim() && !(reuseAttachment && attachedFile)) ? "#94A3B8" : "#fff", cursor: loading || (!input.trim() && !(reuseAttachment && attachedFile)) ? "not-allowed" : "pointer", boxShadow: loading || (!input.trim() && !(reuseAttachment && attachedFile)) ? "none" : "0 8px 20px rgba(12,90,62,0.24)" }}>
+
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              onClick={sendMessage}
+              disabled={loading || (!input.trim() && !attachedFile)}
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: 14,
+                border: "none",
+                background: loading || (!input.trim() && !attachedFile) ? "#E2E8F0" : `linear-gradient(135deg,${DEEP},${MID})`,
+                color: loading || (!input.trim() && !attachedFile) ? "#94A3B8" : "#fff",
+                cursor: loading || (!input.trim() && !attachedFile) ? "not-allowed" : "pointer",
+                boxShadow: loading || (!input.trim() && !attachedFile) ? "none" : "0 8px 20px rgba(12,90,62,0.24)"
+              }}
+            >
               <Send style={{ width: 17, height: 17, margin: "0 auto" }} />
             </motion.button>
           </div>
@@ -374,6 +489,7 @@ export default function GoDavaiiAI() {
         <div style={{ marginTop: 8, fontSize: 11, color: "#64748B", fontWeight: 700 }}>
           Tip: text + voice + file sab combine kar sakte ho. AI context memory last messages se maintain hoti hai.
         </div>
+
         <div style={{ marginTop: 2, fontSize: 11, color: "#64748B", fontWeight: 700 }}>
           Current context: <span style={{ color: "#0F766E" }}>{whoForLabel}</span>
         </div>
