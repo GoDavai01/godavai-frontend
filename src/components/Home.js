@@ -774,7 +774,7 @@ export default function Home() {
               { label: "Upload Rx", emoji: "📋", bg: `linear-gradient(135deg,${DEEP},${MID})`, glow: "rgba(12,90,62,0.30)", onClick: () => setPrescriptionModalOpen(true) },
               // ✅ PATCH: Medicines quick action -> /all-medicines
               { label: "Medicines", emoji: "💊", bg: "linear-gradient(135deg,#0891B2,#0EA5E9)", glow: "rgba(8,145,178,0.26)", onClick: () => navigate("/all-medicines") },
-              { label: "Consult", emoji: "🩺", bg: "linear-gradient(135deg,#D97706,#F59E0B)", glow: "rgba(217,119,6,0.26)", onClick: () => navigate("/search?tab=doctors") },
+              { label: "Consult", emoji: "🩺", bg: "linear-gradient(135deg,#D97706,#F59E0B)", glow: "rgba(217,119,6,0.26)", onClick: () => navigate("/doctors") },
               { label: "Lab Tests", emoji: "🧪", bg: "linear-gradient(135deg,#7C3AED,#A855F7)", glow: "rgba(124,58,237,0.26)", onClick: () => navigate("/search?tab=labs") },
               { label: "GoDavaii AI", emoji: "🧠", bg: "linear-gradient(135deg,#DC2626,#F87171)", glow: "rgba(220,38,38,0.24)", onClick: () => navigate("/ai") },
               { label: "Health Vault", emoji: "🗂️", bg: "linear-gradient(135deg,#0369A1,#38BDF8)", glow: "rgba(3,105,161,0.24)", onClick: () => navigate("/health") },
@@ -872,14 +872,14 @@ export default function Home() {
 
         {/* Consult a Doctor */}
         <div style={{ marginBottom: 20 }}>
-          <Section title="Consult a Doctor" onSeeAll={() => navigate("/search?tab=doctors")} />
+          <Section title="Consult a Doctor" onSeeAll={() => navigate("/doctors")} />
           <div style={{ display: "flex", gap: 12, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 6 }}>
             {[
               { name: "Dr. Sharma", spec: "General Physician" },
               { name: "Dr. Gupta", spec: "Pediatrics" },
               { name: "Dr. Iyer", spec: "Dermatology" },
               { name: "Dr. Mehta", spec: "Cardiology" },
-            ].map((d, i) => <DoctorCard key={i} doctor={d} onClick={() => navigate("/search?tab=doctors")} />)}
+            ].map((d, i) => <DoctorCard key={i} doctor={d} onClick={() => navigate("/doctors")} />)}
           </div>
         </div>
 
