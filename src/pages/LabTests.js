@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   CalendarDays,
   CheckCircle2,
-  Clock3,
   FileUp,
   FlaskConical,
   Home,
