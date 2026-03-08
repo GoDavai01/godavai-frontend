@@ -256,7 +256,7 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading }) {
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════ */
 export default function GoDavaiiAI() {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [focus, setFocus] = useState("auto");
