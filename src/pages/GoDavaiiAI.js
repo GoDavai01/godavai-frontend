@@ -1,41 +1,80 @@
-import React, { useMemo, useRef, useState } from "react";
+// pages/GoDavaiiAI.js — GoDavaii 2035 Health OS AI Assistant
+// ✅ 2035 modern UI — glass cards, Sora font, premium layout
+// ✅ Chat history sidebar (slide from left)
+// ✅ X-Ray tab added alongside Lab Report, Prescription, etc.
+// ✅ Desi Ilaaj toggle — home remedies when appropriate
+// ✅ Server-side TTS (OpenAI voice) with fallback to browser
+// ✅ Multi-page PDF indicator + backend handles all pages
+// ✅ Better audio playback with loading state
+// ✅ Responsive, accessible, old-age friendly text sizes
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle, Brain, Languages, Mic, MicOff, Paperclip, Send, Sparkles, Volume2, VolumeX, X } from "lucide-react";
+import {
+  AlertTriangle, ArrowLeft, Brain, ChevronRight, Clock, FileText,
+  History, Languages, Leaf, Mic, MicOff, Paperclip, Plus, Send,
+  Sparkles, Stethoscope, Volume2, VolumeX, X, Zap,
+} from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-const DEEP = "#0C5A3E";
-const MID = "#0E7A4F";
-const ACC = "#00D97E";
 
+/* ── Design tokens ────────────────────────────────────────── */
+const DEEP = "#0C5A3E";
+const MID  = "#0E7A4F";
+const ACC  = "#00D97E";
+const DARK = "#041F15";
+const GLASS = "rgba(255,255,255,0.82)";
+const GLASS_BORDER = "rgba(12,90,62,0.10)";
+
+/* ── Focus modes (added xray) ─────────────────────────────── */
 const FOCUS = [
-  { key: "auto", label: "Auto" },
-  { key: "symptom", label: "Symptoms" },
-  { key: "medicine", label: "Medicine" },
-  { key: "rx", label: "Prescription" },
-  { key: "lab", label: "Lab Report" },
+  { key: "auto",     label: "Auto",         icon: "🤖" },
+  { key: "symptom",  label: "Symptoms",     icon: "🩺" },
+  { key: "medicine", label: "Medicine",     icon: "💊" },
+  { key: "rx",       label: "Prescription", icon: "📋" },
+  { key: "lab",      label: "Lab Report",   icon: "🧪" },
+  { key: "xray",     label: "X-Ray / Scan", icon: "🦴" },
 ];
 
 const LANGS = [
-  { code: "hinglish", label: "Hinglish" },
-  { code: "hi", label: "Hindi" },
-  { code: "en", label: "English" },
+  { code: "hinglish", label: "Hinglish", short: "HI" },
+  { code: "hi",       label: "हिंदी",    short: "हि" },
+  { code: "en",       label: "English",  short: "EN" },
 ];
 
 const TARGETS = [
-  { key: "self", label: "For Me" },
-  { key: "family", label: "For Family" },
-  { key: "new", label: "New Profile" },
+  { key: "self",   label: "For Me",      icon: "👤" },
+  { key: "family", label: "For Family",  icon: "👨‍👩‍👧" },
+  { key: "new",    label: "New Profile", icon: "➕" },
 ];
 
+/* ── Helpers ───────────────────────────────────────────────── */
 function detectMode(prompt, forcedMode) {
   if (forcedMode && forcedMode !== "auto") return forcedMode;
   const p = String(prompt || "").toLowerCase();
+  if (/(xray|x-ray|x ray|ct scan|mri|ultrasound|sonography|scan report)/.test(p)) return "xray";
   if (/(report|hb|cbc|lipid|tsh|vitamin|platelet|creatinine|hba1c)/.test(p)) return "lab";
   if (/(prescription|rx|dose|tablet|capsule|once daily|bd|tid)/.test(p)) return "rx";
   if (/(paracetamol|azithromycin|medicine|drug|dawai|tablet|capsule|syrup)/.test(p)) return "medicine";
   return "symptom";
+}
+
+function cleanAssistantText(text) {
+  return String(text || "")
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/```[a-z]*\n?/gi, "")
+    .replace(/```/g, "");
+}
+
+function buildCompactHistory(messages) {
+  return messages.slice(-14).map((m) => ({
+    role: m.role,
+    text: m.text || "",
+  }));
 }
 
 function fallbackReply(message, mode, language, whoFor) {
@@ -47,53 +86,168 @@ function fallbackReply(message, mode, language, whoFor) {
       ? "This is preliminary medical guidance. Go to ER for emergencies."
       : "Ye preliminary medical guidance hai. Emergency me turant hospital/ER jao.";
 
-  if (inferred === "lab") {
-    return `${caution}\n\nI will explain this for ${identity}.\nPlease share lab value + unit + reference range. Trend over multiple reports is more reliable than one value.`;
-  }
-  if (inferred === "rx") {
-    return `${caution}\n\nI will explain the prescription for ${identity} in simple language: medicine use, timing, and cautions. Please share prescription text or upload image/pdf.`;
-  }
-  if (inferred === "medicine") {
-    return `${caution}\n\nFor ${identity}: I can explain use, common side-effects, interactions, and safe timing. Share medicine name + strength (example: Paracetamol 650).`;
-  }
-  return `${caution}\n\nFor ${identity}: share age, symptoms, duration, fever value, existing diseases, and current medicines. I will give triage + next steps.`;
+  if (inferred === "xray") return `${caution}\n\nFor ${identity}: X-Ray/scan image upload karein. Main visible findings explain karunga simple language me.`;
+  if (inferred === "lab") return `${caution}\n\nFor ${identity}: Lab report upload karein ya values share karein. Main sab pages analyze karunga.`;
+  if (inferred === "rx") return `${caution}\n\nFor ${identity}: Prescription upload/share karein. Main medicine use, timing, side effects bataunga.`;
+  if (inferred === "medicine") return `${caution}\n\nFor ${identity}: Medicine name + strength share karein (eg: Paracetamol 650).`;
+  return `${caution}\n\nFor ${identity}: Age, symptoms, duration, fever, existing diseases, current medicines share karein.`;
 }
 
-function buildCompactHistory(messages) {
-  return messages.slice(-12).map((m) => ({
-    role: m.role,
-    text: m.text || "",
-  }));
+function getApiErrorMessage(err) {
+  const data = err?.response?.data;
+  return data?.error || data?.details || data?.message || err?.message || "Request failed. Please retry.";
 }
 
-function cleanAssistantText(text) {
-  return String(text || "")
-    .replace(/\*\*/g, "")
-    .replace(/__/g, "");
+/* ── Format sections nicely ───────────────────────────────── */
+function FormatReply({ text }) {
+  const clean = cleanAssistantText(text);
+  const sections = clean.split(/\n(?=(?:Assessment|Next steps|Red flags|When to see doctor|Desi ilaaj|Home remedies):)/i);
+
+  return (
+    <div>
+      {sections.map((section, i) => {
+        const headerMatch = section.match(/^(Assessment|Next steps|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i);
+        if (!headerMatch) {
+          return <div key={i} style={{ whiteSpace: "pre-line", marginBottom: 8 }}>{section.trim()}</div>;
+        }
+        const header = headerMatch[1];
+        const body = section.slice(headerMatch[0].length).trim();
+        const isRed = /red flag/i.test(header);
+        const isDesi = /desi|home remed/i.test(header);
+
+        return (
+          <div key={i} style={{ marginBottom: 12 }}>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              fontSize: 12, fontWeight: 900, letterSpacing: "0.3px",
+              color: isRed ? "#DC2626" : isDesi ? "#059669" : DEEP,
+              background: isRed ? "#FEF2F2" : isDesi ? "#ECFDF5" : "#F0FAF5",
+              padding: "4px 10px", borderRadius: 8, marginBottom: 6,
+              fontFamily: "'Sora',sans-serif",
+            }}>
+              {isRed ? "🚨" : isDesi ? "🌿" : "📋"} {header}
+            </div>
+            <div style={{ whiteSpace: "pre-line", lineHeight: 1.7, fontSize: 13.5, fontWeight: 600, color: "#1F2937" }}>
+              {body}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
+/* ── Chat bubble ──────────────────────────────────────────── */
+function ChatBubble({ m, onSpeak, speakingId, speakLoading }) {
+  const isUser = m.role === "user";
+  const isSpeaking = speakingId === m.id;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.2 }}
+      style={{
+        display: "flex",
+        justifyContent: isUser ? "flex-end" : "flex-start",
+        marginBottom: 12,
+      }}
+    >
+      {!isUser && (
+        <div style={{
+          width: 30, height: 30, borderRadius: 10, flexShrink: 0, marginRight: 8, marginTop: 2,
+          background: `linear-gradient(135deg,${DEEP},${MID})`,
+          display: "grid", placeItems: "center",
+        }}>
+          <Brain style={{ width: 14, height: 14, color: ACC }} />
+        </div>
+      )}
+      <div style={{
+        maxWidth: "85%", borderRadius: isUser ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+        padding: "12px 14px",
+        background: isUser
+          ? `linear-gradient(135deg,${DEEP},${MID})`
+          : GLASS,
+        border: isUser ? "none" : `1px solid ${GLASS_BORDER}`,
+        boxShadow: isUser ? "0 4px 16px rgba(12,90,62,0.20)" : "0 2px 12px rgba(0,0,0,0.04)",
+        backdropFilter: isUser ? "none" : "blur(12px)",
+        color: isUser ? "#fff" : "#1F2937",
+      }}>
+        {isUser ? (
+          <div style={{ whiteSpace: "pre-line", fontSize: 13.5, fontWeight: 650, lineHeight: 1.6 }}>{m.text}</div>
+        ) : (
+          <FormatReply text={m.text} />
+        )}
+        {!isUser && (
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            onClick={() => onSpeak(m)}
+            disabled={speakLoading}
+            style={{
+              marginTop: 8, display: "inline-flex", alignItems: "center", gap: 5,
+              border: `1px solid ${isSpeaking ? ACC : "#E2E8F0"}`,
+              borderRadius: 999, background: isSpeaking ? "#ECFDF5" : "#fff",
+              padding: "4px 10px", fontSize: 11, fontWeight: 800,
+              color: isSpeaking ? "#059669" : "#0F766E", cursor: "pointer",
+            }}
+          >
+            {speakLoading && isSpeaking ? (
+              <div style={{ width: 11, height: 11, border: "2px solid #059669", borderTopColor: "transparent", borderRadius: "50%", animation: "gdSpin 0.6s linear infinite" }} />
+            ) : (
+              <Volume2 style={{ width: 11, height: 11 }} />
+            )}
+            {isSpeaking ? "Playing..." : "Listen"}
+          </motion.button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN COMPONENT
+   ═══════════════════════════════════════════════════════════ */
 export default function GoDavaiiAI() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+
   const [focus, setFocus] = useState("auto");
   const [language, setLanguage] = useState("hinglish");
   const [whoFor, setWhoFor] = useState("self");
   const [familyLabel, setFamilyLabel] = useState("");
   const [customProfile, setCustomProfile] = useState("");
+  const [desiIlaaj, setDesiIlaaj] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [micOn, setMicOn] = useState(false);
-  const [voiceAutoPlay, setVoiceAutoPlay] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
   const [reuseAttachment, setReuseAttachment] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatSessions, setChatSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [speakingId, setSpeakingId] = useState(null);
+  const [speakLoading, setSpeakLoading] = useState(false);
+
   const recognitionRef = useRef(null);
   const fileRef = useRef(null);
+  const chatEndRef = useRef(null);
+  const audioRef = useRef(null);
+  let msgIdCounter = useRef(1);
+
+  const makeId = () => `msg-${msgIdCounter.current++}`;
 
   const [messages, setMessages] = useState([
     {
+      id: makeId(),
       role: "assistant",
-      text: "Namaste, main GoDavaii AI hoon. Aap text, voice, ya file upload se pooch sakte ho. Pehle batayein: aap apne liye puch rahe ho, family ke liye, ya new profile?",
+      text: "Namaste! Main GoDavaii AI hoon — aapka personal health assistant.\n\nAap mujhse pooch sakte ho:\n🩺 Symptoms explain karo\n💊 Medicine side effects\n📋 Prescription samjhao\n🧪 Lab report analyze karo\n🦴 X-Ray / CT scan explain karo\n🌿 Desi ilaaj / home remedies\n\nText, voice, ya file upload — sab kaam karega!",
     },
   ]);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
 
   const whoForLabel = useMemo(() => {
     if (whoFor === "family" && familyLabel.trim()) return familyLabel.trim();
@@ -107,26 +261,70 @@ export default function GoDavaiiAI() {
     whoForLabel,
     language,
     focus,
+    desiIlaaj,
     userSummary: {
       id: user?._id || user?.userId || null,
       name: user?.name || null,
       age: user?.age || null,
       gender: user?.gender || null,
       dob: user?.dob || null,
-      email: user?.email || null,
     },
-  }), [whoFor, whoForLabel, language, focus, user]);
+  }), [whoFor, whoForLabel, language, focus, desiIlaaj, user]);
 
-  function speak(text) {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(String(text || ""));
-    u.rate = 0.98;
-    u.pitch = 1;
-    u.lang = language === "hi" ? "hi-IN" : "en-IN";
-    window.speechSynthesis.speak(u);
-  }
+  /* ── Server-side TTS (OpenAI voice) with browser fallback ── */
+  const handleSpeak = useCallback(async (msg) => {
+    // Stop current audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    window.speechSynthesis?.cancel();
 
+    if (speakingId === msg.id) {
+      setSpeakingId(null);
+      return;
+    }
+
+    setSpeakingId(msg.id);
+    setSpeakLoading(true);
+
+    const text = cleanAssistantText(msg.text);
+
+    // Try server TTS first (OpenAI voices — much better quality)
+    try {
+      const { data } = await axios.post(`${API}/api/ai/assistant/tts`, {
+        text: text.slice(0, 3000),
+        language,
+      }, { timeout: 15000 });
+
+      if (data?.audioBase64) {
+        const audio = new Audio(`data:audio/mp3;base64,${data.audioBase64}`);
+        audioRef.current = audio;
+        audio.onended = () => { setSpeakingId(null); audioRef.current = null; };
+        audio.onerror = () => { setSpeakingId(null); audioRef.current = null; };
+        setSpeakLoading(false);
+        audio.play();
+        return;
+      }
+    } catch {
+      // fallback below
+    }
+
+    // Browser TTS fallback
+    setSpeakLoading(false);
+    if (window.speechSynthesis) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.92;
+      u.pitch = 1.05;
+      u.lang = language === "hi" ? "hi-IN" : "en-IN";
+      u.onend = () => setSpeakingId(null);
+      window.speechSynthesis.speak(u);
+    } else {
+      setSpeakingId(null);
+    }
+  }, [speakingId, language]);
+
+  /* ── Mic toggle ─────────────────────────────────────────── */
   function handleMicToggle() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
@@ -149,41 +347,20 @@ export default function GoDavaiiAI() {
     rec.start();
   }
 
+  /* ── Backend calls ──────────────────────────────────────── */
   async function askBackend(messageText, history) {
-    const payload = {
-      message: messageText,
-      history,
-      context: profileContext,
-    };
-
-    const urls = [
-      `${API}/api/ai/assistant/chat`,
-      `${API}/api/ai/chat`,
-      `${API}/api/ai/assistant`,
-    ];
-
+    const payload = { message: messageText, history, context: profileContext };
+    const urls = [`${API}/api/ai/assistant/chat`, `${API}/api/ai/chat`, `${API}/api/ai/assistant`];
     for (const url of urls) {
       try {
-        const r = await axios.post(url, payload, { timeout: 18000 });
+        const r = await axios.post(url, payload, { timeout: 25000 });
         const text = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
         if (String(text).trim()) return text;
       } catch (err) {
         console.error("Chat AI failed:", url, getApiErrorMessage(err));
       }
     }
-
     return fallbackReply(messageText, focus, language, whoFor);
-  }
-
-  function getApiErrorMessage(err) {
-    const data = err?.response?.data;
-    return (
-      data?.error ||
-      data?.details ||
-      data?.message ||
-      err?.message ||
-      "File analyze nahi ho payi. Please retry."
-    );
   }
 
   async function askBackendWithFile(messageText, history, file) {
@@ -192,47 +369,32 @@ export default function GoDavaiiAI() {
     fd.append("message", messageText || "");
     fd.append("history", JSON.stringify(history));
     fd.append("context", JSON.stringify(profileContext));
-
-    const urls = [
-      `${API}/api/ai/assistant/analyze-file`,
-      `${API}/api/ai/analyze-file`,
-    ];
-
+    const urls = [`${API}/api/ai/assistant/analyze-file`, `${API}/api/ai/analyze-file`];
     let lastErr = null;
-
     for (const url of urls) {
       try {
-        const r = await axios.post(url, fd, {
-          timeout: 60000,
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-
-        const parsed = r?.data?.parsed;
-        if (parsed) console.log("file parsed:", parsed);
-
+        const r = await axios.post(url, fd, { timeout: 90000, headers: { "Content-Type": "multipart/form-data" } });
         const text = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
         if (String(text).trim()) return text;
-
-        lastErr = new Error("Empty reply from backend");
+        lastErr = new Error("Empty reply");
       } catch (err) {
         lastErr = err;
         console.error("File AI failed:", url, getApiErrorMessage(err));
       }
     }
-
-    const msg = getApiErrorMessage(lastErr);
-    return `File analysis issue: ${msg}\n\nPlease retry once.`;
+    return `File analysis issue: ${getApiErrorMessage(lastErr)}\n\nPlease retry.`;
   }
 
+  /* ── Send message ───────────────────────────────────────── */
   async function sendMessage() {
     const msg = input.trim();
-    const activeFile = reuseAttachment ? attachedFile : attachedFile;
-
+    const activeFile = attachedFile;
     if (!msg && !activeFile) return;
     if (loading) return;
 
-    const userBubbleText = activeFile ? `${msg || "(No text)"}\n[Attached: ${activeFile.name}]` : msg;
-    const nextMessages = [...messages, { role: "user", text: userBubbleText }];
+    const userBubbleText = activeFile ? `${msg || "(file uploaded)"}\n📎 ${activeFile.name}` : msg;
+    const userMsg = { id: makeId(), role: "user", text: userBubbleText };
+    const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
@@ -243,261 +405,414 @@ export default function GoDavaiiAI() {
         ? await askBackendWithFile(msg, history, activeFile)
         : await askBackend(msg, history);
 
-      setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
-
-      if (voiceAutoPlay) speak(reply);
-
-      if (activeFile) {
-        setReuseAttachment(false);
-      }
+      setMessages((prev) => [...prev, { id: makeId(), role: "assistant", text: reply }]);
+      if (activeFile) setReuseAttachment(false);
     } finally {
       setLoading(false);
     }
   }
 
-  return (
-    <div style={{ maxWidth: 520, margin: "0 auto", minHeight: "100vh", background: "linear-gradient(180deg,#ECFDF5 0%,#E6F4FF 45%,#F8FAFC 100%)", paddingBottom: 120, fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-      <div style={{ padding: "14px 16px", background: `linear-gradient(135deg,${DEEP} 0%,#083D28 100%)`, color: "#fff", position: "sticky", top: 0, zIndex: 20, boxShadow: "0 10px 24px rgba(12,90,62,0.22)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 14, background: "rgba(0,217,126,0.16)", display: "grid", placeItems: "center" }}>
-            <Brain style={{ width: 20, height: 20, color: ACC }} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900 }}>GoDavaii AI</div>
-            <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.72)", fontWeight: 700 }}>Conversational health assistant with voice + file support</div>
-          </div>
-          <button onClick={() => setVoiceAutoPlay((v) => !v)} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 900, color: ACC, background: "rgba(0,217,126,0.12)", border: "1px solid rgba(0,217,126,0.28)", borderRadius: 999, padding: "5px 9px", cursor: "pointer" }}>
-            {voiceAutoPlay ? <Volume2 style={{ width: 11, height: 11 }} /> : <VolumeX style={{ width: 11, height: 11 }} />}
-            Voice
-          </button>
-        </div>
-      </div>
+  /* ── Load chat history ──────────────────────────────────── */
+  async function loadChatHistory() {
+    if (!user?._id && !user?.userId) return;
+    setSessionsLoading(true);
+    try {
+      const { data } = await axios.get(`${API}/api/ai/assistant/sessions`, { params: { limit: 20 } });
+      setChatSessions(Array.isArray(data) ? data : []);
+    } catch {
+      setChatSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }
 
-      <div style={{ padding: 14 }}>
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, scrollbarWidth: "none" }}>
+  async function loadSession(sessionId) {
+    try {
+      const { data } = await axios.get(`${API}/api/ai/assistant/sessions/${sessionId}`);
+      if (data?.messages?.length) {
+        setMessages(data.messages.map((m, i) => ({ id: `hist-${i}`, role: m.role, text: m.text })));
+      }
+      setSidebarOpen(false);
+    } catch {}
+  }
+
+  function startNewChat() {
+    setMessages([{
+      id: makeId(),
+      role: "assistant",
+      text: "New chat started! Kya help chahiye aapko?",
+    }]);
+    setSidebarOpen(false);
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     RENDER
+     ═══════════════════════════════════════════════════════════ */
+  return (
+    <div style={{
+      maxWidth: 520, margin: "0 auto",
+      height: "100dvh", display: "flex", flexDirection: "column",
+      background: "linear-gradient(170deg,#F0FAF5 0%,#E8F5EF 35%,#EFF6FF 65%,#F5F3FF 85%,#F8FAFC 100%)",
+      fontFamily: "'Plus Jakarta Sans',sans-serif",
+      overflow: "hidden", position: "relative",
+    }}>
+
+      {/* ══ HEADER ══ */}
+      <div style={{
+        flexShrink: 0, zIndex: 30,
+        padding: "12px 14px 10px",
+        background: `linear-gradient(135deg,${DEEP} 0%,${DARK} 100%)`,
+        borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
+        boxShadow: "0 8px 32px rgba(12,90,62,0.25)",
+        position: "relative", overflow: "hidden",
+      }}>
+        <div style={{ position: "absolute", right: -30, top: -30, width: 120, height: 120, borderRadius: "50%", background: `radial-gradient(circle,${ACC}18,transparent 65%)`, pointerEvents: "none" }} />
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <motion.button whileTap={{ scale: 0.9 }}
+            onClick={() => { setSidebarOpen(true); loadChatHistory(); }}
+            style={{ width: 36, height: 36, borderRadius: 12, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.15)", display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0 }}>
+            <History style={{ width: 16, height: 16, color: "#fff" }} />
+          </motion.button>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900, color: "#fff", letterSpacing: "-0.3px" }}>
+              GoDavaii AI
+            </div>
+            <div style={{ fontSize: 10.5, color: ACC, fontWeight: 700, marginTop: 1 }}>
+              Health assistant · Voice · Files · {whoForLabel}
+            </div>
+          </div>
+
+          {/* Desi Ilaaj toggle */}
+          <motion.button whileTap={{ scale: 0.92 }}
+            onClick={() => setDesiIlaaj(!desiIlaaj)}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              fontSize: 10, fontWeight: 900, borderRadius: 999, padding: "5px 10px", cursor: "pointer",
+              color: desiIlaaj ? "#065F46" : ACC,
+              background: desiIlaaj ? "#D1FAE5" : "rgba(0,217,126,0.12)",
+              border: `1px solid ${desiIlaaj ? "#A7F3D0" : "rgba(0,217,126,0.28)"}`,
+            }}>
+            <Leaf style={{ width: 11, height: 11 }} />
+            Desi
+          </motion.button>
+
+          <motion.button whileTap={{ scale: 0.92 }}
+            onClick={() => navigate("/home")}
+            style={{ width: 36, height: 36, borderRadius: 12, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.15)", display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0 }}>
+            <X style={{ width: 16, height: 16, color: "#fff" }} />
+          </motion.button>
+        </div>
+
+        {/* Focus chips */}
+        <div style={{ marginTop: 10, display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" }}>
           {FOCUS.map((m) => (
-            <button
-              key={m.key}
+            <motion.button key={m.key} whileTap={{ scale: 0.93 }}
               onClick={() => setFocus(m.key)}
               style={{
-                flexShrink: 0,
-                height: 34,
-                borderRadius: 999,
-                border: focus === m.key ? "none" : "1.5px solid rgba(12,90,62,0.16)",
-                background: focus === m.key ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff",
-                color: focus === m.key ? "#fff" : "#1E3A2E",
-                padding: "0 13px",
-                fontSize: 12,
-                fontWeight: 800,
-                cursor: "pointer"
-              }}
-            >
-              {m.label}
-            </button>
+                flexShrink: 0, height: 32, borderRadius: 999, border: focus === m.key ? "none" : "1px solid rgba(255,255,255,0.18)",
+                background: focus === m.key ? ACC : "rgba(255,255,255,0.08)",
+                color: focus === m.key ? DEEP : "#fff",
+                padding: "0 12px", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                fontFamily: "'Sora',sans-serif",
+                display: "flex", alignItems: "center", gap: 4,
+                boxShadow: focus === m.key ? `0 4px 14px ${ACC}40` : "none",
+              }}>
+              <span style={{ fontSize: 12 }}>{m.icon}</span> {m.label}
+            </motion.button>
           ))}
         </div>
 
-        <div style={{ marginTop: 8, display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" }}>
+        {/* Target + Language row */}
+        <div style={{ marginTop: 8, display: "flex", gap: 6, alignItems: "center", overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}>
           {TARGETS.map((t) => (
-            <button
-              key={t.key}
+            <motion.button key={t.key} whileTap={{ scale: 0.93 }}
               onClick={() => setWhoFor(t.key)}
               style={{
-                flexShrink: 0,
-                height: 30,
-                borderRadius: 999,
-                border: whoFor === t.key ? "none" : "1px solid rgba(12,90,62,0.18)",
-                background: whoFor === t.key ? DEEP : "rgba(255,255,255,0.88)",
-                color: whoFor === t.key ? "#fff" : "#244636",
-                padding: "0 10px",
-                fontSize: 11,
-                fontWeight: 800,
-                cursor: "pointer"
-              }}
-            >
-              {t.label}
-            </button>
+                flexShrink: 0, height: 28, borderRadius: 999,
+                border: whoFor === t.key ? "none" : "1px solid rgba(255,255,255,0.15)",
+                background: whoFor === t.key ? "rgba(0,217,126,0.25)" : "transparent",
+                color: "#fff", padding: "0 10px", fontSize: 10.5, fontWeight: 800, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 3,
+              }}>
+              <span style={{ fontSize: 11 }}>{t.icon}</span> {t.label}
+            </motion.button>
           ))}
-
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 800, color: "#426756", marginLeft: 4 }}>
-            <Languages style={{ width: 13, height: 13 }} />
-            {LANGS.map((l) => (
-              <button
-                key={l.code}
-                onClick={() => setLanguage(l.code)}
-                style={{
-                  height: 26,
-                  borderRadius: 999,
-                  border: language === l.code ? "none" : "1px solid rgba(12,90,62,0.18)",
-                  background: language === l.code ? DEEP : "rgba(255,255,255,0.86)",
-                  color: language === l.code ? "#fff" : "#244636",
-                  padding: "0 9px",
-                  fontSize: 10.5,
-                  fontWeight: 800,
-                  cursor: "pointer"
-                }}
-              >
-                {l.label}
-              </button>
-            ))}
-          </div>
+          <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.15)", flexShrink: 0, margin: "0 2px" }} />
+          {LANGS.map((l) => (
+            <motion.button key={l.code} whileTap={{ scale: 0.93 }}
+              onClick={() => setLanguage(l.code)}
+              style={{
+                flexShrink: 0, height: 28, borderRadius: 999,
+                border: language === l.code ? "none" : "1px solid rgba(255,255,255,0.15)",
+                background: language === l.code ? "rgba(0,217,126,0.25)" : "transparent",
+                color: "#fff", padding: "0 10px", fontSize: 10.5, fontWeight: 800, cursor: "pointer",
+              }}>
+              {l.label}
+            </motion.button>
+          ))}
         </div>
 
         {whoFor === "family" && (
-          <input
-            value={familyLabel}
-            onChange={(e) => setFamilyLabel(e.target.value)}
+          <input value={familyLabel} onChange={(e) => setFamilyLabel(e.target.value)}
             placeholder="Family member name (eg: Mom)"
-            style={{ marginTop: 8, width: "100%", height: 38, borderRadius: 10, border: "1px solid rgba(12,90,62,0.2)", padding: "0 10px", fontSize: 12.5, fontWeight: 700 }}
+            style={{ marginTop: 8, width: "100%", height: 34, borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", padding: "0 10px", fontSize: 12, fontWeight: 700, color: "#fff", outline: "none" }}
           />
         )}
-
         {whoFor === "new" && (
-          <input
-            value={customProfile}
-            onChange={(e) => setCustomProfile(e.target.value)}
-            placeholder="New profile note (age, gender, condition)"
-            style={{ marginTop: 8, width: "100%", height: 38, borderRadius: 10, border: "1px solid rgba(12,90,62,0.2)", padding: "0 10px", fontSize: 12.5, fontWeight: 700 }}
+          <input value={customProfile} onChange={(e) => setCustomProfile(e.target.value)}
+            placeholder="Age, gender, condition..."
+            style={{ marginTop: 8, width: "100%", height: 34, borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", padding: "0 10px", fontSize: 12, fontWeight: 700, color: "#fff", outline: "none" }}
           />
         )}
+      </div>
 
-        <div style={{ marginTop: 10, background: "#FFF7ED", border: "1px solid #FED7AA", borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "flex-start", gap: 8 }}>
-          <AlertTriangle style={{ width: 15, height: 15, color: "#C2410C", marginTop: 1, flexShrink: 0 }} />
-          <span style={{ fontSize: 11.5, color: "#9A3412", fontWeight: 700 }}>
-            AI helpful hai but final diagnosis doctor karega. Emergency red flags me immediate hospital/ambulance.
-          </span>
-        </div>
+      {/* ══ DISCLAIMER ══ */}
+      <div style={{ flexShrink: 0, margin: "8px 12px 0", background: "#FFF7ED", border: "1px solid #FED7AA", borderRadius: 14, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+        <AlertTriangle style={{ width: 14, height: 14, color: "#C2410C", flexShrink: 0 }} />
+        <span style={{ fontSize: 11, color: "#9A3412", fontWeight: 700 }}>
+          AI guide hai, final diagnosis doctor ka. Emergency me hospital/ambulance call karein.
+        </span>
+      </div>
 
-        <div style={{ marginTop: 12, background: "rgba(255,255,255,0.95)", border: "1px solid rgba(12,90,62,0.12)", borderRadius: 16, minHeight: 360, maxHeight: "50vh", overflowY: "auto", padding: 12 }}>
-          <AnimatePresence initial={false}>
-            {messages.map((m, i) => (
-              <motion.div
-                key={`${m.role}-${i}`}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                style={{ marginBottom: 10, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}
-              >
-                <div
-                  style={{
-                    maxWidth: "90%",
-                    whiteSpace: "pre-line",
-                    borderRadius: 14,
-                    padding: "10px 12px",
-                    fontSize: 13,
-                    lineHeight: 1.55,
-                    fontWeight: 650,
-                    color: m.role === "user" ? "#fff" : "#1F2937",
-                    background: m.role === "user" ? `linear-gradient(135deg,${DEEP},${MID})` : "#F8FAFC",
-                    border: m.role === "user" ? "none" : "1px solid #E2E8F0",
-                    position: "relative"
-                  }}
-                >
-                  {m.role === "assistant" ? cleanAssistantText(m.text) : m.text}
-                  {m.role === "assistant" && (
-                    <button onClick={() => speak(m.text)} style={{ marginTop: 7, display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid #E2E8F0", borderRadius: 999, background: "#fff", padding: "3px 8px", fontSize: 10.5, fontWeight: 800, color: "#0F766E", cursor: "pointer" }}>
-                      <Volume2 style={{ width: 11, height: 11 }} /> Audio
-                    </button>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-
-          {loading && <div style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>Thinking...</div>}
-        </div>
-
-        {attachedFile && (
-          <div style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 7, padding: "6px 10px", borderRadius: 999, background: "#ECFDF5", border: "1px solid #A7F3D0", fontSize: 11.5, fontWeight: 800, color: "#065F46" }}>
-            <Paperclip style={{ width: 12, height: 12 }} />
-            {attachedFile.name}
-            <span style={{ fontSize: 10, fontWeight: 900, color: "#0F766E", background: "#D1FAE5", border: "1px solid #A7F3D0", borderRadius: 999, padding: "1px 6px" }}>
-              Persistent
-            </span>
-            <button onClick={() => setAttachedFile(null)} style={{ border: "none", background: "transparent", cursor: "pointer", padding: 0, display: "grid", placeItems: "center" }}>
-              <X style={{ width: 12, height: 12, color: "#065F46" }} />
-            </button>
-          </div>
-        )}
-
-        {attachedFile && (
-          <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8 }}>
-            <input
-              id="reuse-attachment"
-              type="checkbox"
-              checked={reuseAttachment}
-              onChange={(e) => setReuseAttachment(e.target.checked)}
-              style={{ width: 14, height: 14 }}
+      {/* ══ CHAT AREA ══ */}
+      <div style={{
+        flex: 1, overflowY: "auto", overflowX: "hidden",
+        padding: "12px 12px 4px",
+        scrollbarWidth: "none",
+      }}>
+        <AnimatePresence initial={false}>
+          {messages.map((m) => (
+            <ChatBubble
+              key={m.id}
+              m={m}
+              onSpeak={handleSpeak}
+              speakingId={speakingId}
+              speakLoading={speakLoading}
             />
-            <label htmlFor="reuse-attachment" style={{ fontSize: 11, fontWeight: 800, color: "#3F5F4F", cursor: "pointer" }}>
-              Use same report for next message
-            </label>
-          </div>
+          ))}
+        </AnimatePresence>
+
+        {loading && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", marginBottom: 8 }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: 10,
+              background: `linear-gradient(135deg,${DEEP},${MID})`,
+              display: "grid", placeItems: "center",
+            }}>
+              <Brain style={{ width: 14, height: 14, color: ACC }} />
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {[0, 1, 2].map((i) => (
+                <motion.div key={i}
+                  animate={{ y: [0, -6, 0] }}
+                  transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
+                  style={{ width: 7, height: 7, borderRadius: "50%", background: ACC }}
+                />
+              ))}
+            </div>
+            <span style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>Analyzing...</span>
+          </motion.div>
         )}
+        <div ref={chatEndRef} />
+      </div>
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".pdf,.png,.jpg,.jpeg,.txt,.csv"
-          style={{ display: "none" }}
-          onChange={(e) => setAttachedFile(e.target.files?.[0] || null)}
-        />
+      {/* ══ ATTACHMENT PREVIEW ══ */}
+      {attachedFile && (
+        <div style={{ flexShrink: 0, margin: "0 12px 4px", display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 14, background: "#ECFDF5", border: "1px solid #A7F3D0" }}>
+          <FileText style={{ width: 14, height: 14, color: "#065F46", flexShrink: 0 }} />
+          <span style={{ fontSize: 12, fontWeight: 800, color: "#065F46", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {attachedFile.name}
+          </span>
+          {attachedFile.name?.toLowerCase().endsWith(".pdf") && (
+            <span style={{ fontSize: 9.5, fontWeight: 900, color: "#059669", background: "#D1FAE5", padding: "2px 7px", borderRadius: 999, flexShrink: 0 }}>
+              All pages
+            </span>
+          )}
+          <button onClick={() => setAttachedFile(null)} style={{ border: "none", background: "none", cursor: "pointer", padding: 0, display: "grid", placeItems: "center" }}>
+            <X style={{ width: 14, height: 14, color: "#065F46" }} />
+          </button>
+        </div>
+      )}
 
-        <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={`Ask anything for ${whoForLabel}...`}
-            rows={3}
-            style={{ flex: 1, resize: "none", borderRadius: 14, border: "1.5px solid rgba(12,90,62,0.16)", background: "#fff", padding: 12, fontSize: 13.5, fontWeight: 700, color: "#0F172A", outline: "none" }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-              }
-            }}
-          />
+      {/* ══ INPUT BAR ══ */}
+      <div style={{
+        flexShrink: 0,
+        padding: "8px 12px calc(env(safe-area-inset-bottom,0px) + 80px) 12px",
+        background: "rgba(255,255,255,0.9)", backdropFilter: "blur(16px)",
+        borderTop: `1px solid ${GLASS_BORDER}`,
+      }}>
+        <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,.webp" style={{ display: "none" }}
+          onChange={(e) => setAttachedFile(e.target.files?.[0] || null)} />
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <motion.button whileTap={{ scale: 0.92 }} onClick={() => fileRef.current?.click()} style={{ width: 46, height: 38, borderRadius: 12, border: "1px solid rgba(12,90,62,0.2)", background: "#fff", color: "#14532D", cursor: "pointer" }}>
-              <Paperclip style={{ width: 16, height: 16, margin: "0 auto" }} />
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+          <div style={{
+            flex: 1, display: "flex", alignItems: "flex-end",
+            minHeight: 46, borderRadius: 16,
+            background: "#F8FAFC", border: "1.5px solid rgba(12,90,62,0.12)",
+            padding: "6px 12px",
+          }}>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={`Message for ${whoForLabel}...`}
+              rows={1}
+              style={{
+                flex: 1, resize: "none", background: "none", border: "none", outline: "none",
+                fontSize: 14, fontWeight: 700, color: "#0F172A", lineHeight: 1.5,
+                fontFamily: "'Plus Jakarta Sans',sans-serif",
+                maxHeight: 120, overflowY: "auto",
+              }}
+              onInput={(e) => {
+                e.target.style.height = "auto";
+                e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: 6, paddingBottom: 2 }}>
+            <motion.button whileTap={{ scale: 0.88 }}
+              onClick={() => fileRef.current?.click()}
+              style={{ width: 42, height: 42, borderRadius: 14, border: `1.5px solid ${GLASS_BORDER}`, background: "#fff", display: "grid", placeItems: "center", cursor: "pointer" }}>
+              <Paperclip style={{ width: 17, height: 17, color: DEEP }} />
             </motion.button>
 
-            <motion.button whileTap={{ scale: 0.92 }} onClick={handleMicToggle} style={{ width: 46, height: 38, borderRadius: 12, border: "none", background: micOn ? "linear-gradient(135deg,#DC2626,#EF4444)" : "#E2F8EE", color: micOn ? "#fff" : "#14532D", cursor: "pointer" }}>
-              {micOn ? <MicOff style={{ width: 16, height: 16, margin: "0 auto" }} /> : <Mic style={{ width: 16, height: 16, margin: "0 auto" }} />}
+            <motion.button whileTap={{ scale: 0.88 }}
+              onClick={handleMicToggle}
+              style={{
+                width: 42, height: 42, borderRadius: 14, border: "none",
+                background: micOn ? "linear-gradient(135deg,#DC2626,#EF4444)" : "#E8F5EF",
+                display: "grid", placeItems: "center", cursor: "pointer",
+              }}>
+              {micOn
+                ? <MicOff style={{ width: 17, height: 17, color: "#fff" }} />
+                : <Mic style={{ width: 17, height: 17, color: DEEP }} />}
             </motion.button>
 
-            <motion.button
-              whileTap={{ scale: 0.92 }}
+            <motion.button whileTap={{ scale: 0.88 }}
               onClick={sendMessage}
               disabled={loading || (!input.trim() && !attachedFile)}
               style={{
-                width: 46,
-                height: 46,
-                borderRadius: 14,
-                border: "none",
+                width: 42, height: 42, borderRadius: 14, border: "none",
                 background: loading || (!input.trim() && !attachedFile) ? "#E2E8F0" : `linear-gradient(135deg,${DEEP},${MID})`,
-                color: loading || (!input.trim() && !attachedFile) ? "#94A3B8" : "#fff",
+                display: "grid", placeItems: "center",
                 cursor: loading || (!input.trim() && !attachedFile) ? "not-allowed" : "pointer",
-                boxShadow: loading || (!input.trim() && !attachedFile) ? "none" : "0 8px 20px rgba(12,90,62,0.24)"
-              }}
-            >
-              <Send style={{ width: 17, height: 17, margin: "0 auto" }} />
+                boxShadow: loading || (!input.trim() && !attachedFile) ? "none" : "0 6px 18px rgba(12,90,62,0.28)",
+              }}>
+              <Send style={{ width: 17, height: 17, color: loading || (!input.trim() && !attachedFile) ? "#94A3B8" : "#fff" }} />
             </motion.button>
           </div>
         </div>
-
-        <div style={{ marginTop: 8, fontSize: 11, color: "#64748B", fontWeight: 700 }}>
-          Tip: text + voice + file sab combine kar sakte ho. AI context memory last messages se maintain hoti hai.
-        </div>
-
-        <div style={{ marginTop: 2, fontSize: 11, color: "#64748B", fontWeight: 700 }}>
-          Current context: <span style={{ color: "#0F766E" }}>{whoForLabel}</span>
-        </div>
-
-        <div style={{ marginTop: 10, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10.5, fontWeight: 900, color: ACC, background: "rgba(0,217,126,0.12)", border: "1px solid rgba(0,217,126,0.28)", borderRadius: 999, padding: "5px 10px" }}>
-          <Sparkles style={{ width: 11, height: 11 }} /> AI mode: {focus.toUpperCase()}
-        </div>
       </div>
+
+      {/* ══ CHAT HISTORY SIDEBAR ══ */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setSidebarOpen(false)}
+              style={{ position: "absolute", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
+            />
+            <motion.div
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+              style={{
+                position: "absolute", top: 0, left: 0, bottom: 0, width: "80%", maxWidth: 320,
+                zIndex: 50, background: "#fff",
+                borderTopRightRadius: 28, borderBottomRightRadius: 28,
+                boxShadow: "20px 0 60px rgba(0,0,0,0.15)",
+                display: "flex", flexDirection: "column", overflow: "hidden",
+              }}>
+              {/* Sidebar header */}
+              <div style={{
+                padding: "18px 16px 12px",
+                background: `linear-gradient(135deg,${DEEP},${DARK})`,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900, color: "#fff" }}>
+                    Chat History
+                  </div>
+                  <motion.button whileTap={{ scale: 0.9 }}
+                    onClick={() => setSidebarOpen(false)}
+                    style={{ width: 30, height: 30, borderRadius: 10, background: "rgba(255,255,255,0.12)", border: "none", display: "grid", placeItems: "center", cursor: "pointer" }}>
+                    <X style={{ width: 14, height: 14, color: "#fff" }} />
+                  </motion.button>
+                </div>
+              </div>
+
+              {/* New chat button */}
+              <div style={{ padding: "10px 14px 6px" }}>
+                <motion.button whileTap={{ scale: 0.97 }}
+                  onClick={startNewChat}
+                  style={{
+                    width: "100%", height: 42, borderRadius: 14, border: "none",
+                    background: `linear-gradient(135deg,${DEEP},${MID})`,
+                    color: "#fff", fontSize: 13, fontWeight: 800,
+                    fontFamily: "'Sora',sans-serif", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    boxShadow: "0 4px 14px rgba(12,90,62,0.25)",
+                  }}>
+                  <Plus style={{ width: 15, height: 15 }} /> New Chat
+                </motion.button>
+              </div>
+
+              {/* Sessions list */}
+              <div style={{ flex: 1, overflowY: "auto", padding: "6px 14px 20px", scrollbarWidth: "none" }}>
+                {sessionsLoading ? (
+                  <div style={{ textAlign: "center", padding: "40px 0", color: "#94A3B8", fontSize: 13, fontWeight: 700 }}>Loading...</div>
+                ) : chatSessions.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px 0" }}>
+                    <div style={{ fontSize: 36, marginBottom: 12 }}>💬</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: "#0B1F16", marginBottom: 4 }}>No previous chats</div>
+                    <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>Your conversations will appear here</div>
+                  </div>
+                ) : (
+                  chatSessions.map((s) => {
+                    const lastMsg = s.messages?.[s.messages.length - 1]?.text || "";
+                    const preview = lastMsg.slice(0, 60) + (lastMsg.length > 60 ? "..." : "");
+                    const date = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "";
+
+                    return (
+                      <motion.button key={s._id} whileTap={{ scale: 0.98 }}
+                        onClick={() => loadSession(s._id)}
+                        style={{
+                          width: "100%", textAlign: "left", padding: "12px 14px",
+                          borderRadius: 14, border: "1px solid rgba(12,90,62,0.08)",
+                          background: "#F8FAFC", marginBottom: 8, cursor: "pointer",
+                          display: "block",
+                        }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: DEEP, fontFamily: "'Sora',sans-serif" }}>
+                            {s.whoForLabel || s.whoFor || "Self"}
+                          </span>
+                          <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700 }}>{date}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "#64748B", fontWeight: 600, lineHeight: 1.4 }}>{preview || "Empty chat"}</div>
+                        <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+                          {s.focus && <span style={{ fontSize: 9.5, fontWeight: 800, color: "#059669", background: "#ECFDF5", padding: "2px 7px", borderRadius: 999 }}>{s.focus}</span>}
+                          {s.language && <span style={{ fontSize: 9.5, fontWeight: 800, color: "#6366F1", background: "#EEF2FF", padding: "2px 7px", borderRadius: 999 }}>{s.language}</span>}
+                        </div>
+                      </motion.button>
+                    );
+                  })
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <style>{`
+        @keyframes gdSpin { to { transform: rotate(360deg); } }
+        div::-webkit-scrollbar { display: none; }
+      `}</style>
     </div>
   );
 }
