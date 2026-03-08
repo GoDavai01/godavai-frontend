@@ -231,9 +231,9 @@ export default function ProfilePage() {
 };
 
   // --- Settings modals (unchanged) ---
-  const [changePassOpen, setChangePassOpen] = useState(false);
-  const [changeEmailOpen, setChangeEmailOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [changePassOpen, setChangePassOpen] = useState(false); // eslint-disable-line no-unused-vars
+  const [changeEmailOpen, setChangeEmailOpen] = useState(false); // eslint-disable-line no-unused-vars
+  const [deleteOpen, setDeleteOpen] = useState(false); // eslint-disable-line no-unused-vars
 
   // --- Addresses (unchanged) ---
   const [editingAddress, setEditingAddress] = useState(null);
