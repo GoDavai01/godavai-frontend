@@ -95,14 +95,14 @@ function getAuthHeaders() {
 function FormatReply({ text }) {
   const clean = cleanAssistantText(text);
   const sections = clean.split(
-    /\n(?=(?:Assessment|Next steps|Red flags|When to see doctor|Desi ilaaj|Home remedies):)/i
+    /\n(?=(?:Assessment|Next steps|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):)/i
   );
 
   return (
     <div>
       {sections.map((section, i) => {
         const headerMatch = section.match(
-          /^(Assessment|Next steps|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i
+          /^(Assessment|Next steps|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i
         );
         if (!headerMatch) {
           return (
@@ -113,7 +113,7 @@ function FormatReply({ text }) {
         }
         const header = headerMatch[1];
         const body = section.slice(headerMatch[0].length).trim();
-        const isRed = /red flag/i.test(header);
+        const isRed = /red flag|warning sign/i.test(header);
         const isDesi = /desi|home remed/i.test(header);
 
         return (
@@ -306,7 +306,7 @@ export default function GoDavaiiAI() {
     () => ({
       whoFor,
       whoForLabel,
-      language: "hinglish",
+      language: "auto",
       focus,
       desiIlaaj: true,
       userSummary: {
