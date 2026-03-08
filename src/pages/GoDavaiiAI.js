@@ -1,5 +1,5 @@
 // pages/GoDavaiiAI.js — GoDavaii 2035 Health OS AI Assistant
-// ✅ FIX: Input bar bottom padding reduced (70px → 62px) for tighter fit
+// ✅ FIX: Container height = calc(100dvh - 58px) to account for BottomNavBar, input padding = 4px (no gap)
 // ✅ FIX: TTS timeout increased (15s → 30s) for long responses
 // ✅ FIX: TTS error handling — speakLoading properly reset in ALL error paths
 // ✅ FIX: Auth token sent with all API requests
@@ -572,7 +572,7 @@ export default function GoDavaiiAI() {
       style={{
         maxWidth: 520,
         margin: "0 auto",
-        height: "100dvh",
+        height: "calc(100dvh - 58px)",
         display: "flex",
         flexDirection: "column",
         background:
@@ -923,11 +923,11 @@ export default function GoDavaiiAI() {
         </div>
       )}
 
-      {/* ══ INPUT BAR — ✅ FIX: padding 62px (was 70px) ══ */}
+      {/* ══ INPUT BAR — sits right above BottomNavBar ══ */}
       <div
         style={{
           flexShrink: 0,
-          padding: "8px 12px 62px 12px",
+          padding: "8px 12px 4px 12px",
           background: "rgba(255,255,255,0.9)",
           backdropFilter: "blur(16px)",
           borderTop: `1px solid ${GLASS_BORDER}`,
