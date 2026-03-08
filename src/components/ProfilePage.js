@@ -23,7 +23,7 @@ import { ChevronRight, Shield, FileText, ScrollText, Cookie, UserX } from "lucid
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Pencil, Plus, ChevronDown, Mail, Home, History, BadgeCheck, Wallet, Settings,
-  Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera, Calendar
+  Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera, Calendar, X
 } from "lucide-react";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
