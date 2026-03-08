@@ -22,12 +22,14 @@ const HIDE_ENTIRE_NAVBAR = [
   "/medicines",
   "/search",
   "/all-medicines",
+  "/ai",
+  "/health",
 ];
 
 // Pages where only the search bar is hidden (location + profile still show)
 const NO_SEARCH_PATHS = [
   "/orders", "/profile", "/checkout", "/payment",
-  "/payment-success", "/ai", "/health",
+  "/payment-success",
   "/doctors", "/doctor", "/lab-tests",
 ];
 
@@ -190,7 +192,6 @@ export default function Navbar({
     : routerLocation.pathname.startsWith("/ai")        ? "GoDavaii AI"
     : routerLocation.pathname.startsWith("/health")    ? "Health Vault"
     : routerLocation.pathname.startsWith("/doctors")   ? "Doctors"
-    : routerLocation.pathname.startsWith("/doctor")    ? "Doctor Portal"
     : routerLocation.pathname.startsWith("/lab-tests") ? "Lab Tests"
     : routerLocation.pathname.startsWith("/all-medicines") ? "All Medicines"
     : null;
