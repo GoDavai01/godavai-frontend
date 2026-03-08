@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useThemeMode } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
@@ -23,7 +23,7 @@ import { ChevronRight, Shield, FileText, ScrollText, Cookie, UserX } from "lucid
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Pencil, Plus, ChevronDown, Mail, Home, History, BadgeCheck, Wallet, Settings,
-  Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera, Calendar, Stethoscope
+  Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera, Calendar
 } from "lucide-react";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -76,7 +76,7 @@ export default function ProfilePage() {
 
   const [openSections, setOpenSections] = useState({
     addresses: true, wallet: false, orders: false, badges: false, personalization: false,
-    settings: false, pharmacist: false, doctor: false, delivery: false, support: false, refer: false, legal: false,
+    settings: false, pharmacist: false, delivery: false, support: false, refer: false, legal: false,
   });
   const toggleSection = (key) => setOpenSections((p) => ({ ...p, [key]: !p[key] }));
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
@@ -231,11 +231,8 @@ export default function ProfilePage() {
 };
 
   // --- Settings modals (unchanged) ---
-  // eslint-disable-next-line no-unused-vars
   const [changePassOpen, setChangePassOpen] = useState(false);
-  // eslint-disable-next-line no-unused-vars
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
-  // eslint-disable-next-line no-unused-vars
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   // --- Addresses (unchanged) ---
@@ -369,50 +366,302 @@ export default function ProfilePage() {
   const mobileLocked = MOBILE_LOGIN_ENABLED && Boolean(user?.mobileVerified);
   const canEditMobile = !mobileLocked;
 
-  return (
-    <div className="profile-page mx-auto w-full max-w-[520px] md:max-w-[680px] lg:max-w-[820px] px-4 sm:px-5 md:px-6 pb-28 pt-4 bg-white">
-      
-      {/* Top: Profile Summary */}
-      <div className="flex items-center gap-3 sm:gap-4 py-3 md:py-4 border-b border-slate-100 mb-4">
-        <div className="relative shrink-0">
-          <Avatar className="h-14 w-14 sm:h-16 sm:w-16 ring-2 ring-emerald-100">
-            <AvatarImage
-              src={
-                user?.avatar ||
-                (user?.name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}` : "")
-              }
-            />
-            <AvatarFallback className="bg-emerald-600 text-white font-bold">
-              {(user?.name || "NU").slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+  // ── Health Score (calculated from profile completeness + orders + activity) ──
+  const healthScore = useMemo(() => {
+    let score = 40; // base
+    if (user?.name) score += 8;
+    if (user?.email) score += 8;
+    if (user?.dob) score += 8;
+    if (user?.mobile) score += 6;
+    if (user?.avatar) score += 5;
+    if (addresses.length > 0) score += 5;
+    if (orders.length > 0) score += 10;
+    if (orders.length > 5) score += 5;
+    if (orders.length > 10) score += 5;
+    return Math.min(100, score);
+  }, [user, addresses.length, orders.length]);
 
-          <Button
-            size="icon"
-            variant="secondary"
-            className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full border bg-white text-emerald-700 hover:bg-emerald-50 active:scale-[.97]"
-            onClick={handleEditProfileOpen}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
+  const scoreColor = healthScore >= 80 ? "#00D97E" : healthScore >= 50 ? "#FBBF24" : "#EF4444";
+  const scoreLabel = healthScore >= 80 ? "Excellent" : healthScore >= 50 ? "Good" : "Needs attention";
+
+  // ── Medicine Reminders (local state — future: backend sync) ──
+  const [reminders, setReminders] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("gd_med_reminders") || "[]"); } catch { return []; }
+  });
+  const [reminderDialog, setReminderDialog] = useState(false);
+  const [reminderForm, setReminderForm] = useState({ name: "", time: "08:00", frequency: "daily" });
+
+  const saveReminder = () => {
+    if (!reminderForm.name.trim()) return;
+    const updated = [...reminders, { ...reminderForm, id: Date.now(), active: true }];
+    setReminders(updated);
+    localStorage.setItem("gd_med_reminders", JSON.stringify(updated));
+    setReminderForm({ name: "", time: "08:00", frequency: "daily" });
+    setReminderDialog(false);
+    setSnackbar({ open: true, message: "Reminder added!", severity: "success" });
+  };
+
+  const toggleReminder = (id) => {
+    const updated = reminders.map(r => r.id === id ? { ...r, active: !r.active } : r);
+    setReminders(updated);
+    localStorage.setItem("gd_med_reminders", JSON.stringify(updated));
+  };
+
+  const deleteReminder = (id) => {
+    const updated = reminders.filter(r => r.id !== id);
+    setReminders(updated);
+    localStorage.setItem("gd_med_reminders", JSON.stringify(updated));
+  };
+
+  // Quick actions for HealthOS
+  const quickActions = [
+    { icon: "💊", label: "Medicines", action: () => navigate("/all-medicines") },
+    { icon: "🤖", label: "AI Doctor", action: () => navigate("/ai") },
+    { icon: "🩺", label: "Doctors", action: () => navigate("/doctors") },
+    { icon: "🧪", label: "Lab Tests", action: () => navigate("/search?tab=labs") },
+    { icon: "📋", label: "Upload Rx", action: () => navigate("/medicines") },
+    { icon: "🏥", label: "Health Vault", action: () => navigate("/health") },
+  ];
+
+  return (
+    <div className="profile-page mx-auto w-full max-w-[520px] md:max-w-[680px] lg:max-w-[820px] pb-28 bg-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      
+      {/* ═══ HERO SECTION — 2035 HealthOS ═══ */}
+      <div style={{
+        background: "linear-gradient(145deg, #041F15 0%, #0C5A3E 50%, #0E7A4F 100%)",
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
+        padding: "20px 20px 24px",
+        position: "relative",
+        overflow: "hidden",
+      }}>
+        {/* Decorative orbs */}
+        <div style={{ position: "absolute", right: -40, top: -40, width: 160, height: 160, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,217,126,0.15), transparent 65%)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", left: -30, bottom: -30, width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.06), transparent 65%)", pointerEvents: "none" }} />
+        
+        {/* Profile row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14, position: "relative", zIndex: 2 }}>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: 20, overflow: "hidden",
+              border: "2.5px solid rgba(0,217,126,0.5)",
+              boxShadow: "0 4px 20px rgba(0,217,126,0.25)",
+            }}>
+              <Avatar className="h-full w-full">
+                <AvatarImage src={user?.avatar || (user?.name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=0C5A3E&color=00D97E&bold=true` : "")} />
+                <AvatarFallback style={{ background: "linear-gradient(135deg, #0C5A3E, #0E7A4F)", color: "#00D97E", fontWeight: 800, fontSize: 20, fontFamily: "'Sora', sans-serif" }}>
+                  {(user?.name || "NU").slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            </div>
+            <motion.button
+              whileTap={{ scale: 0.85 }}
+              onClick={handleEditProfileOpen}
+              style={{
+                position: "absolute", bottom: -4, right: -4,
+                width: 28, height: 28, borderRadius: 10,
+                background: "#00D97E", border: "2px solid #041F15",
+                display: "grid", placeItems: "center", cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(0,217,126,0.4)",
+              }}
+            >
+              <Pencil style={{ width: 12, height: 12, color: "#041F15" }} />
+            </motion.button>
+          </div>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "'Sora', sans-serif", fontSize: 20, fontWeight: 900, color: "#fff", letterSpacing: "-0.3px", lineHeight: 1.2 }}>
+              {user?.name || "New User"}
+            </div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", fontWeight: 600, marginTop: 3, display: "flex", alignItems: "center", gap: 5 }}>
+              <Mail style={{ width: 11, height: 11 }} />
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.email || "Add email"}</span>
+            </div>
+            {user?.mobile && (
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 600, marginTop: 2 }}>
+                {user.mobile}
+              </div>
+            )}
+          </div>
+
+          {/* Health Score Ring */}
+          <div style={{ position: "relative", flexShrink: 0, width: 62, height: 62 }}>
+            <svg viewBox="0 0 36 36" style={{ width: 62, height: 62, transform: "rotate(-90deg)" }}>
+              <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3" />
+              <circle cx="18" cy="18" r="15.5" fill="none" stroke={scoreColor} strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={`${healthScore * 0.975} 100`}
+                style={{ transition: "stroke-dasharray 1s ease" }}
+              />
+            </svg>
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ fontFamily: "'Sora', sans-serif", fontSize: 16, fontWeight: 900, color: scoreColor, lineHeight: 1 }}>{healthScore}</span>
+              <span style={{ fontSize: 7, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: "0.3px", marginTop: 1 }}>HEALTH</span>
+            </div>
+          </div>
         </div>
 
-        {/* Text column */}
-        <div className="min-w-0 flex-1">
-          <h1 className="h1-strong truncate text-[18px] sm:text-[20px] md:text-[22px]">
-            {user?.name || "New User"}
-          </h1>
-          <div className="body mt-0.5 flex items-center gap-2 text-slate-700">
-            <Mail className="h-4 w-4 shrink-0" />
-            <span className="truncate text-[13px] sm:text-[14px]">{user?.email}</span>
+        {/* Health Score label */}
+        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ flex: 1, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+            <motion.div initial={{ width: 0 }} animate={{ width: `${healthScore}%` }} transition={{ duration: 1.2, ease: "easeOut" }} style={{ height: "100%", borderRadius: 2, background: `linear-gradient(90deg, ${scoreColor}, ${scoreColor}88)` }} />
           </div>
-          {user?.mobile && (
-            <div className="body text-slate-700 truncate text-[13px] sm:text-[14px]">
-              {user.mobile}
-            </div>
-          )}
+          <span style={{ fontSize: 10, fontWeight: 800, color: scoreColor, fontFamily: "'Sora', sans-serif", letterSpacing: "0.3px", flexShrink: 0 }}>
+            {scoreLabel}
+          </span>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          {[
+            { value: orders.length, label: "Orders", icon: "📦" },
+            { value: `₹${Math.floor(totalSpent)}`, label: "Saved", icon: "💰" },
+            { value: loyaltyPoints, label: "Points", icon: "⭐" },
+          ].map((stat, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 + i * 0.08 }}
+              style={{
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 14,
+                padding: "10px 8px",
+                textAlign: "center",
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              <div style={{ fontSize: 14 }}>{stat.icon}</div>
+              <div style={{ fontFamily: "'Sora', sans-serif", fontSize: 15, fontWeight: 900, color: "#fff", marginTop: 2 }}>{stat.value}</div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.45)", letterSpacing: "0.5px", marginTop: 1 }}>{stat.label.toUpperCase()}</div>
+            </motion.div>
+          ))}
         </div>
       </div>
+
+      {/* ═══ QUICK ACTIONS GRID ═══ */}
+      <div style={{ padding: "16px 16px 0" }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#0B1F16", fontFamily: "'Sora', sans-serif", marginBottom: 10, letterSpacing: "-0.2px" }}>
+          Quick Actions
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+          {quickActions.map((qa, i) => (
+            <motion.button
+              key={i}
+              whileTap={{ scale: 0.93 }}
+              onClick={qa.action}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                padding: "14px 8px", borderRadius: 16,
+                background: "#F8FBFA", border: "1.5px solid rgba(12,90,62,0.08)",
+                cursor: "pointer", transition: "all 0.15s",
+              }}
+            >
+              <span style={{ fontSize: 22 }}>{qa.icon}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 800, color: "#0C5A3E", fontFamily: "'Sora', sans-serif" }}>{qa.label}</span>
+            </motion.button>
+          ))}
+        </div>
+      </div>
+
+      {/* ═══ MEDICINE REMINDERS ═══ */}
+      <div style={{ padding: "16px 16px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#0B1F16", fontFamily: "'Sora', sans-serif", letterSpacing: "-0.2px" }}>
+            Medicine Reminders
+          </div>
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            onClick={() => setReminderDialog(true)}
+            style={{
+              height: 28, padding: "0 12px", borderRadius: 100, border: "none",
+              background: "linear-gradient(135deg, #0C5A3E, #0E7A4F)",
+              color: "#fff", fontSize: 11, fontWeight: 800, fontFamily: "'Sora', sans-serif",
+              cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+              boxShadow: "0 2px 8px rgba(12,90,62,0.3)",
+            }}
+          >
+            <Plus style={{ width: 12, height: 12 }} /> Add
+          </motion.button>
+        </div>
+
+        {reminders.length === 0 ? (
+          <div style={{
+            padding: "20px 16px", borderRadius: 16, textAlign: "center",
+            background: "#F8FBFA", border: "1.5px dashed rgba(12,90,62,0.15)",
+          }}>
+            <div style={{ fontSize: 28, marginBottom: 6 }}>💊</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#64748B" }}>No reminders yet</div>
+            <div style={{ fontSize: 10.5, color: "#94A3B8", marginTop: 2 }}>Add medicine reminders to stay on track</div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {reminders.map((r) => (
+              <motion.div
+                key={r.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "10px 12px", borderRadius: 14,
+                  background: r.active ? "#F0FAF5" : "#F8FAFC",
+                  border: `1.5px solid ${r.active ? "rgba(0,217,126,0.2)" : "rgba(0,0,0,0.06)"}`,
+                }}
+              >
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                  background: r.active ? "linear-gradient(135deg, #0C5A3E, #0E7A4F)" : "#E2E8F0",
+                  display: "grid", placeItems: "center",
+                }}>
+                  <span style={{ fontSize: 16 }}>💊</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: r.active ? "#0B1F16" : "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: "#94A3B8", marginTop: 1 }}>{r.time} · {r.frequency}</div>
+                </div>
+                <Switch checked={r.active} onCheckedChange={() => toggleReminder(r.id)} />
+                <button onClick={() => deleteReminder(r.id)} style={{ border: "none", background: "none", cursor: "pointer", padding: 2 }}>
+                  <X style={{ width: 14, height: 14, color: "#CBD5E1" }} />
+                </button>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Reminder Add Dialog */}
+      <Dialog open={reminderDialog} onOpenChange={setReminderDialog}>
+        <DialogContent className="sm:max-w-md force-light">
+          <DialogHeader><DialogTitle>Add Medicine Reminder</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <Field label="Medicine Name">
+              <Input className="gd-input" placeholder="e.g., Paracetamol 500mg" value={reminderForm.name} onChange={(e) => setReminderForm(f => ({ ...f, name: e.target.value }))} />
+            </Field>
+            <Field label="Time">
+              <Input className="gd-input" type="time" value={reminderForm.time} onChange={(e) => setReminderForm(f => ({ ...f, time: e.target.value }))} />
+            </Field>
+            <Field label="Frequency">
+              <Select value={reminderForm.frequency} onValueChange={(v) => setReminderForm(f => ({ ...f, frequency: v }))}>
+                <SelectTrigger className="gd-input h-10 w-full rounded-xl !font-bold"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="twice">Twice a day</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="as-needed">As needed</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" className="btn-ghost-soft !font-bold" onClick={() => setReminderDialog(false)}>Cancel</Button>
+            <Button className="btn-primary-emerald !font-bold" onClick={saveReminder} disabled={!reminderForm.name.trim()}>Add Reminder</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ SECTIONS (existing) ═══ */}
+      <div style={{ padding: "12px 16px 0" }}>
 
       {/* ---- Sections ---- */}
       <Section
@@ -825,35 +1074,6 @@ export default function ProfilePage() {
       </Section>
 
       <Section
-        icon={<Stethoscope className="h-5 w-5 text-emerald-600" />}
-        title="Doctor Portal"
-        expanded={openSections.doctor}
-        onToggle={() => toggleSection("doctor")}
-      >
-        <div className="mt-1 flex flex-col sm:flex-row gap-2">
-          <Button
-            className="min-w-[220px] btn-primary-emerald !font-bold w-full sm:w-auto"
-            onClick={() => {
-              if (localStorage.getItem("doctorToken")) {
-                navigate("/doctor/dashboard");
-              } else {
-                navigate("/doctor/login");
-              }
-            }}
-          >
-            Go to Doctor Dashboard
-          </Button>
-          <Button
-            variant="outline"
-            className="min-w-[220px] btn-outline-soft !font-bold w-full sm:w-auto"
-            onClick={() => navigate("/doctor/register")}
-          >
-            Register as Doctor
-          </Button>
-        </div>
-      </Section>
-
-      <Section
         icon={<Bike className="h-5 w-5 text-emerald-700" />}
         title="Delivery Partner Portal"
         expanded={openSections.delivery}
@@ -982,8 +1202,9 @@ export default function ProfilePage() {
           </button>
         </div>
       </Section>
+      </div>{/* end sections wrapper */}
 
-      <div className="flex justify-center mt-6">
+      <div className="flex justify-center mt-6 px-4">
         <Button
           variant="outline"
           className="btn-danger-outline !font-bold px-6 text-base"
