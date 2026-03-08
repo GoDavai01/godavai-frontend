@@ -12,9 +12,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  AlertTriangle, ArrowLeft, Brain, ChevronRight, Clock, FileText,
-  History, Languages, Leaf, Mic, MicOff, Paperclip, Plus, Send,
-  Sparkles, Stethoscope, Volume2, VolumeX, X, Zap,
+  AlertTriangle, Brain, FileText, History, Leaf,
+  Mic, MicOff, Paperclip, Plus, Send, Volume2, X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -221,7 +220,6 @@ export default function GoDavaiiAI() {
   const [loading, setLoading] = useState(false);
   const [micOn, setMicOn] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
-  const [reuseAttachment, setReuseAttachment] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [chatSessions, setChatSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -406,7 +404,7 @@ export default function GoDavaiiAI() {
         : await askBackend(msg, history);
 
       setMessages((prev) => [...prev, { id: makeId(), role: "assistant", text: reply }]);
-      if (activeFile) setReuseAttachment(false);
+      if (activeFile) setAttachedFile(null);
     } finally {
       setLoading(false);
     }
