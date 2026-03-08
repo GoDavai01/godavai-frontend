@@ -234,7 +234,7 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading }) {
             ) : (
               <Volume2 style={{ width: 11, height: 11 }} />
             )}
-            {isSpeaking ? "Playing..." : "Listen"}
+            {speakLoading && isSpeaking ? "Loading..." : isSpeaking ? "Playing..." : "Listen"}
           </motion.button>
         )}
       </div>
