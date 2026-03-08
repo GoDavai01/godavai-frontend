@@ -1,13 +1,14 @@
 // pages/GoDavaiiAI.js — GoDavaii 2035 Health OS AI Assistant
+// ✅ FIX: Input bar bottom padding reduced (70px → 62px) for tighter fit
+// ✅ FIX: TTS timeout increased (15s → 30s) for long responses
+// ✅ FIX: TTS error handling — speakLoading properly reset in ALL error paths
+// ✅ FIX: Auth token sent with all API requests
+// ✅ FIX: TTS audio error handling with proper cleanup
 // ✅ NO double header — Navbar hidden via HIDE_ENTIRE_NAVBAR in Navbar.js
-// ✅ NO empty space — input bar padding 70px matches BottomNavBar
-// ✅ NO desi toggle — desiIlaaj always ON, auto-included in every response
-// ✅ NO language selector — always hinglish, TTS auto-detects
-// ✅ Focus chips STICKY in header — always visible
+// ✅ NO desi toggle — desiIlaaj always ON
+// ✅ NO language selector — always hinglish
+// ✅ Focus chips STICKY in header
 // ✅ ChatGPT-style sidebar with recent chats
-// ✅ Server TTS with better loading (preload audio before showing Playing)
-// ✅ Multi-page PDF support
-// ✅ Readable 800+ line format
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -79,6 +80,15 @@ function fallbackReply(message, focus, whoFor) {
 function getApiErrorMessage(err) {
   const data = err?.response?.data;
   return data?.error || data?.details || data?.message || err?.message || "Request failed.";
+}
+
+/* ── Auth header helper ───────────────────────────────────── */
+function getAuthHeaders() {
+  const token = localStorage.getItem("token");
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
+  return {};
 }
 
 /* ── Format sections nicely ───────────────────────────────── */
@@ -217,7 +227,7 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading }) {
               fontSize: 11,
               fontWeight: 800,
               color: isSpeaking ? "#059669" : "#0F766E",
-              cursor: "pointer",
+              cursor: speakLoading ? "wait" : "pointer",
             }}
           >
             {speakLoading && isSpeaking ? (
@@ -246,7 +256,7 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading }) {
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════ */
 export default function GoDavaiiAI() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const navigate = useNavigate();
 
   const [focus, setFocus] = useState("auto");
@@ -310,18 +320,21 @@ export default function GoDavaiiAI() {
     [whoFor, whoForLabel, focus, user]
   );
 
-  /* ── TTS — server first, preload before "Playing" ──────── */
+  /* ── TTS — server first, with PROPER error handling ────── */
   const handleSpeak = useCallback(
     async (msg) => {
-      // Stop current
+      // Stop current audio
       if (audioRef.current) {
         audioRef.current.pause();
+        audioRef.current.currentTime = 0;
         audioRef.current = null;
       }
       window.speechSynthesis?.cancel();
 
+      // Toggle off if already speaking this message
       if (speakingId === msg.id) {
         setSpeakingId(null);
+        setSpeakLoading(false);
         return;
       }
 
@@ -330,48 +343,69 @@ export default function GoDavaiiAI() {
 
       const text = cleanAssistantText(msg.text);
 
-      // Server TTS
+      // ✅ FIX: Server TTS with proper error handling & increased timeout
       try {
         const { data } = await axios.post(
           `${API}/api/ai/assistant/tts`,
           { text: text.slice(0, 3000), language: "hinglish" },
-          { timeout: 15000 }
+          {
+            timeout: 30000, // ✅ FIX: 30s timeout (was 15s — too short for long texts)
+            headers: getAuthHeaders(),
+          }
         );
 
         if (data?.audioBase64) {
           const audio = new Audio(`data:audio/mp3;base64,${data.audioBase64}`);
           audioRef.current = audio;
 
+          // ✅ FIX: Proper cleanup on all audio events
           audio.onended = () => {
             setSpeakingId(null);
+            setSpeakLoading(false);
             audioRef.current = null;
           };
-          audio.onerror = () => {
+          audio.onerror = (e) => {
+            console.error("Audio playback error:", e);
             setSpeakingId(null);
+            setSpeakLoading(false);
             audioRef.current = null;
           };
 
-          // Base64 data URL = already in memory, play instantly
           setSpeakLoading(false);
-          await audio.play().catch(() => {
+
+          try {
+            await audio.play();
+          } catch (playErr) {
+            console.error("Audio play failed:", playErr);
             setSpeakingId(null);
+            setSpeakLoading(false);
             audioRef.current = null;
-          });
+          }
           return;
         }
-      } catch {
-        // fallback
+      } catch (err) {
+        console.error("TTS API failed:", err?.message || err);
+        // Fall through to browser TTS
       }
 
-      // Browser TTS fallback
+      // ✅ FIX: Browser TTS fallback with proper state management
       setSpeakLoading(false);
       if (window.speechSynthesis) {
-        const u = new SpeechSynthesisUtterance(text);
-        u.rate = 0.92;
-        u.pitch = 1.05;
-        u.lang = "hi-IN";
-        u.onend = () => setSpeakingId(null);
-        window.speechSynthesis.speak(u);
+        try {
+          const u = new SpeechSynthesisUtterance(text);
+          u.rate = 0.92;
+          u.pitch = 1.05;
+          u.lang = "hi-IN";
+          u.onend = () => {
+            setSpeakingId(null);
+          };
+          u.onerror = () => {
+            setSpeakingId(null);
+          };
+          window.speechSynthesis.speak(u);
+        } catch {
+          setSpeakingId(null);
+        }
       } else {
         setSpeakingId(null);
       }
@@ -390,7 +424,7 @@ export default function GoDavaiiAI() {
     }
     const rec = new SR();
     recognitionRef.current = rec;
-    rec.lang = "en-IN"; // en-IN handles Hindi + English + Hinglish on Chrome
+    rec.lang = "en-IN";
     rec.interimResults = false;
     rec.onstart = () => setMicOn(true);
     rec.onend = () => setMicOn(false);
@@ -402,9 +436,10 @@ export default function GoDavaiiAI() {
     rec.start();
   }
 
-  /* ── Backend calls ──────────────────────────────────────── */
+  /* ── Backend calls — ✅ FIX: Auth headers included ──────── */
   async function askBackend(messageText, history) {
     const payload = { message: messageText, history, context: profileContext };
+    const headers = getAuthHeaders();
     const urls = [
       `${API}/api/ai/assistant/chat`,
       `${API}/api/ai/chat`,
@@ -412,7 +447,7 @@ export default function GoDavaiiAI() {
     ];
     for (const url of urls) {
       try {
-        const r = await axios.post(url, payload, { timeout: 25000 });
+        const r = await axios.post(url, payload, { timeout: 25000, headers });
         const text = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
         if (String(text).trim()) return text;
       } catch (err) {
@@ -428,6 +463,10 @@ export default function GoDavaiiAI() {
     fd.append("message", messageText || "");
     fd.append("history", JSON.stringify(history));
     fd.append("context", JSON.stringify(profileContext));
+    const headers = {
+      ...getAuthHeaders(),
+      "Content-Type": "multipart/form-data",
+    };
     const urls = [
       `${API}/api/ai/assistant/analyze-file`,
       `${API}/api/ai/analyze-file`,
@@ -437,7 +476,7 @@ export default function GoDavaiiAI() {
       try {
         const r = await axios.post(url, fd, {
           timeout: 90000,
-          headers: { "Content-Type": "multipart/form-data" },
+          headers,
         });
         const text = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
         if (String(text).trim()) return text;
@@ -447,7 +486,7 @@ export default function GoDavaiiAI() {
         console.error("File AI failed:", url, getApiErrorMessage(err));
       }
     }
-    return `File analysis issue: ${getApiErrorMessage(lastErr)}\n\nPlease retry.`;
+    return `File analysis issue: ${getApiErrorMessage(lastErr)}\n\nPlease retry with a clearer image.`;
   }
 
   /* ── Send message ───────────────────────────────────────── */
@@ -482,13 +521,14 @@ export default function GoDavaiiAI() {
     }
   }
 
-  /* ── Load chat history ──────────────────────────────────── */
+  /* ── Load chat history — ✅ FIX: Auth headers ──────────── */
   async function loadChatHistory() {
     if (!user?._id && !user?.userId) return;
     setSessionsLoading(true);
     try {
       const { data } = await axios.get(`${API}/api/ai/assistant/sessions`, {
         params: { limit: 20 },
+        headers: getAuthHeaders(),
       });
       setChatSessions(Array.isArray(data) ? data : []);
     } catch {
@@ -501,7 +541,8 @@ export default function GoDavaiiAI() {
   async function loadSession(sessionId) {
     try {
       const { data } = await axios.get(
-        `${API}/api/ai/assistant/sessions/${sessionId}`
+        `${API}/api/ai/assistant/sessions/${sessionId}`,
+        { headers: getAuthHeaders() }
       );
       if (data?.messages?.length) {
         setMessages(
@@ -667,7 +708,7 @@ export default function GoDavaiiAI() {
           ))}
         </div>
 
-        {/* Target row — NO language selector */}
+        {/* Target row */}
         <div
           style={{
             marginTop: 8,
@@ -882,11 +923,11 @@ export default function GoDavaiiAI() {
         </div>
       )}
 
-      {/* ══ INPUT BAR — padding 70px = tight to BottomNavBar ══ */}
+      {/* ══ INPUT BAR — ✅ FIX: padding 62px (was 70px) ══ */}
       <div
         style={{
           flexShrink: 0,
-          padding: "8px 12px 70px 12px",
+          padding: "8px 12px 62px 12px",
           background: "rgba(255,255,255,0.9)",
           backdropFilter: "blur(16px)",
           borderTop: `1px solid ${GLASS_BORDER}`,
@@ -1020,11 +1061,10 @@ export default function GoDavaiiAI() {
         </div>
       </div>
 
-      {/* ══ CHAT HISTORY SIDEBAR — ChatGPT style ══ */}
+      {/* ══ CHAT HISTORY SIDEBAR ══ */}
       <AnimatePresence>
         {sidebarOpen && (
           <>
-            {/* Overlay */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1038,7 +1078,6 @@ export default function GoDavaiiAI() {
                 backdropFilter: "blur(4px)",
               }}
             />
-            {/* Sidebar panel */}
             <motion.div
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
@@ -1061,7 +1100,6 @@ export default function GoDavaiiAI() {
                 overflow: "hidden",
               }}
             >
-              {/* Sidebar header */}
               <div
                 style={{
                   padding: "18px 16px 12px",
@@ -1104,7 +1142,6 @@ export default function GoDavaiiAI() {
                 </div>
               </div>
 
-              {/* New chat button */}
               <div style={{ padding: "10px 14px 6px" }}>
                 <motion.button
                   whileTap={{ scale: 0.97 }}
@@ -1131,7 +1168,6 @@ export default function GoDavaiiAI() {
                 </motion.button>
               </div>
 
-              {/* Sessions list */}
               <div
                 style={{
                   flex: 1,
