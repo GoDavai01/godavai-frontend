@@ -47,6 +47,7 @@ import Doctors from "./pages/Doctors";
 import DoctorRegister from "./pages/DoctorRegister";
 import DoctorLogin from "./pages/DoctorLogin";
 import DoctorDashboard from "./pages/DoctorDashboard";
+import LabTests from "./pages/LabTests";
 import { LocationProvider } from "./context/LocationContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -340,6 +341,15 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <DoctorDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/lab-tests"
+            element={
+              <ProtectedRoute>
+                <LabTests />
               </ProtectedRoute>
             }
           />

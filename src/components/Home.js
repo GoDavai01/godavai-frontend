@@ -775,7 +775,7 @@ export default function Home() {
               // ✅ PATCH: Medicines quick action -> /all-medicines
               { label: "Medicines", emoji: "💊", bg: "linear-gradient(135deg,#0891B2,#0EA5E9)", glow: "rgba(8,145,178,0.26)", onClick: () => navigate("/all-medicines") },
               { label: "Consult", emoji: "🩺", bg: "linear-gradient(135deg,#D97706,#F59E0B)", glow: "rgba(217,119,6,0.26)", onClick: () => navigate("/doctors") },
-              { label: "Lab Tests", emoji: "🧪", bg: "linear-gradient(135deg,#7C3AED,#A855F7)", glow: "rgba(124,58,237,0.26)", onClick: () => navigate("/search?tab=labs") },
+              { label: "Lab Tests", emoji: "🧪", bg: "linear-gradient(135deg,#7C3AED,#A855F7)", glow: "rgba(124,58,237,0.26)", onClick: () => navigate("/lab-tests") },
               { label: "GoDavaii AI", emoji: "🧠", bg: "linear-gradient(135deg,#DC2626,#F87171)", glow: "rgba(220,38,38,0.24)", onClick: () => navigate("/ai") },
               { label: "Health Vault", emoji: "🗂️", bg: "linear-gradient(135deg,#0369A1,#38BDF8)", glow: "rgba(3,105,161,0.24)", onClick: () => navigate("/health") },
             ].map((act) => (
@@ -885,7 +885,7 @@ export default function Home() {
 
         {/* ✅ NEW: Popular Lab Tests */}
         <div style={{ marginBottom: 20 }}>
-          <Section title="Popular Lab Tests" onSeeAll={() => navigate("/search?tab=labs")} />
+          <Section title="Popular Lab Tests" onSeeAll={() => navigate("/lab-tests")} />
           <div style={{ display: "flex", gap: 12, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 6 }}>
             {[
               { name: "Complete Blood Count", sub: "CBC · 12hr report", price: 299 },
@@ -893,7 +893,7 @@ export default function Home() {
               { name: "HbA1c", sub: "Diabetes monitor", price: 349 },
               { name: "Lipid Profile", sub: "Cholesterol check", price: 449 },
               { name: "Vitamin D", sub: "25-OH Vitamin D", price: 599 },
-            ].map((t, i) => <LabTestCard key={i} test={t} onClick={() => navigate("/search?tab=labs")} />)}
+            ].map((t, i) => <LabTestCard key={i} test={t} onClick={() => navigate("/lab-tests")} />)}
           </div>
         </div>
 

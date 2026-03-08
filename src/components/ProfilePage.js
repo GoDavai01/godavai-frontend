@@ -418,7 +418,7 @@ export default function ProfilePage() {
     { icon: "💊", label: "Medicines", action: () => navigate("/all-medicines") },
     { icon: "🤖", label: "AI Doctor", action: () => navigate("/ai") },
     { icon: "🩺", label: "Doctors", action: () => navigate("/doctors") },
-    { icon: "🧪", label: "Lab Tests", action: () => navigate("/search?tab=labs") },
+    { icon: "🧪", label: "Lab Tests", action: () => navigate("/lab-tests") },
     { icon: "📋", label: "Upload Rx", action: () => navigate("/medicines") },
     { icon: "🏥", label: "Health Vault", action: () => navigate("/health") },
   ];

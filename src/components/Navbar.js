@@ -102,7 +102,7 @@ export default function Navbar({
       setLoading(true);
       const type = routerLocation.pathname.startsWith("/medicines") ? "medicine"
         : routerLocation.pathname.startsWith("/doctors") ? "doctor"
-        : routerLocation.pathname.startsWith("/labs")    ? "lab"
+        : routerLocation.pathname.startsWith("/labs") || routerLocation.pathname.startsWith("/lab-tests") ? "lab"
         : "all";
       const tryReq = async (url, params) =>
         axios.get(url, { params, signal: controller.signal }).then((r) => r.data);
