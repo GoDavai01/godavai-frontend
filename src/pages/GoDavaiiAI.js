@@ -342,13 +342,6 @@ export default function GoDavaiiAI() {
           const audio = new Audio(`data:audio/mp3;base64,${data.audioBase64}`);
           audioRef.current = audio;
 
-          // Wait for audio to be ready BEFORE showing "Playing"
-          await new Promise((resolve, reject) => {
-            audio.oncanplaythrough = resolve;
-            audio.onerror = reject;
-            setTimeout(reject, 5000); // 5s timeout
-          });
-
           audio.onended = () => {
             setSpeakingId(null);
             audioRef.current = null;
@@ -358,8 +351,12 @@ export default function GoDavaiiAI() {
             audioRef.current = null;
           };
 
+          // Base64 data URL = already in memory, play instantly
           setSpeakLoading(false);
-          audio.play();
+          await audio.play().catch(() => {
+            setSpeakingId(null);
+            audioRef.current = null;
+          });
           return;
         }
       } catch {
@@ -393,7 +390,7 @@ export default function GoDavaiiAI() {
     }
     const rec = new SR();
     recognitionRef.current = rec;
-    rec.lang = "hi-IN";
+    rec.lang = "en-IN"; // en-IN handles Hindi + English + Hinglish on Chrome
     rec.interimResults = false;
     rec.onstart = () => setMicOn(true);
     rec.onend = () => setMicOn(false);
