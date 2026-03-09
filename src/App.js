@@ -48,6 +48,9 @@ import DoctorRegister from "./pages/DoctorRegister";
 import DoctorLogin from "./pages/DoctorLogin";
 import DoctorDashboard from "./pages/DoctorDashboard";
 import LabTests from "./pages/LabTests";
+import LabPartnerRegister from "./pages/LabPartnerRegister";
+import LabPartnerLogin from "./pages/LabPartnerLogin";
+import LabPartnerDashboard from "./pages/LabPartnerDashboard";
 import { LocationProvider } from "./context/LocationContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -350,7 +353,33 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <LabTests />
+
+          <Route
+            path="/lab-partner/register"
+            element={
+              <ProtectedRoute>
+                <LabPartnerRegister />
               </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/lab-partner/login"
+            element={
+              <ProtectedRoute>
+                <LabPartnerLogin />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/lab-partner/dashboard"
+            element={
+              <ProtectedRoute>
+                <LabPartnerDashboard />
+              </ProtectedRoute>
+            }
+          />              </ProtectedRoute>
             }
           />
 
@@ -442,3 +471,6 @@ function App() {
 }
 
 export default App;
+
+
+

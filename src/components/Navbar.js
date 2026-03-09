@@ -30,7 +30,7 @@ const HIDE_ENTIRE_NAVBAR = [
 const NO_SEARCH_PATHS = [
   "/orders", "/profile", "/checkout", "/payment",
   "/payment-success",
-  "/doctors", "/doctor", "/lab-tests",
+  "/doctors", "/doctor", "/lab-tests", "/lab-partner",
 ];
 
 export default function Navbar({
@@ -193,6 +193,7 @@ export default function Navbar({
     : routerLocation.pathname.startsWith("/health")    ? "Health Vault"
     : routerLocation.pathname.startsWith("/doctors")   ? "Doctors"
     : routerLocation.pathname.startsWith("/lab-tests") ? "Lab Tests"
+    : routerLocation.pathname.startsWith("/lab-partner") ? "Lab Partner"
     : routerLocation.pathname.startsWith("/all-medicines") ? "All Medicines"
     : null;
 
@@ -373,3 +374,5 @@ export default function Navbar({
     </div>
   );
 }
+
+

@@ -23,7 +23,7 @@ import { ChevronRight, Shield, FileText, ScrollText, Cookie, UserX } from "lucid
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Pencil, Plus, ChevronDown, Mail, Home, History, BadgeCheck, Wallet, Settings,
-  Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera, Calendar, X, Stethoscope
+  Headset, Users, Pill, LogOut, Star, Bike, IndianRupee, Trash, Lock, Camera, Calendar, X, Stethoscope, FlaskConical
 } from "lucide-react";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -76,7 +76,7 @@ export default function ProfilePage() {
 
   const [openSections, setOpenSections] = useState({
     addresses: true, wallet: false, orders: false, badges: false, personalization: false,
-    settings: false, pharmacist: false, doctor: false, delivery: false, support: false, refer: false, legal: false,
+    settings: false, pharmacist: false, doctor: false, lab: false, delivery: false, support: false, refer: false, legal: false,
   });
   const toggleSection = (key) => setOpenSections((p) => ({ ...p, [key]: !p[key] }));
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
@@ -1103,6 +1103,42 @@ export default function ProfilePage() {
       </Section>
 
       <Section
+      <Section
+        icon={<FlaskConical className="h-5 w-5 text-emerald-600" />}
+        title="Lab Partner Portal"
+        expanded={openSections.lab}
+        onToggle={() => toggleSection("lab")}
+      >
+        <div className="mt-1 flex flex-col sm:flex-row gap-2">
+          <Button
+            className="min-w-[220px] btn-primary-emerald !font-bold w-full sm:w-auto"
+            onClick={() => {
+              if (localStorage.getItem("labPartnerToken")) {
+                navigate("/lab-partner/dashboard");
+              } else {
+                navigate("/lab-partner/login");
+              }
+            }}
+          >
+            Go to Lab Dashboard
+          </Button>
+          <Button
+            variant="outline"
+            className="min-w-[220px] btn-outline-soft !font-bold w-full sm:w-auto"
+            onClick={() => navigate("/lab-partner/register")}
+          >
+            Register as Lab Partner
+          </Button>
+          <Button
+            variant="outline"
+            className="min-w-[220px] btn-outline-soft !font-bold w-full sm:w-auto"
+            onClick={() => navigate("/lab-tests")}
+          >
+            Open Lab Tests
+          </Button>
+        </div>
+      </Section>
+
         icon={<Bike className="h-5 w-5 text-emerald-700" />}
         title="Delivery Partner Portal"
         expanded={openSections.delivery}

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -36,11 +37,27 @@ const BRAND = {
   bg3: "#F8FAFC",
 };
 
-const STORAGE_KEYS = {
-  bookings: "gd_lab_bookings_v3",
-  profile: "gd_lab_profile_v2",
-};
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
+const FALLBACK_SLOT_WINDOWS = [
+  "06:30 AM - 08:00 AM",
+  "08:00 AM - 09:30 AM",
+  "09:30 AM - 11:00 AM",
+  "11:00 AM - 12:30 PM",
+  "04:00 PM - 05:30 PM",
+  "05:30 PM - 07:00 PM",
+];
+
+function authConfig(extra = {}) {
+  const token = localStorage.getItem("token");
+  return {
+    ...extra,
+    headers: {
+      ...(extra.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  };
+}
 const CATEGORIES = [
   "All",
   "Popular",
@@ -55,373 +72,6 @@ const CATEGORIES = [
   "Liver",
   "Kidney",
 ];
-
-const TESTS = [
-  {
-    id: "t1",
-    name: "Complete Blood Count (CBC)",
-    short: "CBC",
-    category: "Popular",
-    reportTime: "12-18 hrs",
-    prep: "No fasting",
-    price: 299,
-    oldPrice: 499,
-    homeCollection: true,
-    trending: true,
-    desc: "Checks hemoglobin, RBC, WBC, platelets and infection markers.",
-    idealFor: ["weakness", "fever", "routine check", "fatigue"],
-    badges: ["GoDavaii Verified", "Home Sample", "AI Explained"],
-    sampleType: "Blood",
-    fastingRequired: false,
-    why: "Useful for weakness, fever, infection suspicion and basic health screening.",
-    includes: ["Hemoglobin", "RBC", "WBC", "Platelets", "Hematocrit"],
-  },
-  {
-    id: "t2",
-    name: "Thyroid Profile (T3, T4, TSH)",
-    short: "Thyroid",
-    category: "Thyroid",
-    reportTime: "24 hrs",
-    prep: "No fasting",
-    price: 399,
-    oldPrice: 699,
-    homeCollection: true,
-    trending: true,
-    desc: "Evaluates thyroid balance for weight, fatigue, hair fall and hormonal symptoms.",
-    idealFor: ["hair fall", "weight gain", "thyroid", "fatigue"],
-    badges: ["Popular", "Home Sample", "AI Explained"],
-    sampleType: "Blood",
-    fastingRequired: false,
-    why: "Often recommended for fatigue, unexplained weight changes, hair fall and hormone imbalance.",
-    includes: ["TSH", "T3", "T4"],
-  },
-  {
-    id: "t3",
-    name: "HbA1c",
-    short: "HbA1c",
-    category: "Diabetes",
-    reportTime: "24 hrs",
-    prep: "No fasting",
-    price: 349,
-    oldPrice: 599,
-    homeCollection: true,
-    trending: true,
-    desc: "Average blood sugar level over the past 2-3 months.",
-    idealFor: ["diabetes", "sugar", "routine diabetes check"],
-    badges: ["Diabetes", "GoDavaii Verified"],
-    sampleType: "Blood",
-    fastingRequired: false,
-    why: "Best for understanding long-term sugar control.",
-    includes: ["HbA1c %", "Estimated Average Glucose"],
-  },
-  {
-    id: "t4",
-    name: "Fasting Blood Sugar",
-    short: "FBS",
-    category: "Diabetes",
-    reportTime: "8-12 hrs",
-    prep: "8-10 hr fasting",
-    price: 129,
-    oldPrice: 249,
-    homeCollection: true,
-    trending: false,
-    desc: "Measures blood sugar after fasting.",
-    idealFor: ["diabetes", "sugar", "fasting"],
-    badges: ["Quick", "Budget Friendly"],
-    sampleType: "Blood",
-    fastingRequired: true,
-    why: "Common first-step test for diabetes screening.",
-    includes: ["Fasting Glucose"],
-  },
-  {
-    id: "t5",
-    name: "Lipid Profile",
-    short: "Lipid",
-    category: "Heart",
-    reportTime: "24 hrs",
-    prep: "10-12 hr fasting",
-    price: 449,
-    oldPrice: 799,
-    homeCollection: true,
-    trending: false,
-    desc: "Measures cholesterol and triglycerides for heart risk assessment.",
-    idealFor: ["cholesterol", "heart", "routine check"],
-    badges: ["Heart", "Home Sample"],
-    sampleType: "Blood",
-    fastingRequired: true,
-    why: "Helps understand cholesterol levels and heart risk.",
-    includes: ["HDL", "LDL", "Total Cholesterol", "Triglycerides"],
-  },
-  {
-    id: "t6",
-    name: "Liver Function Test (LFT)",
-    short: "LFT",
-    category: "Liver",
-    reportTime: "24 hrs",
-    prep: "No fasting",
-    price: 499,
-    oldPrice: 899,
-    homeCollection: true,
-    trending: false,
-    desc: "Checks liver enzymes, bilirubin and liver health markers.",
-    idealFor: ["liver", "fatigue", "yellowing", "medicine monitoring"],
-    badges: ["Popular", "AI Explained"],
-    sampleType: "Blood",
-    fastingRequired: false,
-    why: "Used for liver health assessment, medication monitoring and screening.",
-    includes: ["SGOT", "SGPT", "Bilirubin", "Protein", "Albumin"],
-  },
-  {
-    id: "t7",
-    name: "Kidney Function Test (KFT)",
-    short: "KFT",
-    category: "Kidney",
-    reportTime: "24 hrs",
-    prep: "No fasting",
-    price: 449,
-    oldPrice: 799,
-    homeCollection: true,
-    trending: false,
-    desc: "Checks creatinine, urea and kidney function markers.",
-    idealFor: ["kidney", "bp", "diabetes", "routine health"],
-    badges: ["GoDavaii Verified", "Home Sample"],
-    sampleType: "Blood",
-    fastingRequired: false,
-    why: "Useful in routine health checks and kidney monitoring.",
-    includes: ["Creatinine", "Urea", "Uric Acid", "Electrolytes"],
-  },
-  {
-    id: "t8",
-    name: "Vitamin D (25-OH)",
-    short: "Vitamin D",
-    category: "Vitamin",
-    reportTime: "24-36 hrs",
-    prep: "No fasting",
-    price: 799,
-    oldPrice: 1499,
-    homeCollection: true,
-    trending: true,
-    desc: "Checks Vitamin D deficiency linked to fatigue, bone pain and weakness.",
-    idealFor: ["bone pain", "weakness", "vitamin deficiency"],
-    badges: ["Trending", "Home Sample"],
-    sampleType: "Blood",
-    fastingRequired: false,
-    why: "Commonly ordered for fatigue, bone weakness and deficiency screening.",
-    includes: ["25-OH Vitamin D"],
-  },
-  {
-    id: "t9",
-    name: "Vitamin B12",
-    short: "B12",
-    category: "Vitamin",
-    reportTime: "24-36 hrs",
-    prep: "No fasting",
-    price: 699,
-    oldPrice: 1299,
-    homeCollection: true,
-    trending: false,
-    desc: "Checks B12 deficiency which may cause weakness or tingling.",
-    idealFor: ["weakness", "tingling", "deficiency"],
-    badges: ["Vitamin", "AI Explained"],
-    sampleType: "Blood",
-    fastingRequired: false,
-    why: "Useful when weakness, low energy or nerve symptoms are present.",
-    includes: ["Vitamin B12"],
-  },
-  {
-    id: "t10",
-    name: "Iron Studies",
-    short: "Iron",
-    category: "Women",
-    reportTime: "24 hrs",
-    prep: "No fasting",
-    price: 899,
-    oldPrice: 1499,
-    homeCollection: true,
-    trending: false,
-    desc: "Evaluates iron deficiency and anemia-related markers.",
-    idealFor: ["weakness", "hair fall", "low iron", "women wellness"],
-    badges: ["Women", "Popular"],
-    sampleType: "Blood",
-    fastingRequired: false,
-    why: "Often used for anemia and low iron evaluation.",
-    includes: ["Serum Iron", "Ferritin", "TIBC"],
-  },
-  {
-    id: "t11",
-    name: "PCOS Basic Panel",
-    short: "PCOS",
-    category: "Women",
-    reportTime: "24-48 hrs",
-    prep: "As advised",
-    price: 1499,
-    oldPrice: 2699,
-    homeCollection: true,
-    trending: false,
-    desc: "Basic hormone markers for women with irregular periods or PCOS concern.",
-    idealFor: ["pcos", "period issues", "women wellness"],
-    badges: ["Women", "Advanced"],
-    sampleType: "Blood",
-    fastingRequired: false,
-    why: "Helpful in hormone-related women wellness assessment.",
-    includes: ["LH", "FSH", "TSH", "Prolactin"],
-  },
-  {
-    id: "t12",
-    name: "Senior Wellness Basic",
-    short: "Senior Basic",
-    category: "Senior",
-    reportTime: "24-48 hrs",
-    prep: "8 hr fasting",
-    price: 1899,
-    oldPrice: 3299,
-    homeCollection: true,
-    trending: true,
-    desc: "A basic senior care package covering core routine markers.",
-    idealFor: ["senior", "parents", "routine health"],
-    badges: ["Senior", "Home Sample", "AI Explained"],
-    sampleType: "Blood + Urine",
-    fastingRequired: true,
-    why: "Useful for routine preventive checks in older adults.",
-    includes: ["CBC", "Sugar", "Kidney", "Liver", "Lipid", "Urine Routine"],
-  },
-  {
-    id: "t13",
-    name: "Dengue NS1 Antigen",
-    short: "Dengue",
-    category: "Fever",
-    reportTime: "12-24 hrs",
-    prep: "No fasting",
-    price: 649,
-    oldPrice: 1099,
-    homeCollection: true,
-    trending: true,
-    desc: "Fever panel test for suspected dengue infection in early stage.",
-    idealFor: ["fever", "seasonal fever", "body pain"],
-    badges: ["Seasonal", "Fever"],
-    sampleType: "Blood",
-    fastingRequired: false,
-    why: "Often ordered during fever season when dengue is suspected.",
-    includes: ["NS1 Antigen"],
-  },
-  {
-    id: "t14",
-    name: "Typhoid (IgM)",
-    short: "Typhoid",
-    category: "Fever",
-    reportTime: "24 hrs",
-    prep: "No fasting",
-    price: 549,
-    oldPrice: 999,
-    homeCollection: true,
-    trending: false,
-    desc: "Used in fever workup when typhoid is suspected.",
-    idealFor: ["fever", "infection"],
-    badges: ["Fever", "Home Sample"],
-    sampleType: "Blood",
-    fastingRequired: false,
-    why: "Can support fever assessment in the right clinical context.",
-    includes: ["Typhi IgM"],
-  },
-];
-
-const PACKAGES = [
-  {
-    id: "p1",
-    name: "Full Body Basic",
-    category: "Full Body",
-    tests: ["CBC", "LFT", "KFT", "Lipid", "HbA1c"],
-    reportTime: "24 hrs",
-    price: 999,
-    oldPrice: 2199,
-    homeCollection: true,
-    tag: "Most Booked",
-    desc: "Routine preventive check covering sugar, blood, liver, kidney and cholesterol.",
-  },
-  {
-    id: "p2",
-    name: "Diabetes Care Package",
-    category: "Diabetes",
-    tests: ["FBS", "HbA1c", "KFT", "Urine"],
-    reportTime: "24 hrs",
-    price: 799,
-    oldPrice: 1599,
-    homeCollection: true,
-    tag: "Value Pack",
-    desc: "Good for regular diabetes tracking and related health checks.",
-  },
-  {
-    id: "p3",
-    name: "Women Wellness Package",
-    category: "Women",
-    tests: ["CBC", "Iron", "Thyroid", "Vitamin D", "B12"],
-    reportTime: "24-48 hrs",
-    price: 1399,
-    oldPrice: 2999,
-    homeCollection: true,
-    tag: "Women Care",
-    desc: "Focused package for fatigue, deficiency and basic women wellness needs.",
-  },
-  {
-    id: "p4",
-    name: "Senior Citizen Care Package",
-    category: "Senior",
-    tests: ["CBC", "Sugar", "Lipid", "LFT", "KFT", "Urine"],
-    reportTime: "24-48 hrs",
-    price: 1699,
-    oldPrice: 3199,
-    homeCollection: true,
-    tag: "Parent Care",
-    desc: "Routine preventive health package designed for 55+ age group.",
-  },
-  {
-    id: "p5",
-    name: "Thyroid + Vitamin Package",
-    category: "Thyroid",
-    tests: ["Thyroid", "Vitamin D", "B12"],
-    reportTime: "24-36 hrs",
-    price: 1199,
-    oldPrice: 2499,
-    homeCollection: true,
-    tag: "Energy Check",
-    desc: "Popular combo for fatigue, weakness, hair fall and energy issues.",
-  },
-];
-
-const SLOT_WINDOWS = [
-  "06:30 AM - 08:00 AM",
-  "08:00 AM - 09:30 AM",
-  "09:30 AM - 11:00 AM",
-  "11:00 AM - 12:30 PM",
-  "04:00 PM - 05:30 PM",
-  "05:30 PM - 07:00 PM",
-];
-
-function safeReadBookings() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.bookings) || "[]");
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function safeReadProfile() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.profile) || "{}");
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveBookings(rows) {
-  localStorage.setItem(STORAGE_KEYS.bookings, JSON.stringify(rows));
-}
-
-function saveProfile(profile) {
-  localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profile));
-}
 
 function next4Days() {
   const arr = [];
@@ -556,66 +206,105 @@ export default function LabTests() {
 
   const [detailItem, setDetailItem] = useState(null);
 
-  const [bookings, setBookings] = useState(() => safeReadBookings());
-  const savedProfile = useMemo(() => safeReadProfile(), []);
-  const dateList = useMemo(() => next4Days(), []);
+    const [tests, setTests] = useState([]);
+  const [packages, setPackages] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [dateList, setDateList] = useState(() => next4Days());
+  const [slotWindows, setSlotWindows] = useState(FALLBACK_SLOT_WINDOWS);
+
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [loadingBookings, setLoadingBookings] = useState(false);
+  const [apiError, setApiError] = useState("");
 
   const [flowOpen, setFlowOpen] = useState(false);
   const [step, setStep] = useState(1);
 
   const [whoFor, setWhoFor] = useState("self");
-  const [profileName, setProfileName] = useState(savedProfile.profileName || "");
-  const [phone, setPhone] = useState(savedProfile.phone || "");
-  const [address, setAddress] = useState(savedProfile.address || "");
-  const [landmark, setLandmark] = useState(savedProfile.landmark || "");
-  const [cityArea, setCityArea] = useState(savedProfile.cityArea || "Noida");
-  const [date, setDate] = useState(dateList[0]?.iso || "");
-  const [slot, setSlot] = useState(SLOT_WINDOWS[1]);
+  const [profileName, setProfileName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [landmark, setLandmark] = useState("");
+  const [cityArea, setCityArea] = useState("Noida");
+  const [date, setDate] = useState(next4Days()[0]?.iso || "");
+  const [slot, setSlot] = useState(FALLBACK_SLOT_WINDOWS[1]);
   const [paymentMethod, setPaymentMethod] = useState("");
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState(null);
   const [bookingConfirmed, setBookingConfirmed] = useState(null);
 
   useEffect(() => {
-    saveProfile({
-      profileName,
-      phone,
-      address,
-      landmark,
-      cityArea,
-    });
-  }, [profileName, phone, address, landmark, cityArea]);
+    let cancel = false;
+    const loadCatalog = async () => {
+      setLoadingCatalog(true);
+      setApiError("");
+      try {
+        const { data } = await axios.get(`${API_BASE_URL}/api/labs/catalog`, {
+          params: {
+            q: query || undefined,
+            category,
+            homeCollection: showOnlyHomeCollection ? 1 : undefined,
+          },
+        });
+        if (cancel) return;
+        setTests(Array.isArray(data?.tests) ? data.tests : []);
+        setPackages(Array.isArray(data?.packages) ? data.packages : []);
+        if (Array.isArray(data?.dateOptions) && data.dateOptions.length) {
+          setDateList(data.dateOptions);
+          setDate((prev) =>
+            data.dateOptions.some((d) => d.iso === prev) ? prev : data.dateOptions[0].iso
+          );
+        }
+        if (Array.isArray(data?.slotWindows) && data.slotWindows.length) {
+          setSlotWindows(data.slotWindows);
+          setSlot((prev) => (data.slotWindows.includes(prev) ? prev : data.slotWindows[0]));
+        }
+      } catch (e) {
+        if (!cancel) setApiError(e?.response?.data?.error || "Failed to load lab catalog");
+      } finally {
+        if (!cancel) setLoadingCatalog(false);
+      }
+    };
 
-  const filteredTests = useMemo(() => {
-    const q = query.trim().toLowerCase();
-
-    return TESTS.filter((t) => {
-      const categoryMatch = category === "All" || t.category === category || (category === "Popular" && t.trending);
-      const queryMatch =
-        !q ||
-        t.name.toLowerCase().includes(q) ||
-        t.short.toLowerCase().includes(q) ||
-        t.desc.toLowerCase().includes(q) ||
-        t.idealFor.some((item) => item.toLowerCase().includes(q));
-      const homeCollectionMatch = !showOnlyHomeCollection || !!t.homeCollection;
-
-      return categoryMatch && queryMatch && homeCollectionMatch;
-    });
+    loadCatalog();
+    return () => {
+      cancel = true;
+    };
   }, [query, category, showOnlyHomeCollection]);
 
-  const filteredPackages = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return PACKAGES.filter((p) => {
-      const categoryMatch = category === "All" || p.category === category || (category === "Popular" && p.tag);
-      const queryMatch =
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.desc.toLowerCase().includes(q) ||
-        p.tests.join(" ").toLowerCase().includes(q);
+  useEffect(() => {
+    let cancel = false;
+    const loadBookings = async () => {
+      setLoadingBookings(true);
+      try {
+        const { data } = await axios.get(`${API_BASE_URL}/api/labs/bookings/my`, authConfig());
+        if (cancel) return;
+        const rows = Array.isArray(data?.bookings) ? data.bookings : [];
+        setBookings(rows);
 
-      return categoryMatch && queryMatch;
-    });
-  }, [query, category]);
+        const latest = rows[0];
+        if (latest) {
+          setProfileName(latest.profileName || "");
+          setPhone(latest.phone || "");
+          setAddress(latest.address || "");
+          setLandmark(latest.landmark || "");
+          setCityArea(latest.cityArea || "Noida");
+        }
+      } catch {
+        if (!cancel) setBookings([]);
+      } finally {
+        if (!cancel) setLoadingBookings(false);
+      }
+    };
+
+    loadBookings();
+    return () => {
+      cancel = true;
+    };
+  }, []);
+
+  const filteredTests = useMemo(() => tests, [tests]);
+
+  const filteredPackages = useMemo(() => packages, [packages]);
 
   const cartRows = useMemo(() => {
     if (selectedPackage) {
@@ -631,7 +320,7 @@ export default function LabTests() {
     }
 
     return selectedTests.map((id) => {
-      const found = TESTS.find((x) => x.id === id);
+      const found = tests.find((x) => x.id === id);
       return {
         id,
         type: "test",
@@ -640,7 +329,7 @@ export default function LabTests() {
         reportTime: found?.reportTime || "24 hrs",
       };
     });
-  }, [selectedPackage, selectedTests]);
+  }, [selectedPackage, selectedTests, tests]);
 
   const total = useMemo(() => cartRows.reduce((sum, row) => sum + Number(row.price || 0), 0), [cartRows]);
 
@@ -649,10 +338,10 @@ export default function LabTests() {
       return Math.max(0, Number(selectedPackage.oldPrice || 0) - Number(selectedPackage.price || 0));
     }
     return selectedTests.reduce((sum, id) => {
-      const found = TESTS.find((x) => x.id === id);
+      const found = tests.find((x) => x.id === id);
       return sum + Math.max(0, Number(found?.oldPrice || 0) - Number(found?.price || 0));
     }, 0);
-  }, [selectedPackage, selectedTests]);
+  }, [selectedPackage, selectedTests, tests]);
 
   const upcoming = useMemo(() => {
     return [...bookings]
@@ -711,49 +400,63 @@ export default function LabTests() {
     setStep((prev) => Math.max(1, prev - 1));
   }
 
-  function confirmBooking() {
+    async function confirmBooking() {
     if (!paymentMethod || !address.trim() || !phone.trim()) return;
 
-    const selectedDate = dateList.find((d) => d.iso === date);
+    try {
+      setApiError("");
 
-    const newBooking = {
-      id: `lab-${Date.now()}`,
-      items: cartRows,
-      total,
-      discount,
-      whoFor,
-      profileName: profileName.trim() || (whoFor === "self" ? "Self" : "Family Member"),
-      phone: phone.trim(),
-      address: address.trim(),
-      landmark: landmark.trim(),
-      cityArea,
-      date,
-      dateLabel: selectedDate?.full || date,
-      slot,
-      paymentMethod,
-      paymentStatus: "paid",
-      transactionId: `LABTXN-${Date.now()}`,
-      notes: notes.trim(),
-      attachedFileName: file?.name || null,
-      status: "sample_scheduled",
-      reportEta: cartRows.map((r) => r.reportTime).join(", "),
-      collectionType: "Home Sample Collection",
-      processedBy: "GoDavaii Verified Diagnostic Partner",
-      createdAt: new Date().toISOString(),
-    };
+      const formData = new FormData();
+      formData.append(
+        "items",
+        JSON.stringify(
+          cartRows.map((r) => ({
+            itemId: r.id,
+            type: r.type,
+            name: r.name,
+            price: r.price,
+            reportTime: r.reportTime,
+          }))
+        )
+      );
+      formData.append("whoFor", whoFor);
+      formData.append(
+        "profileName",
+        profileName.trim() || (whoFor === "self" ? "Self" : "Family Member")
+      );
+      formData.append("phone", phone.trim());
+      formData.append("address", address.trim());
+      formData.append("landmark", landmark.trim());
+      formData.append("cityArea", cityArea);
+      formData.append("date", date);
+      formData.append("slot", slot);
+      formData.append("paymentMethod", paymentMethod);
+      formData.append("paymentStatus", "paid");
+      formData.append("confirmNow", "1");
+      formData.append("notes", notes.trim());
+      if (file) formData.append("file", file);
 
-    const nextRows = [newBooking, ...bookings];
-    setBookings(nextRows);
-    saveBookings(nextRows);
-    setBookingConfirmed(newBooking);
+      const { data } = await axios.post(
+        `${API_BASE_URL}/api/labs/bookings/create`,
+        formData,
+        authConfig({ headers: { "Content-Type": "multipart/form-data" } })
+      );
 
-    clearSelection();
-    setPaymentMethod("");
-    setNotes("");
-    setFile(null);
-    setStep(5);
+      const booking = data?.booking;
+      if (!booking) throw new Error("Booking create failed");
+
+      setBookings((prev) => [booking, ...prev]);
+      setBookingConfirmed(booking);
+
+      clearSelection();
+      setPaymentMethod("");
+      setNotes("");
+      setFile(null);
+      setStep(5);
+    } catch (e) {
+      setApiError(e?.response?.data?.error || "Failed to confirm booking");
+    }
   }
-
   return (
     <div
       style={{
@@ -916,6 +619,16 @@ export default function LabTests() {
             style={inputStyleWithIcon}
           />
         </div>
+
+        {apiError ? (
+          <div style={{ marginTop: 8, color: "#B91C1C", fontSize: 11, fontWeight: 800 }}>{apiError}</div>
+        ) : null}
+        {loadingCatalog ? (
+          <div style={{ marginTop: 4, color: "#64748B", fontSize: 10.5, fontWeight: 700 }}>Loading lab catalog...</div>
+        ) : null}
+        {loadingBookings ? (
+          <div style={{ marginTop: 4, color: "#64748B", fontSize: 10.5, fontWeight: 700 }}>Loading previous bookings...</div>
+        ) : null}
 
         <div
           style={{
@@ -2007,7 +1720,7 @@ export default function LabTests() {
                       gap: 7,
                     }}
                   >
-                    {SLOT_WINDOWS.map((s) => (
+                    {slotWindows.map((s) => (
                       <button
                         key={s}
                         onClick={() => setSlot(s)}
@@ -2443,3 +2156,17 @@ const secondaryBtnStyle = {
   fontWeight: 900,
   cursor: "pointer",
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
