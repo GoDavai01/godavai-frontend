@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { jwtDecode } from "jwt-decode";
+import { useNavigate } from "react-router-dom";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP  = "#0C5A3E";
@@ -12,6 +13,7 @@ const MID   = "#0E7A4F";
 const ACCENT = "#00D97E";
 
 export default function OtpLogin({ onLogin }) {
+  const navigate = useNavigate();
   const [step, setStep]           = useState(1);
   const [identifier, setIdentifier] = useState("");
   const [otp, setOtp]             = useState(["", "", "", "", "", ""]);
@@ -21,8 +23,18 @@ export default function OtpLogin({ onLogin }) {
   const [resendTimer, setResendTimer] = useState(0);
   const timerRef = useRef(null);
   const otpRefs  = useRef([]);
+  const webOtpAbortRef = useRef(null);
 
   const { login } = useAuth();
+
+  const isEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+  const normalizePhone = (value) => {
+    const raw = String(value || "").replace(/[^\d+]/g, "");
+    if (!raw) return "";
+    if (raw.startsWith("+")) return raw;
+    if (raw.length === 10) return `+91${raw}`;
+    return raw;
+  };
 
   useEffect(() => {
     if (step === 2) {
@@ -34,6 +46,33 @@ export default function OtpLogin({ onLogin }) {
     return () => clearInterval(timerRef.current);
   }, [step]);
 
+  useEffect(() => {
+    if (step !== 2) return;
+    const mobileLike = !isEmail(identifier);
+    const supportsWebOtp = "OTPCredential" in window && navigator?.credentials?.get;
+    if (!mobileLike || !supportsWebOtp) return;
+
+    const ctrl = new AbortController();
+    webOtpAbortRef.current = ctrl;
+
+    navigator.credentials
+      .get({
+        otp: { transport: ["sms"] },
+        signal: ctrl.signal,
+      })
+      .then((cred) => {
+        const code = String(cred?.code || "").replace(/\D/g, "").slice(0, 6);
+        if (code.length === 6) {
+          setOtp(code.split(""));
+          setTimeout(() => handleVerify(code), 120);
+        }
+      })
+      .catch(() => {});
+
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, identifier]);
+
   const showError = (msg) => { setError(msg); setTimeout(() => setError(""), 3500); };
   const showSuccess = (msg) => { setSuccess(msg); setTimeout(() => setSuccess(""), 2500); };
 
@@ -41,7 +80,25 @@ export default function OtpLogin({ onLogin }) {
     if (!identifier) { showError("Enter mobile number or email."); return; }
     setLoading(true);
     try {
-      await axios.post(`${API_BASE_URL}/api/auth/send-otp`, { identifier });
+      const id = String(identifier).trim();
+      const email = isEmail(id) ? id.toLowerCase() : "";
+      const mobile = !email ? normalizePhone(id) : "";
+      const payloads = [
+        { identifier: id, email: email || undefined, mobile: mobile || undefined },
+        { identifier: id, email: email || id, phone: mobile || id },
+      ];
+      let sent = false;
+      let lastErr = null;
+      for (const p of payloads) {
+        try {
+          await axios.post(`${API_BASE_URL}/api/auth/send-otp`, p);
+          sent = true;
+          break;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      if (!sent && lastErr) throw lastErr;
       setStep(2);
       showSuccess("OTP sent!");
       setTimeout(() => otpRefs.current[0]?.focus(), 300);
@@ -71,17 +128,41 @@ export default function OtpLogin({ onLogin }) {
     e.preventDefault();
   };
 
-  const handleVerify = async () => {
-    const code = otp.join("");
+  const handleVerify = async (overrideCode) => {
+    const code = String(overrideCode || otp.join(""));
     if (code.length < 6) { showError("Enter all 6 digits."); return; }
     setLoading(true);
     try {
-      const res = await axios.post(`${API_BASE_URL}/api/auth/verify-otp`, { identifier, otp: code });
-      const token = res.data?.token;
+      const id = String(identifier).trim();
+      const email = isEmail(id) ? id.toLowerCase() : "";
+      const mobile = !email ? normalizePhone(id) : "";
+      const payloads = [
+        { identifier: id, otp: code, code },
+        { identifier: id, email: email || undefined, mobile: mobile || undefined, otp: code },
+      ];
+      let res = null;
+      let lastErr = null;
+      for (const p of payloads) {
+        try {
+          res = await axios.post(`${API_BASE_URL}/api/auth/verify-otp`, p);
+          break;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      if (!res && lastErr) throw lastErr;
+
+      const token = res?.data?.token || res?.data?.accessToken || res?.data?.jwt;
       if (!token) { showError("Invalid OTP. Please try again."); setLoading(false); return; }
-      const decoded = jwtDecode(token);
+      let decoded = null;
+      try {
+        decoded = jwtDecode(token);
+      } catch {
+        decoded = res?.data?.user || { identifier: id };
+      }
       login(decoded, token);
       onLogin?.();
+      navigate("/home", { replace: true });
     } catch (err) {
       const msg = err.response?.data?.error || "Invalid OTP. Please try again.";
       showError(msg);
@@ -159,7 +240,7 @@ export default function OtpLogin({ onLogin }) {
             GoDavaii
           </div>
           <div style={{ fontSize: 13, color: "rgba(255,255,255,0.45)", marginTop: 6, letterSpacing: "0.3px" }}>
-            Medicines delivered in 30 minutes
+            2035 Health OS
           </div>
         </motion.div>
 
@@ -329,6 +410,11 @@ export default function OtpLogin({ onLogin }) {
                   </button>
                 )}
               </div>
+              {!("OTPCredential" in window) && (
+                <div style={{ marginTop: 10, textAlign: "center", fontSize: 11.5, color: "#94A3B8", fontWeight: 700 }}>
+                  Tip: Auto OTP detect works on supported Android browsers over HTTPS.
+                </div>
+              )}
             </div>
           )}
         </motion.div>
