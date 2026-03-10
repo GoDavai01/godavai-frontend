@@ -3,6 +3,7 @@ import axios from "axios";
 import { motion } from "framer-motion";
 import { AlertTriangle, ClipboardList, FileText, HeartPulse, Phone, Plus, Save, Shield, UserRound, Users, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const VAULT_KEY = "gd_health_vault_v2";
@@ -148,6 +149,7 @@ async function openSecureFile(url) {
 
 export default function HealthVault() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [vault, setVault] = useState(() => defaultVault(user));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -468,7 +470,7 @@ export default function HealthVault() {
                     </div>
                   )}
                   {r.fileUrl ? (
-                    <div style={{ marginTop: 6 }}>
+                    <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button
                         onClick={() => {
                           const fileUrl = getVaultReportViewUrl(activeMember.id, r.id) || resolveFileUrl(r.fileUrl);
@@ -481,6 +483,12 @@ export default function HealthVault() {
                         style={{ border: "1px solid #A7F3D0", background: "#ECFDF5", color: "#065F46", borderRadius: 999, height: 26, padding: "0 10px", fontSize: 10.5, fontWeight: 900, cursor: "pointer" }}
                       >
                         Open
+                      </button>
+                      <button
+                        onClick={() => navigate(`/ai?autovaultMember=${encodeURIComponent(activeMember.id)}&autovaultReport=${encodeURIComponent(r.id)}&source=vault-report&run=${Date.now()}`)}
+                        style={{ border: "1px solid #C4B5FD", background: "#F5F3FF", color: "#5B21B6", borderRadius: 999, height: 26, padding: "0 10px", fontSize: 10.5, fontWeight: 900, cursor: "pointer" }}
+                      >
+                        Analyze in AI
                       </button>
                     </div>
                   ) : null}

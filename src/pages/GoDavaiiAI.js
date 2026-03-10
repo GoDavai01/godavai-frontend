@@ -289,7 +289,7 @@ export default function GoDavaiiAI() {
   const chatEndRef = useRef(null);
   const audioRef = useRef(null);
   const msgIdCounter = useRef(1);
-  const autoLabHandledRef = useRef("");
+  const autoAnalyzeHandledRef = useRef("");
 
   const makeId = () => `msg-${msgIdCounter.current++}`;
 
@@ -309,15 +309,20 @@ export default function GoDavaiiAI() {
   useEffect(() => {
     const q = new URLSearchParams(location.search || "");
     const bookingId = String(q.get("autolab") || "").trim();
-    if (!bookingId) return;
-    if (autoLabHandledRef.current === bookingId) return;
-    autoLabHandledRef.current = bookingId;
+    const vaultMemberId = String(q.get("autovaultMember") || "").trim();
+    const vaultReportId = String(q.get("autovaultReport") || "").trim();
+    const runKey = String(q.get("run") || "").trim() || `${bookingId}:${vaultMemberId}:${vaultReportId}`;
+    if (!bookingId && !(vaultMemberId && vaultReportId)) return;
+    if (autoAnalyzeHandledRef.current === runKey) return;
+    autoAnalyzeHandledRef.current = runKey;
 
     (async () => {
       try {
-        const reportFile = await fetchBookingReportAsFile(bookingId);
+        const reportFile = bookingId
+          ? await fetchBookingReportAsFile(bookingId)
+          : await fetchVaultReportAsFile(vaultMemberId, vaultReportId);
         if (!reportFile) return;
-        const autoPrompt = "Please analyze this lab report in detail and explain findings in simple language.";
+        const autoPrompt = "Please analyze this uploaded medical report/image in detail and explain findings in simple language.";
         const userMsg = { id: makeId(), role: "user", text: `${autoPrompt}\n📎 ${reportFile.name} (auto-attached)` };
         const nextMessages = [...messages, userMsg];
         setMessages(nextMessages);
@@ -541,8 +546,19 @@ export default function GoDavaiiAI() {
     if (!bookingId || !headers.Authorization) return null;
     const url = `${API}/api/labs/bookings/${encodeURIComponent(bookingId)}/report`;
     const res = await axios.get(url, { headers, responseType: "blob", timeout: 60000 });
-    const ext = res?.data?.type?.includes("pdf") ? ".pdf" : ".jpg";
-    return new File([res.data], `lab-report-${bookingId}${ext}`, { type: res.data.type || "application/octet-stream" });
+    const contentType = String(res?.data?.type || "application/octet-stream");
+    const ext = contentType.includes("pdf") ? ".pdf" : ".jpg";
+    return new File([res.data], `medical-report-${bookingId}${ext}`, { type: contentType });
+  }
+
+  async function fetchVaultReportAsFile(memberId, reportId) {
+    const headers = getAuthHeaders();
+    if (!memberId || !reportId || !headers.Authorization) return null;
+    const url = `${API}/api/health-vault/me/members/${encodeURIComponent(memberId)}/reports/${encodeURIComponent(reportId)}/file`;
+    const res = await axios.get(url, { headers, responseType: "blob", timeout: 60000 });
+    const contentType = String(res?.data?.type || "application/octet-stream");
+    const ext = contentType.includes("pdf") ? ".pdf" : ".jpg";
+    return new File([res.data], `vault-report-${reportId}${ext}`, { type: contentType });
   }
 
   async function fetchLatestVaultReportAsFile() {
