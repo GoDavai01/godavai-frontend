@@ -488,9 +488,8 @@ export default function LabTests() {
   }
 
   function getReportUrl(booking) {
-    const url = booking?.reportFile?.fileUrl || "";
-    if (!url) return "";
-    return url.startsWith("http://") || url.startsWith("https://") ? url : `${API_BASE_URL}${url}`;
+    if (!booking?.id) return "";
+    return `${API_BASE_URL}/api/labs/bookings/${encodeURIComponent(booking.id)}/report`;
   }
 
   async function pushReportToVault(bookingId) {
@@ -503,6 +502,19 @@ export default function LabTests() {
       setApiError(e?.response?.data?.error || "Failed to push report to health vault");
     } finally {
       setVaultBusyBookingId("");
+    }
+  }
+
+  async function openReportSecurely(booking) {
+    const url = getReportUrl(booking);
+    if (!url) return;
+    try {
+      const res = await axios.get(url, authConfig({ responseType: "blob" }));
+      const blobUrl = window.URL.createObjectURL(res.data);
+      window.open(blobUrl, "_blank", "noopener,noreferrer");
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
+    } catch (e) {
+      setApiError(e?.response?.data?.error || "Failed to open report");
     }
   }
 
@@ -1279,8 +1291,7 @@ export default function LabTests() {
                   <div style={{ marginTop: 8, display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
                     <button
                       onClick={() => {
-                        const url = getReportUrl(booking);
-                        if (url) window.open(url, "_blank", "noopener,noreferrer");
+                        openReportSecurely(booking);
                       }}
                       style={{
                         height: 30,

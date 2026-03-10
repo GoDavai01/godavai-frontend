@@ -129,6 +129,23 @@ function resolveFileUrl(url) {
   return `${API}${src.startsWith("/") ? "" : "/"}${src}`;
 }
 
+function getVaultReportViewUrl(memberId, reportId) {
+  if (!memberId || !reportId) return "";
+  return `${API}/api/health-vault/me/members/${encodeURIComponent(memberId)}/reports/${encodeURIComponent(reportId)}/file`;
+}
+
+async function openSecureFile(url) {
+  const token = localStorage.getItem("token");
+  if (!url || !token) return;
+  const res = await axios.get(url, {
+    responseType: "blob",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const blobUrl = window.URL.createObjectURL(res.data);
+  window.open(blobUrl, "_blank", "noopener,noreferrer");
+  setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
+}
+
 export default function HealthVault() {
   const { user } = useAuth();
   const [vault, setVault] = useState(() => defaultVault(user));
@@ -454,8 +471,12 @@ export default function HealthVault() {
                     <div style={{ marginTop: 6 }}>
                       <button
                         onClick={() => {
-                          const fileUrl = resolveFileUrl(r.fileUrl);
-                          if (fileUrl) window.open(fileUrl, "_blank", "noopener,noreferrer");
+                          const fileUrl = getVaultReportViewUrl(activeMember.id, r.id) || resolveFileUrl(r.fileUrl);
+                          if (fileUrl) {
+                            openSecureFile(fileUrl).catch(() => {
+                              window.open(resolveFileUrl(r.fileUrl), "_blank", "noopener,noreferrer");
+                            });
+                          }
                         }}
                         style={{ border: "1px solid #A7F3D0", background: "#ECFDF5", color: "#065F46", borderRadius: 999, height: 26, padding: "0 10px", fontSize: 10.5, fontWeight: 900, cursor: "pointer" }}
                       >
