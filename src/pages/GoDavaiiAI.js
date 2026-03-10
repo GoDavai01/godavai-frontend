@@ -570,7 +570,7 @@ export default function GoDavaiiAI() {
       `${API}/api/health-vault/me/members/${encodeURIComponent(pick.memberId)}/reports/${encodeURIComponent(pick.id)}/file`,
       { headers, responseType: "blob", timeout: 60000 }
     );
-    const baseName = String(pick.fileName || pick.title || "vault-report").replace(/[\\\\/:*?\"<>|]/g, "_");
+    const baseName = String(pick.fileName || pick.title || "vault-report").replace(/[\\/:*?"<>|]/g, "_");
     return new File([fileRes.data], baseName, { type: fileRes.data.type || "application/octet-stream" });
   }
 
