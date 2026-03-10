@@ -1313,6 +1313,22 @@ export default function LabTests() {
                     >
                       {vaultBusyBookingId === booking.id ? "Saving..." : "Save to Health Vault"}
                     </button>
+                    <button
+                      onClick={() => navigate(`/ai?source=lab-report&bookingId=${encodeURIComponent(booking.id)}`)}
+                      style={{
+                        height: 30,
+                        borderRadius: 9,
+                        border: "1px solid #DDD6FE",
+                        background: "#F5F3FF",
+                        color: "#5B21B6",
+                        fontSize: 10.5,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                        padding: "0 10px",
+                      }}
+                    >
+                      Analyze in AI
+                    </button>
                   </div>
                 ) : null}
               </div>
