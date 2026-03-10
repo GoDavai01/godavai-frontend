@@ -1325,7 +1325,7 @@ export default function LabTests() {
                       {vaultBusyBookingId === booking.id ? "Saving..." : "Save to Health Vault"}
                     </button>
                     <button
-                      onClick={() => navigate(`/ai?source=lab-report&bookingId=${encodeURIComponent(booking.id)}`)}
+                      onClick={() => navigate(`/ai?autolab=${encodeURIComponent(booking.id)}&source=lab-report`)}
                       style={{
                         height: 30,
                         borderRadius: 9,

@@ -27,7 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
@@ -80,6 +80,16 @@ function fallbackReply(message, focus, whoFor) {
 function getApiErrorMessage(err) {
   const data = err?.response?.data;
   return data?.error || data?.details || data?.message || err?.message || "Request failed.";
+}
+
+function wantsLatestVaultReportAnalysis(text) {
+  const src = String(text || "").toLowerCase();
+  return (
+    /(latest|recent|last|naya|new)/.test(src) &&
+    /(health vault|healthvault|vault)/.test(src) &&
+    /(lab report|report|xray|x-ray|scan)/.test(src) &&
+    /(analy|explain|samjha|interpret)/.test(src)
+  );
 }
 
 /* ── Auth header helper ───────────────────────────────────── */
@@ -258,6 +268,7 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading }) {
 export default function GoDavaiiAI() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [focus, setFocus] = useState("auto");
   const [whoFor, setWhoFor] = useState("self");
@@ -278,6 +289,7 @@ export default function GoDavaiiAI() {
   const chatEndRef = useRef(null);
   const audioRef = useRef(null);
   const msgIdCounter = useRef(1);
+  const autoLabHandledRef = useRef("");
 
   const makeId = () => `msg-${msgIdCounter.current++}`;
 
@@ -293,6 +305,41 @@ export default function GoDavaiiAI() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    const q = new URLSearchParams(location.search || "");
+    const bookingId = String(q.get("autolab") || "").trim();
+    if (!bookingId) return;
+    if (autoLabHandledRef.current === bookingId) return;
+    autoLabHandledRef.current = bookingId;
+
+    (async () => {
+      try {
+        const reportFile = await fetchBookingReportAsFile(bookingId);
+        if (!reportFile) return;
+        const autoPrompt = "Please analyze this lab report in detail and explain findings in simple language.";
+        const userMsg = { id: makeId(), role: "user", text: `${autoPrompt}\n📎 ${reportFile.name} (auto-attached)` };
+        const nextMessages = [...messages, userMsg];
+        setMessages(nextMessages);
+        setLoading(true);
+        const history = buildCompactHistory(nextMessages);
+        const reply = await askBackendWithFile(autoPrompt, history, reportFile);
+        setMessages((prev) => [...prev, { id: makeId(), role: "assistant", text: reply }]);
+      } catch (e) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: makeId(),
+            role: "assistant",
+            text: `Assessment:\n- Auto lab analysis start nahi ho paaya.\n\nNext steps:\n- Report ko manually attach karke retry karein.\n\nWarning signs:\n- Agar severe symptoms hain to doctor/ER se turant connect karein.\n\nDesi ilaaj:\n- Supportive care ke liye rest aur hydration continue rakhein.`,
+          },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   const whoForLabel = useMemo(() => {
     if (whoFor === "family" && familyLabel.trim()) return familyLabel.trim();
@@ -489,15 +536,61 @@ export default function GoDavaiiAI() {
     return `File analysis issue: ${getApiErrorMessage(lastErr)}\n\nPlease retry with a clearer image.`;
   }
 
+  async function fetchBookingReportAsFile(bookingId) {
+    const headers = getAuthHeaders();
+    if (!bookingId || !headers.Authorization) return null;
+    const url = `${API}/api/labs/bookings/${encodeURIComponent(bookingId)}/report`;
+    const res = await axios.get(url, { headers, responseType: "blob", timeout: 60000 });
+    const ext = res?.data?.type?.includes("pdf") ? ".pdf" : ".jpg";
+    return new File([res.data], `lab-report-${bookingId}${ext}`, { type: res.data.type || "application/octet-stream" });
+  }
+
+  async function fetchLatestVaultReportAsFile() {
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) return null;
+    const { data } = await axios.get(`${API}/api/health-vault/me`, { headers, timeout: 30000 });
+    const members = Array.isArray(data?.members) ? data.members : [];
+    if (!members.length) return null;
+    const activeMemberId = data?.activeMemberId || members[0]?.id;
+
+    const allReports = members.flatMap((m) =>
+      (Array.isArray(m?.reports) ? m.reports : []).map((r) => ({ memberId: m.id, ...r }))
+    );
+    if (!allReports.length) return null;
+
+    const byDate = [...allReports].sort((a, b) => {
+      const da = new Date(a?.date || 0).getTime() || 0;
+      const db = new Date(b?.date || 0).getTime() || 0;
+      return db - da;
+    });
+    const pick = byDate.find((r) => r.memberId === activeMemberId) || byDate[0];
+    if (!pick?.id || !pick?.memberId) return null;
+
+    const fileRes = await axios.get(
+      `${API}/api/health-vault/me/members/${encodeURIComponent(pick.memberId)}/reports/${encodeURIComponent(pick.id)}/file`,
+      { headers, responseType: "blob", timeout: 60000 }
+    );
+    const baseName = String(pick.fileName || pick.title || "vault-report").replace(/[\\\\/:*?\"<>|]/g, "_");
+    return new File([fileRes.data], baseName, { type: fileRes.data.type || "application/octet-stream" });
+  }
+
   /* ── Send message ───────────────────────────────────────── */
   async function sendMessage() {
     const msg = input.trim();
-    const activeFile = attachedFile;
+    let activeFile = attachedFile;
     if (!msg && !activeFile) return;
     if (loading) return;
 
+    if (!activeFile && msg && wantsLatestVaultReportAnalysis(msg)) {
+      try {
+        activeFile = await fetchLatestVaultReportAsFile();
+      } catch (e) {
+        console.error("Auto-fetch latest vault report failed:", getApiErrorMessage(e));
+      }
+    }
+
     const userBubbleText = activeFile
-      ? `${msg || "(file uploaded)"}\n📎 ${activeFile.name}`
+      ? `${msg || "(file uploaded)"}\n📎 ${activeFile.name}${!attachedFile ? " (auto-attached)" : ""}`
       : msg;
     const userMsg = { id: makeId(), role: "user", text: userBubbleText };
     const nextMessages = [...messages, userMsg];
