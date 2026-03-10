@@ -353,6 +353,9 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <LabTests />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             path="/lab-partner/register"
@@ -378,8 +381,6 @@ function AppContent() {
               <ProtectedRoute>
                 <LabPartnerDashboard />
               </ProtectedRoute>
-            }
-          />              </ProtectedRoute>
             }
           />
 

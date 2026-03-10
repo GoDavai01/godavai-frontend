@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -197,6 +198,7 @@ function TinyBadge({ children, green }) {
 }
 
 export default function LabTests() {
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [showOnlyHomeCollection, setShowOnlyHomeCollection] = useState(false);
@@ -231,6 +233,7 @@ export default function LabTests() {
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState(null);
   const [bookingConfirmed, setBookingConfirmed] = useState(null);
+  const [cancelingBookingId, setCancelingBookingId] = useState("");
 
   useEffect(() => {
     let cancel = false;
@@ -400,7 +403,7 @@ export default function LabTests() {
     setStep((prev) => Math.max(1, prev - 1));
   }
 
-    async function confirmBooking() {
+  async function confirmBooking() {
     if (!paymentMethod || !address.trim() || !phone.trim()) return;
 
     try {
@@ -457,6 +460,32 @@ export default function LabTests() {
       setApiError(e?.response?.data?.error || "Failed to confirm booking");
     }
   }
+
+  function canCancelBooking(status) {
+    return !["completed", "cancelled", "report_ready"].includes(String(status || ""));
+  }
+
+  async function cancelBooking(bookingId) {
+    if (!bookingId || cancelingBookingId) return;
+    setCancelingBookingId(bookingId);
+    setApiError("");
+    try {
+      const { data } = await axios.patch(
+        `${API_BASE_URL}/api/labs/bookings/${encodeURIComponent(bookingId)}/cancel`,
+        { reason: "Cancelled by user from lab tests page" },
+        authConfig()
+      );
+      const updated = data?.booking;
+      if (updated?.id) {
+        setBookings((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+      }
+    } catch (e) {
+      setApiError(e?.response?.data?.error || "Failed to cancel booking");
+    } finally {
+      setCancelingBookingId("");
+    }
+  }
+
   return (
     <div
       style={{
@@ -491,6 +520,7 @@ export default function LabTests() {
           />
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button
+              onClick={() => navigate(-1)}
               style={{
                 width: 36,
                 height: 36,
@@ -1204,6 +1234,27 @@ export default function LabTests() {
                     {booking.status.replaceAll("_", " ")}
                   </span>
                 </div>
+                {canCancelBooking(booking.status) ? (
+                  <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      onClick={() => cancelBooking(booking.id)}
+                      disabled={cancelingBookingId === booking.id}
+                      style={{
+                        height: 30,
+                        borderRadius: 9,
+                        border: "1px solid #FECACA",
+                        background: cancelingBookingId === booking.id ? "#F8FAFC" : "#FEF2F2",
+                        color: "#B91C1C",
+                        fontSize: 10.5,
+                        fontWeight: 900,
+                        cursor: cancelingBookingId === booking.id ? "not-allowed" : "pointer",
+                        padding: "0 10px",
+                      }}
+                    >
+                      {cancelingBookingId === booking.id ? "Cancelling..." : "Cancel Booking"}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ))
           )}

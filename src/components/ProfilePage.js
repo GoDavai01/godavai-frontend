@@ -1103,7 +1103,6 @@ export default function ProfilePage() {
       </Section>
 
       <Section
-      <Section
         icon={<FlaskConical className="h-5 w-5 text-emerald-600" />}
         title="Lab Partner Portal"
         expanded={openSections.lab}
@@ -1139,6 +1138,7 @@ export default function ProfilePage() {
         </div>
       </Section>
 
+      <Section
         icon={<Bike className="h-5 w-5 text-emerald-700" />}
         title="Delivery Partner Portal"
         expanded={openSections.delivery}
