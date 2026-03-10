@@ -105,18 +105,24 @@ function normalizeBookingStatus(status) {
 }
 
 function isCompletedBooking(booking) {
-  const doneStatuses = new Set([
-    "completed",
-    "cancelled",
-    "report_ready",
-    "report_generated",
-    "delivered",
-  ]);
   const status = normalizeBookingStatus(booking?.status);
+  const isDoneByStatus =
+    status === "completed" ||
+    status === "cancelled" ||
+    status === "report_ready" ||
+    status === "report_generated" ||
+    status === "delivered" ||
+    status === "done" ||
+    status === "closed" ||
+    /complete|cancel|report|deliver|done|closed/.test(status);
+
   return (
-    doneStatuses.has(status) ||
+    isDoneByStatus ||
     Boolean(booking?.reportAvailable) ||
-    Boolean(booking?.resultAvailable)
+    Boolean(booking?.resultAvailable) ||
+    Boolean(booking?.reportUrl) ||
+    Boolean(booking?.reportFileUrl) ||
+    Boolean(booking?.reportUploadedAt)
   );
 }
 
@@ -127,21 +133,26 @@ function buildPackageDetails(pack) {
   const savings = Math.max(0, oldPrice - price);
   const reportTime = pack?.reportTime || "24 hrs";
   const name = String(pack?.name || "Health Package");
+  const coverageCount = tests.length || Number(pack?.testCount || 0) || 1;
 
   const valueLine =
     savings > 0
       ? `Save Rs ${savings} versus booking tests separately.`
-      : `One booking includes ${tests.length || 1} clinically relevant tests.`;
+      : `One booking includes ${coverageCount} clinically relevant tests.`;
 
   return {
     whyBest:
       pack?.whyBest ||
-      `${name} helps with preventive screening in one go so users do not miss related markers.`,
+      `${name} covers related biomarkers together, so root-cause patterns are easier to catch than isolated single-test booking.`,
     idealFor:
-      pack?.idealFor || `Best for users who want complete checks with home collection convenience.`,
+      pack?.idealFor || `Best for users who want proactive screening, family-risk tracking, or recurring preventive monitoring.`,
     valueLine,
     reportCommitment:
       pack?.reportCommitment || `Digital report ETA ${reportTime} with GoDavaii follow-up support.`,
+    outcomes:
+      pack?.outcomes || `Helps identify early risk trends, track progression over time, and reduce repeated fragmented bookings.`,
+    coverageSummary:
+      pack?.coverageSummary || `${coverageCount} markers mapped for a single clinical objective with one home collection.`,
   };
 }
 
@@ -863,6 +874,9 @@ export default function LabTests() {
         </Glass>
 
         <SectionTitle title="Health Packages" />
+        <div style={{ marginBottom: 8, fontSize: 10.8, color: BRAND.sub, fontWeight: 800 }}>
+          Tip: multiple packages + multiple tests ek hi booking me add kar sakte ho.
+        </div>
 
         <div
           style={{
@@ -931,18 +945,6 @@ export default function LabTests() {
                 >
                   {p.desc}
                 </div>
-                <div
-                  style={{
-                    marginTop: 6,
-                    fontSize: 10.5,
-                    color: "#0F766E",
-                    fontWeight: 800,
-                    lineHeight: 1.35,
-                  }}
-                >
-                  Why best: {packageDetails.whyBest}
-                </div>
-
                 <div
                   style={{
                     marginTop: 7,
@@ -1280,7 +1282,7 @@ export default function LabTests() {
         </Glass>
 
         <Glass style={{ marginTop: 12, padding: 12, marginBottom: 10 }}>
-          <SectionTitle title="Upcoming Lab Bookings" />
+          <SectionTitle title="Upcoming / Active Lab Bookings" />
           {upcoming.length === 0 ? (
             <div
               style={{
@@ -1289,7 +1291,7 @@ export default function LabTests() {
                 fontWeight: 700,
               }}
             >
-              No upcoming booking yet. Select tests and proceed to home collection.
+              No active booking pending. Completed/report-ready bookings are hidden from this section.
             </div>
           ) : (
             upcoming.map((booking) => (
@@ -1653,12 +1655,14 @@ export default function LabTests() {
               </Glass>
 
               {detailItem.type === "package" && (
-                <Glass style={{ marginTop: 12, padding: 12 }}>
-                  <div style={detailHeading}>Value explanation</div>
-                  <div style={detailText}>{detailItem.data.valueLine}</div>
-                  <div style={{ ...detailText, marginTop: 6 }}>{detailItem.data.reportCommitment}</div>
-                </Glass>
-              )}
+              <Glass style={{ marginTop: 12, padding: 12 }}>
+                <div style={detailHeading}>Value explanation</div>
+                <div style={detailText}>{detailItem.data.valueLine}</div>
+                <div style={{ ...detailText, marginTop: 6 }}>{detailItem.data.coverageSummary}</div>
+                <div style={{ ...detailText, marginTop: 6 }}>{detailItem.data.outcomes}</div>
+                <div style={{ ...detailText, marginTop: 6 }}>{detailItem.data.reportCommitment}</div>
+              </Glass>
+            )}
 
               <Glass style={{ marginTop: 12, padding: 12 }}>
                 <div style={detailHeading}>GoDavaii trust layer</div>
