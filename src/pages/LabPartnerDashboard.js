@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+ï»¿import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -19,6 +19,7 @@ export default function LabPartnerDashboard() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
+  const [reportFiles, setReportFiles] = useState({});
   const [error, setError] = useState("");
 
   async function loadAll() {
@@ -68,10 +69,29 @@ export default function LabPartnerDashboard() {
 
   async function updateStatus(booking, action) {
     if (!booking?.id || busyId) return;
+    const selectedFile = reportFiles[booking.id];
+    if (action === "report_ready" && !selectedFile && !booking?.reportFile?.fileKey) {
+      setError("Please attach the report file before marking report ready.");
+      return;
+    }
+
     setBusyId(booking.id);
     setError("");
     try {
-      await axios.patch(`${API_BASE_URL}/api/lab-partners/bookings/${encodeURIComponent(booking.id)}/status`, { action }, authConfig());
+      if (selectedFile) {
+        const fd = new FormData();
+        fd.append("action", action);
+        fd.append("reportFile", selectedFile);
+        await axios.patch(`${API_BASE_URL}/api/lab-partners/bookings/${encodeURIComponent(booking.id)}/status`, fd, authConfig());
+      } else {
+        await axios.patch(`${API_BASE_URL}/api/lab-partners/bookings/${encodeURIComponent(booking.id)}/status`, { action }, authConfig());
+      }
+
+      setReportFiles((prev) => {
+        const next = { ...prev };
+        delete next[booking.id];
+        return next;
+      });
       await loadAll();
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to update booking status");
@@ -93,7 +113,7 @@ export default function LabPartnerDashboard() {
       case "sample_collected":
         return { action: "processing", label: "Start Processing" };
       case "processing":
-        return { action: "report_ready", label: "Mark Report Ready" };
+        return { action: "report_ready", label: "Upload & Mark Report Ready" };
       case "report_ready":
         return { action: "completed", label: "Mark Completed" };
       default:
@@ -158,9 +178,9 @@ export default function LabPartnerDashboard() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 900, color: "#0B1F16" }}>{b.items?.[0]?.name || "Lab Booking"}{(b.items?.length || 0) > 1 ? ` +${b.items.length - 1}` : ""}</div>
-                  <div style={{ fontSize: 10.5, color: "#64748B", fontWeight: 700 }}>{b.profileName} · {b.phone}</div>
+                  <div style={{ fontSize: 10.5, color: "#64748B", fontWeight: 700 }}>{b.profileName} - {b.phone}</div>
                   <div style={{ marginTop: 4, fontSize: 10.5, color: "#475569", fontWeight: 700, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Clock3 style={{ width: 11, height: 11 }} /> {b.dateLabel} · {b.slot}</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Clock3 style={{ width: 11, height: 11 }} /> {b.dateLabel} - {b.slot}</span>
                     <span>{b.cityArea}</span>
                     <span>Rs {Number(b.total || 0)}</span>
                   </div>
@@ -169,6 +189,24 @@ export default function LabPartnerDashboard() {
                   {String(b.status || "").replaceAll("_", " ")}
                 </span>
               </div>
+
+              {next?.action === "report_ready" ? (
+                <div style={{ marginTop: 8 }}>
+                  <label style={{ width: "100%", height: 34, borderRadius: 10, border: "1px solid #D1D5DB", background: "#fff", color: "#334155", fontSize: 11, fontWeight: 800, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 10px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {reportFiles[b.id]?.name || b?.reportFileName || "Attach Report File (PDF/Image)"}
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        setReportFiles((prev) => ({ ...prev, [b.id]: f }));
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : null}
 
               <div style={{ marginTop: 8, display: "flex", gap: 7 }}>
                 {next ? (

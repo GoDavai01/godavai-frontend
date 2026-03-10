@@ -234,6 +234,7 @@ export default function LabTests() {
   const [file, setFile] = useState(null);
   const [bookingConfirmed, setBookingConfirmed] = useState(null);
   const [cancelingBookingId, setCancelingBookingId] = useState("");
+  const [vaultBusyBookingId, setVaultBusyBookingId] = useState("");
 
   useEffect(() => {
     let cancel = false;
@@ -483,6 +484,25 @@ export default function LabTests() {
       setApiError(e?.response?.data?.error || "Failed to cancel booking");
     } finally {
       setCancelingBookingId("");
+    }
+  }
+
+  function getReportUrl(booking) {
+    const url = booking?.reportFile?.fileUrl || "";
+    if (!url) return "";
+    return url.startsWith("http://") || url.startsWith("https://") ? url : `${API_BASE_URL}${url}`;
+  }
+
+  async function pushReportToVault(bookingId) {
+    if (!bookingId || vaultBusyBookingId) return;
+    setVaultBusyBookingId(bookingId);
+    setApiError("");
+    try {
+      await axios.post(`${API_BASE_URL}/api/labs/bookings/${encodeURIComponent(bookingId)}/push-to-vault`, {}, authConfig());
+    } catch (e) {
+      setApiError(e?.response?.data?.error || "Failed to push report to health vault");
+    } finally {
+      setVaultBusyBookingId("");
     }
   }
 
@@ -1252,6 +1272,46 @@ export default function LabTests() {
                       }}
                     >
                       {cancelingBookingId === booking.id ? "Cancelling..." : "Cancel Booking"}
+                    </button>
+                  </div>
+                ) : null}
+                {booking?.reportAvailable ? (
+                  <div style={{ marginTop: 8, display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                    <button
+                      onClick={() => {
+                        const url = getReportUrl(booking);
+                        if (url) window.open(url, "_blank", "noopener,noreferrer");
+                      }}
+                      style={{
+                        height: 30,
+                        borderRadius: 9,
+                        border: "1px solid #A7F3D0",
+                        background: "#ECFDF5",
+                        color: "#065F46",
+                        fontSize: 10.5,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                        padding: "0 10px",
+                      }}
+                    >
+                      Open Report
+                    </button>
+                    <button
+                      onClick={() => pushReportToVault(booking.id)}
+                      disabled={vaultBusyBookingId === booking.id}
+                      style={{
+                        height: 30,
+                        borderRadius: 9,
+                        border: "1px solid #BFDBFE",
+                        background: "#EFF6FF",
+                        color: "#1D4ED8",
+                        fontSize: 10.5,
+                        fontWeight: 900,
+                        cursor: vaultBusyBookingId === booking.id ? "not-allowed" : "pointer",
+                        padding: "0 10px",
+                      }}
+                    >
+                      {vaultBusyBookingId === booking.id ? "Saving..." : "Save to Health Vault"}
                     </button>
                   </div>
                 ) : null}
