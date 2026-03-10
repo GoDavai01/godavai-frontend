@@ -664,7 +664,7 @@ export default function LabTests() {
                   color: "rgba(255,255,255,0.74)",
                 }}
               >
-                GoDavaii 2035 Health OS · Trusted home sample collection
+                Trusted home sample collection
               </div>
             </div>
           </div>
@@ -855,7 +855,7 @@ export default function LabTests() {
                   color: BRAND.ink,
                 }}
               >
-                Book tests with GoDavaii. Partners stay in the backend.
+                Book tests with GoDavaii. Trusted diagnostics, one smooth experience.
               </div>
               <div
                 style={{
@@ -866,8 +866,7 @@ export default function LabTests() {
                   lineHeight: 1.45,
                 }}
               >
-                Customer-facing experience stays GoDavaii-first: booking, support, status,
-                report delivery and AI explanation all in one flow.
+                Booking, support, status tracking, report delivery and AI explanation in one seamless flow.
               </div>
             </div>
           </div>
@@ -1223,7 +1222,7 @@ export default function LabTests() {
               {
                 icon: <ShieldCheck style={{ width: 14, height: 14, color: BRAND.deep }} />,
                 title: "GoDavaii Verified",
-                sub: "Backend fulfilled by verified diagnostic partners, front-end trust stays with GoDavaii.",
+                sub: "Processed by verified diagnostic labs with GoDavaii quality checks and support.",
               },
               {
                 icon: <Clock3 style={{ width: 14, height: 14, color: BRAND.deep }} />,
@@ -1453,7 +1452,7 @@ export default function LabTests() {
           }}
         >
           <Sparkles style={{ width: 11, height: 11, display: "inline", marginRight: 4 }} />
-          Frontend deliberately keeps labs hidden from the surface so brand trust, support and repeat behavior stay with GoDavaii.
+          Trusted diagnostics with one simple experience: booking, tracking, reports and AI help in one place.
         </div>
       </div>
 
@@ -1667,7 +1666,7 @@ export default function LabTests() {
               <Glass style={{ marginTop: 12, padding: 12 }}>
                 <div style={detailHeading}>GoDavaii trust layer</div>
                 <div style={detailText}>
-                  Bookings, support, status tracking, report access and AI-ready explanation stay inside GoDavaii. Processing may be done by a verified diagnostic partner in the backend.
+                  GoDavaii handles booking, support, status tracking, report access and AI-ready explanation end-to-end.
                 </div>
               </Glass>
 
@@ -1923,7 +1922,7 @@ export default function LabTests() {
                   <Glass style={{ marginTop: 10, padding: 11 }}>
                     <div style={detailHeading}>Collection trust</div>
                     <div style={detailText}>
-                      Home sample collection is scheduled by GoDavaii and may be executed by a trained verified collection executive from a backend diagnostic partner.
+                      Home sample collection is scheduled by GoDavaii and performed by a trained, verified collection executive.
                     </div>
                   </Glass>
                 </>
@@ -2109,9 +2108,9 @@ export default function LabTests() {
                       GoDavaii booking confirmation, GoDavaii support, GoDavaii report center.
                     </div>
 
-                    <div style={{ ...detailHeading, marginTop: 10 }}>What partner handles</div>
+                    <div style={{ ...detailHeading, marginTop: 10 }}>Processing flow</div>
                     <div style={detailText}>
-                      Sample collection, test processing and report generation in the backend.
+                      Sample collection, test processing and report generation with verified quality checks.
                     </div>
                   </Glass>
                 </>
