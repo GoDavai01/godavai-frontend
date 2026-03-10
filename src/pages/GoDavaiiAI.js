@@ -30,7 +30,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-const FILE_ANALYZE_TIMEOUT_MS = 180000;
+const FILE_ANALYZE_TIMEOUT_MS = 300000;
 
 /* ── Design tokens ────────────────────────────────────────── */
 const DEEP = "#0C5A3E";
