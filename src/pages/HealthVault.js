@@ -122,6 +122,13 @@ function miniBtnStyle() {
   return { width: 36, height: 36, borderRadius: 10, border: "none", background: `linear-gradient(135deg,${DEEP},${MID})`, color: "#fff", cursor: "pointer", display: "grid", placeItems: "center", boxShadow: "0 6px 14px rgba(12,90,62,0.2)" };
 }
 
+function resolveFileUrl(url) {
+  const src = String(url || "").trim();
+  if (!src) return "";
+  if (src.startsWith("http://") || src.startsWith("https://")) return src;
+  return `${API}${src.startsWith("/") ? "" : "/"}${src}`;
+}
+
 export default function HealthVault() {
   const { user } = useAuth();
   const [vault, setVault] = useState(() => defaultVault(user));
@@ -443,6 +450,19 @@ export default function HealthVault() {
                       {r.fileName || "Attached file"} {r.fileSize ? `(${Math.round(r.fileSize / 1024)} KB)` : ""}
                     </div>
                   )}
+                  {r.fileUrl ? (
+                    <div style={{ marginTop: 6 }}>
+                      <button
+                        onClick={() => {
+                          const fileUrl = resolveFileUrl(r.fileUrl);
+                          if (fileUrl) window.open(fileUrl, "_blank", "noopener,noreferrer");
+                        }}
+                        style={{ border: "1px solid #A7F3D0", background: "#ECFDF5", color: "#065F46", borderRadius: 999, height: 26, padding: "0 10px", fontSize: 10.5, fontWeight: 900, cursor: "pointer" }}
+                      >
+                        Open
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
                 <button onClick={() => patchActiveMember({ reports: activeMember.reports.filter((x) => x.id !== r.id) })} style={{ border: "none", background: "transparent", color: "#B91C1C", cursor: "pointer" }}>
                   <X style={{ width: 14, height: 14 }} />
