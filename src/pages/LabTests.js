@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
-  ChevronRight,
   Clock3,
   FileUp,
   Filter,
@@ -95,6 +94,55 @@ function next4Days() {
 
 function formatMoney(value) {
   return `Rs ${Number(value || 0)}`;
+}
+
+function toArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function normalizeBookingStatus(status) {
+  return String(status || "").trim().toLowerCase();
+}
+
+function isCompletedBooking(booking) {
+  const doneStatuses = new Set([
+    "completed",
+    "cancelled",
+    "report_ready",
+    "report_generated",
+    "delivered",
+  ]);
+  const status = normalizeBookingStatus(booking?.status);
+  return (
+    doneStatuses.has(status) ||
+    Boolean(booking?.reportAvailable) ||
+    Boolean(booking?.resultAvailable)
+  );
+}
+
+function buildPackageDetails(pack) {
+  const tests = toArray(pack?.tests);
+  const oldPrice = Number(pack?.oldPrice || 0);
+  const price = Number(pack?.price || 0);
+  const savings = Math.max(0, oldPrice - price);
+  const reportTime = pack?.reportTime || "24 hrs";
+  const name = String(pack?.name || "Health Package");
+
+  const valueLine =
+    savings > 0
+      ? `Save Rs ${savings} versus booking tests separately.`
+      : `One booking includes ${tests.length || 1} clinically relevant tests.`;
+
+  return {
+    whyBest:
+      pack?.whyBest ||
+      `${name} helps with preventive screening in one go so users do not miss related markers.`,
+    idealFor:
+      pack?.idealFor || `Best for users who want complete checks with home collection convenience.`,
+    valueLine,
+    reportCommitment:
+      pack?.reportCommitment || `Digital report ETA ${reportTime} with GoDavaii follow-up support.`,
+  };
 }
 
 function Glass({ children, style }) {
@@ -204,7 +252,7 @@ export default function LabTests() {
   const [showOnlyHomeCollection, setShowOnlyHomeCollection] = useState(false);
 
   const [selectedTests, setSelectedTests] = useState([]);
-  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [selectedPackageIds, setSelectedPackageIds] = useState([]);
 
   const [detailItem, setDetailItem] = useState(null);
 
@@ -311,19 +359,18 @@ export default function LabTests() {
   const filteredPackages = useMemo(() => packages, [packages]);
 
   const cartRows = useMemo(() => {
-    if (selectedPackage) {
-      return [
-        {
-          id: selectedPackage.id,
-          type: "package",
-          name: selectedPackage.name,
-          price: selectedPackage.price,
-          reportTime: selectedPackage.reportTime,
-        },
-      ];
-    }
+    const packageRows = selectedPackageIds
+      .map((id) => filteredPackages.find((p) => p.id === id))
+      .filter(Boolean)
+      .map((pack) => ({
+        id: pack.id,
+        type: "package",
+        name: pack.name,
+        price: pack.price,
+        reportTime: pack.reportTime,
+      }));
 
-    return selectedTests.map((id) => {
+    const testRows = selectedTests.map((id) => {
       const found = tests.find((x) => x.id === id);
       return {
         id,
@@ -333,41 +380,48 @@ export default function LabTests() {
         reportTime: found?.reportTime || "24 hrs",
       };
     });
-  }, [selectedPackage, selectedTests, tests]);
+
+    return [...packageRows, ...testRows];
+  }, [filteredPackages, selectedPackageIds, selectedTests, tests]);
 
   const total = useMemo(() => cartRows.reduce((sum, row) => sum + Number(row.price || 0), 0), [cartRows]);
 
   const discount = useMemo(() => {
-    if (selectedPackage) {
-      return Math.max(0, Number(selectedPackage.oldPrice || 0) - Number(selectedPackage.price || 0));
-    }
-    return selectedTests.reduce((sum, id) => {
+    const packageDiscount = selectedPackageIds.reduce((sum, id) => {
+      const pack = filteredPackages.find((p) => p.id === id);
+      return sum + Math.max(0, Number(pack?.oldPrice || 0) - Number(pack?.price || 0));
+    }, 0);
+
+    const testsDiscount = selectedTests.reduce((sum, id) => {
       const found = tests.find((x) => x.id === id);
       return sum + Math.max(0, Number(found?.oldPrice || 0) - Number(found?.price || 0));
     }, 0);
-  }, [selectedPackage, selectedTests, tests]);
+
+    return packageDiscount + testsDiscount;
+  }, [filteredPackages, selectedPackageIds, selectedTests, tests]);
 
   const upcoming = useMemo(() => {
     return [...bookings]
+      .filter((booking) => !isCompletedBooking(booking))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
       .reverse()
       .slice(0, 5);
   }, [bookings]);
 
   function toggleTest(testId) {
-    setSelectedPackage(null);
     setSelectedTests((prev) =>
       prev.includes(testId) ? prev.filter((x) => x !== testId) : [...prev, testId]
     );
   }
 
-  function selectPackage(pack) {
-    setSelectedTests([]);
-    setSelectedPackage((prev) => (prev?.id === pack.id ? null : pack));
+  function togglePackage(packageId) {
+    setSelectedPackageIds((prev) =>
+      prev.includes(packageId) ? prev.filter((id) => id !== packageId) : [...prev, packageId]
+    );
   }
 
   function clearSelection() {
-    setSelectedPackage(null);
+    setSelectedPackageIds([]);
     setSelectedTests([]);
   }
 
@@ -722,7 +776,7 @@ export default function LabTests() {
             Home Collection
           </button>
 
-          {(selectedPackage || selectedTests.length > 0) && (
+          {(selectedPackageIds.length > 0 || selectedTests.length > 0) && (
             <button
               onClick={clearSelection}
               style={{
@@ -820,12 +874,13 @@ export default function LabTests() {
           }}
         >
           {filteredPackages.map((p) => {
-            const active = selectedPackage?.id === p.id;
+            const active = selectedPackageIds.includes(p.id);
+            const packageDetails = buildPackageDetails(p);
             return (
               <motion.button
                 key={p.id}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => selectPackage(p)}
+                onClick={() => setDetailItem({ type: "package", data: { ...p, ...packageDetails } })}
                 style={{
                   width: 230,
                   flexShrink: 0,
@@ -875,6 +930,17 @@ export default function LabTests() {
                   }}
                 >
                   {p.desc}
+                </div>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 10.5,
+                    color: "#0F766E",
+                    fontWeight: 800,
+                    lineHeight: 1.35,
+                  }}
+                >
+                  Why best: {packageDetails.whyBest}
                 </div>
 
                 <div
@@ -937,21 +1003,49 @@ export default function LabTests() {
                     Report in {p.reportTime}
                   </div>
 
-                  <div
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      togglePackage(p.id);
+                    }}
                     style={{
-                      minWidth: 30,
+                      minWidth: 88,
                       height: 30,
                       borderRadius: 10,
-                      background: active ? BRAND.deep : "#F8FAFC",
                       border: active ? "none" : "1px solid #E2E8F0",
+                      background: active ? BRAND.deep : "#F8FAFC",
                       color: active ? "#fff" : BRAND.ink,
                       display: "grid",
                       placeItems: "center",
+                      fontSize: 10.4,
+                      fontWeight: 900,
+                      cursor: "pointer",
                     }}
                   >
-                    <ChevronRight style={{ width: 14, height: 14 }} />
-                  </div>
+                    {active ? "Added" : "Add"}
+                  </button>
                 </div>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailItem({ type: "package", data: { ...p, ...packageDetails } });
+                  }}
+                  style={{
+                    marginTop: 8,
+                    width: "100%",
+                    height: 30,
+                    borderRadius: 9,
+                    border: "1px solid #E2E8F0",
+                    background: "#F8FAFC",
+                    color: "#334155",
+                    fontSize: 10.5,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  Full Details
+                </button>
               </motion.button>
             );
           })}
@@ -1225,8 +1319,8 @@ export default function LabTests() {
                         color: BRAND.ink,
                       }}
                     >
-                      {booking.items[0]?.name}
-                      {booking.items.length > 1 ? ` +${booking.items.length - 1}` : ""}
+                      {booking.items?.[0]?.name || "Lab Booking"}
+                      {booking.items?.length > 1 ? ` +${booking.items.length - 1}` : ""}
                     </div>
                     <div
                       style={{
@@ -1263,7 +1357,7 @@ export default function LabTests() {
                       textTransform: "capitalize",
                     }}
                   >
-                    {booking.status.replaceAll("_", " ")}
+                      {String(booking.status || "scheduled").replaceAll("_", " ")}
                   </span>
                 </div>
                 {canCancelBooking(booking.status) ? (
@@ -1520,25 +1614,51 @@ export default function LabTests() {
               <Glass style={{ marginTop: 12, padding: 12 }}>
                 <div style={detailGrid}>
                   <MiniInfo icon={<Clock3 style={miniIcon} />} label="Report Time" value={detailItem.data.reportTime} />
-                  <MiniInfo icon={<Info style={miniIcon} />} label="Preparation" value={detailItem.data.prep} />
-                  <MiniInfo icon={<TestTube2 style={miniIcon} />} label="Sample Type" value={detailItem.data.sampleType} />
+                  <MiniInfo
+                    icon={<Info style={miniIcon} />}
+                    label={detailItem.type === "package" ? "Ideal For" : "Preparation"}
+                    value={detailItem.type === "package" ? detailItem.data.idealFor : detailItem.data.prep}
+                  />
+                  <MiniInfo
+                    icon={<TestTube2 style={miniIcon} />}
+                    label={detailItem.type === "package" ? "Coverage" : "Sample Type"}
+                    value={
+                      detailItem.type === "package"
+                        ? `${toArray(detailItem.data.tests).length || 1} test markers`
+                        : detailItem.data.sampleType
+                    }
+                  />
                   <MiniInfo icon={<Home style={miniIcon} />} label="Collection" value="Home Sample Available" />
                 </div>
               </Glass>
 
               <Glass style={{ marginTop: 12, padding: 12 }}>
-                <div style={detailHeading}>Why this test is ordered</div>
-                <div style={detailText}>{detailItem.data.why}</div>
+                <div style={detailHeading}>
+                  {detailItem.type === "package" ? "Why this package is best" : "Why this test is ordered"}
+                </div>
+                <div style={detailText}>
+                  {detailItem.type === "package"
+                    ? detailItem.data.whyBest || detailItem.data.why
+                    : detailItem.data.why}
+                </div>
               </Glass>
 
               <Glass style={{ marginTop: 12, padding: 12 }}>
                 <div style={detailHeading}>What it includes</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 8 }}>
-                  {(detailItem.data.includes || []).map((item) => (
+                  {(detailItem.data.includes || detailItem.data.tests || []).map((item) => (
                     <TinyBadge key={item}>{item}</TinyBadge>
                   ))}
                 </div>
               </Glass>
+
+              {detailItem.type === "package" && (
+                <Glass style={{ marginTop: 12, padding: 12 }}>
+                  <div style={detailHeading}>Value explanation</div>
+                  <div style={detailText}>{detailItem.data.valueLine}</div>
+                  <div style={{ ...detailText, marginTop: 6 }}>{detailItem.data.reportCommitment}</div>
+                </Glass>
+              )}
 
               <Glass style={{ marginTop: 12, padding: 12 }}>
                 <div style={detailHeading}>GoDavaii trust layer</div>
@@ -1585,6 +1705,8 @@ export default function LabTests() {
                   onClick={() => {
                     if (detailItem.type === "test") {
                       toggleTest(detailItem.data.id);
+                    } else {
+                      togglePackage(detailItem.data.id);
                     }
                     setDetailItem(null);
                   }}
@@ -1600,7 +1722,13 @@ export default function LabTests() {
                     cursor: "pointer",
                   }}
                 >
-                  {selectedTests.includes(detailItem.data.id) ? "Remove Test" : "Add Test"}
+                  {detailItem.type === "test"
+                    ? selectedTests.includes(detailItem.data.id)
+                      ? "Remove Test"
+                      : "Add Test"
+                    : selectedPackageIds.includes(detailItem.data.id)
+                      ? "Remove Package"
+                      : "Add Package"}
                 </button>
               </div>
             </motion.div>
