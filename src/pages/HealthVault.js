@@ -485,7 +485,7 @@ export default function HealthVault() {
                         Open
                       </button>
                       <button
-                        onClick={() => navigate(`/ai?autovaultMember=${encodeURIComponent(activeMember.id)}&autovaultReport=${encodeURIComponent(r.id)}&source=vault-report&run=${Date.now()}`)}
+                        onClick={() => navigate(`/ai?autovaultMember=${encodeURIComponent(activeMember.id)}&autovaultReport=${encodeURIComponent(r.id)}&autourl=${encodeURIComponent(resolveFileUrl(r.fileUrl || ""))}&autoname=${encodeURIComponent(r.fileName || r.title || "vault-report")}&source=vault-report&run=${Date.now()}`)}
                         style={{ border: "1px solid #C4B5FD", background: "#F5F3FF", color: "#5B21B6", borderRadius: 999, height: 26, padding: "0 10px", fontSize: 10.5, fontWeight: 900, cursor: "pointer" }}
                       >
                         Analyze in AI

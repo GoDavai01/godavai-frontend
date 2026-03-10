@@ -30,6 +30,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+const FILE_ANALYZE_TIMEOUT_MS = 180000;
 
 /* ── Design tokens ────────────────────────────────────────── */
 const DEEP = "#0C5A3E";
@@ -311,7 +312,11 @@ export default function GoDavaiiAI() {
     const bookingId = String(q.get("autolab") || "").trim();
     const vaultMemberId = String(q.get("autovaultMember") || "").trim();
     const vaultReportId = String(q.get("autovaultReport") || "").trim();
-    const runKey = String(q.get("run") || "").trim() || `${bookingId}:${vaultMemberId}:${vaultReportId}`;
+    const autoUrl = String(q.get("autourl") || "").trim();
+    const autoName = String(q.get("autoname") || "").trim();
+    const runKey =
+      String(q.get("run") || "").trim() ||
+      `${bookingId}:${vaultMemberId}:${vaultReportId}:${autoUrl}:${autoName}`;
     if (!bookingId && !(vaultMemberId && vaultReportId)) return;
     if (autoAnalyzeHandledRef.current === runKey) return;
     autoAnalyzeHandledRef.current = runKey;
@@ -320,8 +325,10 @@ export default function GoDavaiiAI() {
       try {
         const reportFile = bookingId
           ? await fetchBookingReportAsFile(bookingId)
-          : await fetchVaultReportAsFile(vaultMemberId, vaultReportId);
-        if (!reportFile) return;
+          : await fetchVaultReportAsFile(vaultMemberId, vaultReportId, autoUrl, autoName);
+        if (!reportFile) {
+          throw new Error("Could not fetch attached report file for auto analysis.");
+        }
         const autoPrompt = "Please analyze this uploaded medical report/image in detail and explain findings in simple language.";
         const userMsg = { id: makeId(), role: "user", text: `${autoPrompt}\n📎 ${reportFile.name} (auto-attached)` };
         const nextMessages = [...messages, userMsg];
@@ -331,12 +338,13 @@ export default function GoDavaiiAI() {
         const reply = await askBackendWithFile(autoPrompt, history, reportFile);
         setMessages((prev) => [...prev, { id: makeId(), role: "assistant", text: reply }]);
       } catch (e) {
+        const msg = getApiErrorMessage(e);
         setMessages((prev) => [
           ...prev,
           {
             id: makeId(),
             role: "assistant",
-            text: `Assessment:\n- Auto lab analysis start nahi ho paaya.\n\nNext steps:\n- Report ko manually attach karke retry karein.\n\nWarning signs:\n- Agar severe symptoms hain to doctor/ER se turant connect karein.\n\nDesi ilaaj:\n- Supportive care ke liye rest aur hydration continue rakhein.`,
+            text: `Assessment:\n- Auto analysis start nahi ho paaya.\n- Error: ${msg}\n\nNext steps:\n- Report ko manually attach karke retry karein.\n- Agar issue repeat ho, same report ka Open button use karke verify karein.\n\nWarning signs:\n- Agar severe symptoms hain to doctor/ER se turant connect karein.`,
           },
         ]);
       } finally {
@@ -527,7 +535,7 @@ export default function GoDavaiiAI() {
     for (const url of urls) {
       try {
         const r = await axios.post(url, fd, {
-          timeout: 90000,
+          timeout: FILE_ANALYZE_TIMEOUT_MS,
           headers,
         });
         const text = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
@@ -536,9 +544,12 @@ export default function GoDavaiiAI() {
       } catch (err) {
         lastErr = err;
         console.error("File AI failed:", url, getApiErrorMessage(err));
+        if (err?.code === "ECONNABORTED" || String(err?.message || "").toLowerCase().includes("timeout")) {
+          break;
+        }
       }
     }
-    return `File analysis issue: ${getApiErrorMessage(lastErr)}\n\nPlease retry with a clearer image.`;
+    return `File analysis issue: ${getApiErrorMessage(lastErr)}\n\nLarge scanned PDFs can take longer. Retry once, or upload a cleaner report PDF/image for faster processing.`;
   }
 
   async function fetchBookingReportAsFile(bookingId) {
@@ -551,14 +562,34 @@ export default function GoDavaiiAI() {
     return new File([res.data], `medical-report-${bookingId}${ext}`, { type: contentType });
   }
 
-  async function fetchVaultReportAsFile(memberId, reportId) {
+  async function fetchReportFromPublicUrlAsFile(url, fileName = "vault-report") {
+    if (!url) return null;
     const headers = getAuthHeaders();
-    if (!memberId || !reportId || !headers.Authorization) return null;
-    const url = `${API}/api/health-vault/me/members/${encodeURIComponent(memberId)}/reports/${encodeURIComponent(reportId)}/file`;
-    const res = await axios.get(url, { headers, responseType: "blob", timeout: 60000 });
+    const reqHeaders = headers.Authorization ? headers : undefined;
+    const res = await axios.get(url, { responseType: "blob", timeout: 60000, headers: reqHeaders });
     const contentType = String(res?.data?.type || "application/octet-stream");
-    const ext = contentType.includes("pdf") ? ".pdf" : ".jpg";
-    return new File([res.data], `vault-report-${reportId}${ext}`, { type: contentType });
+    const safeName = String(fileName || "vault-report").replace(/[\\/:*?"<>|]/g, "_");
+    const ext = /\.[a-z0-9]{2,5}$/i.test(safeName) ? "" : contentType.includes("pdf") ? ".pdf" : ".jpg";
+    return new File([res.data], `${safeName}${ext}`, { type: contentType });
+  }
+
+  async function fetchVaultReportAsFile(memberId, reportId, fallbackUrl = "", fallbackName = "") {
+    const headers = getAuthHeaders();
+    if (memberId && reportId && headers.Authorization) {
+      try {
+        const url = `${API}/api/health-vault/me/members/${encodeURIComponent(memberId)}/reports/${encodeURIComponent(reportId)}/file`;
+        const res = await axios.get(url, { headers, responseType: "blob", timeout: 60000 });
+        const contentType = String(res?.data?.type || "application/octet-stream");
+        const ext = contentType.includes("pdf") ? ".pdf" : ".jpg";
+        return new File([res.data], `vault-report-${reportId}${ext}`, { type: contentType });
+      } catch {
+        // fallback below
+      }
+    }
+    if (fallbackUrl) {
+      return fetchReportFromPublicUrlAsFile(fallbackUrl, fallbackName || "vault-report");
+    }
+    return null;
   }
 
   async function fetchLatestVaultReportAsFile() {
