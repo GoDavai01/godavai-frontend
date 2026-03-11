@@ -367,6 +367,407 @@ function PaymentsPayoutsPanel({ token }) {
   );
 }
 
+function LabPartnersAdminPanel({ token, onNotify }) {
+  const [loading, setLoading] = useState(false);
+  const [partners, setPartners] = useState([]);
+  const [viewMode, setViewMode] = useState("pending");
+  const [search, setSearch] = useState("");
+  const [selectedPartnerId, setSelectedPartnerId] = useState("");
+  const [selectedPartner, setSelectedPartner] = useState(null);
+  const [proposalLoading, setProposalLoading] = useState(false);
+  const [proposals, setProposals] = useState([]);
+  const [proposalDrafts, setProposalDrafts] = useState({});
+  const [statusBusy, setStatusBusy] = useState("");
+  const [proposalBusy, setProposalBusy] = useState("");
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [docs, setDocs] = useState([]);
+  const [audit, setAudit] = useState([]);
+
+  const headers = { Authorization: `Bearer ${token}` };
+
+  const loadPartners = async () => {
+    try {
+      setLoading(true);
+      const url = viewMode === "all"
+        ? `${API_BASE_URL}/api/lab-partners/admin/all?q=${encodeURIComponent(search)}`
+        : `${API_BASE_URL}/api/lab-partners/admin/pending`;
+      const { data } = await axios.get(url, { headers });
+      const rows = Array.isArray(data?.partners) ? data.partners : [];
+      setPartners(rows);
+      if (rows.length) {
+        if (!selectedPartnerId || !rows.some((r) => r.id === selectedPartnerId)) {
+          setSelectedPartnerId(rows[0].id);
+          setSelectedPartner(rows[0]);
+        } else {
+          setSelectedPartner(rows.find((r) => r.id === selectedPartnerId) || null);
+        }
+      } else {
+        setSelectedPartnerId("");
+        setSelectedPartner(null);
+      }
+    } catch {
+      onNotify("Failed to load lab partners");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadProposals = async (partnerId) => {
+    if (!partnerId) return;
+    try {
+      setProposalLoading(true);
+      const { data } = await axios.get(`${API_BASE_URL}/api/lab-partners/admin/${partnerId}/catalog/proposals`, { headers });
+      const rows = Array.isArray(data?.proposals) ? data.proposals : [];
+      setProposals(rows);
+      const draft = {};
+      rows.forEach((p) => {
+        draft[p.id] = {
+          status: p.status || "submitted_for_review",
+          adminComment: p.adminComment || "",
+          activateCapability: false,
+        };
+      });
+      setProposalDrafts(draft);
+    } catch {
+      onNotify("Failed to load catalog proposals");
+    } finally {
+      setProposalLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!token) return;
+    loadPartners();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, viewMode]);
+
+  useEffect(() => {
+    if (!token || viewMode !== "all") return;
+    const t = setTimeout(() => loadPartners(), 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  useEffect(() => {
+    if (!selectedPartnerId) return;
+    loadProposals(selectedPartnerId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPartnerId]);
+
+  const updatePartnerStatus = async (partnerId, status) => {
+    const busyKey = `${partnerId}-${status}`;
+    try {
+      setStatusBusy(busyKey);
+      await axios.patch(
+        `${API_BASE_URL}/api/lab-partners/admin/${partnerId}/status`,
+        { status },
+        { headers }
+      );
+      onNotify(`Partner status updated: ${status}`);
+      setPartners((prev) =>
+        prev.map((p) =>
+          p.id === partnerId
+            ? { ...p, partnerStatus: status, partnerStatusLabel: status.replace(/_/g, " ") }
+            : p
+        )
+      );
+    } catch {
+      onNotify("Failed to update partner status");
+    } finally {
+      setStatusBusy("");
+    }
+  };
+
+  const openDetails = async (partner) => {
+    try {
+      setDetailOpen(true);
+      setDetailLoading(true);
+      setSelectedPartner(partner);
+      const [docsRes, auditRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/api/lab-partners/admin/${partner.id}/documents`, { headers }),
+        axios.get(`${API_BASE_URL}/api/lab-partners/admin/${partner.id}/audit`, { headers }),
+      ]);
+      setDocs(Array.isArray(docsRes?.data?.documents) ? docsRes.data.documents : []);
+      setAudit(Array.isArray(auditRes?.data?.audit) ? auditRes.data.audit : []);
+    } catch {
+      onNotify("Failed to load partner details");
+      setDocs([]);
+      setAudit([]);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const reviewProposal = async (proposalId) => {
+    const draft = proposalDrafts[proposalId];
+    if (!draft || !selectedPartnerId) return;
+    try {
+      setProposalBusy(proposalId);
+      await axios.patch(
+        `${API_BASE_URL}/api/lab-partners/admin/${selectedPartnerId}/catalog/proposals/${proposalId}`,
+        {
+          status: draft.status,
+          adminComment: draft.adminComment,
+          activateCapability: !!draft.activateCapability,
+        },
+        { headers }
+      );
+      onNotify("Proposal review updated");
+      await loadProposals(selectedPartnerId);
+    } catch {
+      onNotify("Failed to review proposal");
+    } finally {
+      setProposalBusy("");
+    }
+  };
+
+  return (
+    <Box>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+        <Typography variant="h6" sx={{ color: "#FFD43B" }}>Lab Partners Review</Typography>
+        <Stack direction="row" spacing={1}>
+          <Button variant={viewMode === "pending" ? "contained" : "outlined"} size="small" onClick={() => setViewMode("pending")}>Pending</Button>
+          <Button variant={viewMode === "all" ? "contained" : "outlined"} size="small" onClick={() => setViewMode("all")}>All Partners</Button>
+          <Button variant="outlined" size="small" onClick={loadPartners}>Refresh</Button>
+        </Stack>
+      </Stack>
+      {viewMode === "all" && (
+        <TextField
+          size="small"
+          fullWidth
+          label="Search by name/org/city/phone/email"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ mb: 2 }}
+        />
+      )}
+
+      {loading ? (
+        <Typography sx={{ color: "#aaa" }}>Loading lab partners...</Typography>
+      ) : (
+        <Stack spacing={2}>
+          {partners.length === 0 && (
+            <Typography sx={{ color: "#aaa" }}>No lab partners found for current view.</Typography>
+          )}
+          {partners.map((p) => (
+            <Card key={p.id} sx={{ p: 2, bgcolor: "#23272a", borderRadius: 2 }}>
+              <Stack spacing={1}>
+                <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }} gap={1}>
+                  <Box>
+                    <Typography fontWeight={700}>{p.name} ({p.organization || "Lab Partner"})</Typography>
+                    <Typography variant="body2" sx={{ color: "#aaf" }}>
+                      {p.city || "-"} | {p.phone || "-"} | {p.email || "-"}
+                    </Typography>
+                  </Box>
+                  <Chip label={`Status: ${p.partnerStatusLabel || p.partnerStatus || "Under Review"}`} color="warning" />
+                </Stack>
+
+                <Stack direction="row" flexWrap="wrap" gap={1}>
+                  {[
+                    "under_review",
+                    "docs_pending",
+                    "verification_in_review",
+                    "approved",
+                    "live",
+                    "suspended",
+                    "rejected",
+                  ].map((st) => (
+                    <Button
+                      key={st}
+                      size="small"
+                      variant="outlined"
+                      disabled={statusBusy === `${p.id}-${st}`}
+                      onClick={() => updatePartnerStatus(p.id, st)}
+                    >
+                      {st.replace(/_/g, " ")}
+                    </Button>
+                  ))}
+                  <Button
+                    size="small"
+                    variant={selectedPartnerId === p.id ? "contained" : "outlined"}
+                    onClick={() => {
+                      setSelectedPartnerId(p.id);
+                      setSelectedPartner(p);
+                    }}
+                  >
+                    Review Catalog Proposals
+                  </Button>
+                  <Button size="small" variant="outlined" startIcon={<Visibility />} onClick={() => openDetails(p)}>
+                    Docs & Audit
+                  </Button>
+                </Stack>
+              </Stack>
+            </Card>
+          ))}
+        </Stack>
+      )}
+
+      <Divider sx={{ my: 2 }} />
+      <Typography variant="subtitle1" sx={{ mb: 1, color: "#13C0A2", fontWeight: 700 }}>
+        Selected Partner Proposals
+      </Typography>
+      {proposalLoading ? (
+        <Typography sx={{ color: "#aaa" }}>Loading proposals...</Typography>
+      ) : (
+        <Stack spacing={2}>
+          {proposals.length === 0 ? (
+            <Typography sx={{ color: "#aaa" }}>No proposals available for selected partner.</Typography>
+          ) : (
+            proposals.map((pr) => (
+              <Card key={pr.id} sx={{ p: 2, bgcolor: "#23272a", borderRadius: 2 }}>
+                <Stack spacing={1.2}>
+                  <Typography fontWeight={700}>{pr.type || "Test"}: {pr.name || "-"}</Typography>
+                  <Typography variant="body2" sx={{ color: "#aaf" }}>
+                    Category: {pr.category || "-"} | Price: {pr.price || "-"} | TAT: {pr.reportTime || "-"}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: "#bbb" }}>
+                    Current: {String(pr.status || "draft").replace(/_/g, " ")} | Admin comment: {pr.adminComment || "-"}
+                  </Typography>
+
+                  <FormControl size="small" sx={{ maxWidth: 260 }}>
+                    <InputLabel>Review Status</InputLabel>
+                    <Select
+                      label="Review Status"
+                      value={proposalDrafts[pr.id]?.status || "submitted_for_review"}
+                      onChange={(e) =>
+                        setProposalDrafts((prev) => ({
+                          ...prev,
+                          [pr.id]: { ...(prev[pr.id] || {}), status: e.target.value },
+                        }))
+                      }
+                    >
+                      <MenuItem value="draft">Draft</MenuItem>
+                      <MenuItem value="submitted_for_review">Submitted for Review</MenuItem>
+                      <MenuItem value="approved">Approved</MenuItem>
+                      <MenuItem value="rejected">Rejected</MenuItem>
+                      <MenuItem value="needs_changes">Needs Changes</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <TextField
+                    size="small"
+                    label="Admin Comment"
+                    value={proposalDrafts[pr.id]?.adminComment || ""}
+                    onChange={(e) =>
+                      setProposalDrafts((prev) => ({
+                        ...prev,
+                        [pr.id]: { ...(prev[pr.id] || {}), adminComment: e.target.value },
+                      }))
+                    }
+                  />
+
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() =>
+                        setProposalDrafts((prev) => ({
+                          ...prev,
+                          [pr.id]: {
+                            ...(prev[pr.id] || {}),
+                            activateCapability: !prev[pr.id]?.activateCapability,
+                          },
+                        }))
+                      }
+                    >
+                      {proposalDrafts[pr.id]?.activateCapability ? "Capability: YES" : "Capability: NO"}
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      disabled={proposalBusy === pr.id}
+                      onClick={() => reviewProposal(pr.id)}
+                    >
+                      Save Review
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Card>
+            ))
+          )}
+        </Stack>
+      )}
+
+      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          Lab Partner Details: {selectedPartner?.name || "-"}
+        </DialogTitle>
+        <DialogContent dividers>
+          {detailLoading ? (
+            <Typography>Loading details...</Typography>
+          ) : (
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="subtitle1" sx={{ color: "#FFD43B", fontWeight: 700 }}>
+                  Verification Documents ({docs.length})
+                </Typography>
+                {docs.length === 0 ? (
+                  <Typography sx={{ color: "#aaa" }}>No documents uploaded.</Typography>
+                ) : (
+                  <Stack spacing={1} sx={{ mt: 1 }}>
+                    {docs.map((d, i) => (
+                      <Card key={`${d.fileKey || d.fileName || "doc"}-${i}`} sx={{ p: 1.5, bgcolor: "#23272a", borderRadius: 2 }}>
+                        <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={1}>
+                          <Box>
+                            <Typography fontWeight={700}>{d.fileName || "Untitled document"}</Typography>
+                            <Typography variant="body2" sx={{ color: "#aaf" }}>
+                              {d.label || `${d.section || "-"} / ${d.key || "-"}`}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: "#bbb" }}>
+                              {d.mimeType || "-"} | {d.fileSize ? `${Math.round(Number(d.fileSize) / 1024)} KB` : "-"}
+                            </Typography>
+                          </Box>
+                          <Stack direction="row" spacing={1}>
+                            {d.fileUrl ? (
+                              <>
+                                <Button size="small" variant="outlined" href={d.fileUrl} target="_blank" rel="noreferrer">Preview</Button>
+                                <Button size="small" variant="contained" href={d.fileUrl} target="_blank" rel="noreferrer">Download</Button>
+                              </>
+                            ) : (
+                              <Chip size="small" label="No file URL" />
+                            )}
+                          </Stack>
+                        </Stack>
+                      </Card>
+                    ))}
+                  </Stack>
+                )}
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle1" sx={{ color: "#13C0A2", fontWeight: 700 }}>
+                  Admin Audit Timeline ({audit.length})
+                </Typography>
+                {audit.length === 0 ? (
+                  <Typography sx={{ color: "#aaa" }}>No audit entries yet.</Typography>
+                ) : (
+                  <Stack spacing={1} sx={{ mt: 1 }}>
+                    {audit.map((a, i) => (
+                      <Card key={`${a.id || "audit"}-${i}`} sx={{ p: 1.5, bgcolor: "#23272a", borderRadius: 2 }}>
+                        <Typography fontWeight={700}>{String(a.action || "-").replace(/_/g, " ")}</Typography>
+                        <Typography variant="body2" sx={{ color: "#aaf" }}>
+                          {a.notes || "-"}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: "#bbb" }}>
+                          Admin: {a.adminId || "system"} | {a.at ? new Date(a.at).toLocaleString() : "-"}
+                        </Typography>
+                      </Card>
+                    ))}
+                  </Stack>
+                )}
+              </Box>
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
 export default function AdminDashboard() {
   const [token, setToken] = useState(localStorage.getItem("adminToken") || "");
   const [login, setLogin] = useState({ email: "", password: "" });
@@ -628,6 +1029,7 @@ export default function AdminDashboard() {
             <Tab label={`Active Delivery Partners (${activeDeliveryPartners.length})`} />
             <Tab label="Medicine Master" />
 <Tab label="Payments & Payouts" />
+<Tab label="Lab Partners" />
           </Tabs>
         </Box>
 
@@ -976,6 +1378,9 @@ export default function AdminDashboard() {
 {/* ------------- PAYMENTS & PAYOUTS TAB ------------- */}
 {activeTab === 7 && (
   <PaymentsPayoutsPanel token={token} />
+)}
+{activeTab === 8 && (
+  <LabPartnersAdminPanel token={token} onNotify={setMsg} />
 )}
 
         </Box>
