@@ -138,6 +138,32 @@ function canRevealPhone(b) {
   return b.assignedToMe || ["accepted", "collector_assigned", "sample_collected", "processing", "report_ready", "completed"].includes(s(b.status));
 }
 
+function normalizeMasterCatalog(tests = [], packages = []) {
+  const testRows = toArr(tests).map((t) => ({
+    id: `test-${t.id || t._id || t.name || Math.random()}`,
+    source: "master",
+    type: "Test",
+    name: t.name || "Unnamed Test",
+    category: t.category || t.department || "General",
+    partnerPrice: Number(t.price || 0),
+    reportTAT: t.reportTime || t.reportTAT || "24 hrs",
+    homeCollection: true,
+    status: "active",
+  }));
+  const packageRows = toArr(packages).map((p) => ({
+    id: `package-${p.id || p._id || p.name || Math.random()}`,
+    source: "master",
+    type: "Package",
+    name: p.name || "Unnamed Package",
+    category: p.category || "Preventive",
+    partnerPrice: Number(p.price || 0),
+    reportTAT: p.reportTime || p.reportTAT || "24-48 hrs",
+    homeCollection: true,
+    status: "active",
+  }));
+  return [...packageRows, ...testRows];
+}
+
 export default function LabPartnerDashboard() {
   const [profile, setProfile] = useState(() => {
     try {
@@ -159,6 +185,7 @@ export default function LabPartnerDashboard() {
   const [reportFiles, setReportFiles] = useState({});
   const [online, setOnline] = useState(true);
   const [proposals, setProposals] = useState([]);
+  const [masterCatalogRows, setMasterCatalogRows] = useState([]);
 
   const [testForm, setTestForm] = useState({ testName: "", category: "", price: "", oldPrice: "", reportTime: "24 hrs", fastingRequired: "no", sampleType: "", description: "", includedParameters: "", homeCollection: "yes", sourcing: "in_house", available: "yes", serviceAreas: "", notesForAdmin: "" });
   const [packageForm, setPackageForm] = useState({ packageName: "", category: "", includedTests: "", customIncludesText: "", price: "", oldPrice: "", reportTime: "24-48 hrs", fastingRequired: "no", description: "", homeCollection: "yes", available: "yes", serviceAreas: "", notesForAdmin: "" });
@@ -188,12 +215,21 @@ export default function LabPartnerDashboard() {
 
   const catalogActive = useMemo(() => {
     const fromApi = toArr(profile?.capabilities);
-    if (fromApi.length) return fromApi;
+    const merged = [...fromApi, ...masterCatalogRows];
+    if (merged.length) {
+      const seen = new Set();
+      return merged.filter((r) => {
+        const key = `${String(r?.type || "").toLowerCase()}::${String(r?.name || "").toLowerCase()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
     return [
       { id: "c1", name: "CBC", category: "Hematology", partnerPrice: 210, reportTAT: "24 hrs", homeCollection: true, status: "active" },
       { id: "c2", name: "Full Body Basic", category: "Preventive", partnerPrice: 760, reportTAT: "24-48 hrs", homeCollection: true, status: "active" },
     ];
-  }, [profile]);
+  }, [profile, masterCatalogRows]);
 
   const bookingData = useMemo(() => bookings.map((b) => normalizeBooking(b, profile)), [bookings, profile]);
 
@@ -212,7 +248,7 @@ export default function LabPartnerDashboard() {
     new: filtered.filter((b) => s(b.status) === "new_request"),
     collections: filtered.filter((b) => ["accepted", "sample_scheduled", "collector_assigned"].includes(s(b.status))),
     processing: filtered.filter((b) => ["sample_collected", "processing", "delayed"].includes(s(b.status))),
-    reports: filtered.filter((b) => ["sample_collected", "processing", "report_ready"].includes(s(b.status))),
+    reports: filtered.filter((b) => ["sample_collected", "processing", "report_ready", "completed"].includes(s(b.status))),
   }), [filtered]);
 
   const stats = useMemo(() => {
@@ -247,6 +283,7 @@ export default function LabPartnerDashboard() {
       localStorage.setItem("labPartnerCatalogProposals", JSON.stringify(p.catalogProposals));
     }
     localStorage.setItem("labPartnerProfile", JSON.stringify(p || {}));
+    return p;
   }
 
   async function loadBookings() {
@@ -260,13 +297,26 @@ export default function LabPartnerDashboard() {
     setBookings(dedupe(rows));
   }
 
+  async function loadMasterCatalog(cityArg) {
+    try {
+      const { data } = await axios.get(`${API_BASE_URL}/api/labs/catalog`, {
+        params: { q: "", city: cityArg || profile?.city || undefined },
+      });
+      const rows = normalizeMasterCatalog(data?.tests || [], data?.packages || []);
+      setMasterCatalogRows(rows);
+    } catch (_) {
+      setMasterCatalogRows([]);
+    }
+  }
+
   async function refresh() {
     setRefreshing(true);
     setError("");
     setSuccess("");
     try {
-      await loadProfile();
+      const p = await loadProfile();
       await loadBookings();
+      await loadMasterCatalog(p?.city);
       setSuccess("Dashboard refreshed.");
     } catch (e) {
       setError(e?.response?.data?.error || "Refresh failed");
@@ -280,8 +330,17 @@ export default function LabPartnerDashboard() {
       setLoading(true);
       setError("");
       try {
-        await loadProfile();
+        const p = await loadProfile();
         await loadBookings();
+        try {
+          const { data } = await axios.get(`${API_BASE_URL}/api/labs/catalog`, {
+            params: { q: "", city: p?.city || undefined },
+          });
+          const rows = normalizeMasterCatalog(data?.tests || [], data?.packages || []);
+          setMasterCatalogRows(rows);
+        } catch (_) {
+          setMasterCatalogRows([]);
+        }
       } catch (e) {
         setError(e?.response?.data?.error || "Unable to load dashboard");
       } finally {
@@ -497,13 +556,14 @@ export default function LabPartnerDashboard() {
           {["new", "collections", "processing", "reports"].includes(tab) ? (
             <div style={{ display: "grid", gap: 10 }}>
               {!tabRows[tab]?.length ? <Empty text="No bookings in this section right now." /> : null}
-              {(tabRows[tab] || []).map((b) => {
-                const k = String(b.bookingId || b.id || b._id);
-                const tat = getTat(b);
-                const tone = chipTone(tat.tone);
-                const st = s(b.status);
-                const stTone = st === "completed" || st === "report_ready" ? chipTone("green") : ["cancelled", "rejected", "unable_to_collect"].includes(st) ? chipTone("red") : chipTone("yellow");
-                const phoneText = canRevealPhone(b) ? (b.phone || "-") : maskPhone(b.phone);
+                {(tabRows[tab] || []).map((b) => {
+                  const k = String(b.bookingId || b.id || b._id);
+                  const tat = getTat(b);
+                  const tone = chipTone(tat.tone);
+                  const st = s(b.status);
+                  const reportUrl = b?.reportFile?.fileUrl || b?.reportFileUrl || b?.attachedFile?.fileUrl || b?.attachedFileUrl || "";
+                  const stTone = st === "completed" || st === "report_ready" ? chipTone("green") : ["cancelled", "rejected", "unable_to_collect"].includes(st) ? chipTone("red") : chipTone("yellow");
+                  const phoneText = canRevealPhone(b) ? (b.phone || "-") : maskPhone(b.phone);
                 return (
                   <div key={k} style={styles.queueCard}>
                     <div style={styles.rowBetween}>
@@ -517,7 +577,7 @@ export default function LabPartnerDashboard() {
                       <Info k="Patient" v={b.patientName} icon={User} />
                       <Info k="Phone" v={phoneText} icon={Phone} />
                       <Info k="Area" v={b.cityArea || "-"} icon={MapPin} />
-                      <Info k="Date / Slot" v={`${b.dateLabel || b.date || "-"} • ${b.slot || "-"}`} icon={CalendarClock} />
+                      <Info k="Date / Slot" v={`${b.dateLabel || b.date || "-"} â€¢ ${b.slot || "-"}`} icon={CalendarClock} />
                       <Info k="Fasting" v={b.fasting || "As advised"} />
                       <Info k="Amount" v={money(b.total)} icon={Banknote} />
                     </div>
@@ -569,7 +629,14 @@ export default function LabPartnerDashboard() {
                         })
                       ) : null}
 
-                      {tab === "reports" ? (
+                    {tab === "reports" ? (
+                      s(b.status) === "completed" ? (
+                        <>
+                          <Chip text={`Uploaded: ${b.reportFileName || b.attachedFileName || "Not available"}`} />
+                          <Chip text="Completed booking" />
+                          {reportUrl ? <button style={styles.btnG} onClick={() => window.open(reportUrl, "_blank", "noopener,noreferrer")}>Open Report</button> : null}
+                        </>
+                      ) : (
                         <>
                           <label style={styles.fileLabel}><Upload style={{ width: 12, height: 12 }} /><input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={(e) => setReportFiles((prev) => ({ ...prev, [k]: e.target.files?.[0] || null }))} />{reportFiles[k] ? reportFiles[k].name : "Choose signed report"}</label>
                           <button style={styles.btnP} disabled={!reportFiles[k]} onClick={() => runAction(b, "upload_report", { reportFile: reportFiles[k] })}>Upload Signed PDF</button>
@@ -577,7 +644,8 @@ export default function LabPartnerDashboard() {
                           <button style={styles.btnP} onClick={() => runAction(b, "report_ready", { reportFile: reportFiles[k] })}>Mark Report Ready</button>
                           <button style={styles.btnG} onClick={() => runAction(b, "completed")}>Mark Completed</button>
                         </>
-                      ) : null}
+                      )
+                    ) : null}
                       <button style={styles.btnG} onClick={() => setSelected(b)}>View Details</button>
                     </div>
                   </div>
@@ -591,6 +659,9 @@ export default function LabPartnerDashboard() {
               <div style={styles.infoBlue}><ShieldCheck style={{ width: 14, height: 14 }} /> Customer-facing catalog is controlled by GoDavaii. Partner proposals require admin approval before going live.</div>
               <div style={styles.innerCard}>
                 <div style={styles.sectionTitle}><Activity style={styles.sectionIcon} />Active Tests & Packages</div>
+                <div style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>
+                  Showing partner capabilities and existing GoDavaii catalog where available.
+                </div>
                 <div style={{ display: "grid", gap: 8 }}>
                   {catalogActive.map((c) => (
                     <div key={c.id || c.name} style={styles.simpleRow}>
@@ -609,7 +680,7 @@ export default function LabPartnerDashboard() {
                 <div style={styles.sectionTitle}><Clock3 style={styles.sectionIcon} />Pending Approval</div>
                 {!proposals.length ? <Empty text="No pending proposals yet." /> : null}
                 <div style={{ display: "grid", gap: 8 }}>
-                  {proposals.map((p) => <div key={p.id} style={styles.simpleRow}><div><div style={styles.title}>{p.name}</div><div style={styles.sub}>{p.type} • {p.category} • {money(p.price)}</div><div style={styles.note}>Admin comment: {p.adminComment || "-"}</div></div><Chip text={statusLabel(p.status) || "Draft"} /></div>)}
+                  {proposals.map((p) => <div key={p.id} style={styles.simpleRow}><div><div style={styles.title}>{p.name}</div><div style={styles.sub}>{p.type} â€¢ {p.category} â€¢ {money(p.price)}</div><div style={styles.note}>Admin comment: {p.adminComment || "-"}</div></div><Chip text={statusLabel(p.status) || "Draft"} /></div>)}
                 </div>
               </div>
 
@@ -707,6 +778,7 @@ function BookingDrawer({ booking, onClose, onAction, busy, reportFile, setReport
   const tone = chipTone(tat.tone);
   const statusTone = ["completed", "report_ready"].includes(s(booking.status)) ? chipTone("green") : ["cancelled", "rejected", "unable_to_collect"].includes(s(booking.status)) ? chipTone("red") : chipTone("yellow");
   const k = String(booking.bookingId || booking.id || booking._id);
+  const reportUrl = booking?.reportFile?.fileUrl || booking?.reportFileUrl || booking?.attachedFile?.fileUrl || booking?.attachedFileUrl || "";
 
   function Act({ label, action, payload = {}, disabled = false }) {
     const b = busy === `${k}-${action}`;
@@ -718,8 +790,9 @@ function BookingDrawer({ booking, onClose, onAction, busy, reportFile, setReport
       <div style={styles.drawer}>
         <div style={styles.rowBetween}><div style={styles.sectionTitle}><FileText style={styles.sectionIcon} />Booking Details</div><button style={styles.closeBtn} onClick={onClose}><XCircle style={{ width: 18, height: 18 }} /></button></div>
         <div style={styles.infoGrid}>
-          <Info k="Booking ID" v={booking.bookingId} /><Info k="Patient" v={booking.patientName} /><Info k="Phone" v={canRevealPhone(booking) ? booking.phone : maskPhone(booking.phone)} /><Info k="Address" v={booking.address || "-"} /><Info k="Landmark" v={booking.landmark || "-"} /><Info k="City / Area" v={booking.cityArea || "-"} /><Info k="Slot" v={`${booking.dateLabel || booking.date || "-"} • ${booking.slot || "-"}`} /><Info k="Tests" v={booking.testsText} /><Info k="Fasting" v={booking.fasting || "As advised"} /><Info k="Payment status" v={booking.paymentStatus || "pending"} /><Info k="Current status" v={statusLabel(booking.status)} /><Info k="Collector" v={booking.collectorName || "Not assigned"} /><Info k="Attached prescription/report" v={booking.attachedFileName || "-"} /><Info k="Report file" v={booking.reportFileName || "Not uploaded"} />
+          <Info k="Booking ID" v={booking.bookingId} /><Info k="Patient" v={booking.patientName} /><Info k="Phone" v={canRevealPhone(booking) ? booking.phone : maskPhone(booking.phone)} /><Info k="Address" v={booking.address || "-"} /><Info k="Landmark" v={booking.landmark || "-"} /><Info k="City / Area" v={booking.cityArea || "-"} /><Info k="Slot" v={`${booking.dateLabel || booking.date || "-"} â€¢ ${booking.slot || "-"}`} /><Info k="Tests" v={booking.testsText} /><Info k="Fasting" v={booking.fasting || "As advised"} /><Info k="Payment status" v={booking.paymentStatus || "pending"} /><Info k="Current status" v={statusLabel(booking.status)} /><Info k="Collector" v={booking.collectorName || "Not assigned"} /><Info k="Attached prescription/report" v={booking.attachedFileName || "-"} /><Info k="Report file" v={booking.reportFileName || "Not uploaded"} />
         </div>
+        {reportUrl ? <button style={styles.btnG} onClick={() => window.open(reportUrl, "_blank", "noopener,noreferrer")}>Open Uploaded Report</button> : null}
         <div style={styles.rowWrap}><StatusChip text={tat.text} icon={Clock3} bg={tone.bg} fg={tone.fg} border={tone.border} /><StatusChip text={statusLabel(booking.status)} bg={statusTone.bg} fg={statusTone.fg} border={statusTone.border} /></div>
         <div style={styles.infoBlue}><FileCheck2 style={{ width: 14, height: 14 }} /> Upload original signed lab report only. Do not replace report branding with GoDavaii branding.</div>
         <label style={styles.fileLabel}><Upload style={{ width: 12, height: 12 }} /><input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={(e) => setReportFile(e.target.files?.[0] || null)} />{reportFile ? reportFile.name : "Choose file (.pdf/.jpg/.jpeg/.png)"}</label>
@@ -798,3 +871,4 @@ const styles = {
   k: { fontSize: 11, color: "#64748B", fontWeight: 700, display: "flex", gap: 5, alignItems: "center" },
   v: { fontSize: 13, color: "#0F172A", fontWeight: 800 },
 };
+
