@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { motion } from "framer-motion";
@@ -50,7 +50,7 @@ export default function DoctorDashboard() {
     slotDurationMins: "15", patientArrivalWindowMins: "15", maxPatientsPerDay: "24", timingsText: "",
   });
 
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     const token = localStorage.getItem("doctorToken");
     if (!token) {
       navigate("/doctor/login", { replace: true });
@@ -97,9 +97,9 @@ export default function DoctorDashboard() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [navigate]);
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => { loadAll(); }, [loadAll]);
 
   const upcoming = useMemo(
     () => [...consults].sort((a, b) => new Date(`${a.date} ${a.slot}`) - new Date(`${b.date} ${b.slot}`)),

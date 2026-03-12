@@ -1,5 +1,5 @@
 // src/components/AdminDashboard.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box, Typography, Button, Card, CardContent, TextField, Stack, Snackbar, Alert, Chip,
   ThemeProvider, createTheme, CssBaseline, Divider, MenuItem, Select, Dialog, DialogTitle,
@@ -384,7 +384,7 @@ function LabPartnersAdminPanel({ token, onNotify }) {
   const [docs, setDocs] = useState([]);
   const [audit, setAudit] = useState([]);
 
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
   const loadPartners = async () => {
     try {
@@ -774,9 +774,9 @@ function DoctorsVerificationPanel({ token, onNotify }) {
   const [statusFilter, setStatusFilter] = useState("pending_verification");
   const [busy, setBusy] = useState("");
   const [notesByDoctor, setNotesByDoctor] = useState({});
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       const { data } = await axios.get(`${API_BASE_URL}/api/doctors/admin/all`, {
@@ -789,9 +789,9 @@ function DoctorsVerificationPanel({ token, onNotify }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [headers, onNotify, statusFilter]);
 
-  useEffect(() => { load(); }, [statusFilter]);
+  useEffect(() => { load(); }, [load]);
 
   const setStatus = async (doctorId, status) => {
     const key = `${doctorId}-${status}`;

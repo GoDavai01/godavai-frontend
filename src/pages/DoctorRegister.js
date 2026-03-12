@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { motion } from "framer-motion";
-import { BadgeCheck, Building2, CheckCircle2, ChevronRight, Clock3, FileUp, MapPin, ShieldCheck, Stethoscope, UserRound } from "lucide-react";
+import { BadgeCheck, Building2, ChevronRight, FileUp, ShieldCheck, Stethoscope, UserRound } from "lucide-react";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
