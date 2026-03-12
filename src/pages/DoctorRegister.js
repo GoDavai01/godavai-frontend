@@ -128,10 +128,15 @@ export default function DoctorRegister() {
     setOtpSending(true);
     setError("");
     try {
-      await axios.post(`${API}/api/doctors/onboarding/otp/send`, { phone: form.phone.trim() });
+      await axios.post(`${API}/api/auth/send-otp`, { identifier: form.phone.trim() });
       setOtpSent(true);
     } catch (e) {
-      setError(e?.response?.data?.error || "Failed to send OTP");
+      const msg =
+        e?.response?.data?.error ||
+        e?.response?.data?.raw?.message ||
+        e?.response?.data?.raw?.description ||
+        "Failed to send OTP";
+      setError(msg);
     } finally {
       setOtpSending(false);
     }
@@ -141,7 +146,7 @@ export default function DoctorRegister() {
     setOtpVerifying(true);
     setError("");
     try {
-      await axios.post(`${API}/api/doctors/onboarding/otp/verify`, { phone: form.phone.trim(), otp: form.otp.trim() });
+      await axios.post(`${API}/api/auth/verify-otp`, { identifier: form.phone.trim(), otp: form.otp.trim() });
       setOtpVerified(true);
     } catch (e) {
       setError(e?.response?.data?.error || "OTP verification failed");
