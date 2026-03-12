@@ -768,6 +768,110 @@ function LabPartnersAdminPanel({ token, onNotify }) {
   );
 }
 
+function DoctorsVerificationPanel({ token, onNotify }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("pending_verification");
+  const [busy, setBusy] = useState("");
+  const [notesByDoctor, setNotesByDoctor] = useState({});
+  const headers = { Authorization: `Bearer ${token}` };
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      const { data } = await axios.get(`${API_BASE_URL}/api/doctors/admin/all`, {
+        headers,
+        params: { status: statusFilter },
+      });
+      setRows(Array.isArray(data?.doctors) ? data.doctors : []);
+    } catch {
+      onNotify("Failed to load doctors verification queue");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, [statusFilter]);
+
+  const setStatus = async (doctorId, status) => {
+    const key = `${doctorId}-${status}`;
+    try {
+      setBusy(key);
+      await axios.patch(
+        `${API_BASE_URL}/api/doctors/admin/${doctorId}/verification-status`,
+        { status, note: notesByDoctor[doctorId] || "" },
+        { headers }
+      );
+      onNotify(`Doctor marked ${status}`);
+      await load();
+    } catch {
+      onNotify("Failed to update doctor verification state");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  return (
+    <Box>
+      <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
+        {["pending_verification", "approved", "rejected", "needs_more_info", "suspended", "all"].map((s) => (
+          <Button key={s} size="small" variant={statusFilter === s ? "contained" : "outlined"} onClick={() => setStatusFilter(s)}>
+            {s.replace(/_/g, " ")}
+          </Button>
+        ))}
+      </Stack>
+
+      {loading ? <Typography sx={{ color: "#aaa" }}>Loading doctors...</Typography> : null}
+      <Stack spacing={2}>
+        {!loading && rows.length === 0 ? <Typography sx={{ color: "#aaa" }}>No doctors found.</Typography> : null}
+        {rows.map((d) => (
+          <Card key={d.id} sx={{ p: 2, bgcolor: "#23272a", borderRadius: 2 }}>
+            <Typography fontWeight={800}>{d.name} ({d.specialty})</Typography>
+            <Typography variant="body2" sx={{ color: "#aaf" }}>{d.email || "-"} | {d.phone || "-"}</Typography>
+            <Typography variant="body2" sx={{ color: "#bbb" }}>
+              Status: {String(d.verificationStatus || "pending_verification").replace(/_/g, " ")} | Reg#: {d?.documents?.registrationNumber || "-"}
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
+              {[
+                ["Registration Certificate", d?.documents?.registrationCertificateUrl],
+                ["MBBS Degree", d?.documents?.mbbsDegreeUrl],
+                ["Specialist Degree", d?.documents?.specialistDegreeUrl],
+                ["PAN", d?.documents?.panUrl],
+                ["Bank Proof", d?.documents?.bankProofUrl],
+                ["Clinic Proof", d?.documents?.clinicProofUrl],
+              ]
+                .filter((x) => !!x[1])
+                .map(([label, url]) => (
+                  <Button key={label} size="small" variant="text" component="a" href={url} target="_blank" rel="noreferrer">
+                    {label}
+                  </Button>
+                ))}
+            </Stack>
+            <TextField
+              fullWidth
+              size="small"
+              sx={{ mt: 1 }}
+              value={notesByDoctor[d.id] || d.verificationNotes || ""}
+              onChange={(e) => setNotesByDoctor((p) => ({ ...p, [d.id]: e.target.value }))}
+              label="Review note"
+            />
+            <Typography variant="caption" sx={{ color: "#8AA", mt: 0.5 }}>
+              Reviewed At: {d?.verificationReviewedAt ? new Date(d.verificationReviewedAt).toLocaleString() : "-"}
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
+              {["approved", "rejected", "needs_more_info", "suspended", "pending_verification"].map((s) => (
+                <Button key={s} size="small" variant="outlined" disabled={busy === `${d.id}-${s}`} onClick={() => setStatus(d.id, s)}>
+                  {s.replace(/_/g, " ")}
+                </Button>
+              ))}
+            </Stack>
+          </Card>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
 export default function AdminDashboard() {
   const [token, setToken] = useState(localStorage.getItem("adminToken") || "");
   const [login, setLogin] = useState({ email: "", password: "" });
@@ -1030,6 +1134,7 @@ export default function AdminDashboard() {
             <Tab label="Medicine Master" />
 <Tab label="Payments & Payouts" />
 <Tab label="Lab Partners" />
+<Tab label="Doctors Verification" />
           </Tabs>
         </Box>
 
@@ -1381,6 +1486,9 @@ export default function AdminDashboard() {
 )}
 {activeTab === 8 && (
   <LabPartnersAdminPanel token={token} onNotify={setMsg} />
+)}
+{activeTab === 9 && (
+  <DoctorsVerificationPanel token={token} onNotify={setMsg} />
 )}
 
         </Box>

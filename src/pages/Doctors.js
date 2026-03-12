@@ -77,6 +77,7 @@ function Glass({ children, style }) {
 
 function DoctorCard({ doctor, mode, onBook }) {
   const fee = mode === "video" ? doctor.feeVideo : mode === "call" ? doctor.feeCall : doctor.feeInPerson;
+  const priceLabel = mode === "inperson" ? (doctor.customerPriceLabelInPerson || `In-Person Visit Rs ${fee}`) : mode === "call" ? (doctor.customerPriceLabelCall || `Consultation Rs ${fee}`) : (doctor.customerPriceLabelVideo || `Consultation Rs ${fee}`);
   return (
     <Glass style={{ padding: 14, marginBottom: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
@@ -110,7 +111,7 @@ function DoctorCard({ doctor, mode, onBook }) {
       </div>
 
       <div style={{ marginTop: 10, fontSize: 11, color: "#64748B", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-        <MapPin style={{ width: 12, height: 12 }} /> {doctor.clinic}
+        <MapPin style={{ width: 12, height: 12 }} /> {doctor.locality || doctor.clinic}
       </div>
 
       <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -125,9 +126,7 @@ function DoctorCard({ doctor, mode, onBook }) {
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <IndianRupee style={{ width: 14, height: 14, color: DEEP }} />
           <span style={{ fontFamily: "'Sora',sans-serif", fontWeight: 900, color: DEEP, fontSize: 15 }}>{fee}</span>
-          <span style={{ fontSize: 11, color: "#64748B", fontWeight: 700 }}>
-            {mode === "video" ? "Video consult" : mode === "call" ? "Audio consult" : "Clinic visit"}
-          </span>
+          <span style={{ fontSize: 11, color: "#64748B", fontWeight: 700 }}>{priceLabel}</span>
         </div>
         <motion.button
           whileTap={{ scale: 0.95 }}
@@ -450,6 +449,29 @@ export default function Doctors() {
                     <Wallet style={{ width: 12, height: 12 }} /> Paid via {a.paymentMethod || "-"}
                   </span>
                 </div>
+                {a.mode === "inperson" ? (
+                  <div style={{ marginTop: 6, fontSize: 10.8, fontWeight: 800, color: "#0F172A" }}>
+                    Clinic: {a?.clinicLocation?.locality || "Locality hidden"}
+                    {a?.clinicLocation?.exactUnlocked ? ` | ${a?.clinicLocation?.fullAddress || ""}` : " | Exact address unlocks after confirmed payment"}
+                    {a?.clinicLocation?.exactUnlocked ? (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                          `${a?.clinicLocation?.coordinates?.lat || ""},${a?.clinicLocation?.coordinates?.lng || ""}`
+                        )}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ marginLeft: 8, color: DEEP, textDecoration: "none" }}
+                      >
+                        Open in Maps
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+                {a?.prescription?.fileUrl ? (
+                  <a href={a.prescription.fileUrl} target="_blank" rel="noreferrer" style={{ marginTop: 5, display: "inline-block", fontSize: 10.8, fontWeight: 800, color: DEEP, textDecoration: "none" }}>
+                    View Prescription
+                  </a>
+                ) : null}
               </div>
             ))
           )}
@@ -495,6 +517,7 @@ export default function Doctors() {
 
               <div style={{ fontSize: 13, fontWeight: 900, color: "#0B1F16" }}>{bookingDoctor.name}</div>
               <div style={{ fontSize: 11, color: "#64748B", fontWeight: 700, marginBottom: 10 }}>{bookingDoctor.specialty}</div>
+              {mode === "inperson" ? <div style={{ marginBottom: 8, fontSize: 11, fontWeight: 800, color: "#92400E", background: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 10, padding: "6px 8px" }}>In-person bookings are prepaid and slot-confirmed after successful payment.</div> : null}
 
               <div style={{ display: "flex", gap: 7, overflowX: "auto", scrollbarWidth: "none", marginBottom: 10 }}>
                 {dateList.map((d) => (
