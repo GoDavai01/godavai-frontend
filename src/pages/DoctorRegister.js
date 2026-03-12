@@ -14,6 +14,8 @@ const STEP_TITLES = [
 
 const SPECIALTIES = [
   "General Physician",
+  "Internal Medicine",
+  "Family Medicine",
   "Cardiology",
   "Dermatology",
   "Pediatrics",
@@ -22,6 +24,16 @@ const SPECIALTIES = [
   "Orthopedics",
   "Psychiatry",
   "Neurology",
+  "Pulmonology",
+  "Endocrinology",
+  "Gastroenterology",
+  "Nephrology",
+  "Ophthalmology",
+  "Urology",
+  "Oncology",
+  "Diabetology",
+  "Rheumatology",
+  "Sports Medicine",
 ];
 
 function asNum(v) {
@@ -64,6 +76,7 @@ export default function DoctorRegister() {
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
+  const [otpHint, setOtpHint] = useState("");
 
   const [form, setForm] = useState({
     fullName: "",
@@ -73,7 +86,9 @@ export default function DoctorRegister() {
     specialty: "General Physician",
     city: "",
     area: "",
-    consultationFee: "499",
+    consultationFee: "",
+    availableStart: "09:00",
+    availableEnd: "13:00",
     availableTimings: "",
     modeAudio: true,
     modeVideo: true,
@@ -116,7 +131,12 @@ export default function DoctorRegister() {
     try {
       const { data } = await axios.post(`${API}/api/doctors/onboarding/otp/send`, { phone: form.phone.trim() });
       setOtpSent(true);
-      if (data?.debugOtp && !form.otp) patch("otp", data.debugOtp);
+      if (data?.debugOtp) {
+        setOtpHint(`Demo OTP: ${data.debugOtp}`);
+        if (!form.otp) patch("otp", data.debugOtp);
+      } else {
+        setOtpHint("OTP sent to your mobile number.");
+      }
     } catch (e) {
       setError(e?.response?.data?.error || "Failed to send OTP");
     } finally {
@@ -130,6 +150,7 @@ export default function DoctorRegister() {
     try {
       await axios.post(`${API}/api/doctors/onboarding/otp/verify`, { phone: form.phone.trim(), otp: form.otp.trim() });
       setOtpVerified(true);
+      setOtpHint("OTP verified successfully.");
     } catch (e) {
       setError(e?.response?.data?.error || "OTP verification failed");
     } finally {
@@ -143,8 +164,9 @@ export default function DoctorRegister() {
     }
     if (!(form.modeAudio || form.modeVideo || form.modeInPerson)) return "Select at least one consultation mode.";
     if (!otpVerified) return "Please verify mobile OTP.";
-    if (asNum(form.consultationFee) < 0) return "Consultation fee must be valid.";
-    if (!form.availableTimings.trim()) return "Please add available timings.";
+    if (asNum(form.consultationFee) <= 0) return "Consultation fee must be valid.";
+    if (!form.availableStart || !form.availableEnd) return "Please select available timings.";
+    if (form.availableStart >= form.availableEnd) return "End time must be after start time.";
     return "";
   }
 
@@ -183,8 +205,10 @@ export default function DoctorRegister() {
     setLoading(true);
     setError("");
     try {
+      const availableTimings = `${form.availableStart} - ${form.availableEnd}`;
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => fd.append(k, typeof v === "boolean" ? String(v) : v));
+      fd.set("availableTimings", availableTimings);
       fd.append("otpVerified", "true");
       Object.entries(files).forEach(([k, v]) => {
         if (v) fd.append(k, v);
@@ -227,8 +251,8 @@ export default function DoctorRegister() {
               <SectionTitle icon={UserRound} text="Basic Details" />
               <input style={styles.input} placeholder="Full Name*" value={form.fullName} onChange={(e) => patch("fullName", e.target.value)} />
               <div style={styles.row2}>
-                <input style={styles.input} placeholder="Mobile Number*" value={form.phone} onChange={(e) => patch("phone", e.target.value)} />
-                <button style={styles.ghostBtn} onClick={sendOtp} type="button" disabled={otpSending || !form.phone.trim()}>
+                <input style={styles.input} placeholder="Mobile Number*" value={form.phone} onChange={(e) => patch("phone", e.target.value.replace(/\D/g, "").slice(0, 10))} />
+                <button style={styles.ghostBtn} onClick={sendOtp} type="button" disabled={otpSending || form.phone.trim().length < 10}>
                   {otpSending ? "Sending..." : otpSent ? "Resend OTP" : "Send OTP"}
                 </button>
               </div>
@@ -238,6 +262,7 @@ export default function DoctorRegister() {
                   {otpVerifying ? "Verifying..." : otpVerified ? "Verified" : "Verify OTP"}
                 </button>
               </div>
+              {otpHint ? <div style={styles.note}>{otpHint}</div> : null}
               <input style={styles.input} placeholder="Email Address*" value={form.email} onChange={(e) => patch("email", e.target.value)} />
               <select style={styles.input} value={form.specialty} onChange={(e) => patch("specialty", e.target.value)}>
                 {SPECIALTIES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -252,8 +277,23 @@ export default function DoctorRegister() {
                 <ModePill active={form.modeInPerson} onClick={() => patch("modeInPerson", !form.modeInPerson)} label="In-person" />
               </div>
               <div style={styles.row2}>
-                <input style={styles.input} placeholder="Consultation Fee*" value={form.consultationFee} onChange={(e) => patch("consultationFee", e.target.value)} />
-                <input style={styles.input} placeholder="Available Timings*" value={form.availableTimings} onChange={(e) => patch("availableTimings", e.target.value)} />
+                <input type="number" min="0" style={styles.input} placeholder="Consultation Fee*" value={form.consultationFee} onChange={(e) => patch("consultationFee", e.target.value)} />
+                <select style={styles.input} value={form.slotDurationMins} onChange={(e) => patch("slotDurationMins", e.target.value)}>
+                  <option value="10">Slot: 10 min</option>
+                  <option value="15">Slot: 15 min</option>
+                  <option value="20">Slot: 20 min</option>
+                  <option value="30">Slot: 30 min</option>
+                </select>
+              </div>
+              <div style={styles.row2}>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <label style={styles.smallLabel}>Start Time*</label>
+                  <input type="time" style={styles.input} value={form.availableStart} onChange={(e) => patch("availableStart", e.target.value)} />
+                </div>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <label style={styles.smallLabel}>End Time*</label>
+                  <input type="time" style={styles.input} value={form.availableEnd} onChange={(e) => patch("availableEnd", e.target.value)} />
+                </div>
               </div>
               <label style={styles.checkboxLine}>
                 <input type="checkbox" checked={form.specialistRequired} onChange={(e) => patch("specialistRequired", e.target.checked)} />
@@ -467,6 +507,7 @@ const styles = {
   bandLine: { fontSize: 12, fontWeight: 700, color: "#334155" },
   currentBand: { marginTop: 6, fontSize: 12, fontWeight: 900, color: "#065F46", background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 10, padding: "6px 8px" },
   note: { fontSize: 11.5, color: "#64748B", fontWeight: 700 },
+  smallLabel: { fontSize: 11, color: "#64748B", fontWeight: 800 },
   checkboxLine: { display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, fontWeight: 700, color: "#334155" },
   error: { fontSize: 12, fontWeight: 800, color: "#B91C1C" },
   footerRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 4 },

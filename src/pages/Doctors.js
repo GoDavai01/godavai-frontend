@@ -25,6 +25,8 @@ const ACC = "#00D97E";
 const FALLBACK_SPECIALTIES = [
   "All",
   "General Physician",
+  "Internal Medicine",
+  "Family Medicine",
   "Pediatrics",
   "Dermatology",
   "Gynecology",
@@ -32,6 +34,15 @@ const FALLBACK_SPECIALTIES = [
   "ENT",
   "Orthopedics",
   "Psychiatry",
+  "Neurology",
+  "Pulmonology",
+  "Endocrinology",
+  "Gastroenterology",
+  "Nephrology",
+  "Ophthalmology",
+  "Urology",
+  "Oncology",
+  "Diabetology",
 ];
 
 function next7Days() {
