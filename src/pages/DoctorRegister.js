@@ -76,7 +76,6 @@ export default function DoctorRegister() {
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
-  const [otpHint, setOtpHint] = useState("");
 
   const [form, setForm] = useState({
     fullName: "",
@@ -129,14 +128,8 @@ export default function DoctorRegister() {
     setOtpSending(true);
     setError("");
     try {
-      const { data } = await axios.post(`${API}/api/doctors/onboarding/otp/send`, { phone: form.phone.trim() });
+      await axios.post(`${API}/api/doctors/onboarding/otp/send`, { phone: form.phone.trim() });
       setOtpSent(true);
-      if (data?.debugOtp) {
-        setOtpHint(`Demo OTP: ${data.debugOtp}`);
-        if (!form.otp) patch("otp", data.debugOtp);
-      } else {
-        setOtpHint("OTP sent to your mobile number.");
-      }
     } catch (e) {
       setError(e?.response?.data?.error || "Failed to send OTP");
     } finally {
@@ -150,7 +143,6 @@ export default function DoctorRegister() {
     try {
       await axios.post(`${API}/api/doctors/onboarding/otp/verify`, { phone: form.phone.trim(), otp: form.otp.trim() });
       setOtpVerified(true);
-      setOtpHint("OTP verified successfully.");
     } catch (e) {
       setError(e?.response?.data?.error || "OTP verification failed");
     } finally {
@@ -262,7 +254,6 @@ export default function DoctorRegister() {
                   {otpVerifying ? "Verifying..." : otpVerified ? "Verified" : "Verify OTP"}
                 </button>
               </div>
-              {otpHint ? <div style={styles.note}>{otpHint}</div> : null}
               <input style={styles.input} placeholder="Email Address*" value={form.email} onChange={(e) => patch("email", e.target.value)} />
               <select style={styles.input} value={form.specialty} onChange={(e) => patch("specialty", e.target.value)}>
                 {SPECIALTIES.map((s) => <option key={s} value={s}>{s}</option>)}
