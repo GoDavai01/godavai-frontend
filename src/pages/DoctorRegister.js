@@ -50,7 +50,7 @@ function serviceBand(fee) {
   return { band: "Rs 2001+", fee: "Manual commercial approval required", manual: true };
 }
 
-function Uploader({ label, required = false, file, onChange }) {
+function Uploader({ label, required = false, file, onChange, hint = "" }) {
   return (
     <label style={styles.uploadCard}>
       <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{ display: "none" }} onChange={(e) => onChange(e.target.files?.[0] || null)} />
@@ -63,6 +63,7 @@ function Uploader({ label, required = false, file, onChange }) {
       <div style={{ fontSize: 11, fontWeight: 700, color: file ? "#065F46" : "#64748B", marginTop: 4 }}>
         {file ? file.name : "Tap to upload"}
       </div>
+      {hint ? <div style={styles.uploadHint}>{hint}</div> : null}
     </label>
   );
 }
@@ -76,6 +77,8 @@ export default function DoctorRegister() {
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationNote, setLocationNote] = useState("");
 
   const [form, setForm] = useState({
     fullName: "",
@@ -100,9 +103,9 @@ export default function DoctorRegister() {
     clinicPincode: "",
     clinicLat: "",
     clinicLng: "",
-    slotDurationMins: "15",
-    patientArrivalWindowMins: "15",
-    maxPatientsPerDay: "24",
+    slotDurationMins: "",
+    patientArrivalWindowMins: "",
+    maxPatientsPerDay: "",
     consentRegisteredDoctor: false,
     consentVerification: false,
     consentTerms: false,
@@ -122,6 +125,50 @@ export default function DoctorRegister() {
 
   function patch(k, v) {
     setForm((p) => ({ ...p, [k]: v }));
+  }
+
+  function useCurrentLocation() {
+    setError("");
+    setLocationNote("");
+    if (!navigator?.geolocation) {
+      setError("Location is not supported on this device/browser.");
+      return;
+    }
+    setLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = Number(pos?.coords?.latitude || 0).toFixed(6);
+        const lng = Number(pos?.coords?.longitude || 0).toFixed(6);
+        patch("clinicLat", lat);
+        patch("clinicLng", lng);
+        setLocationNote("Location detected.");
+        try {
+          const { data } = await axios.get("https://nominatim.openstreetmap.org/reverse", {
+            params: { format: "jsonv2", lat, lon: lng },
+            timeout: 9000,
+          });
+          const a = data?.address || {};
+          const guessedCity = a.city || a.town || a.village || a.state_district || a.state || "";
+          const guessedLocality = a.suburb || a.neighbourhood || a.city_district || a.county || "";
+          const guessedAddress = data?.display_name || "";
+          setForm((prev) => ({
+            ...prev,
+            clinicAddress: prev.clinicAddress?.trim() ? prev.clinicAddress : guessedAddress,
+            clinicLocality: prev.clinicLocality?.trim() ? prev.clinicLocality : guessedLocality,
+            city: prev.city?.trim() ? prev.city : guessedCity,
+          }));
+          setLocationNote("Location + area detected. Please verify before submit.");
+        } catch (_) {
+          setLocationNote("Location detected. Address lookup failed; you can fill address manually.");
+        }
+        setLocationLoading(false);
+      },
+      () => {
+        setLocationLoading(false);
+        setError("Unable to access current location. Please allow GPS/location permission.");
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+    );
   }
 
   async function sendOtp() {
@@ -275,6 +322,7 @@ export default function DoctorRegister() {
               <div style={styles.row2}>
                 <input type="number" min="0" style={styles.input} placeholder="Consultation Fee*" value={form.consultationFee} onChange={(e) => patch("consultationFee", e.target.value)} />
                 <select style={styles.input} value={form.slotDurationMins} onChange={(e) => patch("slotDurationMins", e.target.value)}>
+                  <option value="">Slot: Select (optional)</option>
                   <option value="10">Slot: 10 min</option>
                   <option value="15">Slot: 15 min</option>
                   <option value="20">Slot: 20 min</option>
@@ -323,12 +371,22 @@ export default function DoctorRegister() {
                     <input style={styles.input} placeholder="Map Latitude*" value={form.clinicLat} onChange={(e) => patch("clinicLat", e.target.value)} />
                     <input style={styles.input} placeholder="Map Longitude*" value={form.clinicLng} onChange={(e) => patch("clinicLng", e.target.value)} />
                   </div>
+                  <button type="button" style={styles.ghostBtn} onClick={useCurrentLocation} disabled={locationLoading}>
+                    {locationLoading ? "Detecting Location..." : "Use Current Location"}
+                  </button>
+                  {locationNote ? <div style={styles.note}>{locationNote}</div> : null}
                   <div style={styles.row3}>
-                    <input style={styles.input} placeholder="Slot duration mins" value={form.slotDurationMins} onChange={(e) => patch("slotDurationMins", e.target.value)} />
-                    <input style={styles.input} placeholder="Arrival window mins" value={form.patientArrivalWindowMins} onChange={(e) => patch("patientArrivalWindowMins", e.target.value)} />
-                    <input style={styles.input} placeholder="Max patients/day" value={form.maxPatientsPerDay} onChange={(e) => patch("maxPatientsPerDay", e.target.value)} />
+                    <input style={styles.input} placeholder="Slot duration mins (optional)" value={form.slotDurationMins} onChange={(e) => patch("slotDurationMins", e.target.value)} />
+                    <input style={styles.input} placeholder="Arrival window mins (optional)" value={form.patientArrivalWindowMins} onChange={(e) => patch("patientArrivalWindowMins", e.target.value)} />
+                    <input style={styles.input} placeholder="Max patients/day (optional)" value={form.maxPatientsPerDay} onChange={(e) => patch("maxPatientsPerDay", e.target.value)} />
                   </div>
-                  <Uploader label="Clinic Proof" required file={files.clinicProof} onChange={(v) => setFiles((p) => ({ ...p, clinicProof: v }))} />
+                  <Uploader
+                    label="Clinic Proof"
+                    required
+                    file={files.clinicProof}
+                    onChange={(v) => setFiles((p) => ({ ...p, clinicProof: v }))}
+                    hint="Accepted: clinic front photo/signboard photo (preferred), or clinic address proof (rent agreement/electricity bill)."
+                  />
                 </div>
               ) : null}
             </div>
@@ -503,6 +561,7 @@ const styles = {
   bandLine: { fontSize: 12, fontWeight: 700, color: "#334155" },
   currentBand: { marginTop: 6, fontSize: 12, fontWeight: 900, color: "#065F46", background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: 10, padding: "6px 8px" },
   note: { fontSize: 11.5, color: "#64748B", fontWeight: 700 },
+  uploadHint: { fontSize: 10.5, color: "#64748B", fontWeight: 700, marginTop: 4, lineHeight: 1.45 },
   smallLabel: { fontSize: 11, color: "#64748B", fontWeight: 800 },
   checkboxLine: { display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, fontWeight: 700, color: "#334155" },
   error: { fontSize: 12, fontWeight: 800, color: "#B91C1C" },
