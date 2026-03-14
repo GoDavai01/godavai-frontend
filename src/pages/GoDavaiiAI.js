@@ -6,8 +6,9 @@
 // ✅ PREMIUM REDESIGN: Floating composer with better safe-area handling
 // ✅ PREMIUM REDESIGN: Better welcome state + quick actions
 // ✅ PREMIUM REDESIGN: Richer thinking / analyzing UX
-// ✅ FIX: Backend STT mic flow kept using MediaRecorder + /assistant/transcribe
-// ✅ FIX: Browser SpeechRecognition kept only as fallback
+// ✅ FIX: Desktop mic now prefers browser SpeechRecognition first
+// ✅ FIX: MediaRecorder chunking improved with recorder.start(250)
+// ✅ FIX: Browser TTS fallback now picks better voice and avoids ugly random fallback
 // ✅ FIX: Reply language chip persisted in localStorage
 // ✅ FIX: Existing result / backend / TTS / file logic preserved
 
@@ -189,6 +190,45 @@ function pickSupportedAudioMimeType() {
     if (window.MediaRecorder?.isTypeSupported?.(type)) return type;
   }
   return "";
+}
+
+function pickBestBrowserVoice(lang) {
+  const synth = window.speechSynthesis;
+  if (!synth) return null;
+
+  const voices = synth.getVoices?.() || [];
+  if (!voices.length) return null;
+
+  const normalized = String(lang || "english").toLowerCase();
+
+  const targets =
+    normalized === "hinglish"
+      ? ["hi-IN", "en-IN", "hi", "en"]
+      : normalized === "hindi"
+        ? ["hi-IN", "hi"]
+        : normalized === "marathi"
+          ? ["mr-IN", "mr", "hi-IN"]
+          : normalized === "bengali"
+            ? ["bn-IN", "bn"]
+            : normalized === "tamil"
+              ? ["ta-IN", "ta"]
+              : normalized === "telugu"
+                ? ["te-IN", "te"]
+                : normalized === "gujarati"
+                  ? ["gu-IN", "gu"]
+                  : ["en-IN", "en-GB", "en-US", "en"];
+
+  for (const target of targets) {
+    const v = voices.find((x) => String(x.lang || "").toLowerCase() === target.toLowerCase());
+    if (v) return v;
+  }
+
+  for (const target of targets) {
+    const v = voices.find((x) => String(x.lang || "").toLowerCase().startsWith(target.split("-")[0].toLowerCase()));
+    if (v) return v;
+  }
+
+  return voices[0] || null;
 }
 
 function useScreenSize() {
@@ -789,11 +829,20 @@ export default function GoDavaiiAI() {
 
     setSpeakLoading(false);
 
+    // Avoid ugly browser fallback for Indian language speech unless usable voice exists
     if (window.speechSynthesis) {
       try {
+        const voice = pickBestBrowserVoice(lang);
+
+        // Agar non-English ke liye proper voice hi nahi mili, fallback mat chalao
+        if (!voice && lang !== "english") {
+          setSpeakingId(null);
+          return;
+        }
+
         const u = new SpeechSynthesisUtterance(text);
         u.rate = 0.92;
-        u.pitch = 1.05;
+        u.pitch = 1.0;
         u.lang =
           lang === "hindi" ? "hi-IN" :
           lang === "bengali" ? "bn-IN" :
@@ -802,10 +851,15 @@ export default function GoDavaiiAI() {
           lang === "marathi" ? "mr-IN" :
           lang === "gujarati" ? "gu-IN" :
           lang === "punjabi" ? "pa-IN" :
-          lang === "english" ? "en-IN" :
+          lang === "hinglish" ? "hi-IN" :
           "en-IN";
+
+        if (voice) u.voice = voice;
+
         u.onend = () => setSpeakingId(null);
         u.onerror = () => setSpeakingId(null);
+
+        window.speechSynthesis.cancel();
         window.speechSynthesis.speak(u);
       } catch {
         setSpeakingId(null);
@@ -896,7 +950,7 @@ export default function GoDavaiiAI() {
       }
     };
 
-    recorder.start();
+    recorder.start(250);
     setMicOn(true);
   }
 
@@ -916,56 +970,125 @@ export default function GoDavaiiAI() {
     if (micBusy) return;
 
     if (micOn) {
+      try {
+        recognitionRef.current?.stop?.();
+      } catch (_) {}
       stopRecordedMic();
       return;
     }
 
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const preferBrowserSTT = screen === "desktop" && SR;
+
+    // Desktop pe browser STT first — much more reliable
+    if (preferBrowserSTT) {
+      try {
+        const rec = new SR();
+        recognitionRef.current = rec;
+        rec.lang = getSpeechRecognitionLang(replyLanguage);
+        rec.interimResults = true;
+        rec.continuous = false;
+        rec.maxAlternatives = 1;
+
+        let finalText = "";
+
+        rec.onstart = () => setMicOn(true);
+        rec.onerror = () => {
+          setMicOn(false);
+          recognitionRef.current = null;
+        };
+        rec.onend = () => {
+          setMicOn(false);
+          recognitionRef.current = null;
+
+          if (finalText.trim()) {
+            setInput((prev) => `${prev}${prev ? " " : ""}${finalText.trim()}`);
+            if (textareaRef.current) {
+              setTimeout(() => {
+                const ta = textareaRef.current;
+                if (ta) {
+                  ta.style.height = "auto";
+                  ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+                }
+              }, 30);
+            }
+          }
+        };
+
+        rec.onresult = (e) => {
+          let text = "";
+          for (let i = e.resultIndex; i < e.results.length; i += 1) {
+            text += e.results[i][0]?.transcript || "";
+          }
+          finalText = text.trim();
+        };
+
+        rec.start();
+        return;
+      } catch (err) {
+        console.error("Desktop browser STT failed, falling back to recorder:", err);
+      }
+    }
+
+    // Mobile / fallback => MediaRecorder + backend transcription
     try {
       if (navigator.mediaDevices?.getUserMedia && window.MediaRecorder) {
         await startRecordedMic();
         return;
       }
     } catch (err) {
-      console.error("Recorded mic start failed, falling back:", err);
+      console.error("Recorded mic start failed:", err);
     }
 
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return;
+    // Final fallback
+    if (SR) {
+      try {
+        const rec = new SR();
+        recognitionRef.current = rec;
+        rec.lang = getSpeechRecognitionLang(replyLanguage);
+        rec.interimResults = true;
+        rec.continuous = false;
+        rec.maxAlternatives = 1;
 
-    const rec = new SR();
-    recognitionRef.current = rec;
-    rec.lang = getSpeechRecognitionLang(replyLanguage);
-    rec.interimResults = true;
-    rec.continuous = false;
+        let finalText = "";
 
-    rec.onstart = () => setMicOn(true);
-    rec.onend = () => setMicOn(false);
-    rec.onerror = () => setMicOn(false);
+        rec.onstart = () => setMicOn(true);
+        rec.onerror = () => {
+          setMicOn(false);
+          recognitionRef.current = null;
+        };
+        rec.onend = () => {
+          setMicOn(false);
+          recognitionRef.current = null;
 
-    rec.onresult = (e) => {
-      let finalText = "";
-      for (let i = e.resultIndex; i < e.results.length; i += 1) {
-        if (e.results[i].isFinal) {
-          finalText += e.results[i][0]?.transcript || "";
-        }
-      }
-
-      finalText = finalText.trim();
-      if (finalText) {
-        setInput((prev) => `${prev}${prev ? " " : ""}${finalText}`);
-        if (textareaRef.current) {
-          setTimeout(() => {
-            const ta = textareaRef.current;
-            if (ta) {
-              ta.style.height = "auto";
-              ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+          if (finalText.trim()) {
+            setInput((prev) => `${prev}${prev ? " " : ""}${finalText.trim()}`);
+            if (textareaRef.current) {
+              setTimeout(() => {
+                const ta = textareaRef.current;
+                if (ta) {
+                  ta.style.height = "auto";
+                  ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+                }
+              }, 30);
             }
-          }, 30);
-        }
-      }
-    };
+          }
+        };
 
-    rec.start();
+        rec.onresult = (e) => {
+          let text = "";
+          for (let i = e.resultIndex; i < e.results.length; i += 1) {
+            text += e.results[i][0]?.transcript || "";
+          }
+          finalText = text.trim();
+        };
+
+        rec.start();
+      } catch (err) {
+        console.error("SpeechRecognition fallback failed:", err);
+        setMicOn(false);
+      }
+    }
   }
 
   /* ── Backend ────────────────────────────────────────────── */
