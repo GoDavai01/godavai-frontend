@@ -50,8 +50,11 @@ function next7Days() {
   for (let i = 0; i < 7; i += 1) {
     const d = new Date();
     d.setDate(d.getDate() + i);
+    const localYear = d.getFullYear();
+    const localMonth = String(d.getMonth() + 1).padStart(2, "0");
+    const localDate = String(d.getDate()).padStart(2, "0");
     arr.push({
-      iso: d.toISOString().slice(0, 10),
+      iso: `${localYear}-${localMonth}-${localDate}`,
       day: d.toLocaleDateString("en-IN", { weekday: "short" }),
       date: d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
       full: d.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }),
