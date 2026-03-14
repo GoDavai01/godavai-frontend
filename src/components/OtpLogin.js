@@ -128,7 +128,7 @@ function BgOrbs() {
   );
 }
 
-export default function OtpLogin({ onLogin, stayOnPage = false }) {
+export default function OtpLogin({ onLogin }) {
   const [step, setStep] = useState(1);
   const [identifier, setIdentifier] = useState("");
   const [otp, setOtp] = useState("");
@@ -209,9 +209,7 @@ export default function OtpLogin({ onLogin, stayOnPage = false }) {
         !profile?.email ||
         !profile?.dob;
 
-      if (!stayOnPage) {
-        window.location.href = needsProfile ? "/profile?setup=1" : "/";
-      }
+      window.location.href = needsProfile ? "/profile?setup=1" : "/";
     } catch (err) {
       setSnack({
         open: true,
