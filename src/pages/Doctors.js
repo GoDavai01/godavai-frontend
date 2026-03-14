@@ -17,8 +17,6 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import OtpLogin from "../components/OtpLogin";
-import { useAuth } from "../context/AuthContext";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0C5A3E";
@@ -180,7 +178,6 @@ function DoctorCard({ doctor, mode, onBook }) {
 }
 
 export default function Doctors() {
-  const { token } = useAuth();
   const [query, setQuery] = useState("");
   const [specialty, setSpecialty] = useState("All");
   const [mode, setMode] = useState("video");
@@ -204,7 +201,6 @@ export default function Doctors() {
   const [medicalRecords, setMedicalRecords] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState("");
   const [bookingLoading, setBookingLoading] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
 
   const dateList = useMemo(() => next7Days(), []);
 
@@ -247,6 +243,7 @@ export default function Doctors() {
   }, [query, specialty, sort, mode]);
 
   const loadMyConsults = useCallback(async () => {
+    const token = localStorage.getItem("token");
     if (!token) {
       setAppointments([]);
       setLoadingAppts(false);
@@ -262,7 +259,7 @@ export default function Doctors() {
     } finally {
       setLoadingAppts(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     loadMyConsults();
@@ -312,11 +309,6 @@ export default function Doctors() {
 
   async function bookNow() {
     if (!bookingDoctor || !bookingDate || !bookingSlot || !paymentMethod) return;
-    if (!token) {
-      setError("Please login to continue booking and payment.");
-      setLoginOpen(true);
-      return;
-    }
 
     setBookingLoading(true);
     setError("");
@@ -749,27 +741,13 @@ export default function Doctors() {
                   gap: 7,
                 }}
               >
-                <CheckCircle2 style={{ width: 15, height: 15 }} /> {bookingLoading ? "Processing..." : !token ? "Login to Continue" : "Pay and Confirm Booking"}
+                <CheckCircle2 style={{ width: 15, height: 15 }} /> {bookingLoading ? "Processing..." : "Pay and Confirm Booking"}
               </button>
             </motion.div>
           </>
         )}
       </AnimatePresence>
     </div>
-    <AnimatePresence>
-      {loginOpen && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: "fixed", inset: 0, zIndex: 2000 }}>
-          <OtpLogin
-            stayOnPage
-            onLogin={() => {
-              setLoginOpen(false);
-              setError("");
-              loadMyConsults();
-            }}
-          />
-        </motion.div>
-      )}
-    </AnimatePresence>
     </>
   );
 }

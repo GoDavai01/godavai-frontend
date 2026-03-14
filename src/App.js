@@ -317,11 +317,7 @@ function AppContent() {
 
           <Route
             path="/doctors"
-            element={
-              <ProtectedRoute>
-                <Doctors />
-              </ProtectedRoute>
-            }
+            element={<Doctors />}
           />
 
           <Route
@@ -475,6 +471,5 @@ function App() {
 }
 
 export default App;
-
 
 
