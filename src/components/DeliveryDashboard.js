@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// src/components/DeliveryDashboard.js
+import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import dayjs from "dayjs";
-import relativeTime from "dayjs/plugin/relativeTime";
-import { motion, AnimatePresence } from "framer-motion";
+import { loadGoogleMaps } from "../utils/googleMaps";
 
+// shadcn/ui
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
@@ -12,2258 +13,1390 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
+import { PushNotifications } from "@capacitor/push-notifications";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 
+// framer-motion
+import { motion, AnimatePresence } from "framer-motion";
+
+// icons
 import {
-  BellRing,
-  CalendarClock,
-  CheckCircle2,
-  Clock3,
-  FileText,
-  IndianRupee,
-  LogOut,
-  MapPin,
-  Phone,
-  Video,
-  ShieldCheck,
-  Stethoscope,
-  UserRound,
-  CalendarDays,
-  Activity,
-  Timer,
-  Pill,
-  Sparkles,
-  AlertCircle,
-  RefreshCcw,
-  Settings2,
-  PencilLine,
-  ArrowRight,
-  XCircle,
-  CheckCheck,
-  PhoneCall,
-  Mic,
-  MicOff,
-  Camera,
-  CameraOff,
-  PhoneOff,
-  Building2,
-  BadgeCheck,
-  Wallet,
-  ClipboardPlus,
-  ChevronRight,
+  Bike, CheckCheck, Pill, LogOut, MessageSquare, MapPin, Loader2,
+  AlarmClock, ShieldAlert, TimerReset, Navigation, Gauge, DollarSign, BellRing
 } from "lucide-react";
 
-dayjs.extend(relativeTime);
+// other components
+import ChatModal from "./ChatModal";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
-/* -------------------------------------------------------------------------- */
-/*                                   HELPERS                                  */
-/* -------------------------------------------------------------------------- */
+const BackgroundGeolocation = Capacitor?.isNativePlatform?.()
+  ? registerPlugin("BackgroundGeolocation")
+  : {
+      addWatcher: async () => null,
+      removeWatcher: async () => {},
+    };
 
-const BOOKING_STATES = {
-  PENDING: "pending",
-  ACCEPTED: "accepted",
-  UPCOMING: "upcoming",
-  LIVE_NOW: "live_now",
-  COMPLETED: "completed",
-  CANCELLED: "cancelled",
-  NO_SHOW: "no_show",
+/* ------------------------- helpers (unchanged logic) ------------------------ */
+// eslint-disable-next-line no-unused-vars
+function formatOrderDate(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  const opts = { day: "numeric", month: "long" };
+  const date = d.toLocaleDateString("en-IN", opts);
+  let hour = d.getHours();
+  const min = d.getMinutes().toString().padStart(2, "0");
+  const ampm = hour >= 12 ? "pm" : "am";
+  hour = hour % 12 || 12;
+  return `${date}, ${hour}:${min}${ampm}`;
+}
+
+// Directions using Maps JS SDK (future-friendly; no REST fetch)
+const getRouteAndDistance = async (origin, destination) => {
+  const google = await loadGoogleMaps(["marker"]);
+  return new Promise((resolve) => {
+    const svc = new google.maps.DirectionsService();
+    svc.route(
+      {
+        origin: new google.maps.LatLng(origin.lat, origin.lng),
+        destination: new google.maps.LatLng(destination.lat, destination.lng),
+        travelMode: google.maps.TravelMode.DRIVING, // preview; we open 2-wheeler for real nav
+        provideRouteAlternatives: false,
+      },
+      (result, status) => {
+        if (status !== "OK" || !result?.routes?.[0]) {
+          resolve({ poly: [], distanceKm: null });
+          return;
+        }
+        const r = result.routes[0];
+        const leg = r.legs?.[0];
+        const path = (r.overview_path || []).map(p => ({ lat: p.lat(), lng: p.lng() }));
+        resolve({
+          poly: path,
+          distanceKm: leg?.distance ? leg.distance.value / 1000 : null,
+        });
+      }
+    );
+  });
 };
 
-const NOTIFICATION_TYPES = {
-  NEW_BOOKING: "new_booking",
-  REMINDER_30: "reminder_30",
-  REMINDER_10: "reminder_10",
-  REMINDER_NOW: "reminder_now",
-  CANCELLED: "cancelled",
-  RESCHEDULED: "rescheduled",
-  NEEDS_ACTION: "needs_action",
+// Obfuscate a coordinate by ~400m (privacy circle center)
+function jitterLatLng(lat, lng, meters = 400) {
+  const earth = 111320; // meters per degree latitude
+  const dLat = (meters / earth) * (Math.random() < 0.5 ? -1 : 1);
+  const dLng = (meters / (earth * Math.cos((lat * Math.PI) / 180))) * (Math.random() < 0.5 ? -1 : 1);
+  return { lat: lat + dLat * 0.4, lng: lng + dLng * 0.4 }; // pull it in a bit
+}
+
+const mmss = (secs) => {
+  const m = Math.floor(secs / 60).toString().padStart(2, "0");
+  const s = Math.floor(secs % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
 };
 
-const CONSULT_MODES = {
-  AUDIO: "audio",
-  VIDEO: "video",
-  INPERSON: "inperson",
-};
+/* --------------------------- payouts sub-section --------------------------- */
+function DeliveryPayoutsSection({ partner }) {
+  const [payouts, setPayouts] = useState([]);
+  const [tab, setTab] = useState(0);
 
-function money(v) {
-  return `₹${Number(v || 0).toLocaleString("en-IN")}`;
-}
+  useEffect(() => {
+    if (!partner?._id) return;
+    axios.get(`${API_BASE_URL}/api/payments?deliveryPartnerId=${partner._id}&status=paid`)
+      .then(res => setPayouts(res.data))
+      .catch(() => setPayouts([]));
+  }, [partner]);
 
-function cx(...classes) {
-  return classes.filter(Boolean).join(" ");
-}
-
-function initials(name = "") {
-  return name
-    .split(" ")
-    .map((x) => x[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
-function formatSlot(dt) {
-  return dayjs(dt).format("DD MMM • hh:mm A");
-}
-
-function humanDiff(dt) {
-  return dayjs(dt).fromNow();
-}
-
-function countdownLabel(dt) {
-  const now = dayjs();
-  const target = dayjs(dt);
-  const mins = target.diff(now, "minute");
-  if (mins <= 0) return "Live now";
-  if (mins < 60) return `Starts in ${mins} min`;
-  const hrs = target.diff(now, "hour");
-  return `Starts in ${hrs} hr`;
-}
-
-function getBandFromFee(fee) {
-  const value = Number(fee || 0);
-  if (value <= 500) return { code: "0_500", label: "₹0–₹500", fee: 19 };
-  if (value <= 1000) return { code: "501_1000", label: "₹501–₹1000", fee: 39 };
-  if (value <= 1500) return { code: "1001_1500", label: "₹1001–₹1500", fee: 59 };
-  if (value <= 2000) return { code: "1501_2000", label: "₹1501–₹2000", fee: 79 };
-  return { code: "2001_plus", label: "₹2001+", fee: null };
-}
-
-function getStatusTone(status) {
-  switch (status) {
-    case BOOKING_STATES.PENDING:
-      return "bg-amber-100 text-amber-800 border-amber-200";
-    case BOOKING_STATES.ACCEPTED:
-      return "bg-sky-100 text-sky-800 border-sky-200";
-    case BOOKING_STATES.UPCOMING:
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
-    case BOOKING_STATES.LIVE_NOW:
-      return "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200";
-    case BOOKING_STATES.COMPLETED:
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
-    case BOOKING_STATES.CANCELLED:
-      return "bg-rose-100 text-rose-800 border-rose-200";
-    case BOOKING_STATES.NO_SHOW:
-      return "bg-slate-200 text-slate-700 border-slate-300";
-    default:
-      return "bg-slate-100 text-slate-700 border-slate-200";
-  }
-}
-
-function getModeTone(mode) {
-  if (mode === CONSULT_MODES.VIDEO) return "bg-indigo-100 text-indigo-700 border-indigo-200";
-  if (mode === CONSULT_MODES.AUDIO) return "bg-sky-100 text-sky-700 border-sky-200";
-  return "bg-emerald-100 text-emerald-700 border-emerald-200";
-}
-
-/* -------------------------------------------------------------------------- */
-/*                                   MOCK API                                 */
-/* -------------------------------------------------------------------------- */
-
-function seedDoctor() {
-  return {
-    _id: "doc_001",
-    fullName: "Dr. Hari Pratap",
-    specialty: "General Physician",
-    qualification: "MBBS, MD",
-    avatar: "",
-    phone: "9876543210",
-    email: "hari@godavaii.demo",
-    city: "Delhi",
-    area: "Basant Bagh",
-    yearsExperience: 9,
-    profileStatus: "Approved",
-    online: true,
-    platformBand: getBandFromFee(299),
-    payoutAccountMasked: "HDFC •••• 4821",
-    fees: {
-      audio: 299,
-      video: 299,
-      inperson: 399,
-    },
-    modes: {
-      audio: true,
-      video: true,
-      inperson: true,
-    },
-    clinic: {
-      verified: true,
-      name: "Metro Care Clinic",
-      addressLine1: "C-17, Basant Bagh Main Road",
-      locality: "Basant Bagh",
-      city: "Delhi",
-      pin: "1100XX",
-      mapLabel: "Metro Care Clinic, Basant Bagh",
-      coordinates: { lat: 28.6139, lng: 77.209 },
-      consultationDays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-      startTime: "09:00",
-      endTime: "13:00",
-      slotDuration: 20,
-      arrivalWindow: 20,
-      maxPatientsPerDay: 24,
-    },
-  };
-}
-
-function seedRequests() {
-  const now = dayjs();
-  return [
-    {
-      _id: "req_001",
-      patientName: "Neha Sharma",
-      patientAge: 31,
-      patientGender: "Female",
-      mode: CONSULT_MODES.VIDEO,
-      status: BOOKING_STATES.PENDING,
-      bookedFor: now.add(35, "minute").toISOString(),
-      createdAt: now.subtract(2, "minute").toISOString(),
-      fee: 299,
-      symptoms: "Fever, body ache, sore throat since 2 days",
-      locationLabel: "Rajouri Garden",
-      patientId: "pat_001",
-    },
-    {
-      _id: "req_002",
-      patientName: "Aman Verma",
-      patientAge: 27,
-      patientGender: "Male",
-      mode: CONSULT_MODES.AUDIO,
-      status: BOOKING_STATES.PENDING,
-      bookedFor: now.add(58, "minute").toISOString(),
-      createdAt: now.subtract(5, "minute").toISOString(),
-      fee: 299,
-      symptoms: "Acidity, stomach burning after meals",
-      locationLabel: "Punjabi Bagh",
-      patientId: "pat_002",
-    },
-    {
-      _id: "req_003",
-      patientName: "Sana Khan",
-      patientAge: 24,
-      patientGender: "Female",
-      mode: CONSULT_MODES.INPERSON,
-      status: BOOKING_STATES.PENDING,
-      bookedFor: now.add(1, "hour").add(20, "minute").toISOString(),
-      createdAt: now.subtract(8, "minute").toISOString(),
-      fee: 399,
-      symptoms: "Skin rash and itching",
-      locationLabel: "Basant Bagh",
-      patientId: "pat_003",
-    },
-  ];
-}
-
-function seedUpcoming() {
-  const now = dayjs();
-  return [
-    {
-      _id: "bk_001",
-      patientName: "Rohit Bansal",
-      patientAge: 38,
-      patientGender: "Male",
-      mode: CONSULT_MODES.VIDEO,
-      status: BOOKING_STATES.UPCOMING,
-      bookedFor: now.add(12, "minute").toISOString(),
-      fee: 299,
-      reason: "Follow-up for viral fever",
-      patientId: "pat_004",
-      canJoin: false,
-    },
-    {
-      _id: "bk_002",
-      patientName: "Pooja Arora",
-      patientAge: 29,
-      patientGender: "Female",
-      mode: CONSULT_MODES.AUDIO,
-      status: BOOKING_STATES.LIVE_NOW,
-      bookedFor: now.subtract(2, "minute").toISOString(),
-      fee: 299,
-      reason: "Migraine and nausea",
-      patientId: "pat_005",
-      canJoin: true,
-    },
-    {
-      _id: "bk_003",
-      patientName: "Kunal Sethi",
-      patientAge: 42,
-      patientGender: "Male",
-      mode: CONSULT_MODES.INPERSON,
-      status: BOOKING_STATES.UPCOMING,
-      bookedFor: now.add(55, "minute").toISOString(),
-      fee: 399,
-      reason: "BP review and prescription refill",
-      patientId: "pat_006",
-      canJoin: false,
-    },
-  ];
-}
-
-function seedNotifications() {
-  const now = dayjs();
-  return [
-    {
-      _id: "n_001",
-      type: NOTIFICATION_TYPES.NEW_BOOKING,
-      title: "New consultation booked",
-      body: "Neha Sharma booked a Video consult for 05:30 PM",
-      createdAt: now.subtract(1, "minute").toISOString(),
-      read: false,
-    },
-    {
-      _id: "n_002",
-      type: NOTIFICATION_TYPES.REMINDER_10,
-      title: "Consult starts in 10 minutes",
-      body: "Rohit Bansal • Video consult",
-      createdAt: now.subtract(4, "minute").toISOString(),
-      read: false,
-    },
-    {
-      _id: "n_003",
-      type: NOTIFICATION_TYPES.CANCELLED,
-      title: "Patient cancelled appointment",
-      body: "Ajay Gupta cancelled 03:00 PM audio consult",
-      createdAt: now.subtract(2, "hour").toISOString(),
-      read: true,
-    },
-  ];
-}
-
-function seedCompletedPrescriptions() {
-  return [
-    {
-      _id: "rx_001",
-      patientName: "Megha Jain",
-      createdAt: dayjs().subtract(1, "day").toISOString(),
-      diagnosis: "Upper respiratory tract infection",
-      meds: 3,
-      sentToPatient: true,
-    },
-  ];
-}
-
-function seedCatalog() {
-  return [
-    {
-      id: "med_1",
-      prescribed: "Augmentin 625",
-      salt: "Amoxicillin + Clavulanic Acid",
-      dosage: "1 tablet",
-      frequency: "BD",
-      duration: "5 days",
-      howToTake: "After food",
-      matchedBrand: { name: "Augmentin 625", price: 210, qty: 10 },
-      generic: { name: "Amoxyclav 625 Generic", price: 124, qty: 10, savings: 86, available: true },
-      sensitive: false,
-    },
-    {
-      id: "med_2",
-      prescribed: "Dolo 650",
-      salt: "Paracetamol 650mg",
-      dosage: "1 tablet",
-      frequency: "SOS",
-      duration: "3 days",
-      howToTake: "After food if stomach sensitive",
-      matchedBrand: { name: "Dolo 650", price: 34, qty: 15 },
-      generic: { name: "Paracetamol 650 Generic", price: 21, qty: 15, savings: 13, available: true },
-      sensitive: false,
-    },
-    {
-      id: "med_3",
-      prescribed: "Pantop 40",
-      salt: "Pantoprazole 40mg",
-      dosage: "1 tablet",
-      frequency: "OD",
-      duration: "5 days",
-      howToTake: "Before breakfast",
-      matchedBrand: { name: "Pantop 40", price: 115, qty: 15 },
-      generic: { name: "Pantoprazole 40 Generic", price: 61, qty: 15, savings: 54, available: true },
-      sensitive: false,
-    },
-  ];
-}
-
-/* -------------------------------------------------------------------------- */
-/*                                    UI                                      */
-/* -------------------------------------------------------------------------- */
-
-function SectionCard({ title, icon: Icon, right, children, className = "" }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={cx(
-        "rounded-[26px] border border-emerald-100/80 bg-white/90 shadow-[0_8px_30px_rgba(16,24,40,0.06)] backdrop-blur",
-        className
-      )}
-    >
-      <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
-        <div className="flex items-center gap-2">
-          {Icon ? <Icon className="h-5 w-5 text-emerald-700" /> : null}
-          <h3 className="text-[18px] font-extrabold tracking-tight text-slate-900">{title}</h3>
-        </div>
-        {right}
-      </div>
-      <div className="p-5">{children}</div>
-    </motion.div>
-  );
-}
-
-function KpiCard({ label, value, sub, icon: Icon, tone = "emerald" }) {
-  const toneMap = {
-    emerald: "from-emerald-500/10 to-emerald-100/60 text-emerald-700",
-    indigo: "from-indigo-500/10 to-indigo-100/60 text-indigo-700",
-    amber: "from-amber-500/10 to-amber-100/60 text-amber-700",
-    rose: "from-rose-500/10 to-rose-100/60 text-rose-700",
-  };
+  const today = dayjs().format("YYYY-MM-DD");
+  const yesterday = dayjs().subtract(1, "day").format("YYYY-MM-DD");
+  const filtered = payouts.filter(pay => {
+    const payDay = dayjs(pay.createdAt).format("YYYY-MM-DD");
+    return tab === 0 ? payDay === today : payDay === yesterday;
+  });
+  const total = filtered.reduce((sum, p) => sum + (p.deliveryAmount || 0), 0);
+  if (!partner?._id) return null;
 
   return (
-    <div className="rounded-[22px] border border-white/70 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</div>
-          <div className="mt-2 text-[28px] font-black leading-none text-slate-900">{value}</div>
-          {sub ? <div className="mt-2 text-sm text-slate-600">{sub}</div> : null}
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-emerald-200/60 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h3 className="text-emerald-900 font-extrabold text-lg">Your Delivery Earnings {tab === 0 ? "Today" : "Yesterday"}</h3>
+          <div className="flex gap-2">
+            <Button size="sm" variant={tab === 0 ? "default" : "outline"} className="!font-bold" onClick={() => setTab(0)}>Today</Button>
+            <Button size="sm" variant={tab === 1 ? "default" : "outline"} className="!font-bold" onClick={() => setTab(1)}>Yesterday</Button>
+          </div>
         </div>
-        <div className={cx("rounded-2xl bg-gradient-to-br p-3", toneMap[tone])}>
-          <Icon className="h-5 w-5" />
+        <div className="mt-3 text-3xl font-extrabold text-emerald-700">₹{total.toLocaleString("en-IN")}</div>
+        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-700">
+              <tr>
+                <th className="px-3 py-2 text-left">Order</th>
+                <th className="px-3 py-2 text-left">Date</th>
+                <th className="px-3 py-2 text-left">Fee</th>
+                <th className="px-3 py-2 text-left">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(pay => (
+                <tr key={pay._id} className="border-t">
+                  <td className="px-3 py-2">#{pay.orderId?._id?.slice(-5) || "NA"}</td>
+                  <td className="px-3 py-2">{dayjs(pay.createdAt).format("DD/MM/YYYY")}</td>
+                  <td className="px-3 py-2">₹{pay.deliveryAmount}</td>
+                  <td className="px-3 py-2">{pay.status}</td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan="4" className="px-3 py-3 text-amber-600">No payouts yet.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   );
 }
 
-function ModeBadge({ mode }) {
-  const label = mode === CONSULT_MODES.VIDEO ? "Video" : mode === CONSULT_MODES.AUDIO ? "Audio" : "In-person";
-  return <Badge className={cx("border font-bold", getModeTone(mode))}>{label}</Badge>;
-}
+/* ---- Tiny per-order map (unchanged UI; safe updates) ---- */
+function OrderMiniMap({ center, pharmacyLoc, userLoc, path, showPharmacy = true, showUser = true, approxDrop = null }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const pharmMarkerRef = useRef(null);
+  const userMarkerRef = useRef(null);
+  const circleRef = useRef(null);
+  const polyRef = useRef(null);
+  const fitTimeoutRef = useRef(null);
+  const lastSigRef = useRef("");
 
-function StatusBadge({ status }) {
-  const labelMap = {
-    pending: "Pending",
-    accepted: "Accepted",
-    upcoming: "Upcoming",
-    live_now: "Live Now",
-    completed: "Completed",
-    cancelled: "Cancelled",
-    no_show: "No Show",
-  };
-  return <Badge className={cx("border font-bold", getStatusTone(status))}>{labelMap[status] || status}</Badge>;
-}
+  // Create map once
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const google = await loadGoogleMaps(["marker", "places"]);
+      if (!mounted || !containerRef.current || mapRef.current) return;
 
-function NotificationBadge({ count }) {
-  if (!count) return null;
+      mapRef.current = new google.maps.Map(containerRef.current, {
+        center: center || { lat: 19.076, lng: 72.877 },
+        zoom: 14,
+        mapId: "godavaii-map",
+        streetViewControl: false,
+        mapTypeControl: false,
+        gestureHandling: "greedy",
+      });
+
+      // pre-create polyline
+      polyRef.current = new google.maps.Polyline({
+        map: mapRef.current,
+        strokeOpacity: 0.9,
+        strokeWeight: 4,
+        strokeColor: "#0ea5a4",
+        path: [],
+      });
+    })();
+
+    return () => {
+      mounted = false;
+      if (fitTimeoutRef.current) {
+        clearTimeout(fitTimeoutRef.current);
+        fitTimeoutRef.current = null;
+      }
+      polyRef.current = null;
+      pharmMarkerRef.current = null;
+      userMarkerRef.current = null;
+      circleRef.current = null;
+      mapRef.current = null;
+    };
+    // eslint-disable-next-line
+  }, []);
+
+  // Update markers / path / circle only when inputs change
+  useEffect(() => {
+    const gmap = mapRef.current;
+    if (!gmap) return;
+
+    const pLat = showPharmacy ? pharmacyLoc?.lat : null;
+    const pLng = showPharmacy ? pharmacyLoc?.lng : null;
+    const uLat = showUser ? userLoc?.lat : null;
+    const uLng = showUser ? userLoc?.lng : null;
+    const pathLen = Array.isArray(path) ? path.length : 0;
+    const cLat = approxDrop?.lat ?? null;
+    const cLng = approxDrop?.lng ?? null;
+    const cRad = approxDrop?.radius ?? null;
+
+    const sig = [pLat, pLng, uLat, uLng, pathLen, cLat, cLng, cRad]
+      .map(v => (v == null ? "x" : String(+Number(v).toFixed(6))))
+      .join("|");
+    if (sig === lastSigRef.current) return;
+    lastSigRef.current = sig;
+
+    const google = window.google;
+
+    // FIXED (marker update safe for both classic and AdvancedMarker)
+    const addOrMove = (ref, pos, title, label) => {
+      if (!pos?.lat || !pos?.lng || !mapRef.current) return;
+
+      if (ref.current) {
+        if ("setPosition" in ref.current) {
+          ref.current.setPosition(pos); // classic Marker
+        } else {
+          ref.current.position = pos;   // AdvancedMarkerElement
+        }
+        return;
+      }
+
+      try {
+        const pill = document.createElement("div");
+        pill.style.cssText =
+          "background:#0ea5a4;color:#fff;font-weight:800;border-radius:9999px;padding:4px 8px;font-size:12px";
+        pill.textContent = label;
+        ref.current = new google.maps.marker.AdvancedMarkerElement({
+          map: mapRef.current,
+          position: pos,
+          title,
+          content: pill,
+        });
+      } catch {
+        ref.current = new google.maps.Marker({
+          map: mapRef.current,
+          position: pos,
+          title,
+          label,
+        });
+      }
+    };
+
+    // Pharmacy marker
+    if (pLat && pLng) {
+      addOrMove(pharmMarkerRef, { lat: pLat, lng: pLng }, "Pharmacy", "P");
+    } else if (pharmMarkerRef.current) {
+      if ("setMap" in pharmMarkerRef.current) pharmMarkerRef.current.setMap(null);
+      else pharmMarkerRef.current.map = null;
+      pharmMarkerRef.current = null;
+    }
+
+    // User marker
+    if (uLat && uLng) {
+      addOrMove(userMarkerRef, { lat: uLat, lng: uLng }, "Delivery Address", "U");
+    } else if (userMarkerRef.current) {
+      if ("setMap" in userMarkerRef.current) userMarkerRef.current.setMap(null);
+      else userMarkerRef.current.map = null;
+      userMarkerRef.current = null;
+    }
+
+    // Approximate drop circle
+    if (cLat && cLng && cRad) {
+      if (!circleRef.current) {
+        circleRef.current = new google.maps.Circle({
+          map: gmap,
+          center: { lat: cLat, lng: cLng },
+          radius: cRad,
+          strokeColor: "#0ea5a4",
+          strokeOpacity: 0.55,
+          strokeWeight: 2,
+          fillColor: "#0ea5a4",
+          fillOpacity: 0.15,
+        });
+      } else {
+        circleRef.current.setCenter({ lat: cLat, lng: cLng });
+        circleRef.current.setRadius(cRad);
+      }
+    } else if (circleRef.current) {
+      circleRef.current.setMap(null);
+      circleRef.current = null;
+    }
+
+    // Polyline
+    if (polyRef.current) {
+      polyRef.current.setPath(Array.isArray(path) ? path : []);
+    }
+
+    // Fit bounds softly
+    if (fitTimeoutRef.current) clearTimeout(fitTimeoutRef.current);
+    fitTimeoutRef.current = setTimeout(() => {
+      const bounds = new google.maps.LatLngBounds();
+      if (pLat && pLng) bounds.extend({ lat: pLat, lng: pLng });
+      if (uLat && uLng) bounds.extend({ lat: uLat, lng: uLng });
+      (Array.isArray(path) ? path : []).forEach(pt => bounds.extend(pt));
+      if (cLat && cLng && cRad) {
+        const lat = cLat, lng = cLng;
+        const dLat = cRad / 111320;
+        const dLng = cRad / (111320 * Math.cos((lat * Math.PI) / 180));
+        bounds.extend({ lat: lat + dLat, lng });
+        bounds.extend({ lat: lat - dLat, lng });
+        bounds.extend({ lat, lng: lng + dLng });
+        bounds.extend({ lat, lng: lng - dLng });
+      }
+
+      if (!bounds.isEmpty()) {
+        gmap.fitBounds(bounds, { top: 20, right: 20, bottom: 20, left: 20 });
+        const once = google.maps.event.addListenerOnce(gmap, "idle", () => {
+          const z = gmap.getZoom();
+          if (z > 16) gmap.setZoom(16);
+        });
+        setTimeout(() => google.maps.event.removeListener(once), 0);
+      }
+    }, 120);
+  }, [center, pharmacyLoc, userLoc, path, showPharmacy, showUser, approxDrop]);
+
   return (
-    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-rose-600 px-2 text-xs font-black text-white">
-      {count}
-    </span>
-  );
-}
-
-function TextArea({ value, onChange, placeholder, rows = 4, className = "" }) {
-  return (
-    <textarea
-      rows={rows}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      className={cx(
-        "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100",
-        className
-      )}
+    <div
+      ref={containerRef}
+      style={{ width: "100%", height: "230px", borderRadius: 18, overflow: "hidden" }}
     />
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*                              MAIN COMPONENT                                */
-/* -------------------------------------------------------------------------- */
-
-export default function DoctorDashboard() {
-  const [doctor, setDoctor] = useState(seedDoctor());
-  const [incomingRequests, setIncomingRequests] = useState(seedRequests());
-  const [upcomingConsults, setUpcomingConsults] = useState(seedUpcoming());
-  const [notifications, setNotifications] = useState(seedNotifications());
-  const [completedPrescriptions] = useState(seedCompletedPrescriptions());
-
-  const [settingsDraft, setSettingsDraft] = useState({
-    online: true,
-    audioEnabled: true,
-    videoEnabled: true,
-    inpersonEnabled: true,
-    audioFee: 299,
-    videoFee: 299,
-    inpersonFee: 399,
-    consultationDays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-    startTime: "09:00",
-    endTime: "13:00",
-    slotDuration: 20,
-    arrivalWindow: 20,
-    maxPatientsPerDay: 24,
+/* -------------------------------- component -------------------------------- */
+export default function DeliveryDashboard() {
+  const [loggedIn, setLoggedIn] = useState(() => {
+    const t = localStorage.getItem("deliveryToken");
+    const id = localStorage.getItem("deliveryPartnerId");
+    return !!(t && id);
   });
+  const [partner, setPartner] = useState(null);
+  const [active, setActive] = useState(false);
+  const [tab, setTab] = useState(0);
+  const [orders, setOrders] = useState([]);
+  const [pastOrders, setPastOrders] = useState([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOrder, setChatOrder] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const firstLoad = useRef(true);
+  const unreadTimerRef = useRef(null);
+  const inflightRef = useRef(false); // <<< prevent overlapping polls
+  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+  const [loginDialog, setLoginDialog] = useState(!loggedIn);
+  const [loginForm, setLoginForm] = useState({ mobile: "", password: "" });
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [resetPhase, setResetPhase] = useState(0);
+  const [forgotForm, setForgotForm] = useState({ mobile: "", otp: "", newPassword: "" });
+  const [polylines, setPolylines] = useState({});
+  const [orderDistances, setOrderDistances] = useState({});
+  const [orderUnreadCounts, setOrderUnreadCounts] = useState({});
 
-  const [clinicChangeOpen, setClinicChangeOpen] = useState(false);
-  const [clinicChangeDraft, setClinicChangeDraft] = useState({
-    clinicName: doctor.clinic.name,
-    addressLine1: doctor.clinic.addressLine1,
-    locality: doctor.clinic.locality,
-    city: doctor.clinic.city,
-    pin: doctor.clinic.pin,
-    mapLabel: doctor.clinic.mapLabel,
-  });
+  // NEW: driver live location
+  const [driverLoc, setDriverLoc] = useState(null); // {lat, lng}
 
-  const [callOpen, setCallOpen] = useState(false);
-  const [callSession, setCallSession] = useState(null);
-  const [callSeconds, setCallSeconds] = useState(0);
-  const [callState, setCallState] = useState({
-    micOn: true,
-    camOn: true,
-    connected: true,
-    notes: "",
-  });
+  // NEW: masked approximate drop centers per order (privacy)
+  const [maskedDrops, setMaskedDrops] = useState({}); // { [orderId]: {lat, lng, radius} }
 
-  const [prescriptionOpen, setPrescriptionOpen] = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState(null);
-  const [prescriptionForm, setPrescriptionForm] = useState({
-    diagnosis: "",
-    complaint: "",
-    precautions: "",
-    testsAdvised: "",
-    followUpDate: "",
-    medicines: [
-      {
-        prescribed: "",
-        dosage: "",
-        frequency: "",
-        duration: "",
-        howToTake: "",
-        salt: "",
-        notes: "",
-      },
-    ],
-  });
+  // Live Ops UI
+  const [autoAccept, setAutoAccept] = useState(() => localStorage.getItem("gd_auto_accept") === "1");
+  const [onBreak, setOnBreak] = useState(false);
+  const [breakRemaining, setBreakRemaining] = useState(0);
 
-  const [prescriptionPreviewOpen, setPrescriptionPreviewOpen] = useState(false);
-  const [patientCartPreview, setPatientCartPreview] = useState([]);
-  const [snackbar, setSnackbar] = useState({ open: false, message: "", tone: "success" });
+  // glance UI
+  const [todayEarnings, setTodayEarnings] = useState(null);
+  // eslint-disable-next-line no-unused-vars
+  const [cashDue, setCashDue] = useState(0);
 
-  const timerRef = useRef(null);
+  // NEW: Instant offer popup state + audio
+  const [offer, setOffer] = useState(null); // {orderId, pharmacy, total, ...}
+  const [offerDeadline, setOfferDeadline] = useState(null); // epoch ms
+  const [left, setLeft] = useState(0);
+  const offerAudioRef = useRef(null);
+  const offerLoopRef = useRef(null);
 
-  const unreadNotifications = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
+  // Auto-refresh orders (poll)
+  useEffect(() => {
+    if (!loggedIn) return;
+    const tick = async () => {
+      if (inflightRef.current) return;
+      inflightRef.current = true;
+      try {
+        await fetchProfileAndOrders();
+      } finally {
+        inflightRef.current = false;
+      }
+    };
+    // run immediately, then every 3s
+    tick();
+    const interval = setInterval(tick, 3000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loggedIn, tab]);
 
-  const nextConsult = useMemo(() => {
-    const sorted = [...upcomingConsults]
-      .filter((x) => x.status === BOOKING_STATES.UPCOMING || x.status === BOOKING_STATES.LIVE_NOW || x.status === BOOKING_STATES.ACCEPTED)
-      .sort((a, b) => dayjs(a.bookedFor).valueOf() - dayjs(b.bookedFor).valueOf());
-    return sorted[0] || null;
-  }, [upcomingConsults]);
-
-  const todaySummary = useMemo(() => {
-    const pending = incomingRequests.filter((x) => x.status === BOOKING_STATES.PENDING).length;
-    const upcoming = upcomingConsults.filter(
-      (x) => x.status === BOOKING_STATES.UPCOMING || x.status === BOOKING_STATES.LIVE_NOW || x.status === BOOKING_STATES.ACCEPTED
-    ).length;
-    const completed = 6;
-    const cancelled = 1;
-    const earnings = 4280;
-    return { pending, upcoming, completed, cancelled, earnings };
-  }, [incomingRequests, upcomingConsults]);
-
-  const currentBand = useMemo(() => {
-    const activeFees = [];
-    if (settingsDraft.audioEnabled) activeFees.push(Number(settingsDraft.audioFee || 0));
-    if (settingsDraft.videoEnabled) activeFees.push(Number(settingsDraft.videoFee || 0));
-    if (settingsDraft.inpersonEnabled) activeFees.push(Number(settingsDraft.inpersonFee || 0));
-    const maxFee = activeFees.length ? Math.max(...activeFees) : 0;
-    return getBandFromFee(maxFee);
-  }, [settingsDraft]);
+  // Send driver location while ACTIVE + keep local copy for routing to pickup
+  useEffect(() => {
+    if (!loggedIn || !partner?._id || !active) return;
+    let watchId;
+    const send = async (coords) => {
+      const { latitude, longitude } = coords;
+      setDriverLoc({ lat: latitude, lng: longitude }); // local
+      try {
+        await axios.post(`${API_BASE_URL}/api/delivery/update-location`, {
+          partnerId: partner._id, lat: latitude, lng: longitude,
+        });
+      } catch {}
+    };
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => send(pos.coords), () => {},
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+      );
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => send(pos.coords), () => {},
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+      );
+    }
+    return () => { if (navigator.geolocation && watchId) navigator.geolocation.clearWatch(watchId); };
+  }, [loggedIn, partner?._id, active]);
 
   useEffect(() => {
-    if (!callOpen) {
-      if (timerRef.current) clearInterval(timerRef.current);
-      setCallSeconds(0);
+  if (!loggedIn || !partner?._id) return;
+  if (!Capacitor?.isNativePlatform?.()) return; // skip on web builds
+
+  let watcherId;
+
+  (async () => {
+    try {
+      if (!active) return; // only track when rider is active
+
+      // Start background location (Android keeps running when app is minimized/locked)
+      watcherId = await BackgroundGeolocation.addWatcher(
+        {
+          // shown while running as a foreground service
+          backgroundTitle: 'GoDavaii Delivery',
+          backgroundMessage: 'Sharing your live location',
+          // tuning
+          distanceFilter: 25,          // meters between updates
+          stale: false,
+          requestPermissions: true,    // ask on first run
+          stopOnTerminate: false       // keep tracking after app is killed (Android)
+          // Some versions also accept: interval: 8000, fastestInterval: 5000
+        },
+        async (position, error) => {
+          if (error) return; // ignore transient errors
+          const { latitude, longitude } = position;
+          setDriverLoc({ lat: latitude, lng: longitude });
+          try {
+            await axios.post(`${API_BASE_URL}/api/delivery/update-location`, {
+              partnerId: partner._id,
+              lat: latitude,
+              lng: longitude,
+            });
+          } catch {}
+        }
+      );
+    } catch {
+      // likely running on web or no permission — silently ignore
+    }
+  })();
+
+  return () => {
+    // stop background watcher when leaving the screen or toggling inactive
+    if (watcherId) BackgroundGeolocation.removeWatcher({ id: watcherId });
+  };
+}, [active, loggedIn, partner?._id]);
+
+  // Extra safety net: poll for GPS every ~90s while Active (works even if tab is backgrounded)
+  useEffect(() => {
+    if (!loggedIn || !partner?._id || !active) return;
+    let timer = setInterval(() => {
+      try {
+        if (!navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            const { latitude, longitude } = pos.coords || {};
+            setDriverLoc({ lat: latitude, lng: longitude });
+            try {
+              await axios.post(`${API_BASE_URL}/api/delivery/update-location`, {
+                partnerId: partner._id, lat: latitude, lng: longitude,
+              });
+            } catch {}
+          },
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 }
+        );
+      } catch {}
+    }, 90_000); // ~1.5 min
+    return () => clearInterval(timer);
+  }, [loggedIn, partner?._id, active]);
+
+  useEffect(() => {
+    if (loggedIn) {
+      setLoading(true);
+      fetchProfileAndOrders().finally(() => {
+        setLoading(false);
+        firstLoad.current = false;
+      });
+    }
+    // eslint-disable-next-line
+  }, [loggedIn]);
+
+  // Unread chat counts
+  useEffect(() => {
+    if (!loggedIn || !orders.length) return;
+    const token = localStorage.getItem("deliveryToken");
+    if (!token) return;
+    let cancelled = false;
+
+    const fetchUnread = async () => {
+      const counts = {};
+      await Promise.all(
+        orders.map(async (order) => {
+          try {
+            const res = await axios.get(
+              `${API_BASE_URL}/api/chat/${order._id}/user-unread-count`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            counts[order._id] = res.data.unreadCount || 0;
+          } catch {
+            counts[order._id] = 0; // don't logout on chat errors
+          }
+        })
+      );
+      if (!cancelled) setOrderUnreadCounts(counts);
+    };
+
+    fetchUnread();
+    unreadTimerRef.current = setInterval(fetchUnread, 7000);
+    return () => {
+      cancelled = true;
+      if (unreadTimerRef.current) clearInterval(unreadTimerRef.current);
+    };
+  }, [orders, loggedIn]);
+
+  // Persist auto-accept
+  useEffect(() => {
+    localStorage.setItem("gd_auto_accept", autoAccept ? "1" : "0");
+  }, [autoAccept]);
+
+  // Break timer
+  useEffect(() => {
+    if (!onBreak || breakRemaining <= 0) return;
+    const t = setInterval(() => setBreakRemaining((s) => s - 1), 1000);
+    return () => clearInterval(t);
+  }, [onBreak, breakRemaining]);
+
+  useEffect(() => {
+    if (onBreak && breakRemaining <= 0) {
+      setOnBreak(false);
+      setSnackbar({ open: true, message: "Break finished — back online!", severity: "success" });
+    }
+  }, [onBreak, breakRemaining]);
+
+  // Today earnings glance
+  useEffect(() => {
+    const fetchToday = async () => {
+      try {
+        if (!partner?._id) return;
+        const res = await axios.get(`${API_BASE_URL}/api/payments?deliveryPartnerId=${partner._id}&status=paid`);
+        const today = dayjs().format("YYYY-MM-DD");
+        const todays = (res.data || []).filter(p => dayjs(p.createdAt).format("YYYY-MM-DD") === today);
+        const total = todays.reduce((s, p) => s + (p.deliveryAmount || 0), 0);
+        setTodayEarnings(total);
+      } catch {
+        setTodayEarnings(null);
+      }
+    };
+    fetchToday();
+  }, [partner?._id]);
+
+  // central fetch (SAFE: only logout on 401/403 or missing creds)
+  const fetchProfileAndOrders = async () => {
+    const token = localStorage.getItem("deliveryToken");
+    const partnerId = localStorage.getItem("deliveryPartnerId");
+    if (!token || !partnerId) {
+      hardLogout("Session missing. Please login again.");
       return;
     }
-    timerRef.current = setInterval(() => setCallSeconds((s) => s + 1), 1000);
-    return () => timerRef.current && clearInterval(timerRef.current);
-  }, [callOpen]);
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      if (snackbar.open) setSnackbar((s) => ({ ...s, open: false }));
-    }, 2200);
-    return () => clearTimeout(t);
-  }, [snackbar]);
-
-  /* ------------------------------- ACTIONS -------------------------------- */
-
-  async function fakePersist(payload) {
+    let resProfile, resOrders;
     try {
-      // Frontend-first placeholder. Wire your real endpoint later.
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      await axios?.defaults; // prevent eslint unused warning style
-      return payload;
-    } catch {
-      return payload;
-    }
-  }
-
-  async function handleSaveSettings() {
-    const payload = {
-      online: settingsDraft.online,
-      modes: {
-        audio: settingsDraft.audioEnabled,
-        video: settingsDraft.videoEnabled,
-        inperson: settingsDraft.inpersonEnabled,
-      },
-      fees: {
-        audio: settingsDraft.audioEnabled ? Number(settingsDraft.audioFee || 0) : null,
-        video: settingsDraft.videoEnabled ? Number(settingsDraft.videoFee || 0) : null,
-        inperson: settingsDraft.inpersonEnabled ? Number(settingsDraft.inpersonFee || 0) : null,
-      },
-      availability: {
-        consultationDays: settingsDraft.consultationDays,
-        startTime: settingsDraft.startTime,
-        endTime: settingsDraft.endTime,
-        slotDuration: Number(settingsDraft.slotDuration || 20),
-        arrivalWindow: Number(settingsDraft.arrivalWindow || 20),
-        maxPatientsPerDay: Number(settingsDraft.maxPatientsPerDay || 20),
-      },
-    };
-
-    await fakePersist(payload);
-
-    setDoctor((prev) => ({
-      ...prev,
-      online: settingsDraft.online,
-      platformBand: currentBand,
-      fees: {
-        audio: settingsDraft.audioEnabled ? Number(settingsDraft.audioFee || 0) : 0,
-        video: settingsDraft.videoEnabled ? Number(settingsDraft.videoFee || 0) : 0,
-        inperson: settingsDraft.inpersonEnabled ? Number(settingsDraft.inpersonFee || 0) : 0,
-      },
-      modes: {
-        audio: settingsDraft.audioEnabled,
-        video: settingsDraft.videoEnabled,
-        inperson: settingsDraft.inpersonEnabled,
-      },
-      clinic: {
-        ...prev.clinic,
-        consultationDays: settingsDraft.consultationDays,
-        startTime: settingsDraft.startTime,
-        endTime: settingsDraft.endTime,
-        slotDuration: Number(settingsDraft.slotDuration || 20),
-        arrivalWindow: Number(settingsDraft.arrivalWindow || 20),
-        maxPatientsPerDay: Number(settingsDraft.maxPatientsPerDay || 20),
-      },
-    }));
-
-    setSnackbar({ open: true, message: "Doctor settings saved", tone: "success" });
-  }
-
-  async function handleAcceptRequest(request) {
-    const accepted = {
-      ...request,
-      status: dayjs(request.bookedFor).isBefore(dayjs().add(5, "minute")) ? BOOKING_STATES.LIVE_NOW : BOOKING_STATES.UPCOMING,
-      canJoin: dayjs(request.bookedFor).isBefore(dayjs().add(5, "minute")),
-      reason: request.symptoms,
-    };
-
-    setIncomingRequests((prev) => prev.filter((x) => x._id !== request._id));
-    setUpcomingConsults((prev) => [accepted, ...prev]);
-
-    setNotifications((prev) => [
-      {
-        _id: `n_${Date.now()}`,
-        type: NOTIFICATION_TYPES.NEEDS_ACTION,
-        title: "Booking accepted",
-        body: `${request.patientName} moved to Upcoming Consults`,
-        createdAt: new Date().toISOString(),
-        read: false,
-      },
-      ...prev,
-    ]);
-
-    setSnackbar({ open: true, message: `Accepted ${request.patientName}`, tone: "success" });
-  }
-
-  async function handleRejectRequest(request) {
-    setIncomingRequests((prev) => prev.filter((x) => x._id !== request._id));
-    setNotifications((prev) => [
-      {
-        _id: `n_${Date.now()}`,
-        type: NOTIFICATION_TYPES.CANCELLED,
-        title: "Booking rejected",
-        body: `${request.patientName}'s request was declined`,
-        createdAt: new Date().toISOString(),
-        read: false,
-      },
-      ...prev,
-    ]);
-    setSnackbar({ open: true, message: `Rejected ${request.patientName}`, tone: "error" });
-  }
-
-  function handleRescheduleRequest(request) {
-    setSnackbar({
-      open: true,
-      message: `Reschedule flow ready for ${request.patientName} (wire backend later)`,
-      tone: "success",
-    });
-  }
-
-  function handleJoinConsult(booking) {
-    setCallSession(booking);
-    setCallState({
-      micOn: true,
-      camOn: booking.mode === CONSULT_MODES.VIDEO,
-      connected: true,
-      notes: "",
-    });
-    setCallOpen(true);
-  }
-
-  function handleEndCall() {
-    setCallOpen(false);
-    if (callSession) {
-      const booking = callSession;
-      setUpcomingConsults((prev) =>
-        prev.map((item) =>
-          item._id === booking._id ? { ...item, status: BOOKING_STATES.COMPLETED, canJoin: false } : item
-        )
-      );
-      setSnackbar({ open: true, message: `Consult ended with ${booking.patientName}`, tone: "success" });
-    }
-  }
-
-  function openPrescriptionBuilder(booking) {
-    setSelectedBooking(booking);
-    setPrescriptionForm({
-      diagnosis: "",
-      complaint: booking?.reason || booking?.symptoms || "",
-      precautions: "",
-      testsAdvised: "",
-      followUpDate: "",
-      medicines: [
-        {
-          prescribed: "",
-          dosage: "",
-          frequency: "",
-          duration: "",
-          howToTake: "",
-          salt: "",
-          notes: "",
-        },
-      ],
-    });
-    setPrescriptionOpen(true);
-  }
-
-  function addMedicineRow() {
-    setPrescriptionForm((prev) => ({
-      ...prev,
-      medicines: [
-        ...prev.medicines,
-        {
-          prescribed: "",
-          dosage: "",
-          frequency: "",
-          duration: "",
-          howToTake: "",
-          salt: "",
-          notes: "",
-        },
-      ],
-    }));
-  }
-
-  function updateMedicineRow(index, key, value) {
-    setPrescriptionForm((prev) => ({
-      ...prev,
-      medicines: prev.medicines.map((m, i) => (i === index ? { ...m, [key]: value } : m)),
-    }));
-  }
-
-  function removeMedicineRow(index) {
-    setPrescriptionForm((prev) => ({
-      ...prev,
-      medicines: prev.medicines.filter((_, i) => i !== index),
-    }));
-  }
-
-  function buildPatientCartPreview() {
-    const catalog = seedCatalog();
-    const mapped = prescriptionForm.medicines.map((med, idx) => {
-      const found =
-        catalog.find(
-          (x) =>
-            x.prescribed.toLowerCase().includes((med.prescribed || "").toLowerCase()) ||
-            (med.salt && x.salt.toLowerCase().includes(med.salt.toLowerCase()))
-        ) || null;
-
-      if (found) {
-        return {
-          id: found.id,
-          prescribed: found.prescribed,
-          salt: found.salt,
-          dosage: med.dosage || found.dosage,
-          frequency: med.frequency || found.frequency,
-          duration: med.duration || found.duration,
-          howToTake: med.howToTake || found.howToTake,
-          matchedBrand: found.matchedBrand,
-          generic: found.generic,
-          sensitive: found.sensitive,
-          switchedToGeneric: false,
-        };
+      resProfile = await axios.get(`${API_BASE_URL}/api/delivery/partner/${partnerId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      resOrders = await axios.get(`${API_BASE_URL}/api/delivery/orders`, {
+        headers: { Authorization: `Bearer ${token}`, deliverypartnerid: partnerId }
+      });
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) {
+        hardLogout("Session expired. Please login again.");
+      } else {
+        // transient/server error — DO NOT logout
+        setSnackbar({ open: true, message: "Network issue. Retrying…", severity: "error" });
       }
+      return;
+    }
 
-      return {
-        id: `custom_${idx}`,
-        prescribed: med.prescribed,
-        salt: med.salt || "Unknown composition",
-        dosage: med.dosage,
-        frequency: med.frequency,
-        duration: med.duration,
-        howToTake: med.howToTake,
-        matchedBrand: {
-          name: med.prescribed || "Custom prescribed medicine",
-          price: 0,
-          qty: 0,
-        },
-        generic: {
-          name: "No generic mapped yet",
-          price: 0,
-          qty: 0,
-          savings: 0,
-          available: false,
-        },
-        sensitive: false,
-        switchedToGeneric: false,
-      };
-    });
+    // basic state set from API
+    setPartner(resProfile.data.partner || {});
+    setActive(resProfile.data.partner?.active || false);
+    const activeOrders = resOrders.data || [];
+    setOrders(activeOrders);
+    setPastOrders(resProfile.data.pastOrders || []);
 
-    setPatientCartPreview(mapped);
-    setPrescriptionPreviewOpen(true);
+    // Build masked drop cache once per order (non-fatal)
+    try {
+      const nextMasked = { ...maskedDrops };
+      for (const o of activeOrders) {
+        const user = o.address;
+        if (!nextMasked[o._id] && user?.lat && user?.lng) {
+          const j = jitterLatLng(user.lat, user.lng, 400);
+          nextMasked[o._id] = { lat: j.lat, lng: j.lng, radius: 400 };
+        }
+      }
+      setMaskedDrops(nextMasked);
+    } catch {}
+
+    // Build polylines & distances (non-fatal; isolated try so errors cannot log out)
+    try {
+      const newPolys = {};
+      const newDistances = {};
+      for (const o of activeOrders) {
+        const pharm = o.pharmacy?.location;
+        const user  = o.address;
+        const hasPharm = pharm?.lat && pharm?.lng;
+        const hasUser  = user?.lat && user?.lng;
+
+        let origin = null;
+        let destination = null;
+
+        if (o.status === "out_for_delivery") {
+          if (hasPharm && hasUser) {
+            origin = pharm;
+            destination = user;
+          }
+        } else if (hasPharm) {
+          origin = driverLoc || pharm;
+          destination = pharm;
+        }
+
+        if (origin && destination && (!polylines[o._id] || orderDistances[o._id] == null)) {
+          const { poly, distanceKm } = await getRouteAndDistance(origin, destination);
+          newPolys[o._id] = poly;
+          newDistances[o._id] = distanceKm;
+        } else {
+          if (polylines[o._id]) newPolys[o._id] = polylines[o._id];
+          if (orderDistances[o._id] != null) newDistances[o._id] = orderDistances[o._id];
+        }
+      }
+      setPolylines(newPolys);
+      setOrderDistances(newDistances);
+    } catch {
+      // Maps/route errors should not affect session
+    }
+  };
+
+  function hardLogout(message) {
+    localStorage.removeItem("deliveryToken");
+    localStorage.removeItem("deliveryPartnerId");
+    setLoggedIn(false);
+    setPartner(null);
+    setOrders([]);
+    setPastOrders([]);
+    setLoginDialog(true);
+    setSnackbar({ open: true, message: message || "Logged out", severity: "error" });
   }
 
-  function handleSubmitPrescription() {
-    buildPatientCartPreview();
-    setPrescriptionOpen(false);
-    setSnackbar({
-      open: true,
-      message: "Prescription generated and patient preview prepared",
-      tone: "success",
-    });
-  }
+  const handleUpdateStatus = async (orderId, newStatus) => {
+    try {
+      const token = localStorage.getItem("deliveryToken");
+      await axios.patch(`${API_BASE_URL}/api/delivery/orders/${orderId}/status`, { status: newStatus }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSnackbar({ open: true, message: `Order marked as ${newStatus}`, severity: "success" });
+      await fetchProfileAndOrders();
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) return hardLogout("Session expired. Please login again.");
+      setSnackbar({ open: true, message: "Failed to update order status", severity: "error" });
+    }
+  };
 
-  function toggleGeneric(itemId) {
-    setPatientCartPreview((prev) =>
-      prev.map((item) => (item.id === itemId ? { ...item, switchedToGeneric: !item.switchedToGeneric } : item))
+  // Auth
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await axios.post(`${API_BASE_URL}/api/delivery/login`, loginForm);
+      localStorage.setItem("deliveryToken", res.data.token);
+      localStorage.setItem("deliveryPartnerId", res.data.partner._id);
+      setPartner(res.data.partner);
+      setActive(res.data.partner.active || false);
+      setLoggedIn(true);
+      setLoginDialog(false);
+      setSnackbar({ open: true, message: "Logged in!", severity: "success" });
+    } catch {
+      setSnackbar({ open: true, message: "Login failed. Check mobile/password.", severity: "error" });
+    }
+  };
+  const handleLogout = () => {
+    hardLogout("Logged out");
+  };
+
+  // Forgot / Reset
+  const handleForgotStart = async () => {
+    try {
+      await axios.post(`${API_BASE_URL}/api/delivery/forgot-password`, { mobile: forgotForm.mobile });
+      setSnackbar({ open: true, message: "OTP sent to mobile!", severity: "success" });
+      setResetPhase(1);
+    } catch {
+      setSnackbar({ open: true, message: "Mobile not found!", severity: "error" });
+    }
+  };
+  const handleResetPassword = async () => {
+    try {
+      await axios.post(`${API_BASE_URL}/api/delivery/reset-password`, {
+        mobile: forgotForm.mobile, otp: forgotForm.otp, newPassword: forgotForm.newPassword,
+      });
+      setSnackbar({ open: true, message: "Password reset! Please log in.", severity: "success" });
+      setForgotOpen(false);
+      setResetPhase(0);
+      setForgotForm({ mobile: "", otp: "", newPassword: "" });
+    } catch {
+      setSnackbar({ open: true, message: "Invalid OTP or error", severity: "error" });
+    }
+  };
+
+  /* ------------------------------- NEW: PUSH ------------------------------- */
+  useEffect(() => {
+    (async () => {
+      if (!loggedIn || !partner?._id) return;
+      // web gets Notification API; native gets FCM via Capacitor
+      if (Capacitor.isNativePlatform?.()) {
+        try {
+          const perm = await PushNotifications.requestPermissions();
+          if (perm.receive === "granted") {
+            await PushNotifications.register();
+          }
+          const onReg = PushNotifications.addListener("registration", async (token) => {
+            try {
+              await axios.post(`${API_BASE_URL}/api/delivery/register-device-token`, {
+                partnerId: partner._id,
+                token: token.value,
+                platform: "android",
+              });
+            } catch {}
+          });
+          const onError = PushNotifications.addListener("registrationError", () => {});
+          // When a push arrives in foreground, pop the same dialog we use for SSE
+          const onReceive = PushNotifications.addListener("pushNotificationReceived", (n) => {
+            try {
+              const data = n?.data || {};
+              if (data.type === "offer" && data.orderId) {
+                setOffer({
+                  orderId: data.orderId,
+                  pharmacy: { name: n?.title?.replace("New delivery offer from ", "") || "Pharmacy" },
+                  total: Number(data.total || 0)
+                });
+                const deadline = Date.now() + 25_000;
+                setOfferDeadline(deadline);
+                setLeft(Math.ceil((deadline - Date.now()) / 1000));
+                // sound + vibration
+                try {
+                  if (!offerAudioRef.current) offerAudioRef.current = new Audio("/sounds/offer.mp3");
+                  offerAudioRef.current.currentTime = 0;
+                  offerAudioRef.current.play().catch(()=>{});
+                  if (offerLoopRef.current) clearInterval(offerLoopRef.current);
+                  offerLoopRef.current = setInterval(() => {
+                    offerAudioRef.current.currentTime = 0;
+                    offerAudioRef.current.play().catch(()=>{});
+                  }, 3000);
+                } catch {}
+                try { if (navigator.vibrate) navigator.vibrate([200,80,200,80,300]); } catch {}
+              }
+            } catch {}
+          });
+          return () => {
+            onReg.remove();
+            onError.remove();
+            onReceive.remove();
+          };
+        } catch {}
+      } else {
+        // Ask web Notification permission once
+        if ("Notification" in window && Notification.permission === "default") {
+          try { await Notification.requestPermission(); } catch {}
+        }
+      }
+    })();
+  }, [loggedIn, partner?._id]);
+
+  /* ------------------------------- NEW: SSE ------------------------------- */
+  useEffect(() => {
+    if (!loggedIn || !partner?._id) return;
+    let es;
+    try {
+      es = new EventSource(`${API_BASE_URL}/api/delivery/stream/${partner._id}`);
+      es.addEventListener("offer", (ev) => {
+        const payload = JSON.parse(ev.data || "{}");
+        if (!payload?.orderId) return;
+        // avoid duplicate modal if already fetched via polling
+        const alreadyHave = orders.some(o => String(o._id) === String(payload.orderId));
+        if (alreadyHave) return;
+
+        setOffer(payload);
+        const deadline = Date.now() + 25_000; // 25s to respond
+        setOfferDeadline(deadline);
+        setLeft(Math.ceil((deadline - Date.now()) / 1000));
+
+        // play sound + vibrate + optional web heads-up
+        try {
+          if (!offerAudioRef.current) {
+            offerAudioRef.current = new Audio("/sounds/offer.mp3");
+          }
+          // loop every ~3s while modal is open
+          offerAudioRef.current.currentTime = 0;
+          offerAudioRef.current.play().catch(() => {});
+          if (offerLoopRef.current) clearInterval(offerLoopRef.current);
+          offerLoopRef.current = setInterval(() => {
+            if (offerAudioRef.current) {
+              offerAudioRef.current.currentTime = 0;
+              offerAudioRef.current.play().catch(() => {});
+            }
+          }, 3000);
+        } catch {}
+        try { if (navigator.vibrate) navigator.vibrate([150, 80, 150, 80, 300]); } catch {}
+        try {
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("New delivery offer", { body: "Tap to open GoDavaii", tag: "gd-offer" });
+          }
+        } catch {}
+      });
+    } catch {}
+
+    return () => {
+      if (es) es.close();
+    };
+    // include orders.length so if new order appears via poll, we won't keep stale modal
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loggedIn, partner?._id, orders.length]);
+
+  // NEW: countdown for offer
+  useEffect(() => {
+    if (!offerDeadline) return;
+    const t = setInterval(async () => {
+      const secs = Math.max(0, Math.ceil((offerDeadline - Date.now()) / 1000));
+      setLeft(secs);
+      if (secs === 0) {
+        // auto-dismiss + attempt reject (non-fatal)
+        const id = offer?.orderId;
+        setOffer(null);
+        setOfferDeadline(null);
+        try {
+          if (id) {
+            const token = localStorage.getItem("deliveryToken");
+            await axios.patch(`${API_BASE_URL}/api/delivery/orders/${id}/reject`, {}, {
+              headers: token ? { Authorization: `Bearer ${token}` } : undefined
+            });
+          }
+        } catch {}
+      }
+    }, 200);
+    return () => clearInterval(t);
+  }, [offerDeadline, offer?.orderId]);
+
+  // Stop audio when modal closes
+  useEffect(() => {
+    if (!offer) {
+      if (offerLoopRef.current) {
+        clearInterval(offerLoopRef.current);
+        offerLoopRef.current = null;
+      }
+      try { offerAudioRef.current && offerAudioRef.current.pause(); } catch {}
+    }
+  }, [offer]);
+
+  // Ask web Notification permission on mount (no-op if already granted/denied)
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      try { Notification.requestPermission(); } catch {}
+    }
+  }, []);
+
+  if (!loggedIn) {
+    return (
+      <Dialog open={loginDialog} onOpenChange={() => {}}>
+        <DialogContent className="force-light sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-emerald-800 font-extrabold">Delivery Partner Login</DialogTitle></DialogHeader>
+          <form onSubmit={handleLogin} className="space-y-3">
+            <div className="grid gap-1.5">
+              <Label>Mobile Number</Label>
+              <Input value={loginForm.mobile} onChange={e => setLoginForm(f => ({ ...f, mobile: e.target.value }))} required className="gd-input" />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Password</Label>
+              <Input type="password" value={loginForm.password} onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))} required className="gd-input" />
+            </div>
+            <Button type="submit" className="w-full btn-primary-emerald !font-bold mt-1">Login</Button>
+            <Button type="button" variant="ghost" className="w-full btn-ghost-soft !font-bold" onClick={() => setForgotOpen(true)}>Forgot Password?</Button>
+          </form>
+
+          <Dialog open={forgotOpen} onOpenChange={(open) => { setForgotOpen(open); if (!open) setResetPhase(0); }}>
+            <DialogContent className="force-light sm:max-w-md">
+              <DialogHeader><DialogTitle>Forgot Password</DialogTitle></DialogHeader>
+              {resetPhase === 0 ? (
+                <div className="space-y-3">
+                  <div className="grid gap-1.5">
+                    <Label>Registered Mobile</Label>
+                    <Input value={forgotForm.mobile} onChange={e => setForgotForm(f => ({ ...f, mobile: e.target.value }))} />
+                  </div>
+                  <DialogFooter><Button onClick={handleForgotStart} className="btn-primary-emerald !font-bold">Send OTP</Button></DialogFooter>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid gap-1.5">
+                    <Label>OTP</Label>
+                    <Input value={forgotForm.otp} onChange={e => setForgotForm(f => ({ ...f, otp: e.target.value }))} />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label>New Password</Label>
+                    <Input type="password" value={forgotForm.newPassword} onChange={e => setForgotForm(f => ({ ...f, newPassword: e.target.value }))} />
+                  </div>
+                  <DialogFooter><Button onClick={handleResetPassword} className="btn-primary-emerald !font-bold">Reset Password</Button></DialogFooter>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          <AnimatePresence>
+            {snackbar.open && (
+              <motion.div
+                initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 30, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 320, damping: 24 }}
+                className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[2000] rounded-full px-4 py-2 font-semibold shadow-lg ${
+                  snackbar.severity === "error" ? "bg-red-600 text-white" : "bg-emerald-600 text-white"
+                }`}
+                onAnimationComplete={() => setTimeout(() => setSnackbar(s => ({ ...s, open: false })), 2200)}
+              >
+                {snackbar.message}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </DialogContent>
+      </Dialog>
     );
   }
 
-  async function submitClinicChangeRequest() {
-    await fakePersist({ ...clinicChangeDraft, requestType: "clinic_change" });
-    setClinicChangeOpen(false);
-    setSnackbar({
-      open: true,
-      message: "Clinic change request submitted for re-verification",
-      tone: "success",
-    });
-  }
-
-  function markNotificationRead(notificationId) {
-    setNotifications((prev) => prev.map((n) => (n._id === notificationId ? { ...n, read: true } : n)));
-  }
-
-  /* ------------------------------- EFFECTS -------------------------------- */
-
-  useEffect(() => {
-    // Auto-promote accepted/live states based on time
-    const interval = setInterval(() => {
-      setUpcomingConsults((prev) =>
-        prev.map((item) => {
-          const isLive = dayjs(item.bookedFor).isBefore(dayjs().add(1, "minute")) && item.status !== BOOKING_STATES.COMPLETED;
-          return {
-            ...item,
-            status:
-              item.status === BOOKING_STATES.COMPLETED || item.status === BOOKING_STATES.CANCELLED
-                ? item.status
-                : isLive
-                ? BOOKING_STATES.LIVE_NOW
-                : item.status === BOOKING_STATES.PENDING
-                ? BOOKING_STATES.PENDING
-                : BOOKING_STATES.UPCOMING,
-            canJoin: isLive,
-          };
-        })
-      );
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  /* -------------------------------- RENDER -------------------------------- */
+  const tabsValue = tab === 0 ? "active" : tab === 1 ? "past" : "earnings";
+  const todayStr = dayjs().format("YYYY-MM-DD");
+  const deliveriesToday = (pastOrders || []).filter(o => o.status === "delivered" && dayjs(o.createdAt).format("YYYY-MM-DD") === todayStr).length;
+  // eslint-disable-next-line no-unused-vars
+  const rph = null;
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#effaf6_0%,#f7fbff_44%,#f4f7fb_100%)]">
-      <div className="mx-auto max-w-[1320px] px-4 pb-20 pt-4 sm:px-6 lg:px-8">
-        {/* HEADER */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden rounded-[30px] border border-emerald-200/60 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_30%),linear-gradient(135deg,#083c34_0%,#0f6d57_55%,#0f7c66_100%)] p-5 text-white shadow-[0_20px_50px_rgba(3,31,27,0.22)]"
-        >
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.05),transparent)]" />
-          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center">
-            <div className="flex min-w-0 flex-1 items-center gap-4">
-              <Avatar className="h-16 w-16 border border-white/20 ring-4 ring-white/10">
-                {doctor.avatar ? <AvatarImage src={doctor.avatar} alt={doctor.fullName} /> : null}
-                <AvatarFallback className="bg-white/15 text-lg font-black text-white">{initials(doctor.fullName)}</AvatarFallback>
-              </Avatar>
+    <div className="mx-auto max-w-[900px] px-3 pt-4 pb-16">
+      {/* header */}
+      <div className="flex items-center gap-3 rounded-2xl border border-emerald-200/60 bg-white p-3 shadow-sm">
+        <Avatar className="h-14 w-14 ring-2 ring-emerald-100">
+          {partner?.avatar ? <AvatarImage src={partner.avatar} alt={partner?.name || "Partner"} /> :
+            <AvatarFallback className="bg-emerald-600 text-white font-bold">{(partner?.name || "D").charAt(0).toUpperCase()}</AvatarFallback>}
+        </Avatar>
 
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="truncate text-[26px] font-black tracking-tight">{doctor.fullName}</h1>
-                  <Badge className="border border-white/20 bg-white/10 font-bold text-white">
-                    <BadgeCheck className="mr-1 h-3.5 w-3.5" />
-                    {doctor.profileStatus}
-                  </Badge>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-emerald-50/90">
-                  <span>{doctor.specialty}</span>
-                  <span>•</span>
-                  <span>{doctor.qualification}</span>
-                  <span>•</span>
-                  <span>{doctor.yearsExperience} yrs exp</span>
-                  <span>•</span>
-                  <span>
-                    {doctor.city}, {doctor.area}
-                  </span>
-                </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-lg font-extrabold text-emerald-900 truncate">{partner?.name}</div>
+          <div className="text-sm text-slate-600 truncate">{partner?.mobile} <span className="mx-2">|</span> {partner?.city}, {partner?.area}</div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <div className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold">
-                    GoDavaii Platform / Service Fee Band:{" "}
-                    <span className="font-black">
-                      {currentBand.fee == null ? "Manual Approval" : `${currentBand.label} • ${money(currentBand.fee)} + GST`}
-                    </span>
-                  </div>
-                  <div className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold">
-                    Payout: <span className="font-black">{doctor.payoutAccountMasked}</span>
-                  </div>
-                </div>
-              </div>
+          {/* Live Ops & Availability */}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200/60 bg-white px-3 py-2">
+              <Switch
+                checked={active}
+                onCheckedChange={async (next) => {
+                  setActive(next);
+                  const token = localStorage.getItem("deliveryToken");
+                  if (navigator.geolocation && next) {
+                    navigator.geolocation.getCurrentPosition((pos) => {
+                      axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
+                        { active: next, lat: pos.coords.latitude, lng: pos.coords.longitude },
+                        { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+                    });
+                  } else {
+                    await axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
+                      { active: next }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+                  }
+                }}
+              />
+              <span className={`text-sm font-bold ${active ? "text-emerald-600" : "text-red-600"}`}>{active ? "Active" : "Inactive"}</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[460px]">
-              <div className="rounded-[22px] border border-white/15 bg-white/10 p-4 backdrop-blur">
-                <div className="text-xs uppercase tracking-[0.12em] text-emerald-50/80">Next Consult</div>
-                <div className="mt-2 text-lg font-black">{nextConsult ? countdownLabel(nextConsult.bookedFor) : "No queue"}</div>
-              </div>
-
-              <div className="rounded-[22px] border border-white/15 bg-white/10 p-4 backdrop-blur">
-                <div className="text-xs uppercase tracking-[0.12em] text-emerald-50/80">Pending</div>
-                <div className="mt-2 text-lg font-black">{todaySummary.pending}</div>
-              </div>
-
-              <div className="rounded-[22px] border border-white/15 bg-white/10 p-4 backdrop-blur">
-                <div className="text-xs uppercase tracking-[0.12em] text-emerald-50/80">Today Earnings</div>
-                <div className="mt-2 text-lg font-black">{money(todaySummary.earnings)}</div>
-              </div>
-
-              <div className="rounded-[22px] border border-white/15 bg-white/10 p-4 backdrop-blur">
-                <div className="text-xs uppercase tracking-[0.12em] text-emerald-50/80">Notifications</div>
-                <div className="mt-2 flex items-center gap-2 text-lg font-black">
-                  {unreadNotifications}
-                  <NotificationBadge count={unreadNotifications} />
-                </div>
-              </div>
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200/60 bg-white px-3 py-2">
+              <span className="text-sm font-semibold text-emerald-900">Auto-accept</span>
+              <Switch
+                checked={autoAccept}
+                onCheckedChange={async (v) => {
+                  setAutoAccept(v);
+                  setSnackbar({ open: true, message: v ? "Auto-accept enabled" : "Auto-accept disabled", severity: v ? "success" : "error" });
+                  try {
+                    const token = localStorage.getItem("deliveryToken");
+                    await axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner?._id}/active`,
+                      { autoAccept: v }, { headers: { Authorization: `Bearer ${token}` } });
+                  } catch {}
+                }}
+              />
             </div>
-          </div>
-        </motion.div>
 
-        {/* TOP CONTROL RAIL */}
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.45fr_0.95fr]">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <KpiCard label="Upcoming Consults" value={todaySummary.upcoming} sub="Today queue" icon={CalendarClock} tone="indigo" />
-            <KpiCard label="Pending Requests" value={todaySummary.pending} sub="Need action now" icon={AlertCircle} tone="amber" />
-            <KpiCard label="Completed Today" value={todaySummary.completed} sub="Smooth close rate" icon={CheckCircle2} tone="emerald" />
-            <KpiCard label="Cancelled / Missed" value={todaySummary.cancelled} sub="Track follow-ups" icon={XCircle} tone="rose" />
+            <Badge className="bg-amber-400 text-emerald-900 font-bold">Cash to deposit: ₹{cashDue ?? 0}</Badge>
           </div>
 
-          <SectionCard
-            title="Doctor Controls"
-            icon={Activity}
-            right={
-              <Badge className={cx("border font-bold", doctor.online ? "bg-emerald-100 text-emerald-800 border-emerald-200" : "bg-rose-100 text-rose-800 border-rose-200")}>
-                {doctor.online ? "Online" : "Offline"}
-              </Badge>
-            }
-          >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-bold text-slate-900">Available for bookings</div>
-                    <div className="text-sm text-slate-600">Toggle consultation visibility</div>
-                  </div>
-                  <Switch
-                    checked={settingsDraft.online}
-                    onCheckedChange={(next) => setSettingsDraft((p) => ({ ...p, online: next }))}
-                  />
-                </div>
+          <div className="mt-2 flex items-center gap-2">
+            {!onBreak ? (
+              <Button size="sm" variant="outline" className="!font-bold" onClick={() => { setOnBreak(true); setBreakRemaining(10 * 60); }}>
+                <AlarmClock className="h-4 w-4 mr-1" /> Start 10-min Break
+              </Button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Badge className="bg-emerald-600"><TimerReset className="h-3.5 w-3.5 mr-1" /> {mmss(breakRemaining)}</Badge>
+                <Button size="sm" variant="outline" className="!font-bold" onClick={() => { setOnBreak(false); setBreakRemaining(0); }}>
+                  Resume Now
+                </Button>
               </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-sm font-bold text-slate-900">Current Band</div>
-                <div className="mt-2 text-[22px] font-black text-slate-900">
-                  {currentBand.fee == null ? "Manual" : money(currentBand.fee)}
-                </div>
-                <div className="text-sm text-slate-600">{currentBand.label} • applicable GST</div>
-              </div>
-            </div>
-          </SectionCard>
+            )}
+          </div>
         </div>
 
-        {/* MAIN CONTENT */}
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.35fr_0.92fr]">
-          {/* LEFT COLUMN */}
-          <div className="space-y-4">
-            <SectionCard
-              title="Incoming Requests"
-              icon={BellRing}
-              right={<NotificationBadge count={incomingRequests.filter((x) => x.status === BOOKING_STATES.PENDING).length} />}
-            >
-              {incomingRequests.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-slate-500">
-                  No pending requests right now.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {incomingRequests.map((req) => (
-                    <div
-                      key={req._id}
-                      className="rounded-[22px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#fbfdff_100%)] p-4 shadow-sm"
-                    >
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
-                        <div className="flex min-w-0 flex-1 items-start gap-3">
-                          <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-700">
-                            <UserRound className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h4 className="text-lg font-black text-slate-900">{req.patientName}</h4>
-                              <ModeBadge mode={req.mode} />
-                              <StatusBadge status={req.status} />
-                            </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                              <span>
-                                {req.patientAge} yrs • {req.patientGender}
-                              </span>
-                              <span>•</span>
-                              <span>{formatSlot(req.bookedFor)}</span>
-                              <span>•</span>
-                              <span>{req.locationLabel}</span>
-                              <span>•</span>
-                              <span className="font-bold text-slate-900">{money(req.fee)}</span>
-                            </div>
-                            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                              <span className="font-bold text-slate-900">Reason / Symptoms:</span> {req.symptoms}
-                            </div>
-                          </div>
-                        </div>
+        <Button variant="outline" className="btn-danger-outline !font-bold" onClick={handleLogout}>
+          <LogOut className="h-4 w-4 mr-2" /> Logout
+        </Button>
+      </div>
 
-                        <div className="flex shrink-0 flex-wrap gap-2">
-                          <Button
-                            onClick={() => handleAcceptRequest(req)}
-                            className="rounded-2xl bg-emerald-600 px-4 font-black text-white hover:bg-emerald-700"
-                          >
-                            <CheckCheck className="mr-2 h-4 w-4" />
-                            Accept
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => handleRescheduleRequest(req)}
-                            className="rounded-2xl border-slate-300 font-black"
-                          >
-                            <RefreshCcw className="mr-2 h-4 w-4" />
-                            Reschedule
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => handleRejectRequest(req)}
-                            className="rounded-2xl border-rose-300 font-black text-rose-700 hover:bg-rose-50"
-                          >
-                            <XCircle className="mr-2 h-4 w-4" />
-                            Reject
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </SectionCard>
-
-            <SectionCard title="Upcoming Consults" icon={CalendarDays}>
-              {upcomingConsults.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-slate-500">
-                  No upcoming consults.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {upcomingConsults.map((booking) => (
-                    <div
-                      key={booking._id}
-                      className="rounded-[22px] border border-slate-200 bg-white p-4 shadow-sm"
-                    >
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                        <div className="flex min-w-0 flex-1 items-start gap-3">
-                          <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
-                            {booking.mode === CONSULT_MODES.VIDEO ? (
-                              <Video className="h-5 w-5" />
-                            ) : booking.mode === CONSULT_MODES.AUDIO ? (
-                              <Phone className="h-5 w-5" />
-                            ) : (
-                              <Building2 className="h-5 w-5" />
-                            )}
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h4 className="text-lg font-black text-slate-900">{booking.patientName}</h4>
-                              <ModeBadge mode={booking.mode} />
-                              <StatusBadge status={booking.status} />
-                            </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                              <span>{formatSlot(booking.bookedFor)}</span>
-                              <span>•</span>
-                              <span>{countdownLabel(booking.bookedFor)}</span>
-                              <span>•</span>
-                              <span>{money(booking.fee)}</span>
-                            </div>
-                            <div className="mt-2 text-sm text-slate-700">
-                              <span className="font-bold text-slate-900">Case:</span> {booking.reason}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          {(booking.mode === CONSULT_MODES.VIDEO || booking.mode === CONSULT_MODES.AUDIO) && (
-                            <Button
-                              onClick={() => handleJoinConsult(booking)}
-                              className={cx(
-                                "rounded-2xl px-4 font-black text-white",
-                                booking.mode === CONSULT_MODES.VIDEO
-                                  ? "bg-indigo-600 hover:bg-indigo-700"
-                                  : "bg-sky-600 hover:bg-sky-700"
-                              )}
-                            >
-                              {booking.mode === CONSULT_MODES.VIDEO ? (
-                                <Video className="mr-2 h-4 w-4" />
-                              ) : (
-                                <PhoneCall className="mr-2 h-4 w-4" />
-                              )}
-                              {booking.canJoin ? "Join Now" : "Open Room"}
-                            </Button>
-                          )}
-
-                          {booking.mode === CONSULT_MODES.INPERSON && (
-                            <Button variant="outline" className="rounded-2xl border-slate-300 font-black">
-                              <MapPin className="mr-2 h-4 w-4" />
-                              View Clinic Slot
-                            </Button>
-                          )}
-
-                          <Button
-                            variant="outline"
-                            onClick={() => openPrescriptionBuilder(booking)}
-                            className="rounded-2xl border-slate-300 font-black"
-                          >
-                            <ClipboardPlus className="mr-2 h-4 w-4" />
-                            Prescription
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </SectionCard>
-
-            <SectionCard
-              title="Prescription Center"
-              icon={FileText}
-              right={
-                <Button
-                  variant="outline"
-                  className="rounded-2xl border-slate-300 font-black"
-                  onClick={() => openPrescriptionBuilder(upcomingConsults[0] || incomingRequests[0] || null)}
-                >
-                  <PencilLine className="mr-2 h-4 w-4" />
-                  New Prescription
-                </Button>
-              }
-            >
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center gap-2 text-sm font-black text-slate-900">
-                    <Sparkles className="h-4 w-4 text-emerald-700" />
-                    Prescription → Patient → Cart flow
-                  </div>
-                  <div className="mt-3 space-y-2 text-sm text-slate-700">
-                    <div>1. Doctor fills branded GoDavaii prescription</div>
-                    <div>2. Patient gets prescription instantly</div>
-                    <div>3. Medicines auto-map to catalog</div>
-                    <div>4. All matched medicines pre-add to cart</div>
-                    <div>5. Generic savings shown with switch option</div>
-                  </div>
-                </div>
-
-                <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-sm font-black text-slate-900">Recent prescriptions</div>
-                  <div className="mt-3 space-y-3">
-                    {completedPrescriptions.map((rx) => (
-                      <div key={rx._id} className="rounded-2xl border border-white bg-white p-3 shadow-sm">
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <div className="font-black text-slate-900">{rx.patientName}</div>
-                            <div className="text-sm text-slate-600">{rx.diagnosis}</div>
-                          </div>
-                          <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold">
-                            Sent
-                          </Badge>
-                        </div>
-                        <div className="mt-2 text-xs text-slate-500">
-                          {dayjs(rx.createdAt).format("DD MMM • hh:mm A")} • {rx.meds} medicines
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Doctor Profile & Verified Clinic" icon={ShieldCheck}>
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-                <div className="rounded-[22px] border border-emerald-100 bg-[linear-gradient(180deg,#ffffff_0%,#f6fffb_100%)] p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-bold text-slate-600">Verified clinic details</div>
-                      <div className="mt-1 text-xl font-black text-slate-900">{doctor.clinic.name}</div>
-                    </div>
-                    <Badge className="border border-emerald-200 bg-emerald-100 font-bold text-emerald-800">
-                      Verified
-                    </Badge>
-                  </div>
-
-                  <div className="mt-4 space-y-3">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                      <div className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Address</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900">
-                        {doctor.clinic.addressLine1}, {doctor.clinic.locality}, {doctor.clinic.city} - {doctor.clinic.pin}
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                      <div className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Map label</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900">{doctor.clinic.mapLabel}</div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                      <div className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Clinic timings</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900">
-                        {doctor.clinic.consultationDays.join(", ")} • {doctor.clinic.startTime} – {doctor.clinic.endTime}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        Slot {doctor.clinic.slotDuration} min • Arrival window {doctor.clinic.arrivalWindow} min • Max{" "}
-                        {doctor.clinic.maxPatientsPerDay}/day
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => setClinicChangeOpen(true)}
-                      className="rounded-2xl border-slate-300 font-black"
-                    >
-                      <PencilLine className="mr-2 h-4 w-4" />
-                      Request Clinic Change
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-sm font-bold text-slate-600">Doctor identity</div>
-                  <div className="mt-3 space-y-3">
-                    <div className="rounded-2xl border border-white bg-white p-3">
-                      <div className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Specialty</div>
-                      <div className="mt-1 font-black text-slate-900">{doctor.specialty}</div>
-                    </div>
-                    <div className="rounded-2xl border border-white bg-white p-3">
-                      <div className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Qualification</div>
-                      <div className="mt-1 font-black text-slate-900">{doctor.qualification}</div>
-                    </div>
-                    <div className="rounded-2xl border border-white bg-white p-3">
-                      <div className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Email</div>
-                      <div className="mt-1 font-black text-slate-900">{doctor.email}</div>
-                    </div>
-                    <div className="rounded-2xl border border-white bg-white p-3">
-                      <div className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Payout</div>
-                      <div className="mt-1 font-black text-slate-900">{doctor.payoutAccountMasked}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Modes, Fees & Availability" icon={Settings2}>
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_0.9fr]">
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                    {/* AUDIO */}
-                    <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-sky-700" />
-                          <div className="font-black text-slate-900">Audio</div>
-                        </div>
-                        <Switch
-                          checked={settingsDraft.audioEnabled}
-                          onCheckedChange={(next) =>
-                            setSettingsDraft((p) => ({
-                              ...p,
-                              audioEnabled: next,
-                              audioFee: next ? p.audioFee || 299 : "",
-                            }))
-                          }
-                        />
-                      </div>
-
-                      <AnimatePresence>
-                        {settingsDraft.audioEnabled && (
-                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-                            <div className="mt-3">
-                              <Label>Audio Fee</Label>
-                              <Input
-                                type="number"
-                                value={settingsDraft.audioFee}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, audioFee: e.target.value }))}
-                                className="mt-2"
-                              />
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-
-                    {/* VIDEO */}
-                    <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <Video className="h-4 w-4 text-indigo-700" />
-                          <div className="font-black text-slate-900">Video</div>
-                        </div>
-                        <Switch
-                          checked={settingsDraft.videoEnabled}
-                          onCheckedChange={(next) =>
-                            setSettingsDraft((p) => ({
-                              ...p,
-                              videoEnabled: next,
-                              videoFee: next ? p.videoFee || 299 : "",
-                            }))
-                          }
-                        />
-                      </div>
-
-                      <AnimatePresence>
-                        {settingsDraft.videoEnabled && (
-                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-                            <div className="mt-3">
-                              <Label>Video Fee</Label>
-                              <Input
-                                type="number"
-                                value={settingsDraft.videoFee}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, videoFee: e.target.value }))}
-                                className="mt-2"
-                              />
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-
-                    {/* INPERSON */}
-                    <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-emerald-700" />
-                          <div className="font-black text-slate-900">In-person</div>
-                        </div>
-                        <Switch
-                          checked={settingsDraft.inpersonEnabled}
-                          onCheckedChange={(next) =>
-                            setSettingsDraft((p) => ({
-                              ...p,
-                              inpersonEnabled: next,
-                              inpersonFee: next ? p.inpersonFee || 399 : "",
-                            }))
-                          }
-                        />
-                      </div>
-
-                      <AnimatePresence>
-                        {settingsDraft.inpersonEnabled && (
-                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-                            <div className="mt-3">
-                              <Label>In-person Fee</Label>
-                              <Input
-                                type="number"
-                                value={settingsDraft.inpersonFee}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, inpersonFee: e.target.value }))}
-                                className="mt-2"
-                              />
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-
-                  <AnimatePresence>
-                    {settingsDraft.inpersonEnabled && (
-                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-                        <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                          <div className="mb-3 text-sm font-black text-slate-900">In-person slot rules</div>
-                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                            <div>
-                              <Label>Start Time</Label>
-                              <Input
-                                type="time"
-                                className="mt-2"
-                                value={settingsDraft.startTime}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, startTime: e.target.value }))}
-                              />
-                            </div>
-                            <div>
-                              <Label>End Time</Label>
-                              <Input
-                                type="time"
-                                className="mt-2"
-                                value={settingsDraft.endTime}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, endTime: e.target.value }))}
-                              />
-                            </div>
-                            <div>
-                              <Label>Slot Duration (min)</Label>
-                              <Input
-                                type="number"
-                                className="mt-2"
-                                value={settingsDraft.slotDuration}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, slotDuration: e.target.value }))}
-                              />
-                            </div>
-                            <div>
-                              <Label>Arrival Window (min)</Label>
-                              <Input
-                                type="number"
-                                className="mt-2"
-                                value={settingsDraft.arrivalWindow}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, arrivalWindow: e.target.value }))}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <div>
-                              <Label>Consultation Days</Label>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => {
-                                  const active = settingsDraft.consultationDays.includes(day);
-                                  return (
-                                    <button
-                                      key={day}
-                                      type="button"
-                                      onClick={() =>
-                                        setSettingsDraft((p) => ({
-                                          ...p,
-                                          consultationDays: active
-                                            ? p.consultationDays.filter((d) => d !== day)
-                                            : [...p.consultationDays, day],
-                                        }))
-                                      }
-                                      className={cx(
-                                        "rounded-full border px-3 py-2 text-sm font-black transition",
-                                        active
-                                          ? "border-emerald-300 bg-emerald-100 text-emerald-800"
-                                          : "border-slate-200 bg-white text-slate-600"
-                                      )}
-                                    >
-                                      {day}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            <div>
-                              <Label>Max patients/day</Label>
-                              <Input
-                                type="number"
-                                className="mt-2"
-                                value={settingsDraft.maxPatientsPerDay}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, maxPatientsPerDay: e.target.value }))}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-
-                <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-sm font-black text-slate-900">Commercial preview</div>
-                  <div className="mt-4 space-y-3">
-                    <div className="rounded-2xl border border-white bg-white p-4">
-                      <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Current fee band</div>
-                      <div className="mt-1 text-2xl font-black text-slate-900">{currentBand.label}</div>
-                      <div className="mt-1 text-sm text-slate-600">
-                        {currentBand.fee == null ? "Manual commercial approval required" : `${money(currentBand.fee)} + applicable GST`}
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-white bg-white p-4">
-                      <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Doctor-side note</div>
-                      <div className="mt-2 text-sm text-slate-700">
-                        Applies only on completed consultations. Same model for audio, video, and in-person bookings.
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-white bg-white p-4">
-                      <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Patient UI rule</div>
-                      <div className="mt-2 text-sm text-slate-700">
-                        Customer sees only bundled consult price. Internal commercial split remains hidden.
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
-                    <Button onClick={handleSaveSettings} className="w-full rounded-2xl bg-emerald-600 font-black text-white hover:bg-emerald-700">
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                      Save Doctor Settings
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
-          </div>
-
-          {/* RIGHT COLUMN */}
-          <div className="space-y-4">
-            <SectionCard
-              title="Join Now"
-              icon={Timer}
-              right={
-                nextConsult ? (
-                  <Badge className="border border-emerald-200 bg-emerald-100 font-bold text-emerald-800">
-                    {countdownLabel(nextConsult.bookedFor)}
-                  </Badge>
-                ) : null
-              }
-            >
-              {nextConsult ? (
-                <div className="rounded-[22px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f6fffb_100%)] p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-700">
-                      {nextConsult.mode === CONSULT_MODES.VIDEO ? <Video className="h-5 w-5" /> : nextConsult.mode === CONSULT_MODES.AUDIO ? <Phone className="h-5 w-5" /> : <Building2 className="h-5 w-5" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-lg font-black text-slate-900">{nextConsult.patientName}</div>
-                      <div className="mt-1 text-sm text-slate-600">{formatSlot(nextConsult.bookedFor)}</div>
-                      <div className="mt-2 text-sm text-slate-700">{nextConsult.reason}</div>
-                    </div>
-                  </div>
-                  <div className="mt-4 grid grid-cols-1 gap-2">
-                    {(nextConsult.mode === CONSULT_MODES.AUDIO || nextConsult.mode === CONSULT_MODES.VIDEO) ? (
-                      <Button
-                        onClick={() => handleJoinConsult(nextConsult)}
-                        className={cx(
-                          "rounded-2xl font-black text-white",
-                          nextConsult.mode === CONSULT_MODES.VIDEO ? "bg-indigo-600 hover:bg-indigo-700" : "bg-sky-600 hover:bg-sky-700"
-                        )}
-                      >
-                        {nextConsult.mode === CONSULT_MODES.VIDEO ? <Video className="mr-2 h-4 w-4" /> : <PhoneCall className="mr-2 h-4 w-4" />}
-                        {nextConsult.mode === CONSULT_MODES.VIDEO ? "Join Video Call" : "Join Audio Call"}
-                      </Button>
-                    ) : (
-                      <Button variant="outline" className="rounded-2xl border-slate-300 font-black">
-                        <MapPin className="mr-2 h-4 w-4" />
-                        Open Clinic Slot
-                      </Button>
-                    )}
-
-                    <Button variant="outline" className="rounded-2xl border-slate-300 font-black" onClick={() => openPrescriptionBuilder(nextConsult)}>
-                      <ClipboardPlus className="mr-2 h-4 w-4" />
-                      Start Prescription
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-slate-500">
-                  No active join-ready consult.
-                </div>
-              )}
-            </SectionCard>
-
-            <SectionCard
-              title="Notifications & Reminders"
-              icon={BellRing}
-              right={<NotificationBadge count={unreadNotifications} />}
-            >
-              <div className="space-y-3">
-                {notifications.map((note) => (
-                  <button
-                    key={note._id}
-                    type="button"
-                    onClick={() => markNotificationRead(note._id)}
-                    className={cx(
-                      "w-full rounded-[20px] border p-4 text-left transition",
-                      note.read ? "border-slate-200 bg-white" : "border-emerald-200 bg-emerald-50/60"
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={cx("rounded-2xl p-3", note.read ? "bg-slate-100 text-slate-600" : "bg-emerald-100 text-emerald-700")}>
-                        <BellRing className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="font-black text-slate-900">{note.title}</div>
-                          {!note.read && <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />}
-                        </div>
-                        <div className="mt-1 text-sm text-slate-600">{note.body}</div>
-                        <div className="mt-2 text-xs text-slate-500">{humanDiff(note.createdAt)}</div>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Patient Cart / Generic Savings Preview" icon={Wallet}>
-              {patientCartPreview.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-slate-500">
-                  Submit a prescription to preview patient cart and generic substitution flow.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {patientCartPreview.map((item) => {
-                    const showGeneric = item.generic?.available;
-                    const selectedName = item.switchedToGeneric && showGeneric ? item.generic.name : item.matchedBrand.name;
-                    const selectedPrice = item.switchedToGeneric && showGeneric ? item.generic.price : item.matchedBrand.price;
-                    return (
-                      <div key={item.id} className="rounded-[20px] border border-slate-200 bg-white p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="font-black text-slate-900">{item.prescribed}</div>
-                            <div className="mt-1 text-sm text-slate-600">{item.salt}</div>
-                            <div className="mt-2 text-sm text-slate-700">
-                              {item.dosage} • {item.frequency} • {item.duration}
-                            </div>
-                            <div className="text-sm text-slate-700">{item.howToTake}</div>
-                          </div>
-                          <div className="rounded-2xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-900">
-                            {money(selectedPrice)}
-                          </div>
-                        </div>
-
-                        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                          <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Current cart item</div>
-                          <div className="mt-1 font-black text-slate-900">{selectedName}</div>
-                        </div>
-
-                        {showGeneric && (
-                          <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="font-black text-emerald-900">{item.generic.name}</div>
-                                <div className="mt-1 text-sm text-emerald-800">Same salt composition</div>
-                                <div className="mt-1 text-sm font-bold text-emerald-900">
-                                  Save {money(item.generic.savings)} if switched
-                                </div>
-                              </div>
-                              <Switch checked={!!item.switchedToGeneric} onCheckedChange={() => toggleGeneric(item.id)} />
-                            </div>
-                            {item.sensitive ? (
-                              <div className="mt-2 text-xs font-semibold text-amber-700">
-                                Sensitive medicine: pharmacist/doctor review required before substitution
-                              </div>
-                            ) : null}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </SectionCard>
-          </div>
+      {/* glance */}
+      <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="rounded-xl border border-emerald-200/60 bg-white p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600"><DollarSign className="h-4 w-4 text-emerald-600" /> Today</div>
+          <div className="mt-1 text-2xl font-extrabold text-emerald-700">{todayEarnings == null ? "—" : `₹${todayEarnings.toLocaleString("en-IN")}`}</div>
+        </div>
+        <div className="rounded-xl border border-emerald-200/60 bg-white p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600"><CheckCheck className="h-4 w-4 text-emerald-600" /> Deliveries (Today)</div>
+          <div className="mt-1 text-2xl font-extrabold text-emerald-700">{deliveriesToday}</div>
+        </div>
+        <div className="rounded-xl border border-emerald-200/60 bg-white p-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600"><Gauge className="h-4 w-4 text-emerald-600" /> ₹ / hr</div>
+          <div className="mt-1 text-2xl font-extrabold text-emerald-700">—</div>
         </div>
       </div>
 
-      {/* ------------------------------ CALL MODAL ----------------------------- */}
-      <Dialog open={callOpen} onOpenChange={setCallOpen}>
-        <DialogContent className="max-w-5xl rounded-[32px] border-0 bg-[#061f1d] p-0 text-white shadow-[0_30px_120px_rgba(0,0,0,0.45)]">
-          <div className="grid min-h-[620px] grid-cols-1 lg:grid-cols-[1.35fr_0.8fr]">
-            <div className="relative overflow-hidden rounded-l-[32px] bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.18),transparent_28%),linear-gradient(180deg,#0a1817_0%,#0c2521_100%)] p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm uppercase tracking-[0.18em] text-emerald-100/70">GoDavaii Consult Room</div>
-                  <div className="mt-1 text-2xl font-black">{callSession?.patientName || "Consult Room"}</div>
-                  <div className="mt-1 text-sm text-emerald-50/80">
-                    {callSession?.mode === CONSULT_MODES.VIDEO ? "Video consult" : "Audio consult"} • {dayjs.duration(callSeconds, "seconds").format ? "" : ""}
-                    {Math.floor(callSeconds / 60)
-                      .toString()
-                      .padStart(2, "0")}
-                    :
-                    {(callSeconds % 60).toString().padStart(2, "0")}
-                  </div>
-                </div>
+      {/* tabs */}
+      <div className="mt-4">
+        <Tabs value={tabsValue} onValueChange={(v) => setTab(v === "active" ? 0 : v === "past" ? 1 : 2)}>
+          <TabsList className="grid w-full grid-cols-3 rounded-xl bg-transparent p-0">
+            <TabsTrigger value="active" className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 !font-extrabold">Active Orders</TabsTrigger>
+            <TabsTrigger value="past" className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 !font-extrabold">Past Orders</TabsTrigger>
+            <TabsTrigger value="earnings" className="bg-transparent data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=inactive]:text-slate-600 !font-extrabold">Earnings</TabsTrigger>
+          </TabsList>
 
-                <Badge className="border border-white/10 bg-white/10 font-bold text-white">
-                  {callState.connected ? "Connected" : "Reconnecting"}
-                </Badge>
+          {/* ACTIVE */}
+          <TabsContent value="active" className="mt-4">
+            {loading ? (
+              <div className="flex items-center justify-center py-10 text-slate-500">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading...
               </div>
+            ) : (
+              <div className="space-y-4">
+                {orders.length === 0 && <div className="text-center text-slate-500">No active orders assigned to you.</div>}
 
-              <div className="mt-5 flex h-[420px] items-center justify-center rounded-[28px] border border-white/10 bg-black/30">
-                {callSession?.mode === CONSULT_MODES.VIDEO ? (
-                  <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),transparent_35%),linear-gradient(180deg,#0d1717,#0a0f10)]">
-                    <div className="text-center">
-                      <Avatar className="mx-auto h-24 w-24 border border-white/10">
-                        <AvatarFallback className="bg-white/10 text-3xl font-black text-white">
-                          {initials(callSession?.patientName)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="mt-4 text-xl font-black">{callSession?.patientName}</div>
-                      <div className="mt-1 text-sm text-white/65">Video stream placeholder frontend</div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center">
-                    <Avatar className="mx-auto h-24 w-24 border border-white/10">
-                      <AvatarFallback className="bg-white/10 text-3xl font-black text-white">
-                        {initials(callSession?.patientName)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="mt-4 text-xl font-black">{callSession?.patientName}</div>
-                    <div className="mt-1 text-sm text-white/65">Audio consult room frontend</div>
-                  </div>
-                )}
-              </div>
+                {orders.map((order) => {
+                  const pharmacyLoc = order.pharmacy?.location;
+                  const userLoc = order.address;
 
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setCallState((p) => ({ ...p, micOn: !p.micOn }))}
-                  className="rounded-full border-white/15 bg-white/10 font-black text-white hover:bg-white/15"
-                >
-                  {callState.micOn ? <Mic className="mr-2 h-4 w-4" /> : <MicOff className="mr-2 h-4 w-4" />}
-                  {callState.micOn ? "Mute" : "Unmute"}
-                </Button>
+                  // GeoJSON safeguard
+                  let patchedPharmacyLoc = pharmacyLoc;
+                  if (pharmacyLoc && Array.isArray(pharmacyLoc.coordinates) && pharmacyLoc.coordinates.length === 2) {
+                    patchedPharmacyLoc = { ...pharmacyLoc, lat: pharmacyLoc.coordinates[1], lng: pharmacyLoc.coordinates[0] };
+                  }
+                  let patchedUserLoc = userLoc;
+                  if (userLoc && Array.isArray(userLoc.coordinates) && userLoc.coordinates.length === 2) {
+                    patchedUserLoc = { ...userLoc, lat: userLoc.coordinates[1], lng: userLoc.coordinates[0] };
+                  }
 
-                {callSession?.mode === CONSULT_MODES.VIDEO && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setCallState((p) => ({ ...p, camOn: !p.camOn }))}
-                    className="rounded-full border-white/15 bg-white/10 font-black text-white hover:bg-white/15"
-                  >
-                    {callState.camOn ? <Camera className="mr-2 h-4 w-4" /> : <CameraOff className="mr-2 h-4 w-4" />}
-                    {callState.camOn ? "Camera Off" : "Camera On"}
-                  </Button>
-                )}
+                  const poly = polylines[order._id] || [];
 
-                <Button
-                  onClick={handleEndCall}
-                  className="rounded-full bg-rose-600 font-black text-white hover:bg-rose-700"
-                >
-                  <PhoneOff className="mr-2 h-4 w-4" />
-                  End Consult
-                </Button>
-              </div>
-            </div>
+                  // Phase flags
+                  const isOFD = order.status === "out_for_delivery";
+                  const showPharmacy = !isOFD && order.status !== "delivered";
+                  const showUser     = isOFD; // exact pin only after OFD
 
-            <div className="rounded-r-[32px] bg-white p-5 text-slate-900">
-              <div className="text-lg font-black">During Consult</div>
-              <div className="mt-4 rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                <div className="text-sm font-black text-slate-900">Patient Summary</div>
-                <div className="mt-2 text-sm text-slate-700">
-                  <div>
-                    <span className="font-bold">Name:</span> {callSession?.patientName}
-                  </div>
-                  <div className="mt-1">
-                    <span className="font-bold">Reason:</span> {callSession?.reason}
-                  </div>
-                  <div className="mt-1">
-                    <span className="font-bold">Booked time:</span> {callSession ? formatSlot(callSession.bookedFor) : "—"}
-                  </div>
-                </div>
-              </div>
+                  // Approximate drop (privacy) before OFD
+                  const approxDrop = !isOFD ? maskedDrops[order._id] : null;
 
-              <div className="mt-4">
-                <Label>Clinical Notes</Label>
-                <TextArea
-                  rows={8}
-                  value={callState.notes}
-                  onChange={(e) => setCallState((p) => ({ ...p, notes: e.target.value }))}
-                  placeholder="Write quick notes during consult..."
-                  className="mt-2"
-                />
-              </div>
+                  // Map center preference
+                  const mapCenter =
+                    (showPharmacy && patchedPharmacyLoc?.lat && patchedPharmacyLoc?.lng)
+                      ? { lat: patchedPharmacyLoc.lat, lng: patchedPharmacyLoc.lng }
+                      : (showUser && patchedUserLoc?.lat && patchedUserLoc?.lng)
+                        ? { lat: patchedUserLoc.lat, lng: patchedUserLoc.lng }
+                        : { lat: 19.076, lng: 72.877 };
 
-              <div className="mt-4 grid grid-cols-1 gap-2">
-                <Button
-                  onClick={() => {
-                    setCallOpen(false);
-                    openPrescriptionBuilder(callSession);
-                  }}
-                  className="rounded-2xl bg-emerald-600 font-black text-white hover:bg-emerald-700"
-                >
-                  <ClipboardPlus className="mr-2 h-4 w-4" />
-                  Open Prescription Builder
-                </Button>
+                  // ETA estimate (~22 km/h)
+                  const dist = orderDistances[order._id];
+                  const etaMin = dist != null ? Math.max(3, Math.round((dist / 22) * 60)) : null;
 
-                <Button variant="outline" className="rounded-2xl border-slate-300 font-black">
-                  <ArrowRight className="mr-2 h-4 w-4" />
-                  Continue with Notes Only
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+                  // Navigation targets:
+                  const navOrigin = isOFD
+                    ? `${patchedPharmacyLoc?.lat},${patchedPharmacyLoc?.lng}`
+                    : (driverLoc ? `${driverLoc.lat},${driverLoc.lng}` : `${patchedPharmacyLoc?.lat},${patchedPharmacyLoc?.lng}`);
 
-      {/* ------------------------- PRESCRIPTION MODAL -------------------------- */}
-      <Dialog open={prescriptionOpen} onOpenChange={setPrescriptionOpen}>
-        <DialogContent className="max-h-[92vh] max-w-6xl overflow-y-auto rounded-[32px] border-0 bg-white p-0 shadow-[0_20px_80px_rgba(15,23,42,0.16)]">
-          <DialogHeader className="border-b border-slate-100 px-6 py-5">
-            <DialogTitle className="flex items-center gap-2 text-2xl font-black text-slate-900">
-              <FileText className="h-6 w-6 text-emerald-700" />
-              GoDavaii Branded Prescription
-            </DialogTitle>
-          </DialogHeader>
+                  const navDestination = isOFD
+                    ? `${patchedUserLoc?.lat},${patchedUserLoc?.lng}`
+                    : `${patchedPharmacyLoc?.lat},${patchedPharmacyLoc?.lng}`;
 
-          <div className="grid grid-cols-1 gap-0 lg:grid-cols-[1.08fr_0.92fr]">
-            <div className="border-r border-slate-100 px-6 py-5">
-              <div className="rounded-[24px] border border-emerald-100 bg-[linear-gradient(180deg,#ffffff_0%,#f7fffb_100%)] p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-bold text-slate-500">Doctor</div>
-                    <div className="mt-1 text-xl font-black text-slate-900">{doctor.fullName}</div>
-                    <div className="text-sm text-slate-600">{doctor.specialty}</div>
-                  </div>
-                  <div className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-black text-white">GoDavaii Rx</div>
-                </div>
+                  return (
+                    <motion.div key={order._id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-emerald-200/60 bg-white p-4 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <Pill className="h-5 w-5 text-emerald-600" />
+                        <div className="font-semibold">
+                          Pharmacy: <span className="text-emerald-700 font-extrabold">{order.pharmacy?.name || order.pharmacy}</span>
+                        </div>
+                        <div className="ml-auto flex items-center gap-2">
+                          {dist != null && <Badge className="bg-emerald-100 text-emerald-800 font-bold">{dist.toFixed(2)} km</Badge>}
+                          {etaMin != null && <Badge className="bg-emerald-600">ETA ~ {etaMin} min</Badge>}
+                          <Badge className="bg-emerald-600">{order.status}</Badge>
+                        </div>
+                      </div>
 
-                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white bg-white p-3">
-                    <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Patient</div>
-                    <div className="mt-1 font-black text-slate-900">{selectedBooking?.patientName || "Select booking"}</div>
-                  </div>
-                  <div className="rounded-2xl border border-white bg-white p-3">
-                    <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Consult mode</div>
-                    <div className="mt-1 font-black text-slate-900">
-                      {selectedBooking?.mode === CONSULT_MODES.VIDEO
-                        ? "Video"
-                        : selectedBooking?.mode === CONSULT_MODES.AUDIO
-                        ? "Audio"
-                        : selectedBooking?.mode === CONSULT_MODES.INPERSON
-                        ? "In-person"
-                        : "—"}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                      <div className="mt-2 text-sm text-slate-700">
+                        <div className="flex items-start gap-2">
+                          <MapPin className="h-4 w-4 mt-0.5 text-slate-500" />
+                          <span>Pharmacy Address: <b>{order.pharmacy?.address}</b></span>
+                        </div>
+                        <div className="flex items-start gap-2 mt-1">
+                          <MapPin className="h-4 w-4 mt-0.5 text-slate-500" />
+                          <span>
+                            Deliver to: <b>
+                              {isOFD
+                                ? (order.address?.formatted || order.address?.fullAddress ||
+                                  [order.address?.addressLine, order.address?.floor, order.address?.landmark, order.address?.area, order.address?.city, order.address?.state, order.address?.pin]
+                                    .filter(Boolean).join(", "))
+                                : (order.address?.area || order.address?.city || "Nearby area")}
+                            </b>
+                          </span>
+                        </div>
+                        <div className="mt-1">Amount: ₹{order.total || order.amount || 0}</div>
+                        <div className="mt-1">
+                          Items: {order.items.map((item, i) => (<span key={i} className="text-slate-800">{item.name} x{item.qty || item.quantity}; </span>))}
+                        </div>
+                      </div>
 
-              <div className="mt-5 grid grid-cols-1 gap-4">
-                <div>
-                  <Label>Complaint / Visit Reason</Label>
-                  <TextArea
-                    rows={3}
-                    className="mt-2"
-                    value={prescriptionForm.complaint}
-                    onChange={(e) => setPrescriptionForm((p) => ({ ...p, complaint: e.target.value }))}
-                    placeholder="Main complaint..."
-                  />
-                </div>
+                      {/* map */}
+                      {!patchedPharmacyLoc?.lat ? (
+                        <div className="text-xs text-slate-400 mt-2">Pharmacy location missing</div>
+                      ) : !patchedUserLoc?.lat ? (
+                        <div className="text-xs text-slate-400 mt-2">Customer location missing</div>
+                      ) : (
+                        <div className="mt-3">
+                          <OrderMiniMap
+                            center={mapCenter}
+                            pharmacyLoc={patchedPharmacyLoc}
+                            userLoc={patchedUserLoc}
+                            path={poly}
+                            showPharmacy={showPharmacy}
+                            showUser={showUser}
+                            approxDrop={approxDrop}
+                          />
 
-                <div>
-                  <Label>Diagnosis</Label>
-                  <TextArea
-                    rows={3}
-                    className="mt-2"
-                    value={prescriptionForm.diagnosis}
-                    onChange={(e) => setPrescriptionForm((p) => ({ ...p, diagnosis: e.target.value }))}
-                    placeholder="Diagnosis / clinical impression..."
-                  />
-                </div>
-
-                <div>
-                  <Label>Precautions / Advice</Label>
-                  <TextArea
-                    rows={3}
-                    className="mt-2"
-                    value={prescriptionForm.precautions}
-                    onChange={(e) => setPrescriptionForm((p) => ({ ...p, precautions: e.target.value }))}
-                    placeholder="Precautions, hydration, rest, warning signs..."
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label>Tests Advised</Label>
-                    <TextArea
-                      rows={3}
-                      className="mt-2"
-                      value={prescriptionForm.testsAdvised}
-                      onChange={(e) => setPrescriptionForm((p) => ({ ...p, testsAdvised: e.target.value }))}
-                      placeholder="CBC, LFT, HbA1c..."
-                    />
-                  </div>
-                  <div>
-                    <Label>Follow-up Date</Label>
-                    <Input
-                      type="date"
-                      className="mt-2"
-                      value={prescriptionForm.followUpDate}
-                      onChange={(e) => setPrescriptionForm((p) => ({ ...p, followUpDate: e.target.value }))}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="px-6 py-5">
-              <div className="flex items-center justify-between">
-                <div className="text-lg font-black text-slate-900">Medicine Builder</div>
-                <Button onClick={addMedicineRow} variant="outline" className="rounded-2xl border-slate-300 font-black">
-                  <Pill className="mr-2 h-4 w-4" />
-                  Add Medicine
-                </Button>
-              </div>
-
-              <div className="mt-4 space-y-4">
-                {prescriptionForm.medicines.map((med, idx) => (
-                  <div key={idx} className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="font-black text-slate-900">Medicine #{idx + 1}</div>
-                      {prescriptionForm.medicines.length > 1 && (
-                        <Button
-                          variant="outline"
-                          onClick={() => removeMedicineRow(idx)}
-                          className="rounded-xl border-rose-300 text-rose-700 hover:bg-rose-50"
-                        >
-                          Remove
-                        </Button>
+                          {/* Navigation: default two_wheeler */}
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <Button asChild variant="outline" className="!font-bold h-9 w-full">
+                              <a
+                                target="_blank"
+                                rel="noreferrer"
+                                href={
+                                  `https://www.google.com/maps/dir/?api=1` +
+                                  `&origin=${navOrigin}` +
+                                  `&destination=${navDestination}` +
+                                  `&travelmode=two_wheeler`
+                                }
+                              >
+                                <Navigation className="h-4 w-4 mr-2" /> Google Maps
+                              </a>
+                            </Button>
+                            <Button asChild variant="outline" className="!font-bold h-9 w-full">
+                              <a
+                                target="_blank"
+                                rel="noreferrer"
+                                href={`http://maps.apple.com/?saddr=${navOrigin}&daddr=${navDestination}`}
+                              >
+                                <Navigation className="h-4 w-4 mr-2" /> Apple Maps
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
                       )}
-                    </div>
 
-                    <div className="grid grid-cols-1 gap-3">
-                      <div>
-                        <Label>Medicine name</Label>
-                        <Input
-                          className="mt-2"
-                          value={med.prescribed}
-                          onChange={(e) => updateMedicineRow(idx, "prescribed", e.target.value)}
-                          placeholder="e.g. Augmentin 625"
-                        />
-                      </div>
+                      {/* actions */}
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {order.status === "assigned" && (
+                          <>
+                            <Button
+                              onClick={() => handleUpdateStatus(order._id, "rejected")}
+                              className="!font-extrabold bg-red-600 hover:bg-red-700 active:bg-red-800 text-white border border-red-700/80 shadow-sm">
+                              Reject
+                            </Button>
+                            <Button
+                              className="btn-primary-emerald !font-extrabold"
+                              onClick={() => handleUpdateStatus(order._id, "accepted")}>
+                              Accept Order
+                            </Button>
+                          </>
+                        )}
+                        {order.status === "accepted" && (
+                          <Button onClick={() => handleUpdateStatus(order._id, "out_for_delivery")}
+                            className="!font-extrabold bg-amber-400 hover:bg-amber-500 active:bg-amber-600 text-emerald-950 border border-amber-500/70 shadow-sm">
+                            <Bike className="h-4 w-4 mr-2" /> MARK AS OUT FOR DELIVERY
+                          </Button>
+                        )}
+                        {order.status === "out_for_delivery" && (
+                          <Button onClick={() => handleUpdateStatus(order._id, "delivered")}
+                            className="bg-emerald-600 hover:bg-emerald-700 !font-extrabold text-white">
+                            <CheckCheck className="h-4 w-4 mr-2" /> Mark as Delivered
+                          </Button>
+                        )}
+                        {order.status === "delivered" && <Badge className="bg-emerald-600">Delivered</Badge>}
 
-                      <div>
-                        <Label>Salt / composition</Label>
-                        <Input
-                          className="mt-2"
-                          value={med.salt}
-                          onChange={(e) => updateMedicineRow(idx, "salt", e.target.value)}
-                          placeholder="e.g. Amoxicillin + Clavulanic Acid"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label>Dosage</Label>
-                          <Input
-                            className="mt-2"
-                            value={med.dosage}
-                            onChange={(e) => updateMedicineRow(idx, "dosage", e.target.value)}
-                            placeholder="1 tablet"
-                          />
-                        </div>
-                        <div>
-                          <Label>Frequency</Label>
-                          <Input
-                            className="mt-2"
-                            value={med.frequency}
-                            onChange={(e) => updateMedicineRow(idx, "frequency", e.target.value)}
-                            placeholder="BD / OD / SOS"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label>Duration</Label>
-                          <Input
-                            className="mt-2"
-                            value={med.duration}
-                            onChange={(e) => updateMedicineRow(idx, "duration", e.target.value)}
-                            placeholder="5 days"
-                          />
-                        </div>
-                        <div>
-                          <Label>How to take</Label>
-                          <Input
-                            className="mt-2"
-                            value={med.howToTake}
-                            onChange={(e) => updateMedicineRow(idx, "howToTake", e.target.value)}
-                            placeholder="After food / before breakfast"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <Label>Notes</Label>
-                        <Input
-                          className="mt-2"
-                          value={med.notes}
-                          onChange={(e) => updateMedicineRow(idx, "notes", e.target.value)}
-                          placeholder="Any special note..."
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 flex flex-wrap justify-end gap-2">
-                <Button variant="outline" className="rounded-2xl border-slate-300 font-black" onClick={() => setPrescriptionOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSubmitPrescription}
-                  className="rounded-2xl bg-emerald-600 font-black text-white hover:bg-emerald-700"
-                >
-                  Generate Prescription & Patient Cart Preview
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* ---------------------- PATIENT CART PREVIEW MODAL --------------------- */}
-      <Dialog open={prescriptionPreviewOpen} onOpenChange={setPrescriptionPreviewOpen}>
-        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-[32px] border-0 bg-white p-0 shadow-[0_20px_80px_rgba(15,23,42,0.16)]">
-          <DialogHeader className="border-b border-slate-100 px-6 py-5">
-            <DialogTitle className="flex items-center gap-2 text-2xl font-black text-slate-900">
-              <Wallet className="h-6 w-6 text-emerald-700" />
-              Patient Order Page Preview
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="px-6 py-5">
-            <div className="mb-4 rounded-[24px] border border-emerald-100 bg-[linear-gradient(180deg,#ffffff_0%,#f7fffb_100%)] p-4">
-              <div className="text-sm font-bold text-slate-600">What happens after doctor submits</div>
-              <div className="mt-2 text-sm text-slate-700">
-                Prescription instantly reaches patient → all mapped medicines auto-add to cart → branded + generic options shown → savings visible.
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {patientCartPreview.map((item) => {
-                const usingGeneric = item.switchedToGeneric && item.generic.available;
-                const totalSavings = usingGeneric ? item.generic.savings : 0;
-                return (
-                  <div key={item.id} className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="text-lg font-black text-slate-900">{item.prescribed}</div>
-                          <Badge className="border border-slate-200 bg-slate-100 font-bold text-slate-700">
-                            Auto-added to cart
-                          </Badge>
-                          {usingGeneric && (
-                            <Badge className="border border-emerald-200 bg-emerald-100 font-bold text-emerald-800">
-                              Generic selected
-                            </Badge>
-                          )}
+                        <div className="basis-full h-0" />
+                        <div className="w-full flex flex-wrap gap-2">
+                          {["Reaching in 5–7 mins","Outside your gate","Call me if needed"].map((txt) => (
+                            <Button key={txt} size="sm" variant="secondary" className="rounded-full !font-bold"
+                              onClick={async () => { try { await navigator.clipboard.writeText(txt); } catch {} ; setSnackbar({ open:true, message:"Canned reply copied", severity:"success" }); }}>
+                              {txt}
+                            </Button>
+                          ))}
                         </div>
 
-                        <div className="mt-2 text-sm text-slate-600">{item.salt}</div>
-                        <div className="mt-2 text-sm text-slate-700">
-                          {item.dosage} • {item.frequency} • {item.duration} • {item.howToTake}
-                        </div>
-
-                        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                            <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Prescribed brand</div>
-                            <div className="mt-1 font-black text-slate-900">{item.matchedBrand.name}</div>
-                            <div className="mt-1 text-sm text-slate-600">{money(item.matchedBrand.price)}</div>
-                          </div>
-
-                          <div className={cx("rounded-2xl border p-3", item.generic.available ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50")}>
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Generic alternative</div>
-                                <div className="mt-1 font-black text-slate-900">{item.generic.name}</div>
-                                {item.generic.available ? (
-                                  <>
-                                    <div className="mt-1 text-sm text-slate-600">{money(item.generic.price)}</div>
-                                    <div className="mt-1 text-sm font-bold text-emerald-800">
-                                      Save {money(item.generic.savings)}
-                                    </div>
-                                    <div className="mt-1 text-xs font-semibold text-emerald-800">Same salt composition</div>
-                                  </>
-                                ) : (
-                                  <div className="mt-1 text-sm text-slate-500">No generic mapped</div>
-                                )}
-                              </div>
-                              {item.generic.available ? (
-                                <Switch checked={item.switchedToGeneric} onCheckedChange={() => toggleGeneric(item.id)} />
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4 lg:w-[220px]">
-                        <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Patient pays</div>
-                        <div className="mt-1 text-2xl font-black text-slate-900">
-                          {money(usingGeneric ? item.generic.price : item.matchedBrand.price)}
-                        </div>
-                        <div className="mt-2 text-sm text-slate-600">
-                          {usingGeneric ? "Generic selected" : "Brand retained"}
-                        </div>
-                        {totalSavings > 0 && (
-                          <div className="mt-2 rounded-2xl bg-emerald-100 px-3 py-2 text-sm font-black text-emerald-800">
-                            Saving {money(totalSavings)}
+                        {order.status !== "delivered" && (
+                          <div className="w-full sm:w-auto sm:ml-auto relative">
+                            {!!(orderUnreadCounts[order._id]) && (
+                              <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
+                                {orderUnreadCounts[order._id]}
+                              </span>
+                            )}
+                            <Button
+                              className="bg-amber-300 text-slate-900 hover:bg-amber-400 !font-bold w-full sm:w-auto"
+                              onClick={async () => {
+                                setChatOrder(order);
+                                setChatOpen(true);
+                                const token = localStorage.getItem("deliveryToken");
+                                try { await axios.patch(`${API_BASE_URL}/api/chat/${order._id}/user-chat-seen`, {}, { headers: { Authorization: `Bearer ${token}` } }); } catch {}
+                                setOrderUnreadCounts((c) => ({ ...c, [order._id]: 0 }));
+                              }}
+                            >
+                              <MessageSquare className="h-4 w-4 mr-2" /> Chat
+                            </Button>
                           </div>
                         )}
                       </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* PAST */}
+          <TabsContent value="past" className="mt-4">
+            {loading ? (
+              <div className="flex items-center justify-center py-10 text-slate-500">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading...
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {pastOrders.length === 0 && <div className="text-center text-slate-500">No past orders delivered yet.</div>}
+                {pastOrders.map((order) => (
+                  <motion.div key={order._id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-emerald-200/60 bg-white p-4 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <CheckCheck className="h-5 w-5 text-emerald-600" />
+                      <div className="font-semibold">Delivered #{order._id?.slice(-5)}</div>
+                      <Badge className="ml-auto bg-emerald-600">{order.status}</Badge>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                    <div className="mt-1 text-sm text-slate-700">Pharmacy: {order.pharmacy?.name || order.pharmacy}</div>
+                    <div className="text-sm text-slate-700">Delivered to: {order.address?.addressLine}</div>
+                    <div className="text-sm text-slate-700">Amount: ₹{order.total || order.amount || 0}</div>
+                    <div className="text-xs text-slate-500">{order.createdAt && new Date(order.createdAt).toLocaleString()}</div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
 
-            <div className="mt-5 flex justify-end">
-              <Button
-                onClick={() => {
-                  setPrescriptionPreviewOpen(false);
-                  setSnackbar({
-                    open: true,
-                    message: "Frontend flow ready: prescription → patient → auto cart",
-                    tone: "success",
-                  });
-                }}
-                className="rounded-2xl bg-emerald-600 font-black text-white hover:bg-emerald-700"
-              >
-                Close Preview
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          {/* EARNINGS */}
+          <TabsContent value="earnings" className="mt-4">
+            <DeliveryPayoutsSection partner={partner} />
+          </TabsContent>
+        </Tabs>
+      </div>
 
-      {/* ----------------------- CLINIC CHANGE REQUEST ------------------------ */}
-      <Dialog open={clinicChangeOpen} onOpenChange={setClinicChangeOpen}>
-        <DialogContent className="max-w-2xl rounded-[30px] border-0 bg-white p-0 shadow-[0_20px_80px_rgba(15,23,42,0.16)]">
-          <DialogHeader className="border-b border-slate-100 px-6 py-5">
-            <DialogTitle className="flex items-center gap-2 text-xl font-black text-slate-900">
-              <Building2 className="h-5 w-5 text-emerald-700" />
-              Request Clinic Change
+      {/* NEW: Incoming Offer Modal */}
+      <Dialog open={!!offer} onOpenChange={(o)=>{ if(!o){ setOffer(null); setOfferDeadline(null); }}}>
+        <DialogContent className="force-light sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BellRing className="h-5 w-5 text-emerald-600" />
+              New Delivery Offer
             </DialogTitle>
           </DialogHeader>
 
-          <div className="px-6 py-5">
-            <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              Changing clinic details requires admin re-verification. Public clinic details should stay read-only until approved.
-            </div>
-
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <Label>Clinic Name</Label>
-                <Input
-                  className="mt-2"
-                  value={clinicChangeDraft.clinicName}
-                  onChange={(e) => setClinicChangeDraft((p) => ({ ...p, clinicName: e.target.value }))}
-                />
+          {offer && (
+            <div className="space-y-2">
+              <div className="text-sm text-slate-600">
+                Pharmacy: <b>{offer?.pharmacy?.name || "Pharmacy"}</b>
               </div>
-              <div>
-                <Label>Clinic Address</Label>
-                <Input
-                  className="mt-2"
-                  value={clinicChangeDraft.addressLine1}
-                  onChange={(e) => setClinicChangeDraft((p) => ({ ...p, addressLine1: e.target.value }))}
-                />
+              <div className="text-sm text-slate-600">
+                Payout estimate: <b>₹{Math.round((offer.total || 0) * 0.08)}</b>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <Label>Locality</Label>
-                  <Input
-                    className="mt-2"
-                    value={clinicChangeDraft.locality}
-                    onChange={(e) => setClinicChangeDraft((p) => ({ ...p, locality: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label>City</Label>
-                  <Input
-                    className="mt-2"
-                    value={clinicChangeDraft.city}
-                    onChange={(e) => setClinicChangeDraft((p) => ({ ...p, city: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label>PIN</Label>
-                  <Input
-                    className="mt-2"
-                    value={clinicChangeDraft.pin}
-                    onChange={(e) => setClinicChangeDraft((p) => ({ ...p, pin: e.target.value }))}
-                  />
-                </div>
+              <div className="mt-2">
+                <Badge className="bg-emerald-600 text-white font-bold">
+                  Respond in {left}s
+                </Badge>
               </div>
-              <div>
-                <Label>Map Label / Exact Location Ref</Label>
-                <Input
-                  className="mt-2"
-                  value={clinicChangeDraft.mapLabel}
-                  onChange={(e) => setClinicChangeDraft((p) => ({ ...p, mapLabel: e.target.value }))}
-                />
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button
+                  className="!font-extrabold bg-red-600 hover:bg-red-700 text-white"
+                  onClick={async () => {
+                    try {
+                      const token = localStorage.getItem("deliveryToken");
+                      await axios.patch(`${API_BASE_URL}/api/delivery/orders/${offer.orderId}/reject`, {}, {
+                        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+                      });
+                    } catch {}
+                    setOffer(null); setOfferDeadline(null);
+                  }}>
+                  Reject
+                </Button>
+                <Button
+                  className="btn-primary-emerald !font-extrabold"
+                  onClick={async () => {
+                    try { await handleUpdateStatus(offer.orderId, "accepted"); }
+                    finally { setOffer(null); setOfferDeadline(null); }
+                  }}>
+                  Accept
+                </Button>
               </div>
             </div>
-          </div>
-
-          <DialogFooter className="border-t border-slate-100 px-6 py-4">
-            <Button variant="outline" className="rounded-2xl border-slate-300 font-black" onClick={() => setClinicChangeOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={submitClinicChangeRequest} className="rounded-2xl bg-emerald-600 font-black text-white hover:bg-emerald-700">
-              Submit for Re-verification
-            </Button>
-          </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
-      {/* SNACKBAR */}
+      {/* CHAT MODAL */}
+      <ChatModal
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        orderId={chatOrder?._id}
+        thread="delivery"
+        orderStatus={chatOrder?.status}
+        partnerName={chatOrder?.address?.name}
+        partnerType="user"
+        currentRole="delivery"
+      />
+
+      {/* SOS */}
+      <Button
+        className="fixed bottom-24 right-4 z-[2000] bg-red-600 hover:bg-red-700 font-extrabold shadow-lg"
+        onClick={() => setSnackbar({ open: true, message: "SOS sent to support (demo)", severity: "error" })}
+      >
+        <ShieldAlert className="h-4 w-4 mr-2" /> SOS
+      </Button>
+
+      {/* Snackbar */}
       <AnimatePresence>
         {snackbar.open && (
           <motion.div
-            initial={{ opacity: 0, y: 16, x: "-50%" }}
-            animate={{ opacity: 1, y: 0, x: "-50%" }}
-            exit={{ opacity: 0, y: 16, x: "-50%" }}
-            className={cx(
-              "fixed bottom-6 left-1/2 z-[5000] rounded-full px-5 py-3 text-sm font-black shadow-xl",
-              snackbar.tone === "error" ? "bg-rose-600 text-white" : "bg-emerald-600 text-white"
-            )}
+            initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 30, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 320, damping: 24 }}
+            className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[2000] rounded-full px-4 py-2 font-semibold shadow-lg ${
+              snackbar.severity === "error" ? "bg-red-600 text-white" : "bg-emerald-600 text-white"
+            }`}
+            onAnimationComplete={() => setTimeout(() => setSnackbar(s => ({ ...s, open: false })), 2200)}
           >
             {snackbar.message}
           </motion.div>
