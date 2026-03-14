@@ -98,7 +98,10 @@ function AppShell({ children }) {
 
 function AppContent() {
   const location = useLocation();
-  const hideNavbar = location.pathname === "/" || location.pathname === "/home";
+  const hideNavbar =
+  location.pathname === "/" ||
+  location.pathname === "/home" ||
+  location.pathname.startsWith("/ai");
 
   React.useEffect(() => {
     const isWelcome = location.pathname === "/";

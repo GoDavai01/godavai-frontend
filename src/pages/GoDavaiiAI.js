@@ -17,12 +17,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
   Check,
-  ChevronDown,
   ClipboardList,
   FileText,
   FlaskConical,
   Globe2,
-  History,
   Menu,
   Mic,
   MicOff,
@@ -51,13 +49,10 @@ const DEEP = "#0A5A3B";
 const MID = "#0F7A53";
 const ACC = "#18E2A1";
 const ACC_SOFT = "rgba(24,226,161,0.14)";
-const DARK = "#041A12";
 const BG_TOP = "#F4FBF8";
 const BG_MID = "#EEF8F4";
 const BG_BOT = "#F7FAFF";
-const GLASS = "rgba(255,255,255,0.82)";
 const GLASS_STRONG = "rgba(255,255,255,0.92)";
-const GLASS_DARK = "rgba(7,23,17,0.72)";
 const GLASS_BORDER = "rgba(12,90,62,0.08)";
 const TEXT = "#10231A";
 const SUB = "#6A7A73";
