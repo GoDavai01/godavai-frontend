@@ -11,17 +11,20 @@
 // ✅ FIX: Browser TTS fallback now picks better voice and avoids ugly random fallback
 // ✅ FIX: Reply language chip persisted in localStorage
 // ✅ FIX: Existing result / backend / TTS / file logic preserved
+// ✅ FIX ONLY: top summary chips row removed from navbar
+// ✅ FIX ONLY: better section labels by reply language
+// ✅ FIX ONLY: body scroll lock + touch momentum scroll
+// ✅ FIX ONLY: TTS preference respected properly
+// ✅ FIX ONLY: transcriptMode added for voice transcription
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  AlertTriangle,
   Check,
   ClipboardList,
   FileText,
   FlaskConical,
-  Globe2,
   Menu,
   Mic,
   MicOff,
@@ -89,6 +92,55 @@ function cleanAssistantText(text) {
     .replace(/__/g, "")
     .replace(/```[a-z]*\n?/gi, "")
     .replace(/```/g, "");
+}
+
+function getDisplayReplyLanguage(preferred, text = "") {
+  const pref = String(preferred || "auto").toLowerCase();
+  if (pref && pref !== "auto") return pref;
+
+  if (/[\u0900-\u097F]/.test(text)) return "hindi";
+  const detected = detectLanguageForTTS(text);
+  return detected || "hinglish";
+}
+
+function getSectionLabel(sectionKey, lang) {
+  const normalized = String(lang || "hinglish").toLowerCase();
+
+  const map = {
+    hinglish: {
+      Assessment: "Samajhi hui baat",
+      "Next steps": "Ab kya karein",
+      "Warning signs": "Kab turant doctor ko dikhana hai",
+      "Red flags": "Kab turant doctor ko dikhana hai",
+      "When to see doctor": "Kab doctor ko dikhana hai",
+      "Desi ilaaj": "Desi ilaaj",
+      "Home remedies": "Gharelu nuskhe",
+    },
+    hindi: {
+      Assessment: "समझी हुई बात",
+      "Next steps": "अब क्या करें",
+      "Warning signs": "कब तुरंत डॉक्टर को दिखाना है",
+      "Red flags": "कब तुरंत डॉक्टर को दिखाना है",
+      "When to see doctor": "कब डॉक्टर को दिखाना है",
+      "Desi ilaaj": "देसी इलाज",
+      "Home remedies": "घरेलू नुस्खे",
+    },
+    english: {
+      Assessment: "Assessment",
+      "Next steps": "Next steps",
+      "Warning signs": "Warning signs",
+      "Red flags": "Warning signs",
+      "When to see doctor": "When to see doctor",
+      "Desi ilaaj": "Home support",
+      "Home remedies": "Home remedies",
+    },
+  };
+
+  const selected =
+    map[normalized] ||
+    (normalized === "hinglish" ? map.hinglish : map.english);
+
+  return selected[sectionKey] || sectionKey;
 }
 
 function buildCompactHistory(messages) {
@@ -224,7 +276,9 @@ function pickBestBrowserVoice(lang) {
   }
 
   for (const target of targets) {
-    const v = voices.find((x) => String(x.lang || "").toLowerCase().startsWith(target.split("-")[0].toLowerCase()));
+    const v = voices.find((x) =>
+      String(x.lang || "").toLowerCase().startsWith(target.split("-")[0].toLowerCase())
+    );
     if (v) return v;
   }
 
@@ -307,10 +361,11 @@ function SummaryPill({ children, tone = "default" }) {
 }
 
 /* ── Reply formatter ──────────────────────────────────────── */
-function FormatReply({ text, screen }) {
+function FormatReply({ text, screen, uiLang }) {
   const clean = cleanAssistantText(text);
   const isDesktop = screen === "desktop";
   const baseFontSize = isDesktop ? 14.5 : 14;
+  const lang = getDisplayReplyLanguage(uiLang, clean);
 
   const hasSections = /\n\s*(Assessment|Next steps|Warning signs|Desi ilaaj):/i.test(clean);
   if (!hasSections) {
@@ -356,11 +411,12 @@ function FormatReply({ text, screen }) {
           );
         }
 
-        const header = headerMatch[1];
+        const rawHeader = headerMatch[1];
+        const header = getSectionLabel(rawHeader, lang);
         const body = section.slice(headerMatch[0].length).trim();
-        const isRed = /red flag|warning sign/i.test(header);
-        const isDesi = /desi|home remed/i.test(header);
-        const isAssessment = /assessment/i.test(header);
+        const isRed = /red flag|warning sign|when to see doctor/i.test(rawHeader);
+        const isDesi = /desi|home remed/i.test(rawHeader);
+        const isAssessment = /assessment/i.test(rawHeader);
 
         return (
           <div key={i} style={{ marginBottom: 16 }}>
@@ -402,7 +458,7 @@ function FormatReply({ text, screen }) {
 }
 
 /* ── Message bubbles ──────────────────────────────────────── */
-function ChatBubble({ m, onSpeak, speakingId, speakLoading, screen }) {
+function ChatBubble({ m, onSpeak, speakingId, speakLoading, screen, uiLang }) {
   const isUser = m.role === "user";
   const isSpeaking = speakingId === m.id;
   const isDesktop = screen === "desktop";
@@ -463,7 +519,7 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading, screen }) {
             {m.text}
           </div>
         ) : (
-          <FormatReply text={m.text} screen={screen} />
+          <FormatReply text={m.text} screen={screen} uiLang={uiLang} />
         )}
 
         {!isUser && (
@@ -636,6 +692,28 @@ export default function GoDavaiiAI() {
   }, [replyLanguage]);
 
   useEffect(() => {
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlHeight = document.documentElement.style.height;
+    const prevBodyHeight = document.body.style.height;
+    const prevOverscroll = document.body.style.overscrollBehavior;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.height = "100%";
+    document.body.style.height = "100%";
+    document.body.style.overscrollBehavior = "none";
+
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.height = prevHtmlHeight;
+      document.body.style.height = prevBodyHeight;
+      document.body.style.overscrollBehavior = prevOverscroll;
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       try {
         recognitionRef.current?.stop?.();
@@ -750,9 +828,6 @@ export default function GoDavaiiAI() {
     return whoFor === "family" ? "Family Member" : "New Profile";
   }, [whoFor, familyLabel, customProfile, user?.name]);
 
-  const currentFocusMeta = useMemo(() => FOCUS.find((f) => f.key === focus) || FOCUS[0], [focus]);
-  const currentLangMeta = useMemo(() => LANG_OPTIONS.find((l) => l.key === replyLanguage) || LANG_OPTIONS[0], [replyLanguage]);
-
   const profileContext = useMemo(
     () => ({
       whoFor,
@@ -791,12 +866,23 @@ export default function GoDavaiiAI() {
     setSpeakLoading(true);
 
     const text = cleanAssistantText(msg.text);
-    const lang = detectLanguageForTTS(text);
+
+    // IMPORTANT:
+    // selected reply language wins.
+    // text-detection only fallback hai.
+    const lang =
+      replyLanguage && replyLanguage !== "auto"
+        ? replyLanguage
+        : detectLanguageForTTS(text);
 
     try {
       const { data } = await axios.post(
         `${API}/api/ai/assistant/tts`,
-        { text: text.slice(0, 3000), language: lang },
+        {
+          text: text.slice(0, 3000),
+          language: lang,
+          replyLanguagePreference: replyLanguage || "auto",
+        },
         { timeout: 30000, headers: getAuthHeaders() }
       );
 
@@ -829,31 +915,20 @@ export default function GoDavaiiAI() {
 
     setSpeakLoading(false);
 
-    // Avoid ugly browser fallback for Indian language speech unless usable voice exists
+    // IMPORTANT:
+    // non-English ke liye ugly browser fallback bilkul mat chalao
+    if (lang !== "english") {
+      setSpeakingId(null);
+      return;
+    }
+
     if (window.speechSynthesis) {
       try {
-        const voice = pickBestBrowserVoice(lang);
-
-        // Agar non-English ke liye proper voice hi nahi mili, fallback mat chalao
-        if (!voice && lang !== "english") {
-          setSpeakingId(null);
-          return;
-        }
-
+        const voice = pickBestBrowserVoice("english");
         const u = new SpeechSynthesisUtterance(text);
-        u.rate = 0.92;
+        u.rate = 0.94;
         u.pitch = 1.0;
-        u.lang =
-          lang === "hindi" ? "hi-IN" :
-          lang === "bengali" ? "bn-IN" :
-          lang === "tamil" ? "ta-IN" :
-          lang === "telugu" ? "te-IN" :
-          lang === "marathi" ? "mr-IN" :
-          lang === "gujarati" ? "gu-IN" :
-          lang === "punjabi" ? "pa-IN" :
-          lang === "hinglish" ? "hi-IN" :
-          "en-IN";
-
+        u.lang = "en-IN";
         if (voice) u.voice = voice;
 
         u.onend = () => setSpeakingId(null);
@@ -867,7 +942,7 @@ export default function GoDavaiiAI() {
     } else {
       setSpeakingId(null);
     }
-  }, [speakingId]);
+  }, [speakingId, replyLanguage]);
 
   async function transcribeAudioBlob(blob) {
     const mime = blob.type || "audio/webm";
@@ -880,6 +955,7 @@ export default function GoDavaiiAI() {
     const fd = new FormData();
     fd.append("audio", new File([blob], `voice.${ext}`, { type: mime }));
     fd.append("replyLanguagePreference", replyLanguage);
+    fd.append("transcriptMode", replyLanguage === "hinglish" ? "romanized" : "native");
 
     const { data } = await axios.post(
       `${API}/api/ai/assistant/transcribe`,
@@ -980,7 +1056,6 @@ export default function GoDavaiiAI() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const preferBrowserSTT = screen === "desktop" && SR;
 
-    // Desktop pe browser STT first — much more reliable
     if (preferBrowserSTT) {
       try {
         const rec = new SR();
@@ -1030,7 +1105,6 @@ export default function GoDavaiiAI() {
       }
     }
 
-    // Mobile / fallback => MediaRecorder + backend transcription
     try {
       if (navigator.mediaDevices?.getUserMedia && window.MediaRecorder) {
         await startRecordedMic();
@@ -1040,7 +1114,6 @@ export default function GoDavaiiAI() {
       console.error("Recorded mic start failed:", err);
     }
 
-    // Final fallback
     if (SR) {
       try {
         const rec = new SR();
@@ -1358,31 +1431,6 @@ export default function GoDavaiiAI() {
     );
   }
 
-  const topSummary = (
-    <div
-      style={{
-        display: "flex",
-        gap: 8,
-        overflowX: "auto",
-        paddingBottom: 2,
-        scrollbarWidth: "none",
-      }}
-    >
-      <SummaryPill tone="active">
-        <Sparkles style={{ width: 12, height: 12 }} />
-        {currentFocusMeta.label}
-      </SummaryPill>
-      <SummaryPill>
-        {whoFor === "self" ? <UserRound style={{ width: 12, height: 12 }} /> : <Users style={{ width: 12, height: 12 }} />}
-        {whoForLabel}
-      </SummaryPill>
-      <SummaryPill>
-        <Globe2 style={{ width: 12, height: 12 }} />
-        {currentLangMeta.label}
-      </SummaryPill>
-    </div>
-  );
-
   return (
     <div
       style={{
@@ -1480,12 +1528,9 @@ export default function GoDavaiiAI() {
           </motion.button>
         </div>
 
-        <div style={{ marginTop: 10 }}>{topSummary}</div>
-
         <div style={{ marginTop: 9, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <SummaryPill tone="danger">
-            <AlertTriangle style={{ width: 12, height: 12 }} />
-            AI guide hai. Emergency me hospital/ambulance call karein.
+            Emergency? 112 / 108 pe call karein.
           </SummaryPill>
 
           <motion.button
@@ -1515,6 +1560,7 @@ export default function GoDavaiiAI() {
           zIndex: 1,
           flex: 1,
           overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
           overflowX: "hidden",
           padding: `14px ${sidePad}px ${composerOuterHeight + 26}px`,
           scrollbarWidth: "none",
@@ -1571,6 +1617,7 @@ export default function GoDavaiiAI() {
               speakingId={speakingId}
               speakLoading={speakLoading}
               screen={screen}
+              uiLang={replyLanguage}
             />
           ))}
         </AnimatePresence>
