@@ -17,6 +17,8 @@ import {
   Wallet,
   X,
 } from "lucide-react";
+import OtpLogin from "../components/OtpLogin";
+import { useAuth } from "../context/AuthContext";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0C5A3E";
@@ -67,6 +69,21 @@ function userHeaders() {
 
 function mapModeForBackend(mode) {
   return mode === "call" ? "call" : mode;
+}
+
+function loadRazorpayScript(src) {
+  return new Promise((resolve) => {
+    if (typeof window !== "undefined" && window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
 }
 
 function Glass({ children, style }) {
@@ -163,6 +180,7 @@ function DoctorCard({ doctor, mode, onBook }) {
 }
 
 export default function Doctors() {
+  const { token } = useAuth();
   const [query, setQuery] = useState("");
   const [specialty, setSpecialty] = useState("All");
   const [mode, setMode] = useState("video");
@@ -186,6 +204,7 @@ export default function Doctors() {
   const [medicalRecords, setMedicalRecords] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState("");
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
 
   const dateList = useMemo(() => next7Days(), []);
 
@@ -227,8 +246,8 @@ export default function Doctors() {
     loadDoctors();
   }, [query, specialty, sort, mode]);
 
-  async function loadMyConsults() {
-    if (!localStorage.getItem("token")) {
+  const loadMyConsults = useCallback(async () => {
+    if (!token) {
       setAppointments([]);
       setLoadingAppts(false);
       return;
@@ -243,11 +262,11 @@ export default function Doctors() {
     } finally {
       setLoadingAppts(false);
     }
-  }
+  }, [token]);
 
   useEffect(() => {
     loadMyConsults();
-  }, []);
+  }, [loadMyConsults]);
 
   const loadSlotsForDoctor = useCallback(async (doctorId, date) => {
     if (!doctorId || !date) return;
@@ -293,12 +312,9 @@ export default function Doctors() {
 
   async function bookNow() {
     if (!bookingDoctor || !bookingDate || !bookingSlot || !paymentMethod) return;
-    const token = localStorage.getItem("token");
     if (!token) {
-      setError("Please login again to book consultation.");
-      if (typeof window !== "undefined") {
-        window.location.href = "/login";
-      }
+      setError("Please login to continue booking and payment.");
+      setLoginOpen(true);
       return;
     }
 
@@ -330,16 +346,52 @@ export default function Doctors() {
         }
       );
 
-      const consult = createRes?.data?.consult;
+      const consult = createRes?.data?.consult || createRes?.data?.appointment;
       const paymentRef = createRes?.data?.paymentIntent?.paymentRef || consult?.paymentRef || "";
       if (!consult?.id) throw new Error("Consult hold failed");
 
-      const transactionId = `TXN-${Date.now()}`;
-      await axios.post(`${API}/api/payments/verify`, {
-        consultId: consult.id,
-        paymentRef,
-        paymentMethod,
-        transactionId,
+      const rzpLoaded = await loadRazorpayScript("https://checkout.razorpay.com/v1/checkout.js");
+      if (!rzpLoaded) throw new Error("Razorpay SDK failed to load. Try again.");
+
+      const orderBackend = await axios.post(`${API}/api/payments/razorpay/order`, {
+        amount: Number(createRes?.data?.paymentIntent?.amount || consult?.fee || 0),
+        currency: "INR",
+        receipt: `consult_${consult.id}_${Date.now()}`,
+      });
+
+      await new Promise((resolve, reject) => {
+        const options = {
+          key: process.env.REACT_APP_RAZORPAY_KEY_ID || "rzp_test_GAXFOxUCCrxVvr",
+          amount: orderBackend.data.amount,
+          currency: orderBackend.data.currency || "INR",
+          name: "GoDavaii Doctor Consult",
+          description: `${bookingDoctor.name} ${mode === "inperson" ? "In-Person" : mode === "call" ? "Audio" : "Video"} Consultation`,
+          order_id: orderBackend.data.orderId || orderBackend.data.id,
+          handler: async (response) => {
+            try {
+              await axios.post(`${API}/api/payments/verify`, {
+                consultId: consult.id,
+                paymentRef,
+                paymentMethod,
+                transactionId: response?.razorpay_payment_id || `TXN-${Date.now()}`,
+                razorpayOrderId: response?.razorpay_order_id || "",
+                razorpaySignature: response?.razorpay_signature || "",
+              });
+              resolve();
+            } catch (verifyErr) {
+              reject(verifyErr);
+            }
+          },
+          prefill: {
+            name: patientType === "self" ? "Self" : (patientName.trim() || "Consult Patient"),
+          },
+          theme: { color: DEEP },
+          modal: {
+            ondismiss: () => reject(new Error("Payment cancelled.")),
+          },
+        };
+        const rzp = new window.Razorpay(options);
+        rzp.open();
       });
 
       setBookingDoctor(null);
@@ -360,6 +412,7 @@ export default function Doctors() {
   }
 
   return (
+    <>
     <div style={{ maxWidth: 520, margin: "0 auto", minHeight: "100vh", paddingBottom: 120, background: "linear-gradient(180deg,#ECFDF5 0%,#E6F4FF 45%,#F8FAFC 100%)" }}>
       <div style={{ padding: "14px 14px 8px" }}>
         <Glass style={{ padding: 14, background: "linear-gradient(135deg,#0B4D35,#0A623E)", color: "#fff", border: "none" }}>
@@ -696,12 +749,27 @@ export default function Doctors() {
                   gap: 7,
                 }}
               >
-                <CheckCircle2 style={{ width: 15, height: 15 }} /> {bookingLoading ? "Processing..." : !localStorage.getItem("token") ? "Login to Book" : "Pay and Confirm Booking"}
+                <CheckCircle2 style={{ width: 15, height: 15 }} /> {bookingLoading ? "Processing..." : !token ? "Login to Continue" : "Pay and Confirm Booking"}
               </button>
             </motion.div>
           </>
         )}
       </AnimatePresence>
     </div>
+    <AnimatePresence>
+      {loginOpen && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: "fixed", inset: 0, zIndex: 2000 }}>
+          <OtpLogin
+            stayOnPage
+            onLogin={() => {
+              setLoginOpen(false);
+              setError("");
+              loadMyConsults();
+            }}
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
+    </>
   );
 }
