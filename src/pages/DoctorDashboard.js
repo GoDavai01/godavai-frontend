@@ -242,6 +242,33 @@ function createClinicChangeDraft(doctor = createEmptyDoctor(), request = null) {
     city: source.city || clinic.city || "",
     pin: source.pin || clinic.pin || "",
     mapLabel: source.mapLabel || clinic.mapLabel || "",
+    coordinates: source.coordinates || clinic.coordinates || { lat: null, lng: null },
+    locationCaptureSource: request?.locationCaptureSource || "",
+    proofFile: null,
+    proofDocumentName: request?.proofDocument?.fileName || "",
+  };
+}
+
+function createEmptyMedicineRow() {
+  return {
+    prescribed: "",
+    dosage: "",
+    frequency: "",
+    duration: "",
+    howToTake: "",
+    salt: "",
+    notes: "",
+  };
+}
+
+function createPrescriptionForm(booking = null) {
+  return {
+    diagnosis: "",
+    complaint: booking?.reason || booking?.symptoms || "",
+    precautions: "",
+    testsAdvised: "",
+    followUpDate: "",
+    medicines: [createEmptyMedicineRow()],
   };
 }
 
@@ -404,31 +431,21 @@ export default function DoctorDashboard() {
 
   const [prescriptionOpen, setPrescriptionOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
-  const [prescriptionForm, setPrescriptionForm] = useState({
-    diagnosis: "",
-    complaint: "",
-    precautions: "",
-    testsAdvised: "",
-    followUpDate: "",
-    medicines: [
-      {
-        prescribed: "",
-        dosage: "",
-        frequency: "",
-        duration: "",
-        howToTake: "",
-        salt: "",
-        notes: "",
-      },
-    ],
-  });
+  const [prescriptionForm, setPrescriptionForm] = useState(createPrescriptionForm());
 
   const [prescriptionPreviewOpen, setPrescriptionPreviewOpen] = useState(false);
   const [patientCartPreview, setPatientCartPreview] = useState([]);
   const [activeCartId, setActiveCartId] = useState("");
   const [snackbar, setSnackbar] = useState({ open: false, message: "", tone: "success" });
+  const [onlineSaving, setOnlineSaving] = useState(false);
+  const [aiFieldLoading, setAiFieldLoading] = useState({});
+  const [dictationState, setDictationState] = useState({ active: false, target: "" });
+  const [medicineSuggestions, setMedicineSuggestions] = useState({});
+  const [clinicLocationLoading, setClinicLocationLoading] = useState(false);
 
   const timerRef = useRef(null);
+  const suggestionTimerRef = useRef({});
+  const speechRecognitionRef = useRef(null);
 
   const unreadNotifications = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
@@ -482,10 +499,214 @@ export default function DoctorDashboard() {
     return () => clearTimeout(t);
   }, [snackbar]);
 
+  useEffect(() => {
+    const timers = suggestionTimerRef.current;
+    return () => {
+      Object.values(timers || {}).forEach((timerId) => clearTimeout(timerId));
+      if (speechRecognitionRef.current) {
+        try {
+          speechRecognitionRef.current.stop();
+        } catch (_) {}
+      }
+    };
+  }, []);
+
   /* ------------------------------- ACTIONS -------------------------------- */
 
   function pushSnackbar(message, tone = "success") {
     setSnackbar({ open: true, message, tone });
+  }
+
+  function updatePrescriptionField(field, value) {
+    setPrescriptionForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function mergeMedicineRow(index, patch) {
+    setPrescriptionForm((prev) => ({
+      ...prev,
+      medicines: prev.medicines.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
+    }));
+  }
+
+  function updateClinicDraft(patch) {
+    setClinicChangeDraft((prev) => ({ ...prev, ...patch }));
+  }
+
+  async function saveOnlineAvailability(nextOnline) {
+    setOnlineSaving(true);
+    setSettingsDraft((prev) => ({ ...prev, online: nextOnline }));
+    setDoctor((prev) => ({ ...prev, online: nextOnline }));
+    try {
+      const { data } = await axios.patch(
+        `${API_BASE_URL}/api/doctors/dashboard/settings`,
+        { online: nextOnline },
+        getDoctorAuthConfig()
+      );
+      applyDashboardPayload(data || {});
+      pushSnackbar(nextOnline ? "Doctor is now online" : "Doctor is now offline", "success");
+    } catch (error) {
+      setSettingsDraft((prev) => ({ ...prev, online: !nextOnline }));
+      setDoctor((prev) => ({ ...prev, online: !nextOnline }));
+      pushSnackbar(error?.response?.data?.error || "Failed to update online status", "error");
+    } finally {
+      setOnlineSaving(false);
+    }
+  }
+
+  async function requestAiAssist(field) {
+    const fieldPrompts = {
+      complaint: "Refine the complaint / visit reason into a concise doctor-friendly sentence.",
+      diagnosis: "Draft a short clinical diagnosis / impression based on the available complaint and notes.",
+      precautions: "Draft brief precautions and advice for the patient in clear professional language.",
+      testsAdvised: "Suggest likely tests advised in a concise comma-separated clinical format.",
+    };
+    const currentValue = prescriptionForm[field] || "";
+    setAiFieldLoading((prev) => ({ ...prev, [field]: true }));
+    try {
+      const { data } = await axios.post(
+        `${API_BASE_URL}/api/ai/assistant/chat`,
+        {
+          message: `${fieldPrompts[field]}\n\nCurrent value: ${currentValue || "none"}\nComplaint: ${prescriptionForm.complaint || "none"}\nDiagnosis: ${prescriptionForm.diagnosis || "none"}\nPrecautions: ${prescriptionForm.precautions || "none"}\nTests advised: ${prescriptionForm.testsAdvised || "none"}\nMedicines: ${(prescriptionForm.medicines || [])
+            .map((item) => `${item.prescribed || "medicine"} (${item.salt || "salt"})`)
+            .join(", ") || "none"}\n\nReturn only the improved text for ${field}.`,
+          context: {
+            surface: "doctor_dashboard_prescription",
+            doctorName: doctor.fullName,
+            specialty: doctor.specialty,
+            patientName: selectedBooking?.patientName || "",
+            mode: selectedBooking?.mode || "",
+          },
+        },
+        getDoctorAuthConfig()
+      );
+      const reply = String(data?.reply || "").trim();
+      if (reply) {
+        updatePrescriptionField(field, reply);
+        pushSnackbar(`AI suggested ${field.replace(/([A-Z])/g, " $1").toLowerCase()}`, "success");
+      } else {
+        pushSnackbar("AI did not return a suggestion", "error");
+      }
+    } catch (error) {
+      pushSnackbar(error?.response?.data?.error || "Failed to fetch AI suggestion", "error");
+    } finally {
+      setAiFieldLoading((prev) => ({ ...prev, [field]: false }));
+    }
+  }
+
+  function startDictation(target, options = {}) {
+    const SpeechRecognition =
+      typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
+    if (!SpeechRecognition) {
+      pushSnackbar("Voice dictation is not supported on this device/browser", "error");
+      return;
+    }
+    if (speechRecognitionRef.current) {
+      try {
+        speechRecognitionRef.current.stop();
+      } catch (_) {}
+    }
+    const recognition = new SpeechRecognition();
+    speechRecognitionRef.current = recognition;
+    recognition.lang = "en-IN";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    setDictationState({ active: true, target });
+    recognition.onresult = (event) => {
+      const transcript = String(event?.results?.[0]?.[0]?.transcript || "").trim();
+      if (!transcript) return;
+      if (options.type === "medicine") {
+        const current = prescriptionForm.medicines?.[options.index]?.[options.key] || "";
+        mergeMedicineRow(options.index, {
+          [options.key]: current ? `${current} ${transcript}`.trim() : transcript,
+        });
+      } else {
+        const current = prescriptionForm[target] || "";
+        updatePrescriptionField(target, current ? `${current} ${transcript}`.trim() : transcript);
+      }
+    };
+    recognition.onerror = () => {
+      setDictationState({ active: false, target: "" });
+      pushSnackbar("Voice dictation failed. Please try again.", "error");
+    };
+    recognition.onend = () => {
+      setDictationState({ active: false, target: "" });
+      speechRecognitionRef.current = null;
+    };
+    recognition.start();
+  }
+
+  async function fetchMedicineSuggestions(index, kind, query) {
+    const cleanQuery = String(query || "").trim();
+    const suggestionKey = `${index}:${kind}`;
+    if (!cleanQuery || cleanQuery.length < 2) {
+      setMedicineSuggestions((prev) => ({ ...prev, [suggestionKey]: [] }));
+      return;
+    }
+    if (suggestionTimerRef.current[suggestionKey]) {
+      clearTimeout(suggestionTimerRef.current[suggestionKey]);
+    }
+    suggestionTimerRef.current[suggestionKey] = setTimeout(async () => {
+      try {
+        const endpoint = kind === "brand" ? "brand" : "composition";
+        const { data } = await axios.get(`${API_BASE_URL}/api/suggest/${endpoint}`, {
+          params: { query: cleanQuery, limit: 6 },
+        });
+        setMedicineSuggestions((prev) => ({ ...prev, [suggestionKey]: Array.isArray(data) ? data : [] }));
+      } catch (_) {
+        setMedicineSuggestions((prev) => ({ ...prev, [suggestionKey]: [] }));
+      }
+    }, 220);
+  }
+
+  async function applyMedicineSuggestion(index, kind, suggestion) {
+    const nextPatch =
+      kind === "brand"
+        ? { prescribed: suggestion?.name || "", salt: prescriptionForm.medicines?.[index]?.salt || "" }
+        : { salt: suggestion?.name || "" };
+    mergeMedicineRow(index, nextPatch);
+    setMedicineSuggestions((prev) => ({ ...prev, [`${index}:${kind}`]: [] }));
+    try {
+      const params =
+        kind === "brand" ? { brandId: suggestion?.id } : { compositionId: suggestion?.id };
+      const { data } = await axios.get(`${API_BASE_URL}/api/suggest/prefill`, { params });
+      mergeMedicineRow(index, {
+        prescribed:
+          kind === "brand"
+            ? suggestion?.name || prescriptionForm.medicines?.[index]?.prescribed || ""
+            : prescriptionForm.medicines?.[index]?.prescribed || "",
+        salt:
+          kind === "composition"
+            ? suggestion?.name || prescriptionForm.medicines?.[index]?.salt || ""
+            : prescriptionForm.medicines?.[index]?.salt || "",
+        dosage: prescriptionForm.medicines?.[index]?.dosage || data?.strength || "",
+      });
+    } catch (_) {}
+  }
+
+  async function useCurrentClinicLocation() {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      pushSnackbar("Current location is not supported on this device", "error");
+      return;
+    }
+    setClinicLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        updateClinicDraft({
+          coordinates: {
+            lat: Number(position.coords.latitude),
+            lng: Number(position.coords.longitude),
+          },
+          locationCaptureSource: "current_location",
+        });
+        setClinicLocationLoading(false);
+        pushSnackbar("Clinic location captured", "success");
+      },
+      () => {
+        setClinicLocationLoading(false);
+        pushSnackbar("Unable to fetch current location", "error");
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   }
 
   function applyDashboardPayload(payload = {}) {
@@ -716,50 +937,22 @@ export default function DoctorDashboard() {
 
   function openPrescriptionBuilder(booking) {
     setSelectedBooking(booking);
-    setPrescriptionForm({
-      diagnosis: "",
-      complaint: booking?.reason || booking?.symptoms || "",
-      precautions: "",
-      testsAdvised: "",
-      followUpDate: "",
-      medicines: [
-        {
-          prescribed: "",
-          dosage: "",
-          frequency: "",
-          duration: "",
-          howToTake: "",
-          salt: "",
-          notes: "",
-        },
-      ],
-    });
+    setPrescriptionForm(createPrescriptionForm(booking));
+    setMedicineSuggestions({});
     setPrescriptionOpen(true);
   }
 
   function addMedicineRow() {
     setPrescriptionForm((prev) => ({
       ...prev,
-      medicines: [
-        ...prev.medicines,
-        {
-          prescribed: "",
-          dosage: "",
-          frequency: "",
-          duration: "",
-          howToTake: "",
-          salt: "",
-          notes: "",
-        },
-      ],
+      medicines: [...prev.medicines, createEmptyMedicineRow()],
     }));
   }
 
   function updateMedicineRow(index, key, value) {
-    setPrescriptionForm((prev) => ({
-      ...prev,
-      medicines: prev.medicines.map((m, i) => (i === index ? { ...m, [key]: value } : m)),
-    }));
+    mergeMedicineRow(index, { [key]: value });
+    if (key === "prescribed") fetchMedicineSuggestions(index, "brand", value);
+    if (key === "salt") fetchMedicineSuggestions(index, "composition", value);
   }
 
   function removeMedicineRow(index) {
@@ -767,6 +960,12 @@ export default function DoctorDashboard() {
       ...prev,
       medicines: prev.medicines.filter((_, i) => i !== index),
     }));
+    setMedicineSuggestions((prev) => {
+      const next = { ...prev };
+      delete next[`${index}:brand`];
+      delete next[`${index}:composition`];
+      return next;
+    });
   }
 
   async function handleSubmitPrescription() {
@@ -833,18 +1032,35 @@ export default function DoctorDashboard() {
 
   async function submitClinicChangeRequest() {
     try {
-      const payload = {
-        clinicName: clinicChangeDraft.clinicName,
-        addressLine1: clinicChangeDraft.addressLine1,
-        locality: clinicChangeDraft.locality,
-        city: clinicChangeDraft.city,
-        pin: clinicChangeDraft.pin,
-        mapLabel: clinicChangeDraft.mapLabel,
-      };
+      if (!clinicChangeDraft.proofFile) {
+        pushSnackbar("Please upload new clinic proof before submitting", "error");
+        return;
+      }
+      if (!clinicChangeDraft.coordinates?.lat || !clinicChangeDraft.coordinates?.lng) {
+        pushSnackbar("Please capture the new clinic location / pin", "error");
+        return;
+      }
+      const payload = new FormData();
+      payload.append("clinicName", clinicChangeDraft.clinicName || "");
+      payload.append("addressLine1", clinicChangeDraft.addressLine1 || "");
+      payload.append("locality", clinicChangeDraft.locality || "");
+      payload.append("city", clinicChangeDraft.city || "");
+      payload.append("pin", clinicChangeDraft.pin || "");
+      payload.append("mapLabel", clinicChangeDraft.mapLabel || "");
+      payload.append("lat", String(clinicChangeDraft.coordinates?.lat || ""));
+      payload.append("lng", String(clinicChangeDraft.coordinates?.lng || ""));
+      payload.append("locationCaptureSource", clinicChangeDraft.locationCaptureSource || "manual_pin");
+      payload.append("clinicProof", clinicChangeDraft.proofFile);
       await axios.post(
         `${API_BASE_URL}/api/doctors/clinic-change-requests`,
         payload,
-        getDoctorAuthConfig()
+        {
+          ...getDoctorAuthConfig(),
+          headers: {
+            ...(getDoctorAuthConfig().headers || {}),
+            "Content-Type": "multipart/form-data",
+          },
+        }
       );
       setClinicChangeOpen(false);
       pushSnackbar("Clinic change request submitted for re-verification", "success");
@@ -1005,7 +1221,8 @@ export default function DoctorDashboard() {
                   </div>
                   <Switch
                     checked={settingsDraft.online}
-                    onCheckedChange={(next) => setSettingsDraft((p) => ({ ...p, online: next }))}
+                    onCheckedChange={saveOnlineAvailability}
+                    disabled={onlineSaving}
                   />
                 </div>
               </div>
@@ -1897,46 +2114,142 @@ export default function DoctorDashboard() {
 
               <div className="mt-5 grid grid-cols-1 gap-4">
                 <div>
-                  <Label>Complaint / Visit Reason</Label>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label>Complaint / Visit Reason</Label>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => requestAiAssist("complaint")}
+                        className="rounded-full border-emerald-200 px-3 text-xs font-black text-emerald-700"
+                      >
+                        <Sparkles className="mr-1 h-3.5 w-3.5" />
+                        {aiFieldLoading.complaint ? "Thinking..." : "AI Suggest"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => startDictation("complaint")}
+                        className="rounded-full border-slate-300 px-3 text-xs font-black"
+                      >
+                        <Mic className="mr-1 h-3.5 w-3.5" />
+                        {dictationState.active && dictationState.target === "complaint" ? "Listening..." : "Dictate"}
+                      </Button>
+                    </div>
+                  </div>
                   <TextArea
                     rows={3}
                     className="mt-2"
                     value={prescriptionForm.complaint}
-                    onChange={(e) => setPrescriptionForm((p) => ({ ...p, complaint: e.target.value }))}
+                    onChange={(e) => updatePrescriptionField("complaint", e.target.value)}
                     placeholder="Main complaint..."
                   />
                 </div>
 
                 <div>
-                  <Label>Diagnosis</Label>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label>Diagnosis</Label>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => requestAiAssist("diagnosis")}
+                        className="rounded-full border-emerald-200 px-3 text-xs font-black text-emerald-700"
+                      >
+                        <Sparkles className="mr-1 h-3.5 w-3.5" />
+                        {aiFieldLoading.diagnosis ? "Thinking..." : "AI Suggest"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => startDictation("diagnosis")}
+                        className="rounded-full border-slate-300 px-3 text-xs font-black"
+                      >
+                        <Mic className="mr-1 h-3.5 w-3.5" />
+                        {dictationState.active && dictationState.target === "diagnosis" ? "Listening..." : "Dictate"}
+                      </Button>
+                    </div>
+                  </div>
                   <TextArea
                     rows={3}
                     className="mt-2"
                     value={prescriptionForm.diagnosis}
-                    onChange={(e) => setPrescriptionForm((p) => ({ ...p, diagnosis: e.target.value }))}
+                    onChange={(e) => updatePrescriptionField("diagnosis", e.target.value)}
                     placeholder="Diagnosis / clinical impression..."
                   />
                 </div>
 
                 <div>
-                  <Label>Precautions / Advice</Label>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label>Precautions / Advice</Label>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => requestAiAssist("precautions")}
+                        className="rounded-full border-emerald-200 px-3 text-xs font-black text-emerald-700"
+                      >
+                        <Sparkles className="mr-1 h-3.5 w-3.5" />
+                        {aiFieldLoading.precautions ? "Thinking..." : "AI Suggest"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => startDictation("precautions")}
+                        className="rounded-full border-slate-300 px-3 text-xs font-black"
+                      >
+                        <Mic className="mr-1 h-3.5 w-3.5" />
+                        {dictationState.active && dictationState.target === "precautions" ? "Listening..." : "Dictate"}
+                      </Button>
+                    </div>
+                  </div>
                   <TextArea
                     rows={3}
                     className="mt-2"
                     value={prescriptionForm.precautions}
-                    onChange={(e) => setPrescriptionForm((p) => ({ ...p, precautions: e.target.value }))}
+                    onChange={(e) => updatePrescriptionField("precautions", e.target.value)}
                     placeholder="Precautions, hydration, rest, warning signs..."
                   />
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <Label>Tests Advised</Label>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Label>Tests Advised</Label>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => requestAiAssist("testsAdvised")}
+                          className="rounded-full border-emerald-200 px-3 text-xs font-black text-emerald-700"
+                        >
+                          <Sparkles className="mr-1 h-3.5 w-3.5" />
+                          {aiFieldLoading.testsAdvised ? "Thinking..." : "AI Suggest"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => startDictation("testsAdvised")}
+                          className="rounded-full border-slate-300 px-3 text-xs font-black"
+                        >
+                          <Mic className="mr-1 h-3.5 w-3.5" />
+                          {dictationState.active && dictationState.target === "testsAdvised" ? "Listening..." : "Dictate"}
+                        </Button>
+                      </div>
+                    </div>
                     <TextArea
                       rows={3}
                       className="mt-2"
                       value={prescriptionForm.testsAdvised}
-                      onChange={(e) => setPrescriptionForm((p) => ({ ...p, testsAdvised: e.target.value }))}
+                      onChange={(e) => updatePrescriptionField("testsAdvised", e.target.value)}
                       placeholder="CBC, LFT, HbA1c..."
                     />
                   </div>
@@ -1979,24 +2292,110 @@ export default function DoctorDashboard() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-3">
-                      <div>
-                        <Label>Medicine name</Label>
+                      <div className="relative">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <Label>Medicine name</Label>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => fetchMedicineSuggestions(idx, "brand", med.prescribed)}
+                              className="rounded-full border-emerald-200 px-3 text-xs font-black text-emerald-700"
+                            >
+                              <Sparkles className="mr-1 h-3.5 w-3.5" />
+                              Suggest
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => startDictation(`medicine-brand-${idx}`, { type: "medicine", index: idx, key: "prescribed" })}
+                              className="rounded-full border-slate-300 px-3 text-xs font-black"
+                            >
+                              <Mic className="mr-1 h-3.5 w-3.5" />
+                              {dictationState.active && dictationState.target === `medicine-brand-${idx}` ? "Listening..." : "Dictate"}
+                            </Button>
+                          </div>
+                        </div>
                         <Input
                           className="mt-2"
                           value={med.prescribed}
                           onChange={(e) => updateMedicineRow(idx, "prescribed", e.target.value)}
                           placeholder="e.g. Augmentin 625"
                         />
+                        {Array.isArray(medicineSuggestions[`${idx}:brand`]) && medicineSuggestions[`${idx}:brand`].length > 0 ? (
+                          <div className="absolute z-20 mt-2 w-full rounded-2xl border border-emerald-100 bg-white p-2 shadow-xl">
+                            {medicineSuggestions[`${idx}:brand`].map((suggestion) => (
+                              <button
+                                key={suggestion.id || suggestion.name}
+                                type="button"
+                                onClick={() => applyMedicineSuggestion(idx, "brand", suggestion)}
+                                className="flex w-full items-start justify-between rounded-xl px-3 py-2 text-left hover:bg-emerald-50"
+                              >
+                                <div>
+                                  <div className="text-sm font-black text-slate-900">{suggestion.name}</div>
+                                  <div className="text-xs text-slate-500">
+                                    {[suggestion.type, suggestion.strength, suggestion.packLabel].filter(Boolean).join(" • ")}
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
 
-                      <div>
-                        <Label>Salt / composition</Label>
+                      <div className="relative">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <Label>Salt / composition</Label>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => fetchMedicineSuggestions(idx, "composition", med.salt)}
+                              className="rounded-full border-emerald-200 px-3 text-xs font-black text-emerald-700"
+                            >
+                              <Sparkles className="mr-1 h-3.5 w-3.5" />
+                              Suggest
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => startDictation(`medicine-salt-${idx}`, { type: "medicine", index: idx, key: "salt" })}
+                              className="rounded-full border-slate-300 px-3 text-xs font-black"
+                            >
+                              <Mic className="mr-1 h-3.5 w-3.5" />
+                              {dictationState.active && dictationState.target === `medicine-salt-${idx}` ? "Listening..." : "Dictate"}
+                            </Button>
+                          </div>
+                        </div>
                         <Input
                           className="mt-2"
                           value={med.salt}
                           onChange={(e) => updateMedicineRow(idx, "salt", e.target.value)}
                           placeholder="e.g. Amoxicillin + Clavulanic Acid"
                         />
+                        {Array.isArray(medicineSuggestions[`${idx}:composition`]) && medicineSuggestions[`${idx}:composition`].length > 0 ? (
+                          <div className="absolute z-20 mt-2 w-full rounded-2xl border border-emerald-100 bg-white p-2 shadow-xl">
+                            {medicineSuggestions[`${idx}:composition`].map((suggestion) => (
+                              <button
+                                key={suggestion.id || suggestion.name}
+                                type="button"
+                                onClick={() => applyMedicineSuggestion(idx, "composition", suggestion)}
+                                className="flex w-full items-start justify-between rounded-xl px-3 py-2 text-left hover:bg-emerald-50"
+                              >
+                                <div>
+                                  <div className="text-sm font-black text-slate-900">{suggestion.name}</div>
+                                  <div className="text-xs text-slate-500">
+                                    {(suggestion.dosageForms || []).slice(0, 3).join(" • ")}
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
@@ -2204,7 +2603,7 @@ export default function DoctorDashboard() {
                 <Input
                   className="mt-2"
                   value={clinicChangeDraft.clinicName}
-                  onChange={(e) => setClinicChangeDraft((p) => ({ ...p, clinicName: e.target.value }))}
+                  onChange={(e) => updateClinicDraft({ clinicName: e.target.value })}
                 />
               </div>
               <div>
@@ -2212,7 +2611,7 @@ export default function DoctorDashboard() {
                 <Input
                   className="mt-2"
                   value={clinicChangeDraft.addressLine1}
-                  onChange={(e) => setClinicChangeDraft((p) => ({ ...p, addressLine1: e.target.value }))}
+                  onChange={(e) => updateClinicDraft({ addressLine1: e.target.value })}
                 />
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -2221,7 +2620,7 @@ export default function DoctorDashboard() {
                   <Input
                     className="mt-2"
                     value={clinicChangeDraft.locality}
-                    onChange={(e) => setClinicChangeDraft((p) => ({ ...p, locality: e.target.value }))}
+                    onChange={(e) => updateClinicDraft({ locality: e.target.value })}
                   />
                 </div>
                 <div>
@@ -2229,7 +2628,7 @@ export default function DoctorDashboard() {
                   <Input
                     className="mt-2"
                     value={clinicChangeDraft.city}
-                    onChange={(e) => setClinicChangeDraft((p) => ({ ...p, city: e.target.value }))}
+                    onChange={(e) => updateClinicDraft({ city: e.target.value })}
                   />
                 </div>
                 <div>
@@ -2237,7 +2636,7 @@ export default function DoctorDashboard() {
                   <Input
                     className="mt-2"
                     value={clinicChangeDraft.pin}
-                    onChange={(e) => setClinicChangeDraft((p) => ({ ...p, pin: e.target.value }))}
+                    onChange={(e) => updateClinicDraft({ pin: e.target.value })}
                   />
                 </div>
               </div>
@@ -2246,8 +2645,91 @@ export default function DoctorDashboard() {
                 <Input
                   className="mt-2"
                   value={clinicChangeDraft.mapLabel}
-                  onChange={(e) => setClinicChangeDraft((p) => ({ ...p, mapLabel: e.target.value }))}
+                  onChange={(e) => updateClinicDraft({ mapLabel: e.target.value })}
                 />
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <Label>New Clinic Proof</Label>
+                  <Input
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.pdf,.webp,.heic,.heif"
+                    className="mt-2"
+                    onChange={(e) =>
+                      updateClinicDraft({
+                        proofFile: e.target.files?.[0] || null,
+                        proofDocumentName: e.target.files?.[0]?.name || "",
+                      })
+                    }
+                  />
+                  <div className="mt-2 text-xs text-slate-500">
+                    Upload rent agreement, electricity bill, clinic registration, or similar proof.
+                  </div>
+                  {clinicChangeDraft.proofDocumentName ? (
+                    <div className="mt-2 text-xs font-semibold text-emerald-700">
+                      Selected: {clinicChangeDraft.proofDocumentName}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-black text-slate-900">Map Pin / Current Location</div>
+                      <div className="mt-1 text-xs text-slate-600">
+                        Capture the exact new clinic latitude/longitude for re-verification.
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={useCurrentClinicLocation}
+                      disabled={clinicLocationLoading}
+                      className="rounded-2xl border-emerald-200 font-black text-emerald-700"
+                    >
+                      <MapPin className="mr-2 h-4 w-4" />
+                      {clinicLocationLoading ? "Locating..." : "Use Current Location"}
+                    </Button>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Latitude</Label>
+                      <Input
+                        className="mt-2"
+                        value={clinicChangeDraft.coordinates?.lat ?? ""}
+                        onChange={(e) =>
+                          updateClinicDraft({
+                            coordinates: {
+                              ...(clinicChangeDraft.coordinates || {}),
+                              lat: e.target.value,
+                            },
+                            locationCaptureSource: "manual_pin",
+                          })
+                        }
+                        placeholder="28.6139"
+                      />
+                    </div>
+                    <div>
+                      <Label>Longitude</Label>
+                      <Input
+                        className="mt-2"
+                        value={clinicChangeDraft.coordinates?.lng ?? ""}
+                        onChange={(e) =>
+                          updateClinicDraft({
+                            coordinates: {
+                              ...(clinicChangeDraft.coordinates || {}),
+                              lng: e.target.value,
+                            },
+                            locationCaptureSource: "manual_pin",
+                          })
+                        }
+                        placeholder="77.2090"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    Source: {clinicChangeDraft.locationCaptureSource || "not captured yet"}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
