@@ -1716,7 +1716,7 @@ export default function DoctorDashboard() {
                   <div className="text-sm uppercase tracking-[0.18em] text-emerald-100/70">GoDavaii Consult Room</div>
                   <div className="mt-1 text-2xl font-black">{callSession?.patientName || "Consult Room"}</div>
                   <div className="mt-1 text-sm text-emerald-50/80">
-                    {callSession?.mode === CONSULT_MODES.VIDEO ? "Video consult" : "Audio consult"} • {dayjs.duration(callSeconds, "seconds").format ? "" : ""}
+                    {callSession?.mode === CONSULT_MODES.VIDEO ? "Video consult" : "Audio consult"} •
                     {Math.floor(callSeconds / 60)
                       .toString()
                       .padStart(2, "0")}
