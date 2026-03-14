@@ -198,6 +198,7 @@ function createEmptyDoctor() {
       arrivalWindow: 0,
       maxPatientsPerDay: 0,
     },
+    availability: {},
   };
 }
 
@@ -215,6 +216,18 @@ function createSettingsDraft(doctor = createEmptyDoctor()) {
   const clinic = doctor?.clinic || {};
   const fees = doctor?.fees || {};
   const modes = doctor?.modes || {};
+  const availability = doctor?.availability || {};
+  const customDaySlots = Object.fromEntries(
+    ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].map((day) => [
+      day,
+      {
+        enabled: !!availability?.[day]?.enabled,
+        start: availability?.[day]?.start || clinic.startTime || "09:00",
+        end: availability?.[day]?.end || clinic.endTime || "13:00",
+      },
+    ])
+  );
+  const enabledDayCount = Object.values(customDaySlots).filter((row) => row.enabled).length;
   return {
     online: !!doctor?.online,
     audioEnabled: !!modes.audio,
@@ -229,6 +242,12 @@ function createSettingsDraft(doctor = createEmptyDoctor()) {
     slotDuration: Number(clinic.slotDuration || 20),
     arrivalWindow: Number(clinic.arrivalWindow || 20),
     maxPatientsPerDay: Number(clinic.maxPatientsPerDay || 24),
+    scheduleMode: enabledDayCount > 0 && new Set(
+      Object.values(customDaySlots)
+        .filter((row) => row.enabled)
+        .map((row) => `${row.start}-${row.end}`)
+    ).size > 1 ? "custom" : "uniform",
+    customDaySlots,
   };
 }
 
@@ -532,17 +551,72 @@ export default function DoctorDashboard() {
     setClinicChangeDraft((prev) => ({ ...prev, ...patch }));
   }
 
+  function applyUniformTimeToActiveDays(start, end) {
+    setSettingsDraft((prev) => {
+      const nextCustomDaySlots = { ...(prev.customDaySlots || {}) };
+      Object.keys(nextCustomDaySlots).forEach((day) => {
+        if (nextCustomDaySlots[day]?.enabled) {
+          nextCustomDaySlots[day] = { ...nextCustomDaySlots[day], start, end };
+        }
+      });
+      return {
+        ...prev,
+        startTime: start,
+        endTime: end,
+        customDaySlots: nextCustomDaySlots,
+      };
+    });
+  }
+
+  function toggleConsultationDay(day) {
+    setSettingsDraft((prev) => {
+      const active = prev.consultationDays.includes(day);
+      const nextDays = active
+        ? prev.consultationDays.filter((item) => item !== day)
+        : [...prev.consultationDays, day];
+      const dayKey = day.toLowerCase().slice(0, 3);
+      return {
+        ...prev,
+        consultationDays: nextDays,
+        customDaySlots: {
+          ...(prev.customDaySlots || {}),
+          [dayKey]: {
+            enabled: !active,
+            start: prev.customDaySlots?.[dayKey]?.start || prev.startTime,
+            end: prev.customDaySlots?.[dayKey]?.end || prev.endTime,
+          },
+        },
+      };
+    });
+  }
+
+  function updateCustomDaySlot(dayKey, patch) {
+    setSettingsDraft((prev) => ({
+      ...prev,
+      customDaySlots: {
+        ...(prev.customDaySlots || {}),
+        [dayKey]: {
+          ...(prev.customDaySlots?.[dayKey] || {}),
+          ...patch,
+        },
+      },
+    }));
+  }
+
   async function saveOnlineAvailability(nextOnline) {
     setOnlineSaving(true);
     setSettingsDraft((prev) => ({ ...prev, online: nextOnline }));
     setDoctor((prev) => ({ ...prev, online: nextOnline }));
     try {
       const { data } = await axios.patch(
-        `${API_BASE_URL}/api/doctors/dashboard/settings`,
+        `${API_BASE_URL}/api/doctors/dashboard/online-status`,
         { online: nextOnline },
         getDoctorAuthConfig()
       );
-      applyDashboardPayload(data || {});
+      if (typeof data?.online === "boolean") {
+        setDoctor((prev) => ({ ...prev, online: !!data.online }));
+        setSettingsDraft((prev) => ({ ...prev, online: !!data.online }));
+      }
       pushSnackbar(nextOnline ? "Doctor is now online" : "Doctor is now offline", "success");
     } catch (error) {
       setSettingsDraft((prev) => ({ ...prev, online: !nextOnline }));
@@ -811,6 +885,8 @@ export default function DoctorDashboard() {
         slotDuration: Number(settingsDraft.slotDuration || 20),
         arrivalWindow: Number(settingsDraft.arrivalWindow || 20),
         maxPatientsPerDay: Number(settingsDraft.maxPatientsPerDay || 20),
+        scheduleMode: settingsDraft.scheduleMode,
+        customDaySlots: settingsDraft.customDaySlots,
       },
     };
 
@@ -1418,25 +1494,18 @@ export default function DoctorDashboard() {
                 </Button>
               }
             >
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center gap-2 text-sm font-black text-slate-900">
-                    <Sparkles className="h-4 w-4 text-emerald-700" />
-                    Prescription → Patient → Cart flow
-                  </div>
-                  <div className="mt-3 space-y-2 text-sm text-slate-700">
-                    <div>1. Doctor fills branded GoDavaii prescription</div>
-                    <div>2. Patient gets prescription instantly</div>
-                    <div>3. Medicines auto-map to catalog</div>
-                    <div>4. All matched medicines pre-add to cart</div>
-                    <div>5. Generic savings shown with switch option</div>
-                  </div>
-                </div>
-
+              <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.85fr)]">
                 <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
                   <div className="text-sm font-black text-slate-900">Recent prescriptions</div>
+                  <div className="mt-2 text-sm text-slate-600">
+                    Latest prescriptions created by this doctor. Keep this section focused on actual work only.
+                  </div>
                   <div className="mt-3 space-y-3">
-                    {completedPrescriptions.map((rx) => (
+                    {completedPrescriptions.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
+                        No prescriptions created yet.
+                      </div>
+                    ) : completedPrescriptions.map((rx) => (
                       <div key={rx._id} className="rounded-2xl border border-white bg-white p-3 shadow-sm">
                         <div className="flex items-center justify-between gap-2">
                           <div>
@@ -1448,10 +1517,28 @@ export default function DoctorDashboard() {
                           </Badge>
                         </div>
                         <div className="mt-2 text-xs text-slate-500">
-                          {dayjs(rx.createdAt).format("DD MMM • hh:mm A")} • {rx.meds} medicines
+                          {dayjs(rx.createdAt).format("DD MMM ? hh:mm A")} ? {rx.meds} medicines
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center gap-2 text-sm font-black text-slate-900">
+                    <Sparkles className="h-4 w-4 text-emerald-700" />
+                    Smart prescription tools
+                  </div>
+                  <div className="mt-3 space-y-3 text-sm text-slate-700">
+                    <div className="rounded-2xl border border-white bg-white p-4">
+                      AI assist can help with complaint, diagnosis, precautions, and tests.
+                    </div>
+                    <div className="rounded-2xl border border-white bg-white p-4">
+                      Medicine name and composition support suggestions plus dictation.
+                    </div>
+                    <div className="rounded-2xl border border-white bg-white p-4">
+                      Cart preview opens only after a real prescription is generated.
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1532,10 +1619,9 @@ export default function DoctorDashboard() {
             </SectionCard>
 
             <SectionCard title="Modes, Fees & Availability" icon={Settings2}>
-              <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[1fr_0.9fr]">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-                    {/* AUDIO */}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex items-center gap-2">
@@ -1543,37 +1629,21 @@ export default function DoctorDashboard() {
                           <div className="font-black text-slate-900">Audio</div>
                         </div>
                         <div className="shrink-0">
-                          <Switch
-                            checked={settingsDraft.audioEnabled}
-                            onCheckedChange={(next) =>
-                              setSettingsDraft((p) => ({
-                                ...p,
-                                audioEnabled: next,
-                                audioFee: next ? p.audioFee || 299 : "",
-                              }))
-                            }
-                          />
+                          <Switch checked={settingsDraft.audioEnabled} onCheckedChange={(next) => setSettingsDraft((p) => ({ ...p, audioEnabled: next, audioFee: next ? p.audioFee || 299 : '' }))} />
                         </div>
                       </div>
-
                       <AnimatePresence>
                         {settingsDraft.audioEnabled && (
-                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
                             <div className="mt-3">
                               <Label>Audio Fee</Label>
-                              <Input
-                                type="number"
-                                value={settingsDraft.audioFee}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, audioFee: e.target.value }))}
-                                className="mt-2"
-                              />
+                              <Input type="number" value={settingsDraft.audioFee} onChange={(e) => setSettingsDraft((p) => ({ ...p, audioFee: e.target.value }))} className="mt-2" />
                             </div>
                           </motion.div>
                         )}
                       </AnimatePresence>
                     </div>
 
-                    {/* VIDEO */}
                     <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex items-center gap-2">
@@ -1581,37 +1651,21 @@ export default function DoctorDashboard() {
                           <div className="font-black text-slate-900">Video</div>
                         </div>
                         <div className="shrink-0">
-                          <Switch
-                            checked={settingsDraft.videoEnabled}
-                            onCheckedChange={(next) =>
-                              setSettingsDraft((p) => ({
-                                ...p,
-                                videoEnabled: next,
-                                videoFee: next ? p.videoFee || 299 : "",
-                              }))
-                            }
-                          />
+                          <Switch checked={settingsDraft.videoEnabled} onCheckedChange={(next) => setSettingsDraft((p) => ({ ...p, videoEnabled: next, videoFee: next ? p.videoFee || 299 : '' }))} />
                         </div>
                       </div>
-
                       <AnimatePresence>
                         {settingsDraft.videoEnabled && (
-                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
                             <div className="mt-3">
                               <Label>Video Fee</Label>
-                              <Input
-                                type="number"
-                                value={settingsDraft.videoFee}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, videoFee: e.target.value }))}
-                                className="mt-2"
-                              />
+                              <Input type="number" value={settingsDraft.videoFee} onChange={(e) => setSettingsDraft((p) => ({ ...p, videoFee: e.target.value }))} className="mt-2" />
                             </div>
                           </motion.div>
                         )}
                       </AnimatePresence>
                     </div>
 
-                    {/* INPERSON */}
                     <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex items-center gap-2">
@@ -1619,30 +1673,15 @@ export default function DoctorDashboard() {
                           <div className="font-black text-slate-900">In-person</div>
                         </div>
                         <div className="shrink-0">
-                          <Switch
-                            checked={settingsDraft.inpersonEnabled}
-                            onCheckedChange={(next) =>
-                              setSettingsDraft((p) => ({
-                                ...p,
-                                inpersonEnabled: next,
-                                inpersonFee: next ? p.inpersonFee || 399 : "",
-                              }))
-                            }
-                          />
+                          <Switch checked={settingsDraft.inpersonEnabled} onCheckedChange={(next) => setSettingsDraft((p) => ({ ...p, inpersonEnabled: next, inpersonFee: next ? p.inpersonFee || 399 : '' }))} />
                         </div>
                       </div>
-
                       <AnimatePresence>
                         {settingsDraft.inpersonEnabled && (
-                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
                             <div className="mt-3">
                               <Label>In-person Fee</Label>
-                              <Input
-                                type="number"
-                                value={settingsDraft.inpersonFee}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, inpersonFee: e.target.value }))}
-                                className="mt-2"
-                              />
+                              <Input type="number" value={settingsDraft.inpersonFee} onChange={(e) => setSettingsDraft((p) => ({ ...p, inpersonFee: e.target.value }))} className="mt-2" />
                             </div>
                           </motion.div>
                         )}
@@ -1652,90 +1691,65 @@ export default function DoctorDashboard() {
 
                   <AnimatePresence>
                     {settingsDraft.inpersonEnabled && (
-                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
                         <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                          <div className="mb-3 text-sm font-black text-slate-900">In-person slot rules</div>
-                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                              <Label>Start Time</Label>
-                              <Input
-                                type="time"
-                                className="mt-2"
-                                value={settingsDraft.startTime}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, startTime: e.target.value }))}
-                              />
+                              <div className="text-sm font-black text-slate-900">In-person schedule</div>
+                              <div className="text-sm text-slate-600">Choose one common timing or set custom timings for specific days.</div>
                             </div>
-                            <div>
-                              <Label>End Time</Label>
-                              <Input
-                                type="time"
-                                className="mt-2"
-                                value={settingsDraft.endTime}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, endTime: e.target.value }))}
-                              />
-                            </div>
-                            <div>
-                              <Label>Slot Duration (min)</Label>
-                              <Input
-                                type="number"
-                                className="mt-2"
-                                value={settingsDraft.slotDuration}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, slotDuration: e.target.value }))}
-                              />
-                            </div>
-                            <div>
-                              <Label>Arrival Window (min)</Label>
-                              <Input
-                                type="number"
-                                className="mt-2"
-                                value={settingsDraft.arrivalWindow}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, arrivalWindow: e.target.value }))}
-                              />
+                            <div className="flex flex-wrap gap-2">
+                              <button type="button" onClick={() => setSettingsDraft((p) => ({ ...p, scheduleMode: 'uniform' }))} className={cx('rounded-full border px-3 py-2 text-sm font-black transition', settingsDraft.scheduleMode === 'uniform' ? 'border-emerald-300 bg-emerald-100 text-emerald-800' : 'border-slate-200 bg-white text-slate-600')}>
+                                Same time all days
+                              </button>
+                              <button type="button" onClick={() => setSettingsDraft((p) => ({ ...p, scheduleMode: 'custom' }))} className={cx('rounded-full border px-3 py-2 text-sm font-black transition', settingsDraft.scheduleMode === 'custom' ? 'border-emerald-300 bg-emerald-100 text-emerald-800' : 'border-slate-200 bg-white text-slate-600')}>
+                                Custom day-wise
+                              </button>
                             </div>
                           </div>
 
-                          <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(220px,0.65fr)]">
-                            <div>
-                              <Label>Consultation Days</Label>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => {
-                                  const active = settingsDraft.consultationDays.includes(day);
-                                  return (
-                                    <button
-                                      key={day}
-                                      type="button"
-                                      onClick={() =>
-                                        setSettingsDraft((p) => ({
-                                          ...p,
-                                          consultationDays: active
-                                            ? p.consultationDays.filter((d) => d !== day)
-                                            : [...p.consultationDays, day],
-                                        }))
-                                      }
-                                      className={cx(
-                                        "rounded-full border px-3 py-2 text-sm font-black transition",
-                                        active
-                                          ? "border-emerald-300 bg-emerald-100 text-emerald-800"
-                                          : "border-slate-200 bg-white text-slate-600"
-                                      )}
-                                    >
-                                      {day}
-                                    </button>
-                                  );
-                                })}
+                          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                            <div><Label>Slot Duration (min)</Label><Input type="number" className="mt-2" value={settingsDraft.slotDuration} onChange={(e) => setSettingsDraft((p) => ({ ...p, slotDuration: e.target.value }))} /></div>
+                            <div><Label>Arrival Window (min)</Label><Input type="number" className="mt-2" value={settingsDraft.arrivalWindow} onChange={(e) => setSettingsDraft((p) => ({ ...p, arrivalWindow: e.target.value }))} /></div>
+                            <div><Label>Max patients/day</Label><Input type="number" className="mt-2" value={settingsDraft.maxPatientsPerDay} onChange={(e) => setSettingsDraft((p) => ({ ...p, maxPatientsPerDay: e.target.value }))} /></div>
+                          </div>
+
+                          {settingsDraft.scheduleMode === 'uniform' ? (
+                            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.65fr)]">
+                              <div>
+                                <Label>Consultation Days</Label>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => {
+                                    const active = settingsDraft.consultationDays.includes(day);
+                                    return <button key={day} type="button" onClick={() => toggleConsultationDay(day)} className={cx('rounded-full border px-3 py-2 text-sm font-black transition', active ? 'border-emerald-300 bg-emerald-100 text-emerald-800' : 'border-slate-200 bg-white text-slate-600')}>{day}</button>;
+                                  })}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div><Label>Start Time</Label><Input type="time" className="mt-2" value={settingsDraft.startTime} onChange={(e) => applyUniformTimeToActiveDays(e.target.value, settingsDraft.endTime)} /></div>
+                                <div><Label>End Time</Label><Input type="time" className="mt-2" value={settingsDraft.endTime} onChange={(e) => applyUniformTimeToActiveDays(settingsDraft.startTime, e.target.value)} /></div>
                               </div>
                             </div>
-
-                            <div>
-                              <Label>Max patients/day</Label>
-                              <Input
-                                type="number"
-                                className="mt-2"
-                                value={settingsDraft.maxPatientsPerDay}
-                                onChange={(e) => setSettingsDraft((p) => ({ ...p, maxPatientsPerDay: e.target.value }))}
-                              />
+                          ) : (
+                            <div className="mt-4 space-y-3">
+                              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => {
+                                const dayKey = day.toLowerCase().slice(0, 3);
+                                const row = settingsDraft.customDaySlots?.[dayKey] || { enabled: false, start: settingsDraft.startTime, end: settingsDraft.endTime };
+                                return (
+                                  <div key={day} className="rounded-2xl border border-white bg-white p-3">
+                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-[120px_minmax(0,1fr)_minmax(0,1fr)] md:items-center">
+                                      <div className="flex items-center justify-between gap-3 md:block">
+                                        <div className="font-black text-slate-900">{day}</div>
+                                        <Switch checked={!!row.enabled} onCheckedChange={(next) => { toggleConsultationDay(day); updateCustomDaySlot(dayKey, { enabled: next }); }} />
+                                      </div>
+                                      <div><Label>Start Time</Label><Input type="time" className="mt-2" value={row.start || ''} onChange={(e) => updateCustomDaySlot(dayKey, { start: e.target.value, enabled: row.enabled })} disabled={!row.enabled} /></div>
+                                      <div><Label>End Time</Label><Input type="time" className="mt-2" value={row.end || ''} onChange={(e) => updateCustomDaySlot(dayKey, { end: e.target.value, enabled: row.enabled })} disabled={!row.enabled} /></div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          </div>
+                          )}
                         </div>
                       </motion.div>
                     )}
@@ -1743,29 +1757,19 @@ export default function DoctorDashboard() {
                 </div>
 
                 <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-sm font-black text-slate-900">Commercial preview</div>
+                  <div className="text-sm font-black text-slate-900">Practice summary</div>
                   <div className="mt-4 space-y-3">
                     <div className="rounded-2xl border border-white bg-white p-4">
                       <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Current fee band</div>
                       <div className="mt-1 text-2xl font-black text-slate-900">{currentBand.label}</div>
                       <div className="mt-1 text-sm text-slate-600">
-                        {currentBand.fee == null ? "Manual commercial approval required" : `${money(currentBand.fee)} + applicable GST`}
+                        {currentBand.fee == null ? 'Manual commercial approval required' : `${money(currentBand.fee)} + applicable GST`}
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-white bg-white p-4">
-                      <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Doctor-side note</div>
-                      <div className="mt-2 text-sm text-slate-700">
-                        Applies only on completed consultations. Same model for audio, video, and in-person bookings.
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-white bg-white p-4">
-                      <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Patient UI rule</div>
-                      <div className="mt-2 text-sm text-slate-700">
-                        Customer sees only bundled consult price. Internal commercial split remains hidden.
-                      </div>
+                    <div className="rounded-2xl border border-white bg-white p-4 text-sm text-slate-700">
+                      Keep fees and availability clean here. Patient-facing doctor pages will reflect these saved changes automatically.
                     </div>
                   </div>
-
                   <div className="mt-4">
                     <Button onClick={handleSaveSettings} className="w-full rounded-2xl bg-emerald-600 font-black text-white hover:bg-emerald-700">
                       <CheckCircle2 className="mr-2 h-4 w-4" />
@@ -1868,10 +1872,10 @@ export default function DoctorDashboard() {
               </div>
             </SectionCard>
 
-            <SectionCard title="Patient Cart / Generic Savings Preview" icon={Wallet}>
+            <SectionCard title="Prescription Preview" icon={Wallet}>
               {patientCartPreview.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-slate-500">
-                  Submit a prescription to preview patient cart and generic substitution flow.
+                  Generate a prescription to preview mapped medicines and optional generic alternatives.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -2218,7 +2222,7 @@ export default function DoctorDashboard() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <Label>Tests Advised</Label>
