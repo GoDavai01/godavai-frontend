@@ -2712,7 +2712,7 @@ export default function DoctorDashboard() {
                   onChange={(e) => updateClinicDraft({ addressLine1: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
                   <Label>Locality</Label>
                   <Input
@@ -2746,7 +2746,7 @@ export default function DoctorDashboard() {
                   onChange={(e) => updateClinicDraft({ mapLabel: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-4">
                 <div>
                   <Label>New Clinic Proof</Label>
                   <Input
@@ -2788,7 +2788,7 @@ export default function DoctorDashboard() {
                       {clinicLocationLoading ? "Locating..." : "Use Current Location"}
                     </Button>
                   </div>
-                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="mt-3 grid grid-cols-1 gap-3">
                     <div>
                       <Label>Latitude</Label>
                       <Input

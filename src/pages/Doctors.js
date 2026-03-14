@@ -296,6 +296,9 @@ export default function Doctors() {
     const token = localStorage.getItem("token");
     if (!token) {
       setError("Please login again to book consultation.");
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
       return;
     }
 
@@ -693,7 +696,7 @@ export default function Doctors() {
                   gap: 7,
                 }}
               >
-                <CheckCircle2 style={{ width: 15, height: 15 }} /> {bookingLoading ? "Processing..." : "Pay and Confirm Booking"}
+                <CheckCircle2 style={{ width: 15, height: 15 }} /> {bookingLoading ? "Processing..." : !localStorage.getItem("token") ? "Login to Book" : "Pay and Confirm Booking"}
               </button>
             </motion.div>
           </>
