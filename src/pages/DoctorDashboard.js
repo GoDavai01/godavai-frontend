@@ -551,6 +551,22 @@ export default function DoctorDashboard() {
     setClinicChangeDraft((prev) => ({ ...prev, ...patch }));
   }
 
+  function sanitizeCustomDaySlots(slots = {}) {
+    return Object.fromEntries(
+      ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].map((day) => {
+        const row = slots?.[day] || {};
+        return [
+          day,
+          {
+            enabled: !!row.enabled,
+            start: String(row.start || ""),
+            end: String(row.end || ""),
+          },
+        ];
+      })
+    );
+  }
+
   function applyUniformTimeToActiveDays(start, end) {
     setSettingsDraft((prev) => {
       const nextCustomDaySlots = { ...(prev.customDaySlots || {}) };
@@ -866,6 +882,24 @@ export default function DoctorDashboard() {
   }
 
   async function handleSaveSettings() {
+    if (settingsDraft.inpersonEnabled) {
+      const enabledDays =
+        settingsDraft.scheduleMode === "custom"
+          ? Object.entries(settingsDraft.customDaySlots || {}).filter(([, row]) => row?.enabled)
+          : settingsDraft.consultationDays.map((day) => [day.toLowerCase().slice(0, 3), { enabled: true }]);
+      if (!enabledDays.length) {
+        pushSnackbar("Select at least one consultation day for in-person booking", "error");
+        return;
+      }
+      if (
+        settingsDraft.scheduleMode === "custom" &&
+        enabledDays.some(([, row]) => !String(row?.start || "").trim() || !String(row?.end || "").trim())
+      ) {
+        pushSnackbar("Add start and end time for every enabled custom day", "error");
+        return;
+      }
+    }
+
     const payload = {
       online: settingsDraft.online,
       modes: {
@@ -886,7 +920,7 @@ export default function DoctorDashboard() {
         arrivalWindow: Number(settingsDraft.arrivalWindow || 20),
         maxPatientsPerDay: Number(settingsDraft.maxPatientsPerDay || 20),
         scheduleMode: settingsDraft.scheduleMode,
-        customDaySlots: settingsDraft.customDaySlots,
+        customDaySlots: sanitizeCustomDaySlots(settingsDraft.customDaySlots),
       },
     };
 
@@ -1359,6 +1393,24 @@ export default function DoctorDashboard() {
                             <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
                               <span className="font-bold text-slate-900">Reason / Symptoms:</span> {req.symptoms}
                             </div>
+                            {Array.isArray(req.patientAttachments) && req.patientAttachments.length > 0 ? (
+                              <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                                <div className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-700">Patient records shared</div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {req.patientAttachments.map((file) => (
+                                    <a
+                                      key={`${req._id}_${file.url}`}
+                                      href={file.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="rounded-full border border-emerald-200 bg-white px-3 py-2 text-xs font-black text-emerald-800"
+                                    >
+                                      {file.fileName || "Open record"}
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
 
@@ -1434,6 +1486,21 @@ export default function DoctorDashboard() {
                             <div className="mt-2 text-sm text-slate-700">
                               <span className="font-bold text-slate-900">Case:</span> {booking.reason}
                             </div>
+                            {Array.isArray(booking.patientAttachments) && booking.patientAttachments.length > 0 ? (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {booking.patientAttachments.map((file) => (
+                                  <a
+                                    key={`${booking._id}_${file.url}`}
+                                    href={file.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700"
+                                  >
+                                    {file.fileName || "Patient record"}
+                                  </a>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
 
@@ -1757,10 +1824,10 @@ export default function DoctorDashboard() {
                 </div>
 
                 <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-sm font-black text-slate-900">Practice summary</div>
+                  <div className="text-sm font-black text-slate-900">Booking & visibility</div>
                   <div className="mt-4 space-y-3">
                     <div className="rounded-2xl border border-white bg-white p-4">
-                      <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Current fee band</div>
+                      <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Current consult band</div>
                       <div className="mt-1 text-2xl font-black text-slate-900">{currentBand.label}</div>
                       <div className="mt-1 text-sm text-slate-600">
                         {currentBand.fee == null ? 'Manual commercial approval required' : `${money(currentBand.fee)} + applicable GST`}
@@ -1864,6 +1931,11 @@ export default function DoctorDashboard() {
                           {!note.read && <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />}
                         </div>
                         <div className="mt-1 text-sm text-slate-600">{note.body}</div>
+                        {Number(note?.meta?.attachmentCount || 0) > 0 ? (
+                          <div className="mt-2 text-xs font-bold text-emerald-700">
+                            {note.meta.attachmentCount} medical record{note.meta.attachmentCount > 1 ? "s" : ""} shared with this booking
+                          </div>
+                        ) : null}
                         <div className="mt-2 text-xs text-slate-500">{humanDiff(note.createdAt)}</div>
                       </div>
                     </div>
@@ -2031,6 +2103,24 @@ export default function DoctorDashboard() {
                     <span className="font-bold">Booked time:</span> {callSession ? formatSlot(callSession.bookedFor) : "—"}
                   </div>
                 </div>
+                {Array.isArray(callSession?.patientAttachments) && callSession.patientAttachments.length > 0 ? (
+                  <div className="mt-3">
+                    <div className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Uploaded records</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {callSession.patientAttachments.map((file) => (
+                        <a
+                          key={`${callSession?._id}_${file.url}`}
+                          href={file.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700"
+                        >
+                          {file.fileName || "Open record"}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="mt-4">
@@ -2588,7 +2678,7 @@ export default function DoctorDashboard() {
 
       {/* ----------------------- CLINIC CHANGE REQUEST ------------------------ */}
       <Dialog open={clinicChangeOpen} onOpenChange={setClinicChangeOpen}>
-        <DialogContent className="max-w-2xl rounded-[30px] border-0 bg-white p-0 shadow-[0_20px_80px_rgba(15,23,42,0.16)]">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-1.25rem)] max-w-[calc(100vw-1.25rem)] overflow-y-auto rounded-[30px] border-0 bg-white p-0 shadow-[0_20px_80px_rgba(15,23,42,0.16)] sm:w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)] md:max-w-2xl">
           <DialogHeader className="border-b border-slate-100 px-6 py-5">
             <DialogTitle className="flex items-center gap-2 text-xl font-black text-slate-900">
               <Building2 className="h-5 w-5 text-emerald-700" />
@@ -2652,7 +2742,7 @@ export default function DoctorDashboard() {
                   onChange={(e) => updateClinicDraft({ mapLabel: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <Label>New Clinic Proof</Label>
                   <Input
@@ -2676,7 +2766,7 @@ export default function DoctorDashboard() {
                   ) : null}
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="text-sm font-black text-slate-900">Map Pin / Current Location</div>
                       <div className="mt-1 text-xs text-slate-600">
@@ -2688,13 +2778,13 @@ export default function DoctorDashboard() {
                       variant="outline"
                       onClick={useCurrentClinicLocation}
                       disabled={clinicLocationLoading}
-                      className="rounded-2xl border-emerald-200 font-black text-emerald-700"
+                      className="w-full rounded-2xl border-emerald-200 font-black text-emerald-700 sm:w-auto"
                     >
                       <MapPin className="mr-2 h-4 w-4" />
                       {clinicLocationLoading ? "Locating..." : "Use Current Location"}
                     </Button>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <Label>Latitude</Label>
                       <Input

@@ -182,6 +182,8 @@ export default function Doctors() {
   const [patientType, setPatientType] = useState("self");
   const [patientName, setPatientName] = useState("");
   const [reason, setReason] = useState("");
+  const [patientSummary, setPatientSummary] = useState("");
+  const [medicalRecords, setMedicalRecords] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState("");
   const [bookingLoading, setBookingLoading] = useState(false);
 
@@ -291,17 +293,27 @@ export default function Doctors() {
     try {
       const createRes = await axios.post(
         `${API}/api/consults/create`,
+        (() => {
+          const payload = new FormData();
+          payload.append("doctorId", bookingDoctor.id);
+          payload.append("mode", mapModeForBackend(mode));
+          payload.append("date", bookingDate);
+          payload.append("slot", bookingSlot);
+          payload.append("patientType", patientType);
+          payload.append("patientName", patientName.trim() || (patientType === "self" ? "Self" : "Family Member"));
+          payload.append("reason", reason.trim() || "General consultation");
+          payload.append("symptoms", reason.trim() || "General consultation");
+          payload.append("patientSummary", patientSummary.trim());
+          payload.append("paymentMethod", paymentMethod);
+          medicalRecords.forEach((file) => payload.append("medicalRecords", file));
+          return payload;
+        })(),
         {
-          doctorId: bookingDoctor.id,
-          mode: mapModeForBackend(mode),
-          date: bookingDate,
-          slot: bookingSlot,
-          patientType,
-          patientName: patientName.trim() || (patientType === "self" ? "Self" : "Family Member"),
-          reason: reason.trim() || "General consultation",
-          paymentMethod,
-        },
-        { headers: userHeaders() }
+          headers: {
+            ...userHeaders(),
+            "Content-Type": "multipart/form-data",
+          },
+        }
       );
 
       const consult = createRes?.data?.consult;
@@ -318,11 +330,13 @@ export default function Doctors() {
 
       setBookingDoctor(null);
       setReason("");
+      setPatientSummary("");
       setPatientName("");
       setPatientType("self");
       setPaymentMethod("");
       setBookingSlot("");
       setSlotOptions([]);
+      setMedicalRecords([]);
       await loadMyConsults();
     } catch (err) {
       setError(err?.response?.data?.error || err?.message || "Booking failed.");
@@ -502,6 +516,8 @@ export default function Doctors() {
                 setBookingSlot("");
                 setSlotOptions([]);
                 setPaymentMethod("");
+                setPatientSummary("");
+                setMedicalRecords([]);
               }}
             />
           ))
@@ -581,6 +597,39 @@ export default function Doctors() {
                 placeholder="Reason/symptoms (optional)"
                 style={{ width: "100%", borderRadius: 10, border: "1.5px solid #D1D5DB", padding: 10, fontSize: 12, fontWeight: 700, resize: "none", marginBottom: 8, outline: "none" }}
               />
+
+              <textarea
+                value={patientSummary}
+                onChange={(e) => setPatientSummary(e.target.value)}
+                rows={2}
+                placeholder="Previous diagnosis / ongoing treatment / anything doctor should know (optional)"
+                style={{ width: "100%", borderRadius: 10, border: "1.5px solid #D1D5DB", padding: 10, fontSize: 12, fontWeight: 700, resize: "none", marginBottom: 8, outline: "none" }}
+              />
+
+              <div style={{ marginBottom: 10, border: "1px solid #D1D5DB", borderRadius: 12, padding: 10, background: "#F8FAFC" }}>
+                <div style={{ fontSize: 11.5, fontWeight: 900, color: "#0F172A", marginBottom: 6 }}>
+                  Upload prescription / lab report / previous doctor record
+                </div>
+                <input
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.pdf,.webp,.heic,.heif"
+                  onChange={(e) => setMedicalRecords(Array.from(e.target.files || []))}
+                  style={{ width: "100%", fontSize: 11.5, fontWeight: 700 }}
+                />
+                <div style={{ marginTop: 6, fontSize: 10.5, color: "#64748B", fontWeight: 700 }}>
+                  These records will be available to the doctor in consult context.
+                </div>
+                {medicalRecords.length > 0 ? (
+                  <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {medicalRecords.map((file) => (
+                      <span key={`${file.name}-${file.size}`} style={{ padding: "4px 8px", borderRadius: 999, background: "#ECFDF5", border: "1px solid #A7F3D0", fontSize: 10.5, fontWeight: 800, color: "#065F46" }}>
+                        {file.name}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
 
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 11.5, fontWeight: 900, color: "#0F172A", marginBottom: 6 }}>Payment Method</div>
