@@ -1,12 +1,14 @@
 // pages/GoDavaiiAI.js — GoDavaii 2035 Health OS AI Assistant
-// ✅ FIX: Container height = calc(100dvh - 58px) to account for BottomNavBar, input padding = 4px (no gap)
-// ✅ FIX: TTS timeout increased (15s → 30s) for long responses
-// ✅ FIX: TTS error handling — speakLoading properly reset in ALL error paths
+// ✅ FIX: Input box no longer shrinks — uses fixed min-height + proper flex layout
+// ✅ FIX: Textarea auto-grows correctly without collapsing
+// ✅ FIX: TTS timeout increased (30s), proper error handling, multi-language
 // ✅ FIX: Auth token sent with all API requests
-// ✅ FIX: TTS audio error handling with proper cleanup
-// ✅ NO double header — Navbar hidden via HIDE_ENTIRE_NAVBAR in Navbar.js
+// ✅ FIX: Container height = calc(100dvh - 58px) for BottomNavBar
+// ✅ PREMIUM: 2030 glassmorphic design, smooth animations
+// ✅ PREMIUM: Typing indicator with brain animation
+// ✅ MULTI-LANG: Supports all Indian languages for TTS
+// ✅ NO double header — Navbar hidden via HIDE_ENTIRE_NAVBAR
 // ✅ NO desi toggle — desiIlaaj always ON
-// ✅ NO language selector — always hinglish
 // ✅ Focus chips STICKY in header
 // ✅ ChatGPT-style sidebar with recent chats
 
@@ -23,7 +25,9 @@ import {
   Paperclip,
   Plus,
   Send,
+  Sparkles,
   Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -32,13 +36,14 @@ import { useLocation, useNavigate } from "react-router-dom";
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const FILE_ANALYZE_TIMEOUT_MS = 300000;
 
-/* ── Design tokens ────────────────────────────────────────── */
+/* ── Design tokens — Premium 2030 palette ─────────────────── */
 const DEEP = "#0C5A3E";
 const MID = "#0E7A4F";
 const ACC = "#00D97E";
 const DARK = "#041F15";
-const GLASS = "rgba(255,255,255,0.82)";
-const GLASS_BORDER = "rgba(12,90,62,0.10)";
+const GLASS = "rgba(255,255,255,0.88)";
+const GLASS_BORDER = "rgba(12,90,62,0.08)";
+const SURFACE = "rgba(248,250,252,0.95)";
 
 /* ── Focus modes ──────────────────────────────────────────── */
 const FOCUS = [
@@ -93,18 +98,50 @@ function wantsLatestVaultReportAnalysis(text) {
   );
 }
 
+/* ── Detect language for TTS ──────────────────────────────── */
+function detectLanguageForTTS(text) {
+  const src = String(text || "").trim();
+  if (!src) return "hinglish";
+  if (/[\u0900-\u097F]/.test(src)) {
+    if (/\b(आहे|नाही|काय|कसे)\b/.test(src)) return "marathi";
+    return "hindi";
+  }
+  if (/[\u0980-\u09FF]/.test(src)) return "bengali";
+  if (/[\u0B80-\u0BFF]/.test(src)) return "tamil";
+  if (/[\u0C00-\u0C7F]/.test(src)) return "telugu";
+  if (/[\u0C80-\u0CFF]/.test(src)) return "kannada";
+  if (/[\u0D00-\u0D7F]/.test(src)) return "malayalam";
+  if (/[\u0A80-\u0AFF]/.test(src)) return "gujarati";
+  if (/[\u0A00-\u0A7F]/.test(src)) return "punjabi";
+
+  const lower = src.toLowerCase();
+  const hindiWords = ["hai", "kya", "kaise", "mujhe", "mera", "kar", "karo", "samjha", "batao", "nahi", "acha", "dard", "bukhar", "dawai", "ilaaj"];
+  const hintCount = hindiWords.reduce((n, w) => (new RegExp(`\\b${w}\\b`).test(lower) ? n + 1 : n), 0);
+  if (hintCount >= 2) return "hinglish";
+  return "english";
+}
+
 /* ── Auth header helper ───────────────────────────────────── */
 function getAuthHeaders() {
   const token = localStorage.getItem("token");
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
+  if (token) return { Authorization: `Bearer ${token}` };
   return {};
 }
 
 /* ── Format sections nicely ───────────────────────────────── */
 function FormatReply({ text }) {
   const clean = cleanAssistantText(text);
+
+  // Check if this is a casual reply (no sections)
+  const hasSections = /\n\s*(Assessment|Next steps|Warning signs|Desi ilaaj):/i.test(clean);
+  if (!hasSections) {
+    return (
+      <div style={{ whiteSpace: "pre-line", lineHeight: 1.7, fontSize: 13.5, fontWeight: 600, color: "#1F2937" }}>
+        {clean.trim()}
+      </div>
+    );
+  }
+
   const sections = clean.split(
     /\n(?=(?:Assessment|Next steps|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):)/i
   );
@@ -117,7 +154,7 @@ function FormatReply({ text }) {
         );
         if (!headerMatch) {
           return (
-            <div key={i} style={{ whiteSpace: "pre-line", marginBottom: 8 }}>
+            <div key={i} style={{ whiteSpace: "pre-line", marginBottom: 8, lineHeight: 1.7, fontSize: 13.5, fontWeight: 600 }}>
               {section.trim()}
             </div>
           );
@@ -126,34 +163,46 @@ function FormatReply({ text }) {
         const body = section.slice(headerMatch[0].length).trim();
         const isRed = /red flag|warning sign/i.test(header);
         const isDesi = /desi|home remed/i.test(header);
+        const isAssessment = /assessment/i.test(header);
+
+        const iconMap = {
+          assessment: "🔍",
+          "next steps": "✅",
+          "warning signs": "🚨",
+          "red flags": "🚨",
+          "when to see doctor": "🏥",
+          "desi ilaaj": "🌿",
+          "home remedies": "🌿",
+        };
 
         return (
-          <div key={i} style={{ marginBottom: 12 }}>
+          <div key={i} style={{ marginBottom: 14 }}>
             <div
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 5,
-                fontSize: 12,
+                fontSize: 11.5,
                 fontWeight: 900,
                 letterSpacing: "0.3px",
-                color: isRed ? "#DC2626" : isDesi ? "#059669" : DEEP,
-                background: isRed ? "#FEF2F2" : isDesi ? "#ECFDF5" : "#F0FAF5",
-                padding: "4px 10px",
-                borderRadius: 8,
-                marginBottom: 6,
-                fontFamily: "'Sora',sans-serif",
+                color: isRed ? "#DC2626" : isDesi ? "#059669" : isAssessment ? "#0369A1" : DEEP,
+                background: isRed ? "#FEF2F2" : isDesi ? "#ECFDF5" : isAssessment ? "#F0F9FF" : "#F0FAF5",
+                padding: "5px 11px",
+                borderRadius: 10,
+                marginBottom: 8,
+                fontFamily: "'Sora','Plus Jakarta Sans',sans-serif",
               }}
             >
-              {isRed ? "🚨" : isDesi ? "🌿" : "📋"} {header}
+              {iconMap[header.toLowerCase()] || "📋"} {header}
             </div>
             <div
               style={{
                 whiteSpace: "pre-line",
-                lineHeight: 1.7,
+                lineHeight: 1.75,
                 fontSize: 13.5,
                 fontWeight: 600,
                 color: "#1F2937",
+                paddingLeft: 2,
               }}
             >
               {body}
@@ -172,50 +221,51 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10, scale: 0.97 }}
+      initial={{ opacity: 0, y: 12, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
       style={{
         display: "flex",
         justifyContent: isUser ? "flex-end" : "flex-start",
-        marginBottom: 12,
+        marginBottom: 14,
       }}
     >
       {!isUser && (
         <div
           style={{
-            width: 30,
-            height: 30,
-            borderRadius: 10,
+            width: 32,
+            height: 32,
+            borderRadius: 12,
             flexShrink: 0,
             marginRight: 8,
             marginTop: 2,
             background: `linear-gradient(135deg,${DEEP},${MID})`,
             display: "grid",
             placeItems: "center",
+            boxShadow: "0 2px 8px rgba(12,90,62,0.20)",
           }}
         >
-          <Brain style={{ width: 14, height: 14, color: ACC }} />
+          <Sparkles style={{ width: 14, height: 14, color: ACC }} />
         </div>
       )}
       <div
         style={{
           maxWidth: "85%",
-          borderRadius: isUser ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-          padding: "12px 14px",
+          borderRadius: isUser ? "20px 20px 6px 20px" : "20px 20px 20px 6px",
+          padding: "14px 16px",
           background: isUser
             ? `linear-gradient(135deg,${DEEP},${MID})`
             : GLASS,
           border: isUser ? "none" : `1px solid ${GLASS_BORDER}`,
           boxShadow: isUser
-            ? "0 4px 16px rgba(12,90,62,0.20)"
-            : "0 2px 12px rgba(0,0,0,0.04)",
-          backdropFilter: isUser ? "none" : "blur(12px)",
+            ? "0 4px 20px rgba(12,90,62,0.22)"
+            : "0 2px 16px rgba(0,0,0,0.04)",
+          backdropFilter: isUser ? "none" : "blur(16px)",
           color: isUser ? "#fff" : "#1F2937",
         }}
       >
         {isUser ? (
-          <div style={{ whiteSpace: "pre-line", fontSize: 13.5, fontWeight: 650, lineHeight: 1.6 }}>
+          <div style={{ whiteSpace: "pre-line", fontSize: 13.5, fontWeight: 650, lineHeight: 1.65 }}>
             {m.text}
           </div>
         ) : (
@@ -227,18 +277,19 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading }) {
             onClick={() => onSpeak(m)}
             disabled={speakLoading}
             style={{
-              marginTop: 8,
+              marginTop: 10,
               display: "inline-flex",
               alignItems: "center",
               gap: 5,
-              border: `1px solid ${isSpeaking ? ACC : "#E2E8F0"}`,
+              border: `1px solid ${isSpeaking ? ACC : "#E5E7EB"}`,
               borderRadius: 999,
-              background: isSpeaking ? "#ECFDF5" : "#fff",
-              padding: "4px 10px",
+              background: isSpeaking ? "#ECFDF5" : "#FAFAFA",
+              padding: "5px 12px",
               fontSize: 11,
               fontWeight: 800,
-              color: isSpeaking ? "#059669" : "#0F766E",
+              color: isSpeaking ? "#059669" : "#6B7280",
               cursor: speakLoading ? "wait" : "pointer",
+              transition: "all 0.15s ease",
             }}
           >
             {speakLoading && isSpeaking ? (
@@ -252,10 +303,12 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading }) {
                   animation: "gdSpin 0.6s linear infinite",
                 }}
               />
+            ) : isSpeaking ? (
+              <VolumeX style={{ width: 11, height: 11 }} />
             ) : (
               <Volume2 style={{ width: 11, height: 11 }} />
             )}
-            {speakLoading && isSpeaking ? "Loading..." : isSpeaking ? "Playing..." : "Listen"}
+            {speakLoading && isSpeaking ? "Loading..." : isSpeaking ? "Stop" : "Listen"}
           </motion.button>
         )}
       </div>
@@ -289,6 +342,7 @@ export default function GoDavaiiAI() {
   const fileRef = useRef(null);
   const chatEndRef = useRef(null);
   const audioRef = useRef(null);
+  const textareaRef = useRef(null);
   const msgIdCounter = useRef(1);
   const autoAnalyzeHandledRef = useRef("");
 
@@ -298,7 +352,7 @@ export default function GoDavaiiAI() {
     {
       id: makeId(),
       role: "assistant",
-      text: "Namaste! Main GoDavaii AI hoon — aapka personal health assistant.\n\nAap mujhse pooch sakte ho:\n🩺 Symptoms explain karo\n💊 Medicine side effects\n📋 Prescription samjhao\n🧪 Lab report analyze karo (multi-page PDF)\n🦴 X-Ray / CT scan explain karo\n🌿 Desi ilaaj har response me included\n\nText, voice, ya file upload — sab kaam karega!",
+      text: "Namaste! Main GoDavaii AI hoon — aapka personal health assistant.\n\nAap mujhse pooch sakte ho:\n🩺 Symptoms explain karo\n💊 Medicine side effects\n📋 Prescription samjhao\n🧪 Lab report analyze karo (multi-page PDF)\n🦴 X-Ray / CT scan explain karo\n🌿 Desi ilaaj har response me included\n\nText, voice, ya file upload — sab kaam karega!\n\nAur haan, aap kisi bhi language me baat kar sakte ho — Hindi, English, Bengali, Tamil, Telugu, Gujarati, Marathi, Punjabi... main samajh lunga!",
     },
   ]);
 
@@ -361,7 +415,6 @@ export default function GoDavaiiAI() {
     return whoFor === "family" ? "Family Member" : "New Profile";
   }, [whoFor, familyLabel, customProfile, user?.name]);
 
-  // Context — desiIlaaj ALWAYS true, language ALWAYS hinglish
   const profileContext = useMemo(
     () => ({
       whoFor,
@@ -380,7 +433,7 @@ export default function GoDavaiiAI() {
     [whoFor, whoForLabel, focus, user]
   );
 
-  /* ── TTS — server first, with PROPER error handling ────── */
+  /* ── TTS — server first, multi-language ────────────────── */
   const handleSpeak = useCallback(
     async (msg) => {
       // Stop current audio
@@ -402,30 +455,25 @@ export default function GoDavaiiAI() {
       setSpeakLoading(true);
 
       const text = cleanAssistantText(msg.text);
+      const lang = detectLanguageForTTS(text);
 
-      // ✅ FIX: Server TTS with proper error handling & increased timeout
       try {
         const { data } = await axios.post(
           `${API}/api/ai/assistant/tts`,
-          { text: text.slice(0, 3000), language: "hinglish" },
-          {
-            timeout: 30000, // ✅ FIX: 30s timeout (was 15s — too short for long texts)
-            headers: getAuthHeaders(),
-          }
+          { text: text.slice(0, 3000), language: lang },
+          { timeout: 30000, headers: getAuthHeaders() }
         );
 
         if (data?.audioBase64) {
           const audio = new Audio(`data:audio/mp3;base64,${data.audioBase64}`);
           audioRef.current = audio;
 
-          // ✅ FIX: Proper cleanup on all audio events
           audio.onended = () => {
             setSpeakingId(null);
             setSpeakLoading(false);
             audioRef.current = null;
           };
-          audio.onerror = (e) => {
-            console.error("Audio playback error:", e);
+          audio.onerror = () => {
             setSpeakingId(null);
             setSpeakLoading(false);
             audioRef.current = null;
@@ -445,23 +493,18 @@ export default function GoDavaiiAI() {
         }
       } catch (err) {
         console.error("TTS API failed:", err?.message || err);
-        // Fall through to browser TTS
       }
 
-      // ✅ FIX: Browser TTS fallback with proper state management
+      // Browser TTS fallback
       setSpeakLoading(false);
       if (window.speechSynthesis) {
         try {
           const u = new SpeechSynthesisUtterance(text);
           u.rate = 0.92;
           u.pitch = 1.05;
-          u.lang = "hi-IN";
-          u.onend = () => {
-            setSpeakingId(null);
-          };
-          u.onerror = () => {
-            setSpeakingId(null);
-          };
+          u.lang = lang === "hindi" ? "hi-IN" : lang === "bengali" ? "bn-IN" : lang === "tamil" ? "ta-IN" : lang === "telugu" ? "te-IN" : "hi-IN";
+          u.onend = () => setSpeakingId(null);
+          u.onerror = () => setSpeakingId(null);
           window.speechSynthesis.speak(u);
         } catch {
           setSpeakingId(null);
@@ -484,19 +527,32 @@ export default function GoDavaiiAI() {
     }
     const rec = new SR();
     recognitionRef.current = rec;
-    rec.lang = "en-IN";
+    rec.lang = "hi-IN";
     rec.interimResults = false;
+    rec.continuous = false;
     rec.onstart = () => setMicOn(true);
     rec.onend = () => setMicOn(false);
     rec.onerror = () => setMicOn(false);
     rec.onresult = (e) => {
       const txt = e.results?.[0]?.[0]?.transcript || "";
-      if (txt.trim()) setInput((prev) => `${prev}${prev ? " " : ""}${txt.trim()}`);
+      if (txt.trim()) {
+        setInput((prev) => `${prev}${prev ? " " : ""}${txt.trim()}`);
+        // Reset textarea height after voice input
+        if (textareaRef.current) {
+          setTimeout(() => {
+            const ta = textareaRef.current;
+            if (ta) {
+              ta.style.height = "auto";
+              ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+            }
+          }, 50);
+        }
+      }
     };
     rec.start();
   }
 
-  /* ── Backend calls — ✅ FIX: Auth headers included ──────── */
+  /* ── Backend calls ──────────────────────────────────────── */
   async function askBackend(messageText, history) {
     const payload = { message: messageText, history, context: profileContext };
     const headers = getAuthHeaders();
@@ -534,19 +590,14 @@ export default function GoDavaiiAI() {
     let lastErr = null;
     for (const url of urls) {
       try {
-        const r = await axios.post(url, fd, {
-          timeout: FILE_ANALYZE_TIMEOUT_MS,
-          headers,
-        });
+        const r = await axios.post(url, fd, { timeout: FILE_ANALYZE_TIMEOUT_MS, headers });
         const text = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
         if (String(text).trim()) return text;
         lastErr = new Error("Empty reply");
       } catch (err) {
         lastErr = err;
         console.error("File AI failed:", url, getApiErrorMessage(err));
-        if (err?.code === "ECONNABORTED" || String(err?.message || "").toLowerCase().includes("timeout")) {
-          break;
-        }
+        if (err?.code === "ECONNABORTED" || String(err?.message || "").toLowerCase().includes("timeout")) break;
       }
     }
     return `File analysis issue: ${getApiErrorMessage(lastErr)}\n\nLarge scanned PDFs can take longer. Retry once, or upload a cleaner report PDF/image for faster processing.`;
@@ -582,13 +633,9 @@ export default function GoDavaiiAI() {
         const contentType = String(res?.data?.type || "application/octet-stream");
         const ext = contentType.includes("pdf") ? ".pdf" : ".jpg";
         return new File([res.data], `vault-report-${reportId}${ext}`, { type: contentType });
-      } catch {
-        // fallback below
-      }
+      } catch { /* fallback below */ }
     }
-    if (fallbackUrl) {
-      return fetchReportFromPublicUrlAsFile(fallbackUrl, fallbackName || "vault-report");
-    }
+    if (fallbackUrl) return fetchReportFromPublicUrlAsFile(fallbackUrl, fallbackName || "vault-report");
     return null;
   }
 
@@ -645,6 +692,11 @@ export default function GoDavaiiAI() {
     setInput("");
     setLoading(true);
 
+    // ✅ FIX: Reset textarea height after sending
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "24px";
+    }
+
     try {
       const history = buildCompactHistory(nextMessages);
       const reply = activeFile
@@ -661,7 +713,7 @@ export default function GoDavaiiAI() {
     }
   }
 
-  /* ── Load chat history — ✅ FIX: Auth headers ──────────── */
+  /* ── Load chat history ──────────────────────────────────── */
   async function loadChatHistory() {
     if (!user?._id && !user?.userId) return;
     setSessionsLoading(true);
@@ -698,7 +750,7 @@ export default function GoDavaiiAI() {
       {
         id: makeId(),
         role: "assistant",
-        text: "New chat started! Kya help chahiye aapko?",
+        text: "New chat started! Kya help chahiye aapko? 😊",
       },
     ]);
     setSidebarOpen(false);
@@ -715,8 +767,7 @@ export default function GoDavaiiAI() {
         height: "calc(100dvh - 58px)",
         display: "flex",
         flexDirection: "column",
-        background:
-          "linear-gradient(170deg,#F0FAF5 0%,#E8F5EF 35%,#EFF6FF 65%,#F5F3FF 85%,#F8FAFC 100%)",
+        background: "linear-gradient(170deg,#F0FAF5 0%,#E8F5EF 35%,#EFF6FF 65%,#F5F3FF 85%,#F8FAFC 100%)",
         fontFamily: "'Plus Jakarta Sans',sans-serif",
         overflow: "hidden",
         position: "relative",
@@ -750,39 +801,23 @@ export default function GoDavaiiAI() {
           }}
         />
 
-        {/* Top row: history + title + close */}
+        {/* Top row */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <motion.button
             whileTap={{ scale: 0.9 }}
-            onClick={() => {
-              setSidebarOpen(true);
-              loadChatHistory();
-            }}
+            onClick={() => { setSidebarOpen(true); loadChatHistory(); }}
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: 12,
+              width: 36, height: 36, borderRadius: 12,
               background: "rgba(255,255,255,0.10)",
               border: "1px solid rgba(255,255,255,0.15)",
-              display: "grid",
-              placeItems: "center",
-              cursor: "pointer",
-              flexShrink: 0,
+              display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0,
             }}
           >
             <History style={{ width: 16, height: 16, color: "#fff" }} />
           </motion.button>
 
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                fontFamily: "'Sora',sans-serif",
-                fontSize: 16,
-                fontWeight: 900,
-                color: "#fff",
-                letterSpacing: "-0.3px",
-              }}
-            >
+            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900, color: "#fff", letterSpacing: "-0.3px" }}>
               GoDavaii AI
             </div>
             <div style={{ fontSize: 10.5, color: ACC, fontWeight: 700, marginTop: 1 }}>
@@ -794,52 +829,31 @@ export default function GoDavaiiAI() {
             whileTap={{ scale: 0.92 }}
             onClick={() => navigate("/home")}
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: 12,
+              width: 36, height: 36, borderRadius: 12,
               background: "rgba(255,255,255,0.10)",
               border: "1px solid rgba(255,255,255,0.15)",
-              display: "grid",
-              placeItems: "center",
-              cursor: "pointer",
-              flexShrink: 0,
+              display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0,
             }}
           >
             <X style={{ width: 16, height: 16, color: "#fff" }} />
           </motion.button>
         </div>
 
-        {/* Focus chips — always visible */}
-        <div
-          style={{
-            marginTop: 10,
-            display: "flex",
-            gap: 6,
-            overflowX: "auto",
-            paddingBottom: 2,
-            scrollbarWidth: "none",
-          }}
-        >
+        {/* Focus chips */}
+        <div style={{ marginTop: 10, display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" }}>
           {FOCUS.map((m) => (
             <motion.button
               key={m.key}
               whileTap={{ scale: 0.93 }}
               onClick={() => setFocus(m.key)}
               style={{
-                flexShrink: 0,
-                height: 32,
-                borderRadius: 999,
+                flexShrink: 0, height: 32, borderRadius: 999,
                 border: focus === m.key ? "none" : "1px solid rgba(255,255,255,0.18)",
                 background: focus === m.key ? ACC : "rgba(255,255,255,0.08)",
                 color: focus === m.key ? DEEP : "#fff",
-                padding: "0 12px",
-                fontSize: 11,
-                fontWeight: 800,
-                cursor: "pointer",
+                padding: "0 12px", fontSize: 11, fontWeight: 800, cursor: "pointer",
                 fontFamily: "'Sora',sans-serif",
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
+                display: "flex", alignItems: "center", gap: 4,
                 boxShadow: focus === m.key ? `0 4px 14px ${ACC}40` : "none",
               }}
             >
@@ -849,36 +863,18 @@ export default function GoDavaiiAI() {
         </div>
 
         {/* Target row */}
-        <div
-          style={{
-            marginTop: 8,
-            display: "flex",
-            gap: 6,
-            alignItems: "center",
-            overflowX: "auto",
-            scrollbarWidth: "none",
-            paddingBottom: 2,
-          }}
-        >
+        <div style={{ marginTop: 8, display: "flex", gap: 6, alignItems: "center", overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}>
           {TARGETS.map((t) => (
             <motion.button
               key={t.key}
               whileTap={{ scale: 0.93 }}
               onClick={() => setWhoFor(t.key)}
               style={{
-                flexShrink: 0,
-                height: 28,
-                borderRadius: 999,
+                flexShrink: 0, height: 28, borderRadius: 999,
                 border: whoFor === t.key ? "none" : "1px solid rgba(255,255,255,0.15)",
                 background: whoFor === t.key ? "rgba(0,217,126,0.25)" : "transparent",
-                color: "#fff",
-                padding: "0 10px",
-                fontSize: 10.5,
-                fontWeight: 800,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 3,
+                color: "#fff", padding: "0 10px", fontSize: 10.5, fontWeight: 800,
+                cursor: "pointer", display: "flex", alignItems: "center", gap: 3,
               }}
             >
               <span style={{ fontSize: 11 }}>{t.icon}</span> {t.label}
@@ -892,17 +888,10 @@ export default function GoDavaiiAI() {
             onChange={(e) => setFamilyLabel(e.target.value)}
             placeholder="Family member name (eg: Mom)"
             style={{
-              marginTop: 8,
-              width: "100%",
-              height: 34,
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.2)",
-              background: "rgba(255,255,255,0.08)",
-              padding: "0 10px",
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#fff",
-              outline: "none",
+              marginTop: 8, width: "100%", height: 34, borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)",
+              padding: "0 10px", fontSize: 12, fontWeight: 700, color: "#fff", outline: "none",
+              boxSizing: "border-box",
             }}
           />
         )}
@@ -912,17 +901,10 @@ export default function GoDavaiiAI() {
             onChange={(e) => setCustomProfile(e.target.value)}
             placeholder="Age, gender, condition..."
             style={{
-              marginTop: 8,
-              width: "100%",
-              height: 34,
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.2)",
-              background: "rgba(255,255,255,0.08)",
-              padding: "0 10px",
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#fff",
-              outline: "none",
+              marginTop: 8, width: "100%", height: 34, borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)",
+              padding: "0 10px", fontSize: 12, fontWeight: 700, color: "#fff", outline: "none",
+              boxSizing: "border-box",
             }}
           />
         )}
@@ -931,15 +913,9 @@ export default function GoDavaiiAI() {
       {/* ══ DISCLAIMER ══ */}
       <div
         style={{
-          flexShrink: 0,
-          margin: "8px 12px 0",
-          background: "#FFF7ED",
-          border: "1px solid #FED7AA",
-          borderRadius: 14,
-          padding: "8px 12px",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
+          flexShrink: 0, margin: "8px 12px 0",
+          background: "#FFF7ED", border: "1px solid #FED7AA", borderRadius: 14,
+          padding: "8px 12px", display: "flex", alignItems: "center", gap: 8,
         }}
       >
         <AlertTriangle style={{ width: 14, height: 14, color: "#C2410C", flexShrink: 0 }} />
@@ -956,6 +932,7 @@ export default function GoDavaiiAI() {
           overflowX: "hidden",
           padding: "12px 12px 4px",
           scrollbarWidth: "none",
+          minHeight: 0,
         }}
       >
         <AnimatePresence initial={false}>
@@ -974,27 +951,19 @@ export default function GoDavaiiAI() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 12px",
-              marginBottom: 8,
-            }}
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", marginBottom: 8 }}
           >
             <div
               style={{
-                width: 30,
-                height: 30,
-                borderRadius: 10,
+                width: 32, height: 32, borderRadius: 12,
                 background: `linear-gradient(135deg,${DEEP},${MID})`,
-                display: "grid",
-                placeItems: "center",
+                display: "grid", placeItems: "center",
+                boxShadow: "0 2px 8px rgba(12,90,62,0.20)",
               }}
             >
-              <Brain style={{ width: 14, height: 14, color: ACC }} />
+              <Sparkles style={{ width: 14, height: 14, color: ACC }} />
             </div>
-            <div style={{ display: "flex", gap: 4 }}>
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
               {[0, 1, 2].map((i) => (
                 <motion.div
                   key={i}
@@ -1004,7 +973,9 @@ export default function GoDavaiiAI() {
                 />
               ))}
             </div>
-            <span style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>Analyzing...</span>
+            <span style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>
+              {attachedFile || loading ? "Analyzing..." : "Thinking..."}
+            </span>
           </motion.div>
         )}
         <div ref={chatEndRef} />
@@ -1014,27 +985,17 @@ export default function GoDavaiiAI() {
       {attachedFile && (
         <div
           style={{
-            flexShrink: 0,
-            margin: "0 12px 4px",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "8px 12px",
-            borderRadius: 14,
-            background: "#ECFDF5",
-            border: "1px solid #A7F3D0",
+            flexShrink: 0, margin: "0 12px 4px",
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "8px 12px", borderRadius: 14,
+            background: "#ECFDF5", border: "1px solid #A7F3D0",
           }}
         >
           <FileText style={{ width: 14, height: 14, color: "#065F46", flexShrink: 0 }} />
           <span
             style={{
-              fontSize: 12,
-              fontWeight: 800,
-              color: "#065F46",
-              flex: 1,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              fontSize: 12, fontWeight: 800, color: "#065F46",
+              flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             }}
           >
             {attachedFile.name}
@@ -1042,13 +1003,8 @@ export default function GoDavaiiAI() {
           {attachedFile.name?.toLowerCase().endsWith(".pdf") && (
             <span
               style={{
-                fontSize: 9.5,
-                fontWeight: 900,
-                color: "#059669",
-                background: "#D1FAE5",
-                padding: "2px 7px",
-                borderRadius: 999,
-                flexShrink: 0,
+                fontSize: 9.5, fontWeight: 900, color: "#059669",
+                background: "#D1FAE5", padding: "2px 7px", borderRadius: 999, flexShrink: 0,
               }}
             >
               All pages
@@ -1063,12 +1019,12 @@ export default function GoDavaiiAI() {
         </div>
       )}
 
-      {/* ══ INPUT BAR — sits right above BottomNavBar ══ */}
+      {/* ══ INPUT BAR — ✅ FIXED: No more shrinking ══ */}
       <div
         style={{
           flexShrink: 0,
-          padding: "8px 12px 4px 12px",
-          background: "rgba(255,255,255,0.9)",
+          padding: "8px 12px 6px 12px",
+          background: SURFACE,
           backdropFilter: "blur(16px)",
           borderTop: `1px solid ${GLASS_BORDER}`,
         }}
@@ -1082,6 +1038,7 @@ export default function GoDavaiiAI() {
         />
 
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+          {/* ✅ FIX: Input container with FIXED min-height — never shrinks below 46px */}
           <div
             style={{
               flex: 1,
@@ -1089,14 +1046,24 @@ export default function GoDavaiiAI() {
               alignItems: "flex-end",
               minHeight: 46,
               borderRadius: 16,
-              background: "#F8FAFC",
+              background: "#fff",
               border: "1.5px solid rgba(12,90,62,0.12)",
               padding: "6px 12px",
+              boxSizing: "border-box",
+              transition: "border-color 0.15s ease",
             }}
           >
+            {/* ✅ FIX: Textarea with proper min-height so text is always visible */}
             <textarea
+              ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // Auto-resize
+                const ta = e.target;
+                ta.style.height = "auto";
+                ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+              }}
               placeholder={`Message for ${whoForLabel}...`}
               rows={1}
               style={{
@@ -1110,12 +1077,11 @@ export default function GoDavaiiAI() {
                 color: "#0F172A",
                 lineHeight: 1.5,
                 fontFamily: "'Plus Jakarta Sans',sans-serif",
+                minHeight: 24,
                 maxHeight: 120,
                 overflowY: "auto",
-              }}
-              onInput={(e) => {
-                e.target.style.height = "auto";
-                e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                padding: "4px 0",
+                boxSizing: "border-box",
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -1126,19 +1092,14 @@ export default function GoDavaiiAI() {
             />
           </div>
 
-          <div style={{ display: "flex", gap: 6, paddingBottom: 2 }}>
+          <div style={{ display: "flex", gap: 6, paddingBottom: 2, flexShrink: 0 }}>
             <motion.button
               whileTap={{ scale: 0.88 }}
               onClick={() => fileRef.current?.click()}
               style={{
-                width: 42,
-                height: 42,
-                borderRadius: 14,
-                border: `1.5px solid ${GLASS_BORDER}`,
-                background: "#fff",
-                display: "grid",
-                placeItems: "center",
-                cursor: "pointer",
+                width: 42, height: 42, borderRadius: 14,
+                border: `1.5px solid ${GLASS_BORDER}`, background: "#fff",
+                display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0,
               }}
             >
               <Paperclip style={{ width: 17, height: 17, color: DEEP }} />
@@ -1148,14 +1109,10 @@ export default function GoDavaiiAI() {
               whileTap={{ scale: 0.88 }}
               onClick={handleMicToggle}
               style={{
-                width: 42,
-                height: 42,
-                borderRadius: 14,
-                border: "none",
+                width: 42, height: 42, borderRadius: 14, border: "none",
                 background: micOn ? "linear-gradient(135deg,#DC2626,#EF4444)" : "#E8F5EF",
-                display: "grid",
-                placeItems: "center",
-                cursor: "pointer",
+                display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0,
+                boxShadow: micOn ? "0 4px 14px rgba(220,38,38,0.3)" : "none",
               }}
             >
               {micOn ? (
@@ -1170,30 +1127,21 @@ export default function GoDavaiiAI() {
               onClick={sendMessage}
               disabled={loading || (!input.trim() && !attachedFile)}
               style={{
-                width: 42,
-                height: 42,
-                borderRadius: 14,
-                border: "none",
-                background:
-                  loading || (!input.trim() && !attachedFile)
-                    ? "#E2E8F0"
-                    : `linear-gradient(135deg,${DEEP},${MID})`,
-                display: "grid",
-                placeItems: "center",
-                cursor:
-                  loading || (!input.trim() && !attachedFile) ? "not-allowed" : "pointer",
-                boxShadow:
-                  loading || (!input.trim() && !attachedFile)
-                    ? "none"
-                    : "0 6px 18px rgba(12,90,62,0.28)",
+                width: 42, height: 42, borderRadius: 14, border: "none",
+                background: loading || (!input.trim() && !attachedFile)
+                  ? "#E2E8F0"
+                  : `linear-gradient(135deg,${DEEP},${MID})`,
+                display: "grid", placeItems: "center", flexShrink: 0,
+                cursor: loading || (!input.trim() && !attachedFile) ? "not-allowed" : "pointer",
+                boxShadow: loading || (!input.trim() && !attachedFile)
+                  ? "none"
+                  : "0 6px 18px rgba(12,90,62,0.28)",
               }}
             >
               <Send
                 style={{
-                  width: 17,
-                  height: 17,
-                  color:
-                    loading || (!input.trim() && !attachedFile) ? "#94A3B8" : "#fff",
+                  width: 17, height: 17,
+                  color: loading || (!input.trim() && !attachedFile) ? "#94A3B8" : "#fff",
                 }}
               />
             </motion.button>
@@ -1211,11 +1159,8 @@ export default function GoDavaiiAI() {
               exit={{ opacity: 0 }}
               onClick={() => setSidebarOpen(false)}
               style={{
-                position: "absolute",
-                inset: 0,
-                zIndex: 40,
-                background: "rgba(0,0,0,0.4)",
-                backdropFilter: "blur(4px)",
+                position: "absolute", inset: 0, zIndex: 40,
+                background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)",
               }}
             />
             <motion.div
@@ -1224,57 +1169,26 @@ export default function GoDavaiiAI() {
               exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 300 }}
               style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                bottom: 0,
-                width: "80%",
-                maxWidth: 320,
-                zIndex: 50,
+                position: "absolute", top: 0, left: 0, bottom: 0,
+                width: "80%", maxWidth: 320, zIndex: 50,
                 background: "#fff",
-                borderTopRightRadius: 28,
-                borderBottomRightRadius: 28,
+                borderTopRightRadius: 28, borderBottomRightRadius: 28,
                 boxShadow: "20px 0 60px rgba(0,0,0,0.15)",
-                display: "flex",
-                flexDirection: "column",
-                overflow: "hidden",
+                display: "flex", flexDirection: "column", overflow: "hidden",
               }}
             >
-              <div
-                style={{
-                  padding: "18px 16px 12px",
-                  background: `linear-gradient(135deg,${DEEP},${DARK})`,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontFamily: "'Sora',sans-serif",
-                      fontSize: 16,
-                      fontWeight: 900,
-                      color: "#fff",
-                    }}
-                  >
+              <div style={{ padding: "18px 16px 12px", background: `linear-gradient(135deg,${DEEP},${DARK})` }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900, color: "#fff" }}>
                     Chat History
                   </div>
                   <motion.button
                     whileTap={{ scale: 0.9 }}
                     onClick={() => setSidebarOpen(false)}
                     style={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: 10,
-                      background: "rgba(255,255,255,0.12)",
-                      border: "none",
-                      display: "grid",
-                      placeItems: "center",
-                      cursor: "pointer",
+                      width: 30, height: 30, borderRadius: 10,
+                      background: "rgba(255,255,255,0.12)", border: "none",
+                      display: "grid", placeItems: "center", cursor: "pointer",
                     }}
                   >
                     <X style={{ width: 14, height: 14, color: "#fff" }} />
@@ -1287,20 +1201,11 @@ export default function GoDavaiiAI() {
                   whileTap={{ scale: 0.97 }}
                   onClick={startNewChat}
                   style={{
-                    width: "100%",
-                    height: 42,
-                    borderRadius: 14,
-                    border: "none",
+                    width: "100%", height: 42, borderRadius: 14, border: "none",
                     background: `linear-gradient(135deg,${DEEP},${MID})`,
-                    color: "#fff",
-                    fontSize: 13,
-                    fontWeight: 800,
-                    fontFamily: "'Sora',sans-serif",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
+                    color: "#fff", fontSize: 13, fontWeight: 800,
+                    fontFamily: "'Sora',sans-serif", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                     boxShadow: "0 4px 14px rgba(12,90,62,0.25)",
                   }}
                 >
@@ -1308,24 +1213,9 @@ export default function GoDavaiiAI() {
                 </motion.button>
               </div>
 
-              <div
-                style={{
-                  flex: 1,
-                  overflowY: "auto",
-                  padding: "6px 14px 20px",
-                  scrollbarWidth: "none",
-                }}
-              >
+              <div style={{ flex: 1, overflowY: "auto", padding: "6px 14px 20px", scrollbarWidth: "none" }}>
                 {sessionsLoading ? (
-                  <div
-                    style={{
-                      textAlign: "center",
-                      padding: "40px 0",
-                      color: "#94A3B8",
-                      fontSize: 13,
-                      fontWeight: 700,
-                    }}
-                  >
+                  <div style={{ textAlign: "center", padding: "40px 0", color: "#94A3B8", fontSize: 13, fontWeight: 700 }}>
                     Loading...
                   </div>
                 ) : chatSessions.length === 0 ? (
@@ -1343,10 +1233,7 @@ export default function GoDavaiiAI() {
                     const lastMsg = s.messages?.[s.messages.length - 1]?.text || "";
                     const preview = lastMsg.slice(0, 60) + (lastMsg.length > 60 ? "..." : "");
                     const date = s.updatedAt
-                      ? new Date(s.updatedAt).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "short",
-                        })
+                      ? new Date(s.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
                       : "";
 
                     return (
@@ -1355,76 +1242,24 @@ export default function GoDavaiiAI() {
                         whileTap={{ scale: 0.98 }}
                         onClick={() => loadSession(s._id)}
                         style={{
-                          width: "100%",
-                          textAlign: "left",
-                          padding: "12px 14px",
-                          borderRadius: 14,
-                          border: "1px solid rgba(12,90,62,0.08)",
-                          background: "#F8FAFC",
-                          marginBottom: 8,
-                          cursor: "pointer",
-                          display: "block",
+                          width: "100%", textAlign: "left", padding: "12px 14px",
+                          borderRadius: 14, border: "1px solid rgba(12,90,62,0.08)",
+                          background: "#F8FAFC", marginBottom: 8, cursor: "pointer", display: "block",
                         }}
                       >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            marginBottom: 4,
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 12,
-                              fontWeight: 800,
-                              color: DEEP,
-                              fontFamily: "'Sora',sans-serif",
-                            }}
-                          >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: DEEP, fontFamily: "'Sora',sans-serif" }}>
                             {s.whoForLabel || s.whoFor || "Self"}
                           </span>
-                          <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700 }}>
-                            {date}
-                          </span>
+                          <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700 }}>{date}</span>
                         </div>
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: "#64748B",
-                            fontWeight: 600,
-                            lineHeight: 1.4,
-                          }}
-                        >
+                        <div style={{ fontSize: 12, color: "#64748B", fontWeight: 600, lineHeight: 1.4 }}>
                           {preview || "Empty chat"}
                         </div>
                         <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
                           {s.focus && (
-                            <span
-                              style={{
-                                fontSize: 9.5,
-                                fontWeight: 800,
-                                color: "#059669",
-                                background: "#ECFDF5",
-                                padding: "2px 7px",
-                                borderRadius: 999,
-                              }}
-                            >
+                            <span style={{ fontSize: 9.5, fontWeight: 800, color: "#059669", background: "#ECFDF5", padding: "2px 7px", borderRadius: 999 }}>
                               {s.focus}
-                            </span>
-                          )}
-                          {s.language && (
-                            <span
-                              style={{
-                                fontSize: 9.5,
-                                fontWeight: 800,
-                                color: "#6366F1",
-                                background: "#EEF2FF",
-                                padding: "2px 7px",
-                                borderRadius: 999,
-                              }}
-                            >
-                              {s.language}
                             </span>
                           )}
                         </div>
@@ -1441,6 +1276,7 @@ export default function GoDavaiiAI() {
       <style>{`
         @keyframes gdSpin { to { transform: rotate(360deg); } }
         div::-webkit-scrollbar { display: none; }
+        textarea::placeholder { color: #94A3B8; font-weight: 600; }
       `}</style>
     </div>
   );
