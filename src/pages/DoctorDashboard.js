@@ -902,7 +902,7 @@ export default function DoctorDashboard() {
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#effaf6_0%,#f7fbff_44%,#f4f7fb_100%)]">
-      <div className="mx-auto max-w-[1320px] px-4 pb-20 pt-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1320px] px-4 pb-32 pt-4 sm:px-6 sm:pb-24 lg:px-8">
         {/* HEADER */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -951,7 +951,7 @@ export default function DoctorDashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[460px]">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-full lg:max-w-[500px] lg:flex-none">
               <div className="rounded-[22px] border border-white/15 bg-white/10 p-4 backdrop-blur">
                 <div className="text-xs uppercase tracking-[0.12em] text-emerald-50/80">Next Consult</div>
                 <div className="mt-2 text-lg font-black">{nextConsult ? countdownLabel(nextConsult.bookedFor) : "No queue"}</div>
@@ -979,7 +979,7 @@ export default function DoctorDashboard() {
         </motion.div>
 
         {/* TOP CONTROL RAIL */}
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.45fr_0.95fr]">
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard label="Upcoming Consults" value={todaySummary.upcoming} sub="Today queue" icon={CalendarClock} tone="indigo" />
             <KpiCard label="Pending Requests" value={todaySummary.pending} sub="Need action now" icon={AlertCircle} tone="amber" />
@@ -1022,7 +1022,7 @@ export default function DoctorDashboard() {
         </div>
 
         {/* MAIN CONTENT */}
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.35fr_0.92fr]">
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)] 2xl:grid-cols-[1.35fr_0.92fr]">
           {/* LEFT COLUMN */}
           <div className="space-y-4">
             <SectionCard
@@ -1241,7 +1241,7 @@ export default function DoctorDashboard() {
             </SectionCard>
 
             <SectionCard title="Doctor Profile & Verified Clinic" icon={ShieldCheck}>
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.08fr_0.92fr]">
                 <div className="rounded-[22px] border border-emerald-100 bg-[linear-gradient(180deg,#ffffff_0%,#f6fffb_100%)] p-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -1315,26 +1315,28 @@ export default function DoctorDashboard() {
             </SectionCard>
 
             <SectionCard title="Modes, Fees & Availability" icon={Settings2}>
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_0.9fr]">
+              <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[1fr_0.9fr]">
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                     {/* AUDIO */}
-                    <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                      <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex items-center gap-2">
                           <Phone className="h-4 w-4 text-sky-700" />
                           <div className="font-black text-slate-900">Audio</div>
                         </div>
-                        <Switch
-                          checked={settingsDraft.audioEnabled}
-                          onCheckedChange={(next) =>
-                            setSettingsDraft((p) => ({
-                              ...p,
-                              audioEnabled: next,
-                              audioFee: next ? p.audioFee || 299 : "",
-                            }))
-                          }
-                        />
+                        <div className="shrink-0">
+                          <Switch
+                            checked={settingsDraft.audioEnabled}
+                            onCheckedChange={(next) =>
+                              setSettingsDraft((p) => ({
+                                ...p,
+                                audioEnabled: next,
+                                audioFee: next ? p.audioFee || 299 : "",
+                              }))
+                            }
+                          />
+                        </div>
                       </div>
 
                       <AnimatePresence>
@@ -1355,22 +1357,24 @@ export default function DoctorDashboard() {
                     </div>
 
                     {/* VIDEO */}
-                    <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                      <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex items-center gap-2">
                           <Video className="h-4 w-4 text-indigo-700" />
                           <div className="font-black text-slate-900">Video</div>
                         </div>
-                        <Switch
-                          checked={settingsDraft.videoEnabled}
-                          onCheckedChange={(next) =>
-                            setSettingsDraft((p) => ({
-                              ...p,
-                              videoEnabled: next,
-                              videoFee: next ? p.videoFee || 299 : "",
-                            }))
-                          }
-                        />
+                        <div className="shrink-0">
+                          <Switch
+                            checked={settingsDraft.videoEnabled}
+                            onCheckedChange={(next) =>
+                              setSettingsDraft((p) => ({
+                                ...p,
+                                videoEnabled: next,
+                                videoFee: next ? p.videoFee || 299 : "",
+                              }))
+                            }
+                          />
+                        </div>
                       </div>
 
                       <AnimatePresence>
@@ -1391,22 +1395,24 @@ export default function DoctorDashboard() {
                     </div>
 
                     {/* INPERSON */}
-                    <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                      <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex items-center gap-2">
                           <Building2 className="h-4 w-4 text-emerald-700" />
                           <div className="font-black text-slate-900">In-person</div>
                         </div>
-                        <Switch
-                          checked={settingsDraft.inpersonEnabled}
-                          onCheckedChange={(next) =>
-                            setSettingsDraft((p) => ({
-                              ...p,
-                              inpersonEnabled: next,
-                              inpersonFee: next ? p.inpersonFee || 399 : "",
-                            }))
-                          }
-                        />
+                        <div className="shrink-0">
+                          <Switch
+                            checked={settingsDraft.inpersonEnabled}
+                            onCheckedChange={(next) =>
+                              setSettingsDraft((p) => ({
+                                ...p,
+                                inpersonEnabled: next,
+                                inpersonFee: next ? p.inpersonFee || 399 : "",
+                              }))
+                            }
+                          />
+                        </div>
                       </div>
 
                       <AnimatePresence>
@@ -1432,7 +1438,7 @@ export default function DoctorDashboard() {
                       <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
                         <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
                           <div className="mb-3 text-sm font-black text-slate-900">In-person slot rules</div>
-                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                             <div>
                               <Label>Start Time</Label>
                               <Input
@@ -1471,7 +1477,7 @@ export default function DoctorDashboard() {
                             </div>
                           </div>
 
-                          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(220px,0.65fr)]">
                             <div>
                               <Label>Consultation Days</Label>
                               <div className="mt-2 flex flex-wrap gap-2">
@@ -1658,7 +1664,7 @@ export default function DoctorDashboard() {
                     const selectedPrice = item.switchedToGeneric && showGeneric ? item.generic.price : item.matchedBrand.price;
                     return (
                       <div key={item.id} className="rounded-[20px] border border-slate-200 bg-white p-4">
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div className="min-w-0">
                             <div className="font-black text-slate-900">{item.prescribed}</div>
                             <div className="mt-1 text-sm text-slate-600">{item.salt}</div>
@@ -1667,7 +1673,7 @@ export default function DoctorDashboard() {
                             </div>
                             <div className="text-sm text-slate-700">{item.howToTake}</div>
                           </div>
-                          <div className="rounded-2xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-900">
+                          <div className="self-start rounded-2xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-900">
                             {money(selectedPrice)}
                           </div>
                         </div>
@@ -1679,15 +1685,17 @@ export default function DoctorDashboard() {
 
                         {showGeneric && (
                           <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0 flex-1">
                                 <div className="font-black text-emerald-900">{item.generic.name}</div>
                                 <div className="mt-1 text-sm text-emerald-800">Same salt composition</div>
                                 <div className="mt-1 text-sm font-bold text-emerald-900">
                                   Save {money(item.generic.savings)} if switched
                                 </div>
                               </div>
-                              <Switch checked={!!item.switchedToGeneric} onCheckedChange={() => toggleGeneric(item.id)} />
+                              <div className="self-start sm:self-center">
+                                <Switch checked={!!item.switchedToGeneric} onCheckedChange={() => toggleGeneric(item.id)} />
+                              </div>
                             </div>
                             {item.sensitive ? (
                               <div className="mt-2 text-xs font-semibold text-amber-700">
@@ -1847,7 +1855,7 @@ export default function DoctorDashboard() {
 
       {/* ------------------------- PRESCRIPTION MODAL -------------------------- */}
       <Dialog open={prescriptionOpen} onOpenChange={setPrescriptionOpen}>
-        <DialogContent className="max-h-[92vh] max-w-6xl overflow-y-auto rounded-[32px] border-0 bg-white p-0 shadow-[0_20px_80px_rgba(15,23,42,0.16)]">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto rounded-[24px] border-0 bg-white p-0 shadow-[0_20px_80px_rgba(15,23,42,0.16)] sm:w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)] lg:max-w-6xl xl:w-auto xl:rounded-[32px]">
           <DialogHeader className="border-b border-slate-100 px-6 py-5">
             <DialogTitle className="flex items-center gap-2 text-2xl font-black text-slate-900">
               <FileText className="h-6 w-6 text-emerald-700" />
@@ -1855,8 +1863,8 @@ export default function DoctorDashboard() {
             </DialogTitle>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 gap-0 lg:grid-cols-[1.08fr_0.92fr]">
-            <div className="border-r border-slate-100 px-6 py-5">
+          <div className="grid grid-cols-1 gap-0 xl:grid-cols-[1.02fr_0.98fr]">
+            <div className="border-b border-slate-100 px-4 py-5 sm:px-6 xl:border-b-0 xl:border-r">
               <div className="rounded-[24px] border border-emerald-100 bg-[linear-gradient(180deg,#ffffff_0%,#f7fffb_100%)] p-5">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1945,8 +1953,8 @@ export default function DoctorDashboard() {
               </div>
             </div>
 
-            <div className="px-6 py-5">
-              <div className="flex items-center justify-between">
+            <div className="px-4 py-5 sm:px-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-lg font-black text-slate-900">Medicine Builder</div>
                 <Button onClick={addMedicineRow} variant="outline" className="rounded-2xl border-slate-300 font-black">
                   <Pill className="mr-2 h-4 w-4" />
@@ -2065,7 +2073,7 @@ export default function DoctorDashboard() {
 
       {/* ---------------------- PATIENT CART PREVIEW MODAL --------------------- */}
       <Dialog open={prescriptionPreviewOpen} onOpenChange={setPrescriptionPreviewOpen}>
-        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-[32px] border-0 bg-white p-0 shadow-[0_20px_80px_rgba(15,23,42,0.16)]">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-y-auto rounded-[24px] border-0 bg-white p-0 shadow-[0_20px_80px_rgba(15,23,42,0.16)] sm:w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)] lg:max-w-5xl xl:w-auto xl:rounded-[32px]">
           <DialogHeader className="border-b border-slate-100 px-6 py-5">
             <DialogTitle className="flex items-center gap-2 text-2xl font-black text-slate-900">
               <Wallet className="h-6 w-6 text-emerald-700" />
@@ -2087,7 +2095,7 @@ export default function DoctorDashboard() {
                 const totalSavings = usingGeneric ? item.generic.savings : 0;
                 return (
                   <div key={item.id} className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="text-lg font-black text-slate-900">{item.prescribed}</div>
@@ -2114,8 +2122,8 @@ export default function DoctorDashboard() {
                           </div>
 
                           <div className={cx("rounded-2xl border p-3", item.generic.available ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50")}>
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0 flex-1">
                                 <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Generic alternative</div>
                                 <div className="mt-1 font-black text-slate-900">{item.generic.name}</div>
                                 {item.generic.available ? (
@@ -2131,14 +2139,16 @@ export default function DoctorDashboard() {
                                 )}
                               </div>
                               {item.generic.available ? (
-                                <Switch checked={item.switchedToGeneric} onCheckedChange={() => toggleGeneric(item.id)} />
+                                <div className="self-start sm:self-center">
+                                  <Switch checked={item.switchedToGeneric} onCheckedChange={() => toggleGeneric(item.id)} />
+                                </div>
                               ) : null}
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4 lg:w-[220px]">
+                      <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4 xl:w-[220px]">
                         <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Patient pays</div>
                         <div className="mt-1 text-2xl font-black text-slate-900">
                           {money(usingGeneric ? item.generic.price : item.matchedBrand.price)}
