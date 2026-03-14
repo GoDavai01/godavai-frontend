@@ -11,9 +11,10 @@
 // ✅ FIX: Browser TTS fallback now picks better voice and avoids ugly random fallback
 // ✅ FIX: Reply language chip persisted in localStorage
 // ✅ FIX: Existing result / backend / TTS / file logic preserved
-// ✅ FIX ONLY: top summary chips row removed from navbar
+// ✅ FIX ONLY: navbar restored
+// ✅ FIX ONLY: owner/name row restored
+// ✅ FIX ONLY: bottom blank space issue fixed by removing body scroll lock
 // ✅ FIX ONLY: better section labels by reply language
-// ✅ FIX ONLY: body scroll lock + touch momentum scroll
 // ✅ FIX ONLY: TTS preference respected properly
 // ✅ FIX ONLY: transcriptMode added for voice transcription
 
@@ -21,10 +22,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  AlertTriangle,
   Check,
   ClipboardList,
   FileText,
   FlaskConical,
+  Globe2,
   Menu,
   Mic,
   MicOff,
@@ -692,28 +695,6 @@ export default function GoDavaiiAI() {
   }, [replyLanguage]);
 
   useEffect(() => {
-    const prevHtmlOverflow = document.documentElement.style.overflow;
-    const prevBodyOverflow = document.body.style.overflow;
-    const prevHtmlHeight = document.documentElement.style.height;
-    const prevBodyHeight = document.body.style.height;
-    const prevOverscroll = document.body.style.overscrollBehavior;
-
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.height = "100%";
-    document.body.style.height = "100%";
-    document.body.style.overscrollBehavior = "none";
-
-    return () => {
-      document.documentElement.style.overflow = prevHtmlOverflow;
-      document.body.style.overflow = prevBodyOverflow;
-      document.documentElement.style.height = prevHtmlHeight;
-      document.body.style.height = prevBodyHeight;
-      document.body.style.overscrollBehavior = prevOverscroll;
-    };
-  }, []);
-
-  useEffect(() => {
     return () => {
       try {
         recognitionRef.current?.stop?.();
@@ -828,6 +809,9 @@ export default function GoDavaiiAI() {
     return whoFor === "family" ? "Family Member" : "New Profile";
   }, [whoFor, familyLabel, customProfile, user?.name]);
 
+  const currentFocusMeta = useMemo(() => FOCUS.find((f) => f.key === focus) || FOCUS[0], [focus]);
+  const currentLangMeta = useMemo(() => LANG_OPTIONS.find((l) => l.key === replyLanguage) || LANG_OPTIONS[0], [replyLanguage]);
+
   const profileContext = useMemo(
     () => ({
       whoFor,
@@ -867,9 +851,6 @@ export default function GoDavaiiAI() {
 
     const text = cleanAssistantText(msg.text);
 
-    // IMPORTANT:
-    // selected reply language wins.
-    // text-detection only fallback hai.
     const lang =
       replyLanguage && replyLanguage !== "auto"
         ? replyLanguage
@@ -915,8 +896,6 @@ export default function GoDavaiiAI() {
 
     setSpeakLoading(false);
 
-    // IMPORTANT:
-    // non-English ke liye ugly browser fallback bilkul mat chalao
     if (lang !== "english") {
       setSpeakingId(null);
       return;
@@ -1431,6 +1410,31 @@ export default function GoDavaiiAI() {
     );
   }
 
+  const topSummary = (
+    <div
+      style={{
+        display: "flex",
+        gap: 8,
+        overflowX: "auto",
+        paddingBottom: 2,
+        scrollbarWidth: "none",
+      }}
+    >
+      <SummaryPill tone="active">
+        <Sparkles style={{ width: 12, height: 12 }} />
+        {currentFocusMeta.label}
+      </SummaryPill>
+      <SummaryPill>
+        {whoFor === "self" ? <UserRound style={{ width: 12, height: 12 }} /> : <Users style={{ width: 12, height: 12 }} />}
+        {whoForLabel}
+      </SummaryPill>
+      <SummaryPill>
+        <Globe2 style={{ width: 12, height: 12 }} />
+        {currentLangMeta.label}
+      </SummaryPill>
+    </div>
+  );
+
   return (
     <div
       style={{
@@ -1528,9 +1532,12 @@ export default function GoDavaiiAI() {
           </motion.button>
         </div>
 
+        <div style={{ marginTop: 10 }}>{topSummary}</div>
+
         <div style={{ marginTop: 9, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <SummaryPill tone="danger">
-            Emergency? 112 / 108 pe call karein.
+            <AlertTriangle style={{ width: 12, height: 12 }} />
+            AI guide hai. Emergency me hospital/ambulance call karein.
           </SummaryPill>
 
           <motion.button
@@ -2105,7 +2112,6 @@ export default function GoDavaiiAI() {
                 </motion.button>
               </div>
 
-              {/* Focus */}
               <div style={{ marginBottom: 18 }}>
                 <div style={{ fontSize: 12, fontWeight: 900, color: TEXT, marginBottom: 10, letterSpacing: "0.2px" }}>
                   Focus Mode
@@ -2155,7 +2161,6 @@ export default function GoDavaiiAI() {
                 </div>
               </div>
 
-              {/* Who for */}
               <div style={{ marginBottom: 18 }}>
                 <div style={{ fontSize: 12, fontWeight: 900, color: TEXT, marginBottom: 10, letterSpacing: "0.2px" }}>
                   Who is this for?
@@ -2249,7 +2254,6 @@ export default function GoDavaiiAI() {
                 )}
               </div>
 
-              {/* Language */}
               <div>
                 <div style={{ fontSize: 12, fontWeight: 900, color: TEXT, marginBottom: 10, letterSpacing: "0.2px" }}>
                   Reply Language
