@@ -1,26 +1,41 @@
-// pages/GoDavaiiAI.js — GoDavaii 2035 Health OS AI Assistant
-// ✅ FIX: Backend STT mic flow added using MediaRecorder + /assistant/transcribe
+// pages/GoDavaiiAI.js — GoDavaii 2035 Premium Mobile-First Health AI
+// ✅ PREMIUM REDESIGN: ChatGPT-style immersive full-screen AI layout
+// ✅ PREMIUM REDESIGN: Minimal top bar + premium history drawer
+// ✅ PREMIUM REDESIGN: Context controls moved into bottom sheet
+// ✅ PREMIUM REDESIGN: Slim disclaimer pill
+// ✅ PREMIUM REDESIGN: Floating composer with better safe-area handling
+// ✅ PREMIUM REDESIGN: Better welcome state + quick actions
+// ✅ PREMIUM REDESIGN: Richer thinking / analyzing UX
+// ✅ FIX: Backend STT mic flow kept using MediaRecorder + /assistant/transcribe
 // ✅ FIX: Browser SpeechRecognition kept only as fallback
-// ✅ FIX: English speech no longer forced into hi-IN
-// ✅ FIX: Reply language chip added (Auto / Hindi / Hinglish / English)
-// ✅ FIX: Selected reply language persisted in localStorage
-// ✅ FIX: Fallback speech synthesis default language corrected to en-IN
-// ✅ FIX: Marathi TTS detection order preserved
-// ✅ FIX: Nothing else changed in layout/UX beyond requested fix
+// ✅ FIX: Reply language chip persisted in localStorage
+// ✅ FIX: Existing result / backend / TTS / file logic preserved
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
+  Check,
+  ChevronDown,
+  ClipboardList,
   FileText,
+  FlaskConical,
+  Globe2,
   History,
+  Menu,
   Mic,
   MicOff,
   Paperclip,
+  Pill,
   Plus,
+  ScanSearch,
   Send,
+  Settings2,
   Sparkles,
+  Stethoscope,
+  UserRound,
+  Users,
   Volume2,
   VolumeX,
   X,
@@ -31,29 +46,37 @@ import { useLocation, useNavigate } from "react-router-dom";
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const FILE_ANALYZE_TIMEOUT_MS = 300000;
 
-/* ── Design tokens — Premium 2030 palette ─────────────────── */
-const DEEP = "#0C5A3E";
-const MID = "#0E7A4F";
-const ACC = "#00D97E";
-const DARK = "#041F15";
-const GLASS = "rgba(255,255,255,0.88)";
+/* ── Premium design tokens ───────────────────────────────── */
+const DEEP = "#0A5A3B";
+const MID = "#0F7A53";
+const ACC = "#18E2A1";
+const ACC_SOFT = "rgba(24,226,161,0.14)";
+const DARK = "#041A12";
+const BG_TOP = "#F4FBF8";
+const BG_MID = "#EEF8F4";
+const BG_BOT = "#F7FAFF";
+const GLASS = "rgba(255,255,255,0.82)";
+const GLASS_STRONG = "rgba(255,255,255,0.92)";
+const GLASS_DARK = "rgba(7,23,17,0.72)";
 const GLASS_BORDER = "rgba(12,90,62,0.08)";
-const SURFACE = "rgba(248,250,252,0.95)";
+const TEXT = "#10231A";
+const SUB = "#6A7A73";
+const USER_BUBBLE = `linear-gradient(135deg, ${DEEP} 0%, ${MID} 100%)`;
 
-/* ── Focus modes ──────────────────────────────────────────── */
+/* ── Modes / controls ────────────────────────────────────── */
 const FOCUS = [
-  { key: "auto", label: "Auto", icon: "🤖" },
-  { key: "symptom", label: "Symptoms", icon: "🩺" },
-  { key: "medicine", label: "Medicine", icon: "💊" },
-  { key: "rx", label: "Prescription", icon: "📋" },
-  { key: "lab", label: "Lab Report", icon: "🧪" },
-  { key: "xray", label: "X-Ray / Scan", icon: "🦴" },
+  { key: "auto", label: "Auto", icon: Sparkles },
+  { key: "symptom", label: "Symptoms", icon: Stethoscope },
+  { key: "medicine", label: "Medicine", icon: Pill },
+  { key: "rx", label: "Prescription", icon: ClipboardList },
+  { key: "lab", label: "Lab Report", icon: FlaskConical },
+  { key: "xray", label: "X-Ray / Scan", icon: ScanSearch },
 ];
 
 const TARGETS = [
-  { key: "self", label: "For Me", icon: "👤" },
-  { key: "family", label: "For Family", icon: "👨‍👩‍👧" },
-  { key: "new", label: "New Profile", icon: "➕" },
+  { key: "self", label: "For Me", icon: UserRound },
+  { key: "family", label: "For Family", icon: Users },
+  { key: "new", label: "New Profile", icon: Plus },
 ];
 
 const LANG_OPTIONS = [
@@ -63,7 +86,7 @@ const LANG_OPTIONS = [
   { key: "english", label: "English" },
 ];
 
-/* ── Helpers ───────────────────────────────────────────────── */
+/* ── Helpers ──────────────────────────────────────────────── */
 function cleanAssistantText(text) {
   return String(text || "")
     .replace(/\*\*/g, "")
@@ -100,7 +123,6 @@ function wantsLatestVaultReportAnalysis(text) {
   );
 }
 
-/* ── Detect language for TTS ──────────────────────────────── */
 function detectLanguageForTTS(text) {
   const src = String(text || "").trim();
   if (!src) return "hinglish";
@@ -130,7 +152,6 @@ function detectLanguageForTTS(text) {
   return "english";
 }
 
-/* ── Auth header helper ───────────────────────────────────── */
 function getAuthHeaders() {
   const token = localStorage.getItem("token");
   if (token) return { Authorization: `Bearer ${token}` };
@@ -175,7 +196,6 @@ function pickSupportedAudioMimeType() {
   return "";
 }
 
-/* ── Responsive hook ──────────────────────────────────────── */
 function useScreenSize() {
   const [size, setSize] = useState(() => {
     if (typeof window === "undefined") return "mobile";
@@ -199,16 +219,76 @@ function useScreenSize() {
   return size;
 }
 
-/* ── Format sections nicely ───────────────────────────────── */
+function getThinkingSteps(hasFile) {
+  return hasFile
+    ? ["Reading file", "Extracting medical text", "Reviewing findings", "Preparing simple explanation"]
+    : ["Reviewing symptoms", "Checking likely causes", "Preparing guidance", "Finalizing response"];
+}
+
+function getSafeBottomPadding() {
+  return "calc(env(safe-area-inset-bottom, 0px) + 10px)";
+}
+
+function SummaryPill({ children, tone = "default" }) {
+  const styleMap = {
+    default: {
+      bg: "rgba(255,255,255,0.72)",
+      border: "rgba(12,90,62,0.08)",
+      color: TEXT,
+    },
+    active: {
+      bg: ACC_SOFT,
+      border: "rgba(24,226,161,0.22)",
+      color: DEEP,
+    },
+    danger: {
+      bg: "rgba(255,247,237,0.95)",
+      border: "#FED7AA",
+      color: "#9A3412",
+    },
+  };
+  const s = styleMap[tone] || styleMap.default;
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        height: 28,
+        borderRadius: 999,
+        padding: "0 11px",
+        background: s.bg,
+        border: `1px solid ${s.border}`,
+        color: s.color,
+        fontSize: 11.5,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+        backdropFilter: "blur(18px)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ── Reply formatter ──────────────────────────────────────── */
 function FormatReply({ text, screen }) {
   const clean = cleanAssistantText(text);
   const isDesktop = screen === "desktop";
-  const baseFontSize = isDesktop ? 14.5 : 13.5;
+  const baseFontSize = isDesktop ? 14.5 : 14;
 
   const hasSections = /\n\s*(Assessment|Next steps|Warning signs|Desi ilaaj):/i.test(clean);
   if (!hasSections) {
     return (
-      <div style={{ whiteSpace: "pre-line", lineHeight: 1.7, fontSize: baseFontSize, fontWeight: 600, color: "#1F2937" }}>
+      <div
+        style={{
+          whiteSpace: "pre-line",
+          lineHeight: 1.78,
+          fontSize: baseFontSize,
+          fontWeight: 600,
+          color: "#1B2B24",
+        }}
+      >
         {clean.trim()}
       </div>
     );
@@ -226,7 +306,16 @@ function FormatReply({ text, screen }) {
         );
         if (!headerMatch) {
           return (
-            <div key={i} style={{ whiteSpace: "pre-line", marginBottom: 8, lineHeight: 1.7, fontSize: baseFontSize, fontWeight: 600 }}>
+            <div
+              key={i}
+              style={{
+                whiteSpace: "pre-line",
+                marginBottom: 8,
+                lineHeight: 1.76,
+                fontSize: baseFontSize,
+                fontWeight: 600,
+              }}
+            >
               {section.trim()}
             </div>
           );
@@ -238,44 +327,34 @@ function FormatReply({ text, screen }) {
         const isDesi = /desi|home remed/i.test(header);
         const isAssessment = /assessment/i.test(header);
 
-        const iconMap = {
-          assessment: "🔍",
-          "next steps": "✅",
-          "warning signs": "🚨",
-          "red flags": "🚨",
-          "when to see doctor": "🏥",
-          "desi ilaaj": "🌿",
-          "home remedies": "🌿",
-        };
-
         return (
-          <div key={i} style={{ marginBottom: 14 }}>
+          <div key={i} style={{ marginBottom: 16 }}>
             <div
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 5,
+                gap: 6,
                 fontSize: isDesktop ? 12.5 : 11.5,
                 fontWeight: 900,
-                letterSpacing: "0.3px",
+                letterSpacing: "0.25px",
                 color: isRed ? "#DC2626" : isDesi ? "#059669" : isAssessment ? "#0369A1" : DEEP,
-                background: isRed ? "#FEF2F2" : isDesi ? "#ECFDF5" : isAssessment ? "#F0F9FF" : "#F0FAF5",
-                padding: "5px 11px",
-                borderRadius: 10,
-                marginBottom: 8,
+                background: isRed ? "#FEF2F2" : isDesi ? "#ECFDF5" : isAssessment ? "#F0F9FF" : "#EFFAF4",
+                padding: "6px 11px",
+                borderRadius: 999,
+                marginBottom: 9,
                 fontFamily: "'Sora','Plus Jakarta Sans',sans-serif",
+                border: `1px solid ${isRed ? "#FECACA" : isDesi ? "#A7F3D0" : isAssessment ? "#BAE6FD" : "rgba(12,90,62,0.08)"}`,
               }}
             >
-              {iconMap[header.toLowerCase()] || "📋"} {header}
+              {header}
             </div>
             <div
               style={{
                 whiteSpace: "pre-line",
-                lineHeight: 1.75,
+                lineHeight: 1.8,
                 fontSize: baseFontSize,
                 fontWeight: 600,
-                color: "#1F2937",
-                paddingLeft: 2,
+                color: "#1D2B23",
               }}
             >
               {body}
@@ -287,7 +366,7 @@ function FormatReply({ text, screen }) {
   );
 }
 
-/* ── Chat bubble ──────────────────────────────────────────── */
+/* ── Message bubbles ──────────────────────────────────────── */
 function ChatBubble({ m, onSpeak, speakingId, speakLoading, screen }) {
   const isUser = m.role === "user";
   const isSpeaking = speakingId === m.id;
@@ -295,44 +374,57 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading, screen }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12, scale: 0.97 }}
+      initial={{ opacity: 0, y: 16, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
-      style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom: isDesktop ? 16 : 14 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+      style={{
+        display: "flex",
+        justifyContent: isUser ? "flex-end" : "flex-start",
+        marginBottom: isDesktop ? 18 : 16,
+      }}
     >
       {!isUser && (
         <div
           style={{
-            width: isDesktop ? 36 : 32,
-            height: isDesktop ? 36 : 32,
+            width: isDesktop ? 34 : 30,
+            height: isDesktop ? 34 : 30,
             borderRadius: 12,
             flexShrink: 0,
-            marginRight: 8,
-            marginTop: 2,
-            background: `linear-gradient(135deg,${DEEP},${MID})`,
+            marginRight: 9,
+            marginTop: 4,
+            background: `linear-gradient(135deg, ${DEEP}, ${MID})`,
             display: "grid",
             placeItems: "center",
-            boxShadow: "0 2px 8px rgba(12,90,62,0.20)",
+            boxShadow: "0 8px 20px rgba(10,90,59,0.18)",
           }}
         >
-          <Sparkles style={{ width: isDesktop ? 16 : 14, height: isDesktop ? 16 : 14, color: ACC }} />
+          <Sparkles style={{ width: 14, height: 14, color: ACC }} />
         </div>
       )}
 
       <div
         style={{
-          maxWidth: isDesktop ? "75%" : "85%",
-          borderRadius: isUser ? "20px 20px 6px 20px" : "20px 20px 20px 6px",
-          padding: isDesktop ? "16px 20px" : "14px 16px",
-          background: isUser ? `linear-gradient(135deg,${DEEP},${MID})` : GLASS,
+          maxWidth: isDesktop ? "75%" : "86%",
+          borderRadius: isUser ? "22px 22px 8px 22px" : "22px 22px 22px 8px",
+          padding: isDesktop ? "16px 18px" : "14px 15px",
+          background: isUser ? USER_BUBBLE : GLASS_STRONG,
           border: isUser ? "none" : `1px solid ${GLASS_BORDER}`,
-          boxShadow: isUser ? "0 4px 20px rgba(12,90,62,0.22)" : "0 2px 16px rgba(0,0,0,0.04)",
-          backdropFilter: isUser ? "none" : "blur(16px)",
-          color: isUser ? "#fff" : "#1F2937",
+          boxShadow: isUser
+            ? "0 12px 28px rgba(10,90,59,0.22)"
+            : "0 10px 30px rgba(16,24,40,0.05)",
+          backdropFilter: isUser ? "none" : "blur(22px)",
+          color: isUser ? "#fff" : "#1B2B24",
         }}
       >
         {isUser ? (
-          <div style={{ whiteSpace: "pre-line", fontSize: isDesktop ? 14.5 : 13.5, fontWeight: 650, lineHeight: 1.65 }}>
+          <div
+            style={{
+              whiteSpace: "pre-line",
+              fontSize: isDesktop ? 14.5 : 14,
+              fontWeight: 650,
+              lineHeight: 1.66,
+            }}
+          >
             {m.text}
           </div>
         ) : (
@@ -341,23 +433,22 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading, screen }) {
 
         {!isUser && (
           <motion.button
-            whileTap={{ scale: 0.92 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => onSpeak(m)}
             disabled={speakLoading}
             style={{
-              marginTop: 10,
+              marginTop: 11,
               display: "inline-flex",
               alignItems: "center",
-              gap: 5,
-              border: `1px solid ${isSpeaking ? ACC : "#E5E7EB"}`,
+              gap: 6,
+              border: `1px solid ${isSpeaking ? "rgba(24,226,161,0.35)" : "#E5E7EB"}`,
               borderRadius: 999,
               background: isSpeaking ? "#ECFDF5" : "#FAFAFA",
-              padding: "5px 12px",
+              padding: "6px 12px",
               fontSize: 11,
               fontWeight: 800,
               color: isSpeaking ? "#059669" : "#6B7280",
               cursor: speakLoading ? "wait" : "pointer",
-              transition: "all 0.15s ease",
             }}
           >
             {speakLoading && isSpeaking ? (
@@ -372,13 +463,91 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading, screen }) {
                 }}
               />
             ) : isSpeaking ? (
-              <VolumeX style={{ width: 11, height: 11 }} />
+              <VolumeX style={{ width: 12, height: 12 }} />
             ) : (
-              <Volume2 style={{ width: 11, height: 11 }} />
+              <Volume2 style={{ width: 12, height: 12 }} />
             )}
             {speakLoading && isSpeaking ? "Loading..." : isSpeaking ? "Stop" : "Listen"}
           </motion.button>
         )}
+      </div>
+    </motion.div>
+  );
+}
+
+function ThinkingBlock({ hasFile }) {
+  const steps = getThinkingSteps(hasFile);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      style={{ display: "flex", alignItems: "flex-start", gap: 9, marginBottom: 16 }}
+    >
+      <div
+        style={{
+          width: 30,
+          height: 30,
+          borderRadius: 12,
+          flexShrink: 0,
+          marginTop: 4,
+          background: `linear-gradient(135deg, ${DEEP}, ${MID})`,
+          display: "grid",
+          placeItems: "center",
+          boxShadow: "0 8px 20px rgba(10,90,59,0.18)",
+        }}
+      >
+        <Sparkles style={{ width: 14, height: 14, color: ACC }} />
+      </div>
+
+      <div
+        style={{
+          maxWidth: "84%",
+          borderRadius: "22px 22px 22px 8px",
+          padding: "14px 15px",
+          background: GLASS_STRONG,
+          border: `1px solid ${GLASS_BORDER}`,
+          boxShadow: "0 10px 30px rgba(16,24,40,0.05)",
+          backdropFilter: "blur(22px)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={i}
+                animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
+                transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.14 }}
+                style={{ width: 7, height: 7, borderRadius: "50%", background: ACC }}
+              />
+            ))}
+          </div>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: DEEP }}>
+            {hasFile ? "Analyzing report" : "Preparing guidance"}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 8 }}>
+          {steps.map((step, i) => (
+            <motion.div
+              key={step}
+              initial={{ opacity: 0.2 }}
+              animate={{ opacity: [0.35, 1, 0.35] }}
+              transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.22 }}
+              style={{ display: "flex", alignItems: "center", gap: 8 }}
+            >
+              <div
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: i === 0 ? ACC : "rgba(15,122,83,0.25)",
+                }}
+              />
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#5F7068" }}>{step}</div>
+            </motion.div>
+          ))}
+        </div>
       </div>
     </motion.div>
   );
@@ -407,6 +576,7 @@ export default function GoDavaiiAI() {
   const [micBusy, setMicBusy] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatSessions, setChatSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [speakingId, setSpeakingId] = useState(null);
@@ -418,6 +588,7 @@ export default function GoDavaiiAI() {
   const audioChunksRef = useRef([]);
   const fileRef = useRef(null);
   const chatEndRef = useRef(null);
+  const chatScrollRef = useRef(null);
   const audioRef = useRef(null);
   const textareaRef = useRef(null);
   const msgIdCounter = useRef(1);
@@ -461,19 +632,14 @@ export default function GoDavaiiAI() {
     }
   }
 
-  /* ── Responsive values ──────────────────────────────────── */
   const isDesktop = screen === "desktop";
   const isTablet = screen === "tablet";
-  const containerMaxWidth = isDesktop ? 720 : isTablet ? 600 : 520;
-  const headerPadding = isDesktop ? "14px 20px 12px" : "12px 14px 10px";
-  const chatPadding = isDesktop ? "16px 20px 4px" : "12px 12px 4px";
-  const inputBarPadding = isDesktop ? "10px 20px 8px 20px" : "8px 12px 6px 12px";
-  const btnSize = isDesktop ? 46 : 42;
-  const headerFontSize = isDesktop ? 18 : 16;
-  const chipHeight = isDesktop ? 36 : 32;
-  const chipFontSize = isDesktop ? 12 : 11;
-  const targetHeight = isDesktop ? 30 : 28;
-  const inputFontSize = isDesktop ? 15 : 14;
+  const containerMaxWidth = isDesktop ? 760 : isTablet ? 620 : 560;
+  const topPad = isDesktop ? 16 : 12;
+  const sidePad = isDesktop ? 20 : 12;
+  const btnSize = isDesktop ? 48 : 44;
+  const composerPadBottom = getSafeBottomPadding();
+  const composerOuterHeight = attachedFile ? 136 : 94;
 
   const [messages, setMessages] = useState([
     {
@@ -481,21 +647,13 @@ export default function GoDavaiiAI() {
       role: "assistant",
       text:
         "Namaste! Main GoDavaii AI hoon — aapka personal health assistant.\n\n" +
-        "Aap mujhse pooch sakte ho:\n" +
-        "🩺 Symptoms explain karo\n" +
-        "💊 Medicine side effects\n" +
-        "📋 Prescription samjhao\n" +
-        "🧪 Lab report analyze karo (multi-page PDF)\n" +
-        "🦴 X-Ray / CT scan explain karo\n" +
-        "🌿 Desi ilaaj har response me included\n\n" +
-        "Text, voice, ya file upload — sab kaam karega!\n\n" +
-        "Aur haan, aap kisi bhi language me baat kar sakte ho — Hindi, English, Bengali, Tamil, Telugu, Gujarati, Marathi, Punjabi... main samajh lunga!",
+        "Symptoms, reports, prescriptions, scans, ya voice se baat karein. Main simple language me samjhaunga.",
     },
   ]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, loading, attachedFile]);
 
   useEffect(() => {
     const q = new URLSearchParams(location.search || "");
@@ -556,6 +714,9 @@ export default function GoDavaiiAI() {
     if (whoFor === "self") return user?.name || "Self";
     return whoFor === "family" ? "Family Member" : "New Profile";
   }, [whoFor, familyLabel, customProfile, user?.name]);
+
+  const currentFocusMeta = useMemo(() => FOCUS.find((f) => f.key === focus) || FOCUS[0], [focus]);
+  const currentLangMeta = useMemo(() => LANG_OPTIONS.find((l) => l.key === replyLanguage) || LANG_OPTIONS[0], [replyLanguage]);
 
   const profileContext = useMemo(
     () => ({
@@ -756,7 +917,6 @@ export default function GoDavaiiAI() {
     }
   }
 
-  /* ── Mic ────────────────────────────────────────────────── */
   async function handleMicToggle() {
     if (micBusy) return;
 
@@ -1021,21 +1181,100 @@ export default function GoDavaiiAI() {
   }
 
   function startNewChat() {
-    setMessages([{ id: makeId(), role: "assistant", text: "New chat started! Kya help chahiye aapko? 😊" }]);
+    setMessages([
+      {
+        id: makeId(),
+        role: "assistant",
+        text: "Namaste! Aap symptoms, reports, prescriptions, ya scan upload karke seedha puch sakte ho.",
+      },
+    ]);
     setSidebarOpen(false);
   }
 
-  /* ═══ RENDER ═══ */
+  function QuickActions() {
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8, marginTop: 10 }}>
+        {[
+          { label: "Symptoms", icon: Stethoscope, onClick: () => setFocus("symptom") },
+          { label: "Upload Report", icon: FlaskConical, onClick: () => fileRef.current?.click() },
+          { label: "Ask by Voice", icon: Mic, onClick: handleMicToggle },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <motion.button
+              key={item.label}
+              whileTap={{ scale: 0.97 }}
+              onClick={item.onClick}
+              style={{
+                border: "1px solid rgba(12,90,62,0.08)",
+                background: GLASS_STRONG,
+                borderRadius: 18,
+                padding: "12px 10px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-start",
+                gap: 9,
+                textAlign: "left",
+                boxShadow: "0 10px 30px rgba(16,24,40,0.04)",
+                cursor: "pointer",
+              }}
+            >
+              <div
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 12,
+                  display: "grid",
+                  placeItems: "center",
+                  background: ACC_SOFT,
+                  color: DEEP,
+                }}
+              >
+                <Icon style={{ width: 16, height: 16 }} />
+              </div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{item.label}</div>
+            </motion.button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const topSummary = (
+    <div
+      style={{
+        display: "flex",
+        gap: 8,
+        overflowX: "auto",
+        paddingBottom: 2,
+        scrollbarWidth: "none",
+      }}
+    >
+      <SummaryPill tone="active">
+        <Sparkles style={{ width: 12, height: 12 }} />
+        {currentFocusMeta.label}
+      </SummaryPill>
+      <SummaryPill>
+        {whoFor === "self" ? <UserRound style={{ width: 12, height: 12 }} /> : <Users style={{ width: 12, height: 12 }} />}
+        {whoForLabel}
+      </SummaryPill>
+      <SummaryPill>
+        <Globe2 style={{ width: 12, height: 12 }} />
+        {currentLangMeta.label}
+      </SummaryPill>
+    </div>
+  );
+
   return (
     <div
       style={{
         maxWidth: containerMaxWidth,
         width: "100%",
         margin: "0 auto",
-        height: isDesktop ? "100dvh" : "calc(100dvh - 58px)",
+        height: "100dvh",
         display: "flex",
         flexDirection: "column",
-        background: "linear-gradient(170deg,#F0FAF5 0%,#E8F5EF 35%,#EFF6FF 65%,#F5F3FF 85%,#F8FAFC 100%)",
+        background: `linear-gradient(180deg, ${BG_TOP} 0%, ${BG_MID} 44%, ${BG_BOT} 100%)`,
         fontFamily: "'Plus Jakarta Sans',sans-serif",
         overflow: "hidden",
         position: "relative",
@@ -1043,236 +1282,168 @@ export default function GoDavaiiAI() {
           ? {
               borderLeft: "1px solid rgba(12,90,62,0.06)",
               borderRight: "1px solid rgba(12,90,62,0.06)",
-              boxShadow: "0 0 60px rgba(12,90,62,0.06)",
+              boxShadow: "0 0 70px rgba(12,90,62,0.06)",
             }
           : {}),
       }}
     >
-      {/* HEADER */}
+      {/* Ambient background */}
       <div
         style={{
-          flexShrink: 0,
-          zIndex: 30,
-          padding: headerPadding,
-          background: `linear-gradient(135deg,${DEEP} 0%,${DARK} 100%)`,
-          borderBottomLeftRadius: isDesktop ? 28 : 24,
-          borderBottomRightRadius: isDesktop ? 28 : 24,
-          boxShadow: "0 8px 32px rgba(12,90,62,0.25)",
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background:
+            "radial-gradient(circle at top right, rgba(24,226,161,0.10), transparent 28%), radial-gradient(circle at bottom left, rgba(15,122,83,0.07), transparent 25%)",
+        }}
+      />
+
+      {/* TOP BAR */}
+      <div
+        style={{
           position: "relative",
-          overflow: "hidden",
+          zIndex: 20,
+          padding: `${topPad}px ${sidePad}px 8px`,
+          paddingTop: `calc(${topPad}px + env(safe-area-inset-top, 0px))`,
+          backdropFilter: "blur(24px)",
+          background: "linear-gradient(180deg, rgba(244,251,248,0.92), rgba(244,251,248,0.76))",
+          borderBottom: "1px solid rgba(12,90,62,0.06)",
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            right: -30,
-            top: -30,
-            width: 120,
-            height: 120,
-            borderRadius: "50%",
-            background: `radial-gradient(circle,${ACC}18,transparent 65%)`,
-            pointerEvents: "none",
-          }}
-        />
-
-        <div style={{ display: "flex", alignItems: "center", gap: isDesktop ? 12 : 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <motion.button
-            whileTap={{ scale: 0.9 }}
+            whileTap={{ scale: 0.92 }}
             onClick={() => {
               setSidebarOpen(true);
               loadChatHistory();
             }}
             style={{
-              width: isDesktop ? 40 : 36,
-              height: isDesktop ? 40 : 36,
-              borderRadius: 12,
-              background: "rgba(255,255,255,0.10)",
-              border: "1px solid rgba(255,255,255,0.15)",
+              width: 40,
+              height: 40,
+              borderRadius: 14,
+              border: "1px solid rgba(12,90,62,0.08)",
+              background: GLASS_STRONG,
               display: "grid",
               placeItems: "center",
+              boxShadow: "0 10px 24px rgba(16,24,40,0.04)",
               cursor: "pointer",
               flexShrink: 0,
             }}
           >
-            <History style={{ width: 16, height: 16, color: "#fff" }} />
+            <Menu style={{ width: 18, height: 18, color: TEXT }} />
           </motion.button>
 
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: headerFontSize, fontWeight: 900, color: "#fff", letterSpacing: "-0.3px" }}>
+            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: isDesktop ? 18 : 16, fontWeight: 900, color: TEXT }}>
               GoDavaii AI
             </div>
-            <div style={{ fontSize: isDesktop ? 11.5 : 10.5, color: ACC, fontWeight: 700, marginTop: 1 }}>
-              Health assistant · Voice · Files · {whoForLabel}
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: SUB, marginTop: 1 }}>
+              Personal health assistant
             </div>
           </div>
 
           <motion.button
             whileTap={{ scale: 0.92 }}
-            onClick={() => navigate("/home")}
+            onClick={() => setSettingsOpen(true)}
             style={{
-              width: isDesktop ? 40 : 36,
-              height: isDesktop ? 40 : 36,
-              borderRadius: 12,
-              background: "rgba(255,255,255,0.10)",
-              border: "1px solid rgba(255,255,255,0.15)",
+              width: 40,
+              height: 40,
+              borderRadius: 14,
+              border: "1px solid rgba(12,90,62,0.08)",
+              background: GLASS_STRONG,
               display: "grid",
               placeItems: "center",
+              boxShadow: "0 10px 24px rgba(16,24,40,0.04)",
               cursor: "pointer",
               flexShrink: 0,
             }}
           >
-            <X style={{ width: 16, height: 16, color: "#fff" }} />
+            <Settings2 style={{ width: 18, height: 18, color: TEXT }} />
           </motion.button>
         </div>
 
-        <div style={{ marginTop: 10, display: "flex", gap: isDesktop ? 8 : 6, overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" }}>
-          {FOCUS.map((m) => (
-            <motion.button
-              key={m.key}
-              whileTap={{ scale: 0.93 }}
-              onClick={() => setFocus(m.key)}
-              style={{
-                flexShrink: 0,
-                height: chipHeight,
-                borderRadius: 999,
-                border: focus === m.key ? "none" : "1px solid rgba(255,255,255,0.18)",
-                background: focus === m.key ? ACC : "rgba(255,255,255,0.08)",
-                color: focus === m.key ? DEEP : "#fff",
-                padding: isDesktop ? "0 16px" : "0 12px",
-                fontSize: chipFontSize,
-                fontWeight: 800,
-                cursor: "pointer",
-                fontFamily: "'Sora',sans-serif",
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                boxShadow: focus === m.key ? `0 4px 14px ${ACC}40` : "none",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <span style={{ fontSize: chipFontSize + 1 }}>{m.icon}</span> {m.label}
-            </motion.button>
-          ))}
-        </div>
+        <div style={{ marginTop: 10 }}>{topSummary}</div>
 
-        <div style={{ marginTop: 8, display: "flex", gap: isDesktop ? 8 : 6, alignItems: "center", overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}>
-          {TARGETS.map((t) => (
-            <motion.button
-              key={t.key}
-              whileTap={{ scale: 0.93 }}
-              onClick={() => setWhoFor(t.key)}
-              style={{
-                flexShrink: 0,
-                height: targetHeight,
-                borderRadius: 999,
-                border: whoFor === t.key ? "none" : "1px solid rgba(255,255,255,0.15)",
-                background: whoFor === t.key ? "rgba(0,217,126,0.25)" : "transparent",
-                color: "#fff",
-                padding: isDesktop ? "0 14px" : "0 10px",
-                fontSize: isDesktop ? 11.5 : 10.5,
-                fontWeight: 800,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 3,
-              }}
-            >
-              <span style={{ fontSize: 11 }}>{t.icon}</span> {t.label}
-            </motion.button>
-          ))}
-        </div>
+        <div style={{ marginTop: 9, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <SummaryPill tone="danger">
+            <AlertTriangle style={{ width: 12, height: 12 }} />
+            AI guide hai. Emergency me hospital/ambulance call karein.
+          </SummaryPill>
 
-        <div style={{ marginTop: 8, display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}>
-          {LANG_OPTIONS.map((l) => (
-            <motion.button
-              key={l.key}
-              whileTap={{ scale: 0.93 }}
-              onClick={() => setReplyLanguage(l.key)}
-              style={{
-                flexShrink: 0,
-                height: targetHeight,
-                borderRadius: 999,
-                border: replyLanguage === l.key ? "none" : "1px solid rgba(255,255,255,0.15)",
-                background: replyLanguage === l.key ? "rgba(0,217,126,0.25)" : "transparent",
-                color: "#fff",
-                padding: isDesktop ? "0 14px" : "0 10px",
-                fontSize: isDesktop ? 11.5 : 10.5,
-                fontWeight: 800,
-                cursor: "pointer",
-              }}
-            >
-              {l.label}
-            </motion.button>
-          ))}
-        </div>
-
-        {whoFor === "family" && (
-          <input
-            value={familyLabel}
-            onChange={(e) => setFamilyLabel(e.target.value)}
-            placeholder="Family member name (eg: Mom)"
+          <motion.button
+            whileTap={{ scale: 0.96 }}
+            onClick={() => navigate("/home")}
             style={{
-              marginTop: 8,
-              width: "100%",
-              height: isDesktop ? 38 : 34,
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.2)",
-              background: "rgba(255,255,255,0.08)",
-              padding: "0 12px",
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#fff",
-              outline: "none",
-              boxSizing: "border-box",
+              border: "none",
+              background: "transparent",
+              color: SUB,
+              fontSize: 11.5,
+              fontWeight: 800,
+              cursor: "pointer",
+              padding: "0 2px",
+              flexShrink: 0,
             }}
-          />
-        )}
-
-        {whoFor === "new" && (
-          <input
-            value={customProfile}
-            onChange={(e) => setCustomProfile(e.target.value)}
-            placeholder="Age, gender, condition..."
-            style={{
-              marginTop: 8,
-              width: "100%",
-              height: isDesktop ? 38 : 34,
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.2)",
-              background: "rgba(255,255,255,0.08)",
-              padding: "0 12px",
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#fff",
-              outline: "none",
-              boxSizing: "border-box",
-            }}
-          />
-        )}
-      </div>
-
-      {/* DISCLAIMER */}
-      <div
-        style={{
-          flexShrink: 0,
-          margin: isDesktop ? "10px 20px 0" : "8px 12px 0",
-          background: "#FFF7ED",
-          border: "1px solid #FED7AA",
-          borderRadius: 14,
-          padding: isDesktop ? "10px 16px" : "8px 12px",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        <AlertTriangle style={{ width: 14, height: 14, color: "#C2410C", flexShrink: 0 }} />
-        <span style={{ fontSize: isDesktop ? 12 : 11, color: "#9A3412", fontWeight: 700 }}>
-          AI guide hai, final diagnosis doctor ka. Emergency me hospital/ambulance call karein.
-        </span>
+          >
+            Close
+          </motion.button>
+        </div>
       </div>
 
       {/* CHAT AREA */}
-      <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: chatPadding, scrollbarWidth: "none", minHeight: 0 }}>
+      <div
+        ref={chatScrollRef}
+        style={{
+          position: "relative",
+          zIndex: 1,
+          flex: 1,
+          overflowY: "auto",
+          overflowX: "hidden",
+          padding: `14px ${sidePad}px ${composerOuterHeight + 26}px`,
+          scrollbarWidth: "none",
+          minHeight: 0,
+        }}
+      >
+        {messages.length <= 1 && !loading && (
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            style={{
+              marginBottom: 18,
+              borderRadius: 28,
+              padding: isDesktop ? "22px 22px" : "18px 16px",
+              background: "linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.78))",
+              border: `1px solid ${GLASS_BORDER}`,
+              boxShadow: "0 18px 40px rgba(16,24,40,0.05)",
+              backdropFilter: "blur(26px)",
+            }}
+          >
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 16,
+                display: "grid",
+                placeItems: "center",
+                background: `linear-gradient(135deg, ${DEEP}, ${MID})`,
+                boxShadow: "0 14px 28px rgba(10,90,59,0.18)",
+                marginBottom: 14,
+              }}
+            >
+              <Sparkles style={{ width: 18, height: 18, color: ACC }} />
+            </div>
+
+            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: isDesktop ? 22 : 18, fontWeight: 900, color: TEXT, lineHeight: 1.2 }}>
+              Premium health AI for symptoms, reports, prescriptions, and scans
+            </div>
+
+            <div style={{ marginTop: 9, fontSize: 14, lineHeight: 1.72, color: SUB, fontWeight: 600 }}>
+              Type naturally, speak by voice, or upload a report. I’ll explain things simply and clearly.
+            </div>
+
+            <QuickActions />
+          </motion.div>
+        )}
+
         <AnimatePresence initial={false}>
           {messages.map((m) => (
             <ChatBubble
@@ -1286,203 +1457,227 @@ export default function GoDavaiiAI() {
           ))}
         </AnimatePresence>
 
-        {loading && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", marginBottom: 8 }}>
-            <div
-              style={{
-                width: isDesktop ? 36 : 32,
-                height: isDesktop ? 36 : 32,
-                borderRadius: 12,
-                background: `linear-gradient(135deg,${DEEP},${MID})`,
-                display: "grid",
-                placeItems: "center",
-                boxShadow: "0 2px 8px rgba(12,90,62,0.20)",
-              }}
-            >
-              <Sparkles style={{ width: 14, height: 14, color: ACC }} />
-            </div>
-            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-              {[0, 1, 2].map((i) => (
-                <motion.div
-                  key={i}
-                  animate={{ y: [0, -6, 0] }}
-                  transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15 }}
-                  style={{ width: 7, height: 7, borderRadius: "50%", background: ACC }}
-                />
-              ))}
-            </div>
-            <span style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>
-              {attachedFile ? "Analyzing file..." : "Thinking..."}
-            </span>
-          </motion.div>
-        )}
+        {loading && <ThinkingBlock hasFile={Boolean(attachedFile)} />}
 
         <div ref={chatEndRef} />
       </div>
 
-      {/* ATTACHMENT PREVIEW */}
-      {attachedFile && (
-        <div
-          style={{
-            flexShrink: 0,
-            margin: isDesktop ? "0 20px 4px" : "0 12px 4px",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "8px 12px",
-            borderRadius: 14,
-            background: "#ECFDF5",
-            border: "1px solid #A7F3D0",
-          }}
-        >
-          <FileText style={{ width: 14, height: 14, color: "#065F46", flexShrink: 0 }} />
-          <span style={{ fontSize: 12, fontWeight: 800, color: "#065F46", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {attachedFile.name}
-          </span>
-          {attachedFile.name?.toLowerCase().endsWith(".pdf") && (
-            <span style={{ fontSize: 9.5, fontWeight: 900, color: "#059669", background: "#D1FAE5", padding: "2px 7px", borderRadius: 999, flexShrink: 0 }}>
-              All pages
-            </span>
-          )}
-          <button
-            onClick={() => setAttachedFile(null)}
-            style={{ border: "none", background: "none", cursor: "pointer", padding: 0, display: "grid", placeItems: "center" }}
-          >
-            <X style={{ width: 14, height: 14, color: "#065F46" }} />
-          </button>
-        </div>
-      )}
+      {/* COMPOSER */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 25,
+          padding: `10px ${sidePad}px ${composerPadBottom}`,
+          background: "linear-gradient(180deg, rgba(247,250,255,0), rgba(247,250,255,0.82) 22%, rgba(247,250,255,0.96) 70%)",
+          backdropFilter: "blur(24px)",
+          pointerEvents: "none",
+        }}
+      >
+        <div style={{ pointerEvents: "auto" }}>
+          <AnimatePresence>
+            {attachedFile && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                style={{
+                  marginBottom: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "10px 12px",
+                  borderRadius: 18,
+                  background: "rgba(236,253,245,0.95)",
+                  border: "1px solid #A7F3D0",
+                  boxShadow: "0 12px 28px rgba(16,24,40,0.04)",
+                }}
+              >
+                <FileText style={{ width: 15, height: 15, color: "#065F46", flexShrink: 0 }} />
+                <span
+                  style={{
+                    fontSize: 12.5,
+                    fontWeight: 800,
+                    color: "#065F46",
+                    flex: 1,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {attachedFile.name}
+                </span>
+                {attachedFile.name?.toLowerCase().endsWith(".pdf") && (
+                  <span
+                    style={{
+                      fontSize: 9.5,
+                      fontWeight: 900,
+                      color: "#059669",
+                      background: "#D1FAE5",
+                      padding: "3px 7px",
+                      borderRadius: 999,
+                      flexShrink: 0,
+                    }}
+                  >
+                    All pages
+                  </span>
+                )}
+                <button
+                  onClick={() => setAttachedFile(null)}
+                  style={{
+                    border: "none",
+                    background: "none",
+                    cursor: "pointer",
+                    padding: 0,
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                >
+                  <X style={{ width: 14, height: 14, color: "#065F46" }} />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-      {/* INPUT BAR */}
-      <div style={{ flexShrink: 0, padding: inputBarPadding, background: SURFACE, backdropFilter: "blur(16px)", borderTop: `1px solid ${GLASS_BORDER}` }}>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,.webp"
-          style={{ display: "none" }}
-          onChange={(e) => setAttachedFile(e.target.files?.[0] || null)}
-        />
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,.webp"
+            style={{ display: "none" }}
+            onChange={(e) => setAttachedFile(e.target.files?.[0] || null)}
+          />
 
-        <div style={{ display: "flex", alignItems: "flex-end", gap: isDesktop ? 10 : 8 }}>
           <div
             style={{
-              flex: 1,
               display: "flex",
               alignItems: "flex-end",
-              minHeight: btnSize + 4,
-              borderRadius: isDesktop ? 18 : 16,
-              background: "#fff",
-              border: "1.5px solid rgba(12,90,62,0.12)",
-              padding: isDesktop ? "8px 16px" : "6px 12px",
-              boxSizing: "border-box",
-              transition: "border-color 0.15s ease",
+              gap: 8,
+              borderRadius: 24,
+              background: "rgba(255,255,255,0.92)",
+              border: "1px solid rgba(12,90,62,0.10)",
+              boxShadow: "0 20px 40px rgba(16,24,40,0.08)",
+              padding: "8px 8px 8px 12px",
+              backdropFilter: "blur(22px)",
             }}
           >
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                const ta = e.target;
-                ta.style.height = "auto";
-                ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
-              }}
-              placeholder={`Message for ${whoForLabel}...`}
-              rows={1}
-              style={{
-                flex: 1,
-                resize: "none",
-                background: "none",
-                border: "none",
-                outline: "none",
-                fontSize: inputFontSize,
-                fontWeight: 700,
-                color: "#0F172A",
-                lineHeight: 1.5,
-                fontFamily: "'Plus Jakarta Sans',sans-serif",
-                minHeight: 24,
-                maxHeight: 120,
-                overflowY: "auto",
-                padding: "4px 0",
-                boxSizing: "border-box",
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
-            />
-          </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  const ta = e.target;
+                  ta.style.height = "auto";
+                  ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+                }}
+                placeholder={`Message for ${whoForLabel}...`}
+                rows={1}
+                style={{
+                  width: "100%",
+                  resize: "none",
+                  background: "none",
+                  border: "none",
+                  outline: "none",
+                  fontSize: isDesktop ? 15 : 14,
+                  fontWeight: 700,
+                  color: "#0F172A",
+                  lineHeight: 1.5,
+                  fontFamily: "'Plus Jakarta Sans',sans-serif",
+                  minHeight: 26,
+                  maxHeight: 120,
+                  overflowY: "auto",
+                  padding: "6px 2px 4px 0",
+                  boxSizing: "border-box",
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }}
+              />
+            </div>
 
-          <div style={{ display: "flex", gap: isDesktop ? 8 : 6, paddingBottom: 2, flexShrink: 0 }}>
-            <motion.button
-              whileTap={{ scale: 0.88 }}
-              onClick={() => fileRef.current?.click()}
-              style={{
-                width: btnSize,
-                height: btnSize,
-                borderRadius: isDesktop ? 16 : 14,
-                border: `1.5px solid ${GLASS_BORDER}`,
-                background: "#fff",
-                display: "grid",
-                placeItems: "center",
-                cursor: "pointer",
-                flexShrink: 0,
-              }}
-            >
-              <Paperclip style={{ width: isDesktop ? 19 : 17, height: isDesktop ? 19 : 17, color: DEEP }} />
-            </motion.button>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => fileRef.current?.click()}
+                style={{
+                  width: btnSize,
+                  height: btnSize,
+                  borderRadius: 16,
+                  border: "1px solid rgba(12,90,62,0.08)",
+                  background: "#fff",
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: "pointer",
+                }}
+              >
+                <Paperclip style={{ width: 18, height: 18, color: DEEP }} />
+              </motion.button>
 
-            <motion.button
-              whileTap={{ scale: 0.88 }}
-              onClick={handleMicToggle}
-              disabled={micBusy}
-              style={{
-                width: btnSize,
-                height: btnSize,
-                borderRadius: isDesktop ? 16 : 14,
-                border: "none",
-                background: micOn ? "linear-gradient(135deg,#DC2626,#EF4444)" : "#E8F5EF",
-                display: "grid",
-                placeItems: "center",
-                cursor: micBusy ? "wait" : "pointer",
-                flexShrink: 0,
-                boxShadow: micOn ? "0 4px 14px rgba(220,38,38,0.3)" : "none",
-                opacity: micBusy ? 0.75 : 1,
-              }}
-            >
-              {micOn ? (
-                <MicOff style={{ width: isDesktop ? 19 : 17, height: isDesktop ? 19 : 17, color: "#fff" }} />
-              ) : (
-                <Mic style={{ width: isDesktop ? 19 : 17, height: isDesktop ? 19 : 17, color: DEEP }} />
-              )}
-            </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={handleMicToggle}
+                disabled={micBusy}
+                style={{
+                  width: btnSize,
+                  height: btnSize,
+                  borderRadius: 16,
+                  border: "none",
+                  background: micOn ? "linear-gradient(135deg,#DC2626,#EF4444)" : "rgba(24,226,161,0.10)",
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: micBusy ? "wait" : "pointer",
+                  boxShadow: micOn ? "0 10px 24px rgba(220,38,38,0.26)" : "none",
+                  opacity: micBusy ? 0.72 : 1,
+                }}
+              >
+                {micOn ? (
+                  <MicOff style={{ width: 18, height: 18, color: "#fff" }} />
+                ) : (
+                  <Mic style={{ width: 18, height: 18, color: DEEP }} />
+                )}
+              </motion.button>
 
-            <motion.button
-              whileTap={{ scale: 0.88 }}
-              onClick={sendMessage}
-              disabled={loading || (!input.trim() && !attachedFile)}
-              style={{
-                width: btnSize,
-                height: btnSize,
-                borderRadius: isDesktop ? 16 : 14,
-                border: "none",
-                background: loading || (!input.trim() && !attachedFile) ? "#E2E8F0" : `linear-gradient(135deg,${DEEP},${MID})`,
-                display: "grid",
-                placeItems: "center",
-                flexShrink: 0,
-                cursor: loading || (!input.trim() && !attachedFile) ? "not-allowed" : "pointer",
-                boxShadow: loading || (!input.trim() && !attachedFile) ? "none" : "0 6px 18px rgba(12,90,62,0.28)",
-              }}
-            >
-              <Send style={{ width: isDesktop ? 19 : 17, height: isDesktop ? 19 : 17, color: loading || (!input.trim() && !attachedFile) ? "#94A3B8" : "#fff" }} />
-            </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={sendMessage}
+                disabled={loading || (!input.trim() && !attachedFile)}
+                style={{
+                  width: btnSize,
+                  height: btnSize,
+                  borderRadius: 16,
+                  border: "none",
+                  background:
+                    loading || (!input.trim() && !attachedFile)
+                      ? "#E2E8F0"
+                      : `linear-gradient(135deg, ${DEEP}, ${MID})`,
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: loading || (!input.trim() && !attachedFile) ? "not-allowed" : "pointer",
+                  boxShadow:
+                    loading || (!input.trim() && !attachedFile)
+                      ? "none"
+                      : "0 14px 28px rgba(10,90,59,0.22)",
+                }}
+              >
+                <Send
+                  style={{
+                    width: 18,
+                    height: 18,
+                    color: loading || (!input.trim() && !attachedFile) ? "#94A3B8" : "#fff",
+                  }}
+                />
+              </motion.button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* SIDEBAR */}
+      {/* HISTORY DRAWER */}
       <AnimatePresence>
         {sidebarOpen && (
           <>
@@ -1491,86 +1686,119 @@ export default function GoDavaiiAI() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSidebarOpen(false)}
-              style={{ position: "absolute", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
+              style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 40,
+                background: "rgba(0,0,0,0.36)",
+                backdropFilter: "blur(6px)",
+              }}
             />
+
             <motion.div
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
-              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
               style={{
                 position: "absolute",
                 top: 0,
                 left: 0,
                 bottom: 0,
-                width: isDesktop ? "40%" : "80%",
-                maxWidth: isDesktop ? 360 : 320,
+                width: isDesktop ? "38%" : "84%",
+                maxWidth: 360,
                 zIndex: 50,
-                background: "#fff",
+                background: "linear-gradient(180deg, rgba(7,23,17,0.92), rgba(7,23,17,0.86))",
+                color: "#fff",
+                backdropFilter: "blur(26px)",
                 borderTopRightRadius: 28,
                 borderBottomRightRadius: 28,
-                boxShadow: "20px 0 60px rgba(0,0,0,0.15)",
+                boxShadow: "20px 0 60px rgba(0,0,0,0.22)",
                 display: "flex",
                 flexDirection: "column",
                 overflow: "hidden",
               }}
             >
-              <div style={{ padding: "18px 16px 12px", background: `linear-gradient(135deg,${DEEP},${DARK})` }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900, color: "#fff" }}>
-                    Chat History
+              <div
+                style={{
+                  padding: `18px 16px 14px`,
+                  paddingTop: `calc(18px + env(safe-area-inset-top, 0px))`,
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 17, fontWeight: 900 }}>
+                      Chat History
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.72)", fontWeight: 700, marginTop: 2 }}>
+                      Recent AI conversations
+                    </div>
                   </div>
                   <motion.button
-                    whileTap={{ scale: 0.9 }}
+                    whileTap={{ scale: 0.92 }}
                     onClick={() => setSidebarOpen(false)}
-                    style={{ width: 30, height: 30, borderRadius: 10, background: "rgba(255,255,255,0.12)", border: "none", display: "grid", placeItems: "center", cursor: "pointer" }}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 10,
+                      background: "rgba(255,255,255,0.10)",
+                      border: "none",
+                      display: "grid",
+                      placeItems: "center",
+                      cursor: "pointer",
+                    }}
                   >
-                    <X style={{ width: 14, height: 14, color: "#fff" }} />
+                    <X style={{ width: 15, height: 15, color: "#fff" }} />
                   </motion.button>
                 </div>
-              </div>
 
-              <div style={{ padding: "10px 14px 6px" }}>
                 <motion.button
-                  whileTap={{ scale: 0.97 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={startNewChat}
                   style={{
                     width: "100%",
-                    height: 42,
+                    height: 44,
+                    marginTop: 14,
                     borderRadius: 14,
                     border: "none",
-                    background: `linear-gradient(135deg,${DEEP},${MID})`,
+                    background: `linear-gradient(135deg, ${DEEP}, ${MID})`,
                     color: "#fff",
                     fontSize: 13,
-                    fontWeight: 800,
+                    fontWeight: 900,
                     fontFamily: "'Sora',sans-serif",
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    gap: 6,
-                    boxShadow: "0 4px 14px rgba(12,90,62,0.25)",
+                    gap: 8,
+                    boxShadow: "0 14px 28px rgba(10,90,59,0.28)",
                   }}
                 >
-                  <Plus style={{ width: 15, height: 15 }} /> New Chat
+                  <Plus style={{ width: 15, height: 15 }} />
+                  New Chat
                 </motion.button>
               </div>
 
-              <div style={{ flex: 1, overflowY: "auto", padding: "6px 14px 20px", scrollbarWidth: "none" }}>
+              <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px 24px", scrollbarWidth: "none" }}>
                 {sessionsLoading ? (
-                  <div style={{ textAlign: "center", padding: "40px 0", color: "#94A3B8", fontSize: 13, fontWeight: 700 }}>
+                  <div style={{ textAlign: "center", padding: "48px 0", color: "rgba(255,255,255,0.70)", fontSize: 13, fontWeight: 700 }}>
                     Loading...
                   </div>
                 ) : chatSessions.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "40px 0" }}>
-                    <div style={{ fontSize: 36, marginBottom: 12 }}>💬</div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: "#0B1F16", marginBottom: 4 }}>No previous chats</div>
-                    <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>Your conversations will appear here</div>
+                  <div style={{ textAlign: "center", padding: "48px 10px" }}>
+                    <div style={{ fontSize: 34, marginBottom: 12 }}>💬</div>
+                    <div style={{ fontSize: 15, fontWeight: 900, color: "#fff", marginBottom: 4 }}>
+                      No previous chats
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.68)", fontWeight: 600 }}>
+                      Your AI sessions will appear here
+                    </div>
                   </div>
                 ) : (
                   chatSessions.map((s) => {
                     const lastMsg = s.messages?.[s.messages.length - 1]?.text || "";
-                    const preview = lastMsg.slice(0, 60) + (lastMsg.length > 60 ? "..." : "");
+                    const preview = lastMsg.slice(0, 70) + (lastMsg.length > 70 ? "..." : "");
                     const date = s.updatedAt
                       ? new Date(s.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
                       : "";
@@ -1583,27 +1811,42 @@ export default function GoDavaiiAI() {
                         style={{
                           width: "100%",
                           textAlign: "left",
-                          padding: "12px 14px",
-                          borderRadius: 14,
-                          border: "1px solid rgba(12,90,62,0.08)",
-                          background: "#F8FAFC",
+                          padding: "13px 13px",
+                          borderRadius: 18,
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          background: "rgba(255,255,255,0.05)",
                           marginBottom: 8,
                           cursor: "pointer",
                           display: "block",
+                          backdropFilter: "blur(12px)",
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                          <span style={{ fontSize: 12, fontWeight: 800, color: DEEP, fontFamily: "'Sora',sans-serif" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 5 }}>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: "#fff", fontFamily: "'Sora',sans-serif" }}>
                             {s.whoForLabel || s.whoFor || "Self"}
                           </span>
-                          <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700 }}>{date}</span>
+                          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.58)", fontWeight: 700 }}>
+                            {date}
+                          </span>
                         </div>
-                        <div style={{ fontSize: 12, color: "#64748B", fontWeight: 600, lineHeight: 1.4 }}>
+
+                        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.70)", fontWeight: 600, lineHeight: 1.45 }}>
                           {preview || "Empty chat"}
                         </div>
+
                         {s.focus && (
-                          <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-                            <span style={{ fontSize: 9.5, fontWeight: 800, color: "#059669", background: "#ECFDF5", padding: "2px 7px", borderRadius: 999 }}>
+                          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                            <span
+                              style={{
+                                fontSize: 9.5,
+                                fontWeight: 900,
+                                color: "#B8FFE5",
+                                background: "rgba(24,226,161,0.12)",
+                                padding: "3px 7px",
+                                borderRadius: 999,
+                                border: "1px solid rgba(24,226,161,0.14)",
+                              }}
+                            >
                               {s.focus}
                             </span>
                           </div>
@@ -1618,10 +1861,271 @@ export default function GoDavaiiAI() {
         )}
       </AnimatePresence>
 
+      {/* SETTINGS SHEET */}
+      <AnimatePresence>
+        {settingsOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSettingsOpen(false)}
+              style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 60,
+                background: "rgba(0,0,0,0.28)",
+                backdropFilter: "blur(6px)",
+              }}
+            />
+
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 280 }}
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 70,
+                borderTopLeftRadius: 28,
+                borderTopRightRadius: 28,
+                background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(247,250,255,0.98))",
+                borderTop: "1px solid rgba(12,90,62,0.08)",
+                boxShadow: "0 -24px 60px rgba(16,24,40,0.12)",
+                backdropFilter: "blur(28px)",
+                padding: "12px 14px 20px",
+                paddingBottom: `calc(20px + env(safe-area-inset-bottom, 0px))`,
+                maxHeight: "82dvh",
+                overflowY: "auto",
+              }}
+            >
+              <div
+                style={{
+                  width: 42,
+                  height: 5,
+                  borderRadius: 999,
+                  background: "rgba(15,122,83,0.18)",
+                  margin: "0 auto 12px",
+                }}
+              />
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 17, fontWeight: 900, color: TEXT }}>
+                    Assistant Settings
+                  </div>
+                  <div style={{ fontSize: 12, color: SUB, fontWeight: 700, marginTop: 2 }}>
+                    Customize focus, profile, and reply language
+                  </div>
+                </div>
+
+                <motion.button
+                  whileTap={{ scale: 0.92 }}
+                  onClick={() => setSettingsOpen(false)}
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 12,
+                    border: "1px solid rgba(12,90,62,0.08)",
+                    background: "#fff",
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer",
+                  }}
+                >
+                  <X style={{ width: 15, height: 15, color: TEXT }} />
+                </motion.button>
+              </div>
+
+              {/* Focus */}
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: TEXT, marginBottom: 10, letterSpacing: "0.2px" }}>
+                  Focus Mode
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 8 }}>
+                  {FOCUS.map((m) => {
+                    const Icon = m.icon;
+                    const active = focus === m.key;
+                    return (
+                      <motion.button
+                        key={m.key}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setFocus(m.key)}
+                        style={{
+                          borderRadius: 18,
+                          border: active ? "1px solid rgba(24,226,161,0.24)" : "1px solid rgba(12,90,62,0.08)",
+                          background: active ? ACC_SOFT : "#fff",
+                          padding: "13px 12px",
+                          textAlign: "left",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                          <div
+                            style={{
+                              width: 34,
+                              height: 34,
+                              borderRadius: 12,
+                              display: "grid",
+                              placeItems: "center",
+                              background: active ? "rgba(24,226,161,0.18)" : "rgba(12,90,62,0.06)",
+                              color: active ? DEEP : TEXT,
+                            }}
+                          >
+                            <Icon style={{ width: 15, height: 15 }} />
+                          </div>
+                          <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{m.label}</div>
+                        </div>
+                        {active && <Check style={{ width: 15, height: 15, color: DEEP }} />}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Who for */}
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: TEXT, marginBottom: 10, letterSpacing: "0.2px" }}>
+                  Who is this for?
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {TARGETS.map((t) => {
+                    const Icon = t.icon;
+                    const active = whoFor === t.key;
+                    return (
+                      <motion.button
+                        key={t.key}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setWhoFor(t.key)}
+                        style={{
+                          borderRadius: 18,
+                          border: active ? "1px solid rgba(24,226,161,0.24)" : "1px solid rgba(12,90,62,0.08)",
+                          background: active ? ACC_SOFT : "#fff",
+                          padding: "13px 12px",
+                          textAlign: "left",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                          <div
+                            style={{
+                              width: 34,
+                              height: 34,
+                              borderRadius: 12,
+                              display: "grid",
+                              placeItems: "center",
+                              background: active ? "rgba(24,226,161,0.18)" : "rgba(12,90,62,0.06)",
+                              color: active ? DEEP : TEXT,
+                            }}
+                          >
+                            <Icon style={{ width: 15, height: 15 }} />
+                          </div>
+                          <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{t.label}</div>
+                        </div>
+                        {active && <Check style={{ width: 15, height: 15, color: DEEP }} />}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+
+                {whoFor === "family" && (
+                  <input
+                    value={familyLabel}
+                    onChange={(e) => setFamilyLabel(e.target.value)}
+                    placeholder="Family member name (eg: Mom)"
+                    style={{
+                      marginTop: 10,
+                      width: "100%",
+                      height: 44,
+                      borderRadius: 14,
+                      border: "1px solid rgba(12,90,62,0.10)",
+                      background: "#fff",
+                      padding: "0 13px",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: TEXT,
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                )}
+
+                {whoFor === "new" && (
+                  <input
+                    value={customProfile}
+                    onChange={(e) => setCustomProfile(e.target.value)}
+                    placeholder="Age, gender, condition..."
+                    style={{
+                      marginTop: 10,
+                      width: "100%",
+                      height: 44,
+                      borderRadius: 14,
+                      border: "1px solid rgba(12,90,62,0.10)",
+                      background: "#fff",
+                      padding: "0 13px",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: TEXT,
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Language */}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 900, color: TEXT, marginBottom: 10, letterSpacing: "0.2px" }}>
+                  Reply Language
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 8 }}>
+                  {LANG_OPTIONS.map((l) => {
+                    const active = replyLanguage === l.key;
+                    return (
+                      <motion.button
+                        key={l.key}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setReplyLanguage(l.key)}
+                        style={{
+                          borderRadius: 16,
+                          border: active ? "1px solid rgba(24,226,161,0.24)" : "1px solid rgba(12,90,62,0.08)",
+                          background: active ? ACC_SOFT : "#fff",
+                          padding: "12px 12px",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 8,
+                        }}
+                      >
+                        <span style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{l.label}</span>
+                        {active && <Check style={{ width: 15, height: 15, color: DEEP }} />}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       <style>{`
         @keyframes gdSpin { to { transform: rotate(360deg); } }
         div::-webkit-scrollbar { display: none; }
-        textarea::placeholder { color: #94A3B8; font-weight: 600; }
+        textarea::placeholder { color: #98A8A1; font-weight: 600; }
+        input::placeholder { color: #98A8A1; }
       `}</style>
     </div>
   );
