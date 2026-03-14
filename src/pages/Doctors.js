@@ -228,6 +228,11 @@ export default function Doctors() {
   }, [query, specialty, sort, mode]);
 
   async function loadMyConsults() {
+    if (!localStorage.getItem("token")) {
+      setAppointments([]);
+      setLoadingAppts(false);
+      return;
+    }
     setLoadingAppts(true);
     try {
       const r = await axios.get(`${API}/api/consults/my`, { headers: userHeaders() });
@@ -247,6 +252,8 @@ export default function Doctors() {
   const loadSlotsForDoctor = useCallback(async (doctorId, date) => {
     if (!doctorId || !date) return;
     setSlotsLoading(true);
+    setSlotOptions([]);
+    setBookingSlot("");
     try {
       const r = await axios.get(`${API}/api/doctors/${doctorId}/slots`, {
         params: { date, mode: mapModeForBackend(mode) },
@@ -259,9 +266,13 @@ export default function Doctors() {
       const onlyAvailable = slots.filter((s) => s?.available).map((s) => s.slot);
       setSlotOptions(onlyAvailable);
       setBookingSlot(onlyAvailable[0] || "");
-    } catch (_) {
+      if (!onlyAvailable.length) {
+        setError("No live slots are available for the selected doctor/date.");
+      }
+    } catch (err) {
       setSlotOptions([]);
       setBookingSlot("");
+      setError(err?.response?.data?.error || "Unable to load slots for this doctor right now.");
     } finally {
       setSlotsLoading(false);
     }

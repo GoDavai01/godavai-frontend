@@ -930,7 +930,11 @@ export default function DoctorDashboard() {
         payload,
         getDoctorAuthConfig()
       );
-      applyDashboardPayload(data || {});
+      if (data?.doctor) {
+        setDoctor((prev) => ({ ...prev, ...data.doctor }));
+        setSettingsDraft((prev) => createSettingsDraft({ ...doctor, ...data.doctor }));
+      }
+      await loadDashboard();
       pushSnackbar("Doctor settings saved", "success");
     } catch (error) {
       pushSnackbar(error?.response?.data?.error || "Failed to save doctor settings", "error");
