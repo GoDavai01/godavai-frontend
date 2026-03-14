@@ -891,7 +891,12 @@ export default function GoDavaiiAI() {
         return;
       }
     } catch (err) {
-      console.error("TTS API failed:", err?.message || err);
+      console.error(
+  "TTS API failed:",
+  err?.response?.status,
+  err?.response?.data,
+  err?.message || err
+);
     }
 
     setSpeakLoading(false);
