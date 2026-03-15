@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ReceiptText, X, MapPin, Clock, Package,
-  ChevronRight, RefreshCw, Zap, Video, Phone, FileText, MessageCircle, Stethoscope,
+  ChevronRight, RefreshCw, Zap,
 } from "lucide-react";
 
 import QuoteReviewModal from "./QuoteReviewModal";
@@ -332,8 +332,6 @@ export default function MyOrdersPage() {
   const [reuploadMode, setReuploadMode]           = useState("manual");
   const [reuploadOrderData, setReuploadOrderData] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
-  const [myConsults, setMyConsults] = useState([]);
-  const [consultsLoading, setConsultsLoading] = useState(false);
 
   // ── IDENTICAL EFFECTS ──────────────────────────────────────
   useEffect(() => {
@@ -346,23 +344,6 @@ export default function MyOrdersPage() {
     const poll = setInterval(() => { fetchOrders(); }, 15000);
     return () => clearInterval(poll);
     // eslint-disable-next-line
-  }, [userId]);
-
-  // Fetch doctor consultations
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    setConsultsLoading(true);
-    axios.get(`${API_BASE_URL}/api/consults/my`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => setMyConsults(Array.isArray(r?.data?.consults) ? r.data.consults : []))
-      .catch(() => setMyConsults([]))
-      .finally(() => setConsultsLoading(false));
-    const pollConsults = setInterval(() => {
-      axios.get(`${API_BASE_URL}/api/consults/my`, { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => setMyConsults(Array.isArray(r?.data?.consults) ? r.data.consults : []))
-        .catch(() => {});
-    }, 20000);
-    return () => clearInterval(pollConsults);
   }, [userId]);
 
   const fetchOrders = async () => {
@@ -927,7 +908,6 @@ export default function MyOrdersPage() {
           {[
             { key: "all",    label: "All",    count: orders.length },
             { key: "active", label: "Active", count: activeOrders.length },
-            { key: "consults", label: "Consults", count: myConsults.filter(c => c.status !== "pending_payment").length },
             { key: "past",   label: "Past",   count: pastOrders.length },
           ].map((tab) => (
             <button
@@ -1025,113 +1005,6 @@ export default function MyOrdersPage() {
               </div>
             ))}
           </div>
-        ) : activeTab === "consults" ? (
-          /* ═══ CONSULTS TAB ═══ */
-          consultsLoading ? (
-            <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: "#94A3B8", fontWeight: 700 }}>Loading consultations...</div>
-          ) : myConsults.filter(c => c.status !== "pending_payment").length === 0 ? (
-            <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} style={{ textAlign: "center", padding: "60px 20px" }}>
-              <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }} style={{ fontSize: 64, marginBottom: 14 }}>🩺</motion.div>
-              <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 18, fontWeight: 900, color: "#0B1F16", marginBottom: 8 }}>No consultations yet</div>
-              <div style={{ fontSize: 13, color: "#94A3B8", marginBottom: 24, lineHeight: 1.6 }}>Book a doctor consultation to see it here</div>
-              <motion.button whileTap={{ scale: 0.96 }} onClick={() => navigate("/doctors")} style={{ height: 48, padding: "0 28px", borderRadius: 100, border: "none", background: `linear-gradient(135deg,${DEEP},${MID})`, color: "#fff", fontSize: 14, fontWeight: 800, fontFamily: "'Sora',sans-serif", cursor: "pointer", boxShadow: "0 8px 24px rgba(12,90,62,0.35)", display: "inline-flex", alignItems: "center", gap: 8 }}>
-                <Stethoscope style={{ width: 16, height: 16 }} /> Book Doctor Consult
-              </motion.button>
-            </motion.div>
-          ) : (
-            <div style={{ paddingBottom: 8 }}>
-              {myConsults.filter(c => c.status !== "pending_payment").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((c) => {
-                const isLive = c.callState === "live" || c.status === "live_now";
-                const canJoin = ["confirmed","accepted","live_now"].includes(c.status) && c.paymentStatus === "paid" && c.mode !== "inperson";
-                const hasPrescription = !!c?.prescription?.fileUrl;
-                const isCompleted = c.status === "completed";
-                const isCancelled = ["cancelled","rejected"].includes(c.status);
-                const modeLabel = c.mode === "video" ? "Video" : c.mode === "call" ? "Audio" : "In-Person";
-                const statusColor = isLive ? "#065F46" : isCompleted ? "#065F46" : isCancelled ? "#991B1B" : "#92400E";
-                const statusBg = isLive ? "#D1FAE5" : isCompleted ? "#ECFDF5" : isCancelled ? "#FEF2F2" : "#FEF3C7";
-                const statusBorder = isLive ? "#A7F3D0" : isCompleted ? "#A7F3D0" : isCancelled ? "#FECACA" : "#FDE68A";
-                const statusLabel = isLive ? "LIVE NOW" : isCompleted ? "Completed" : isCancelled ? "Cancelled" : c.status === "accepted" ? "Upcoming" : "Pending";
-
-                return (
-                  <motion.div key={c.id} initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.26 }}
-                    style={{ background: "#fff", borderRadius: 24, border: isLive ? `1.5px solid ${ACCENT}50` : "1.5px solid rgba(12,90,62,0.08)", boxShadow: isLive ? `0 12px 40px rgba(12,90,62,0.16)` : "0 2px 16px rgba(0,0,0,0.05)", overflow: "hidden", marginBottom: 16, position: "relative" }}>
-                    {isLive && <div style={{ height: 4, background: `linear-gradient(90deg,${DEEP} 0%,${ACCENT} 50%,${DEEP} 100%)`, backgroundSize: "200% 100%", animation: "barShimmer 2s linear infinite" }} />}
-                    <div style={{ padding: "18px 18px 16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                          <div style={{ width: 42, height: 42, borderRadius: 14, background: `linear-gradient(135deg,${DEEP}15,${ACCENT}15)`, border: `1.5px solid ${DEEP}15`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <Stethoscope style={{ width: 20, height: 20, color: DEEP }} />
-                          </div>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 800, color: "#0A1F14", letterSpacing: "-0.3px" }}>{c.doctorName}</div>
-                            <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 1, display: "flex", alignItems: "center", gap: 4 }}>
-                              <Clock style={{ width: 10, height: 10 }} /> {c.dateLabel} · {c.slot}
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-                          <span style={{ fontSize: 10, fontWeight: 900, color: statusColor, background: statusBg, border: `1px solid ${statusBorder}`, padding: "4px 10px", borderRadius: 100, display: "flex", alignItems: "center", gap: 4 }}>
-                            {isLive && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10B981", animation: "liveDot 1.6s ease-in-out infinite" }} />}
-                            {statusLabel}
-                          </span>
-                          <span style={{ fontSize: 10, fontWeight: 800, color: c.mode === "video" ? "#7C3AED" : c.mode === "call" ? "#0EA5E9" : "#D97706", background: c.mode === "video" ? "#F5F3FF" : c.mode === "call" ? "#F0F9FF" : "#FFFBEB", padding: "3px 8px", borderRadius: 100 }}>{modeLabel}</span>
-                        </div>
-                      </div>
-
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-                        <span style={{ fontSize: 11, color: "#475569", fontWeight: 700 }}>{c.specialty}</span>
-                        <span style={{ fontSize: 11, color: "#475569", fontWeight: 700 }}>Patient: {c.patientName}</span>
-                        <span style={{ fontSize: 11, color: "#475569", fontWeight: 700 }}>₹{c.fee}</span>
-                        {c.paymentStatus === "paid" && <span style={{ fontSize: 10, fontWeight: 800, color: "#065F46", background: "#ECFDF5", padding: "2px 8px", borderRadius: 100 }}>Paid ✓</span>}
-                      </div>
-
-                      {hasPrescription && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 14, padding: "10px 14px", marginBottom: 12 }}>
-                          <FileText style={{ width: 18, height: 18, color: "#15803D", flexShrink: 0 }} />
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 12, fontWeight: 900, color: "#166534" }}>Prescription Available</div>
-                            <div style={{ fontSize: 10.5, color: "#4ADE80", fontWeight: 700 }}>by {c.doctorName}</div>
-                          </div>
-                          <a href={c.prescription.fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11, fontWeight: 900, color: "#fff", background: "linear-gradient(135deg,#15803D,#22C55E)", padding: "7px 14px", borderRadius: 100, textDecoration: "none", display: "flex", alignItems: "center", gap: 4 }}>
-                            <FileText style={{ width: 12, height: 12 }} /> View Rx
-                          </a>
-                        </div>
-                      )}
-
-                      {isCompleted && !hasPrescription && (
-                        <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 14, padding: "10px 14px", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 16 }}>⏳</span>
-                          <div style={{ fontSize: 12, fontWeight: 800, color: "#92400E" }}>Consultation completed — prescription pending from doctor</div>
-                        </div>
-                      )}
-
-                      <div style={{ display: "flex", gap: 8 }}>
-                        {canJoin && (
-                          <motion.button whileTap={{ scale: 0.95 }} onClick={() => { const roomId = c.consultRoomId || `consult_${c.id?.slice(-8)}`; window.open(`https://meet.jit.si/${roomId}`, "_blank"); }}
-                            style={{ flex: 1, height: 42, border: "none", borderRadius: 14, background: isLive ? "linear-gradient(135deg,#059669,#10B981)" : `linear-gradient(135deg,${DEEP},${MID})`, color: "#fff", fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, boxShadow: isLive ? "0 8px 24px rgba(16,185,129,0.3)" : "0 6px 18px rgba(12,90,62,0.2)" }}>
-                            {c.mode === "video" ? <Video style={{ width: 14, height: 14 }} /> : <Phone style={{ width: 14, height: 14 }} />}
-                            {isLive ? "Join Now — LIVE" : "Join Consultation"}
-                          </motion.button>
-                        )}
-                        {canJoin && (
-                          <motion.button whileTap={{ scale: 0.95 }} onClick={() => { const roomId = c.consultRoomId || `consult_${c.id?.slice(-8)}`; window.open(`https://meet.jit.si/${roomId}#config.startWithVideoMuted=true`, "_blank"); }}
-                            style={{ width: 42, height: 42, borderRadius: 14, border: "1.5px solid #E2E8F0", background: "#fff", cursor: "pointer", display: "grid", placeItems: "center" }}>
-                            <MessageCircle style={{ width: 18, height: 18, color: DEEP }} />
-                          </motion.button>
-                        )}
-                        {!canJoin && !isCancelled && (
-                          <motion.button whileTap={{ scale: 0.95 }} onClick={() => navigate("/doctors")}
-                            style={{ flex: 1, height: 42, borderRadius: 14, border: `1.5px solid ${DEEP}30`, background: "#F0FAF5", color: DEEP, fontSize: 12, fontWeight: 700, fontFamily: "'Sora',sans-serif", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
-                            <RefreshCw style={{ width: 12, height: 12 }} /> Book Again
-                          </motion.button>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          )
         ) : displayGrouped.length === 0 ? (
           /* Empty state */
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
