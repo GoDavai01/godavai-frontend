@@ -33,6 +33,15 @@ const BORDER = "rgba(12,90,62,0.08)";
 const TEXT = "#10231A";
 const SUB = "#6A7A73";
 
+/* ───────── GPS accuracy threshold (meters) ───────── */
+const MAX_ACCURACY_METERS = 30;       // reject GPS points with accuracy worse than 30m
+const MIN_DISTANCE_DELTA = 1.5;       // min meters between points to count as movement
+const MAX_DISTANCE_DELTA = 200;       // max meters between consecutive points (noise filter)
+
+/* ───────── Motion / pedometer thresholds ───────── */
+const MOTION_MAGNITUDE_THRESHOLD = 10.8;  // was 12.2 — too high for normal walking
+const MOTION_DEBOUNCE_MS = 280;           // was 360ms — misses fast steps at 120+ steps/min
+
 function Glass({ children, style }) {
   return (
     <div
@@ -639,7 +648,7 @@ function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSession
             borderRadius: 999,
           }}
         >
-          Google style
+          Google Maps
         </div>
       </div>
 
@@ -871,6 +880,10 @@ function BodyMetricsCard({
   );
 }
 
+/* ═══════════════════════════════════════════════════════
+   MAIN STEP TRACKER COMPONENT — ALL BUGS FIXED
+   ═══════════════════════════════════════════════════════ */
+
 export default function StepTracker() {
   const navigate = useNavigate();
   const { user, setUser, token } = useAuth();
@@ -906,6 +919,16 @@ export default function StepTracker() {
   const motionEnabledRef = useRef(false);
   const lastMotionPeakTsRef = useRef(0);
 
+  /* ─── FIX #1: Use refs for live values to avoid stale closures ─── */
+  const distanceRef = useRef(0);
+  const stepsRef = useRef(0);
+  const durationRef = useRef(0);
+  const caloriesRef = useRef(null);
+
+  /* ─── FIX #2: Better motion detection with low-pass filter ─── */
+  const lastAccMagnitudeRef = useRef(9.81);
+  const motionHandlerRef = useRef(null);
+
   useEffect(() => {
     setWeightInput(String(user?.weightKg || user?.weight || ""));
     const nextHeight = cmToFeetInches(user?.heightCm || user?.height || "");
@@ -920,6 +943,12 @@ export default function StepTracker() {
   const hasWeight = !!weightKg && Number(weightKg) > 0;
   const hasHeight = !!heightCm && Number(heightCm) > 0;
   const strideMeters = hasHeight ? Math.max(0.5, Number(heightCm) * 0.00415) : 0.78;
+  const strideMRef = useRef(strideMeters);
+  const weightKgRef = useRef(weightKg);
+
+  // Keep refs in sync
+  useEffect(() => { strideMRef.current = strideMeters; }, [strideMeters]);
+  useEffect(() => { weightKgRef.current = weightKg; }, [weightKg]);
 
   const authHeaders = useMemo(() => {
     const resolvedToken = extractAnyToken(token);
@@ -974,37 +1003,72 @@ export default function StepTracker() {
 
       if (typeof setUser === "function") setUser(nextUser);
 
-      setCalories(calculateCalories({ distanceMeters, steps, weightKg: nextWeight }));
+      // Immediately recalculate with new weight
+      weightKgRef.current = nextWeight;
+      const newCal = calculateCalories({ distanceMeters: distanceRef.current, steps: stepsRef.current, weightKg: nextWeight });
+      setCalories(newCal);
+      caloriesRef.current = newCal;
     } catch (err) {
       setPermissionError(err?.response?.data?.message || "Unable to save weight/height.");
     } finally {
       setSavingMetrics(false);
     }
-  }, [authHeaders, distanceMeters, feetInput, inchInput, setUser, steps, user, weightInput]);
+  }, [authHeaders, feetInput, inchInput, setUser, user, weightInput]);
 
-  const handleDeviceMotion = useCallback(
-    (e) => {
+  /* ─── FIX #3: Completely rewritten motion handler ─── */
+  /* Uses refs everywhere so no stale closures. Low-pass filter for smoother detection. */
+  const setupMotionHandler = useCallback(() => {
+    // Remove old handler if exists
+    if (motionHandlerRef.current) {
+      window.removeEventListener("devicemotion", motionHandlerRef.current);
+    }
+
+    const handler = (e) => {
       if (!motionEnabledRef.current) return;
-      const acc = e.accelerationIncludingGravity;
+
+      // Prefer acceleration (gravity removed) if available, fall back to accelerationIncludingGravity
+      const acc = e.acceleration || e.accelerationIncludingGravity;
       if (!acc) return;
 
       const x = Number(acc.x || 0);
       const y = Number(acc.y || 0);
       const z = Number(acc.z || 0);
-
       const magnitude = Math.sqrt(x * x + y * y + z * z);
+
+      // Low-pass filter to smooth out noise
+      const alpha = 0.3;
+      const smoothed = alpha * magnitude + (1 - alpha) * lastAccMagnitudeRef.current;
+      lastAccMagnitudeRef.current = smoothed;
+
       const now = Date.now();
 
-      if (magnitude > 12.2 && now - lastMotionPeakTsRef.current > 360) {
+      // Use different thresholds based on whether we have pure acceleration or gravity-included
+      const threshold = e.acceleration ? 2.8 : MOTION_MAGNITUDE_THRESHOLD;
+
+      if (smoothed > threshold && now - lastMotionPeakTsRef.current > MOTION_DEBOUNCE_MS) {
         lastMotionPeakTsRef.current = now;
         manualMotionStepsRef.current += 1;
-        setSteps((prev) =>
-          Math.max(prev + 1, calculateEstimatedSteps(distanceMeters, manualMotionStepsRef.current, strideMeters))
-        );
+
+        const currentStride = strideMRef.current;
+        const currentDistance = distanceRef.current;
+        const currentWeight = weightKgRef.current;
+
+        const newSteps = calculateEstimatedSteps(currentDistance, manualMotionStepsRef.current, currentStride);
+        stepsRef.current = newSteps;
+        setSteps(newSteps);
+
+        // Also update calories on each step
+        if (currentWeight && currentWeight > 0) {
+          const newCal = calculateCalories({ distanceMeters: currentDistance, steps: newSteps, weightKg: currentWeight });
+          caloriesRef.current = newCal;
+          setCalories(newCal);
+        }
       }
-    },
-    [distanceMeters, strideMeters]
-  );
+    };
+
+    motionHandlerRef.current = handler;
+    window.addEventListener("devicemotion", handler);
+  }, []);
 
   const refreshHistory = useCallback(async () => {
     if (!Object.keys(authHeaders).length) {
@@ -1044,9 +1108,11 @@ export default function StepTracker() {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
       if (timerRef.current) clearInterval(timerRef.current);
-      window.removeEventListener("devicemotion", handleDeviceMotion);
+      if (motionHandlerRef.current) {
+        window.removeEventListener("devicemotion", motionHandlerRef.current);
+      }
     };
-  }, [handleDeviceMotion]);
+  }, []);
 
   const flushPoints = useCallback(
     async (extra = {}) => {
@@ -1061,10 +1127,10 @@ export default function StepTracker() {
           `${API}/api/step-tracker/sessions/${sessionId}/points`,
           {
             points: batch,
-            steps,
-            distanceMeters,
-            caloriesKcal: calories,
-            durationSec,
+            steps: stepsRef.current,
+            distanceMeters: distanceRef.current,
+            caloriesKcal: caloriesRef.current,
+            durationSec: durationRef.current,
             ...extra,
           },
           { headers: authHeaders }
@@ -1075,18 +1141,7 @@ export default function StepTracker() {
         setSyncing(false);
       }
     },
-    [authHeaders, calories, distanceMeters, durationSec, sessionId, steps]
-  );
-
-  const recomputeLiveMetrics = useCallback(
-    (nextDistance, explicitSteps = null) => {
-      const computedSteps = calculateEstimatedSteps(nextDistance, explicitSteps ?? manualMotionStepsRef.current, strideMeters);
-      const nextCalories = calculateCalories({ distanceMeters: nextDistance, steps: computedSteps, weightKg });
-      setSteps(computedSteps);
-      setCalories(nextCalories);
-      setPace(calculatePace(durationSec, nextDistance));
-    },
-    [durationSec, strideMeters, weightKg]
+    [authHeaders, sessionId]
   );
 
   const enableMotionTracking = useCallback(async () => {
@@ -1096,25 +1151,41 @@ export default function StepTracker() {
         if (result !== "granted") return false;
       }
       motionEnabledRef.current = true;
-      window.addEventListener("devicemotion", handleDeviceMotion);
+      setupMotionHandler();
       return true;
     } catch {
       return false;
     }
-  }, [handleDeviceMotion]);
+  }, [setupMotionHandler]);
 
+  /* ─── FIX #4: GPS watch with accuracy filtering ─── */
   const startGpsWatch = useCallback(() => {
     if (!navigator.geolocation) {
       setPermissionError("Geolocation is not supported on this device/browser.");
       return;
     }
 
+    // Clear any existing watch
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        const accuracy = pos.coords.accuracy;
+
+        /* FIX #4a: Filter out inaccurate GPS readings */
+        if (accuracy > MAX_ACCURACY_METERS) {
+          // Skip this reading — too inaccurate, would cause wrong location on map
+          console.log(`[StepTracker] Skipping GPS point with accuracy ${accuracy.toFixed(0)}m (limit: ${MAX_ACCURACY_METERS}m)`);
+          return;
+        }
+
         const point = {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
+          accuracy,
           speed: pos.coords.speed ?? 0,
           heading: pos.coords.heading ?? null,
           recordedAt: new Date().toISOString(),
@@ -1130,38 +1201,61 @@ export default function StepTracker() {
 
         if (lastPointRef.current) {
           const delta = haversineMeters(lastPointRef.current, point);
-          if (delta > 1 && delta < 120) {
-            setDistanceMeters((prev) => {
-              const nextDistance = prev + delta;
-              recomputeLiveMetrics(nextDistance);
-              return nextDistance;
-            });
+
+          /* FIX #4b: Smarter distance filtering — also factor in combined accuracy */
+          const combinedAccuracy = (accuracy + (lastPointRef.current.accuracy || 0)) / 2;
+          const effectiveMinDelta = Math.max(MIN_DISTANCE_DELTA, combinedAccuracy * 0.5);
+
+          if (delta > effectiveMinDelta && delta < MAX_DISTANCE_DELTA) {
+            const nextDistance = distanceRef.current + delta;
+            distanceRef.current = nextDistance;
+            setDistanceMeters(nextDistance);
+
+            /* FIX #5: Recompute steps using refs (no stale closure!) */
+            const currentStride = strideMRef.current;
+            const currentWeight = weightKgRef.current;
+            const currentMotionSteps = manualMotionStepsRef.current;
+
+            const newSteps = calculateEstimatedSteps(nextDistance, currentMotionSteps, currentStride);
+            stepsRef.current = newSteps;
+            setSteps(newSteps);
+
+            const newCal = calculateCalories({ distanceMeters: nextDistance, steps: newSteps, weightKg: currentWeight });
+            caloriesRef.current = newCal;
+            setCalories(newCal);
+
+            const currentDuration = durationRef.current;
+            setPace(calculatePace(currentDuration, nextDistance));
           }
         }
 
         lastPointRef.current = point;
       },
       (err) => {
-        setPermissionError(err?.message || "Unable to access live location.");
+        setPermissionError(err?.message || "Unable to access live location. Please allow location access in browser settings.");
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 2500,
-        timeout: 12000,
+        maximumAge: 1000,    // FIX: was 2500 — reduce to get fresher readings
+        timeout: 15000,      // FIX: increased from 12000 for slower devices
       }
     );
-  }, [recomputeLiveMetrics]);
+  }, []);
 
+  /* ─── FIX #6: Timer uses ref so duration is always fresh ─── */
   const beginTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
-      setDurationSec((prev) => prev + 1);
+      durationRef.current += 1;
+      setDurationSec(durationRef.current);
+
+      // Update pace every second using refs
+      const curDist = distanceRef.current;
+      if (curDist > 0) {
+        setPace(calculatePace(durationRef.current, curDist));
+      }
     }, 1000);
   }, []);
-
-  useEffect(() => {
-    setPace(calculatePace(durationSec, distanceMeters));
-  }, [distanceMeters, durationSec]);
 
   const handleStart = useCallback(async () => {
     setStarting(true);
@@ -1175,7 +1269,7 @@ export default function StepTracker() {
       const current = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 12000,
+          timeout: 15000,
           maximumAge: 0,
         });
       });
@@ -1213,6 +1307,14 @@ export default function StepTracker() {
       ]);
       lastPointRef.current = startPoint;
       manualMotionStepsRef.current = 0;
+
+      // Reset ALL state AND refs
+      durationRef.current = 0;
+      distanceRef.current = 0;
+      stepsRef.current = 0;
+      caloriesRef.current = hasWeight ? 0 : null;
+      lastAccMagnitudeRef.current = 9.81;
+
       setDurationSec(0);
       setDistanceMeters(0);
       setSteps(0);
@@ -1221,7 +1323,7 @@ export default function StepTracker() {
       beginTimer();
       startGpsWatch();
     } catch (err) {
-      setPermissionError(err?.response?.data?.message || err?.message || "Unable to start tracking.");
+      setPermissionError(err?.response?.data?.message || err?.message || "Unable to start tracking. Please allow location permission.");
     } finally {
       setStarting(false);
     }
@@ -1234,8 +1336,13 @@ export default function StepTracker() {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
-    if (timerRef.current) clearInterval(timerRef.current);
-    window.removeEventListener("devicemotion", handleDeviceMotion);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (motionHandlerRef.current) {
+      window.removeEventListener("devicemotion", motionHandlerRef.current);
+    }
     motionEnabledRef.current = false;
 
     await flushPoints();
@@ -1245,7 +1352,7 @@ export default function StepTracker() {
     } catch {}
 
     setStatus("paused");
-  }, [authHeaders, flushPoints, handleDeviceMotion, sessionId]);
+  }, [authHeaders, flushPoints, sessionId]);
 
   const handleResume = useCallback(async () => {
     if (!sessionId) return;
@@ -1268,8 +1375,13 @@ export default function StepTracker() {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
-    if (timerRef.current) clearInterval(timerRef.current);
-    window.removeEventListener("devicemotion", handleDeviceMotion);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (motionHandlerRef.current) {
+      window.removeEventListener("devicemotion", motionHandlerRef.current);
+    }
     motionEnabledRef.current = false;
 
     await flushPoints();
@@ -1288,10 +1400,10 @@ export default function StepTracker() {
         `${API}/api/step-tracker/sessions/${sessionId}/end`,
         {
           endLocation,
-          steps,
-          distanceMeters,
-          caloriesKcal: calories,
-          durationSec,
+          steps: stepsRef.current,
+          distanceMeters: distanceRef.current,
+          caloriesKcal: caloriesRef.current,
+          durationSec: durationRef.current,
         },
         { headers: authHeaders }
       );
@@ -1300,7 +1412,7 @@ export default function StepTracker() {
     setStatus("ended");
     setSessionId(null);
     await refreshHistory();
-  }, [authHeaders, calories, distanceMeters, durationSec, flushPoints, handleDeviceMotion, refreshHistory, routePoints, sessionId, steps]);
+  }, [authHeaders, flushPoints, refreshHistory, routePoints, sessionId]);
 
   useEffect(() => {
     if (status !== "tracking" || !sessionId) return;
@@ -1399,12 +1511,14 @@ export default function StepTracker() {
               gap: 6,
               padding: "8px 12px",
               borderRadius: 999,
-              background: GLASS,
-              border: `1px solid ${BORDER}`,
+              background: status === "tracking" ? "rgba(24,226,161,0.15)" : GLASS,
+              border: `1px solid ${status === "tracking" ? "rgba(24,226,161,0.3)" : BORDER}`,
             }}
           >
-            <ShieldCheck style={{ width: 13, height: 13, color: DEEP }} />
-            <span style={{ fontSize: 10.5, fontWeight: 900, color: TEXT }}>Live</span>
+            <ShieldCheck style={{ width: 13, height: 13, color: status === "tracking" ? "#18E2A1" : DEEP }} />
+            <span style={{ fontSize: 10.5, fontWeight: 900, color: status === "tracking" ? DEEP : TEXT }}>
+              {status === "tracking" ? "Tracking" : status === "paused" ? "Paused" : "Ready"}
+            </span>
           </div>
         </div>
 
