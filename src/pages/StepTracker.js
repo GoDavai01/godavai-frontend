@@ -46,15 +46,15 @@ const MAX_ACCURACY_METERS = 30;
 const MIN_DISTANCE_DELTA = 2.0;
 const MAX_DISTANCE_DELTA = 150;
 
-/* ── Pedometer tuning ── */
-const STEP_PEAK_GRAVITY = 11.4;    // raised slightly from 11.2
-const STEP_VALLEY_GRAVITY = 9.0;
-const STEP_PEAK_PURE = 2.5;        // raised from 2.2
-const STEP_VALLEY_PURE = 0.6;
-const STEP_MIN_MS = 280;           // ~214 steps/min max (fast run)
-const STEP_MAX_MS = 2000;
-const WARMUP_MS = 3000;            // ignore first 3s of motion after start
-const CONSECUTIVE_NEEDED = 3;      // need 3 valid cycles before we start counting
+/*
+ * SIMPLE PEDOMETER — the old approach that ACTUALLY detected walking.
+ * Using accelerationIncludingGravity: resting ~9.81, walking peaks ~11-13.
+ * Using pure acceleration: resting ~0, walking peaks ~2-4.
+ * Simple threshold + debounce. NO warmup, NO consecutive filter.
+ */
+const MOTION_THRESHOLD_GRAVITY = 10.8;
+const MOTION_THRESHOLD_PURE = 2.0;
+const MOTION_DEBOUNCE_MS = 300;
 
 function Glass({ children, style, ...rest }) {
   return (<div style={{ background: GLASS, border: `1px solid ${BORDER}`, borderRadius: 24, boxShadow: "0 16px 34px rgba(16,24,40,0.05)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", ...style }} {...rest}>{children}</div>);
@@ -114,7 +114,7 @@ function extractToken(t) {
   return null;
 }
 
-/* ═══ Sub-components ═══ */
+/* ═══ Sub-components (unchanged from v4) ═══ */
 
 function FallbackRouteMap({ points, title = "Live Route", badge = "Outdoor" }) {
   const poly = normPtsPath(points); const hasR = points && points.length >= 2;
@@ -148,16 +148,12 @@ function StatCard({ icon: Icon, label, value, helper, accent }) {
   );
 }
 
-/* ═══ Enhanced Session Card with full walk details ═══ */
 function SessionCard({ session, onOpenMap }) {
   const st = session.stats || {};
-  const dur = Number(st.durationSec || 0);
-  const dist = Number(st.distanceMeters || 0);
-  const steps = Number(st.steps || 0);
+  const dur = Number(st.durationSec || 0), dist = Number(st.distanceMeters || 0), steps = Number(st.steps || 0);
   const cal = st.caloriesKcal != null ? Math.round(st.caloriesKcal) : null;
   const pace = st.avgPaceMinPerKm && st.avgPaceMinPerKm > 0 ? `${Math.floor(st.avgPaceMinPerKm)}:${String(Math.round((st.avgPaceMinPerKm % 1) * 60)).padStart(2, "0")} /km` : "--";
   const maxSpd = st.maxSpeedKmh ? `${st.maxSpeedKmh.toFixed(1)} km/h` : "--";
-
   return (
     <Glass style={{ padding: 14 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
@@ -166,36 +162,18 @@ function SessionCard({ session, onOpenMap }) {
           <div style={{ fontSize: 11, color: SUB, fontWeight: 700, marginTop: 2 }}>{new Date(session.startedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} {session.endedAt ? `— ${new Date(session.endedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <motion.button whileTap={{ scale: 0.95 }} onClick={() => onOpenMap?.(session)} style={{ border: "none", background: `linear-gradient(135deg,${DEEP},${MID})`, color: "#fff", borderRadius: 999, padding: "8px 14px", fontSize: 10.5, fontWeight: 900, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-            <Navigation style={{ width: 12, height: 12 }} /> Route
-          </motion.button>
+          <motion.button whileTap={{ scale: 0.95 }} onClick={() => onOpenMap?.(session)} style={{ border: "none", background: `linear-gradient(135deg,${DEEP},${MID})`, color: "#fff", borderRadius: 999, padding: "8px 14px", fontSize: 10.5, fontWeight: 900, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}><Navigation style={{ width: 12, height: 12 }} /> Route</motion.button>
           <div style={{ fontSize: 10.5, fontWeight: 900, color: session.status === "ended" ? DEEP : "#C2410C", background: session.status === "ended" ? "rgba(24,226,161,0.10)" : "#FFF7ED", padding: "6px 10px", borderRadius: 999 }}>{session.status === "ended" ? "Done" : "Active"}</div>
         </div>
       </div>
-
-      {/* Stats grid — 2 rows */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 8 }}>
-        {[
-          { icon: Footprints, l: "Steps", v: steps.toLocaleString() },
-          { icon: Route, l: "Distance", v: `${metersToKm(dist)} km` },
-          { icon: Timer, l: "Duration", v: formatDuration(dur) },
-        ].map(x => (
-          <div key={x.l} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <x.icon style={{ width: 13, height: 13, color: DEEP, flexShrink: 0 }} />
-            <div><div style={{ fontSize: 9.5, color: SUB, fontWeight: 700 }}>{x.l}</div><div style={{ fontSize: 12.5, color: TEXT, fontWeight: 1000, fontFamily: "'Sora',sans-serif" }}>{x.v}</div></div>
-          </div>
+        {[{ icon: Footprints, l: "Steps", v: steps.toLocaleString() }, { icon: Route, l: "Distance", v: `${metersToKm(dist)} km` }, { icon: Timer, l: "Duration", v: formatDuration(dur) }].map(x => (
+          <div key={x.l} style={{ display: "flex", alignItems: "center", gap: 6 }}><x.icon style={{ width: 13, height: 13, color: DEEP, flexShrink: 0 }} /><div><div style={{ fontSize: 9.5, color: SUB, fontWeight: 700 }}>{x.l}</div><div style={{ fontSize: 12.5, color: TEXT, fontWeight: 1000, fontFamily: "'Sora',sans-serif" }}>{x.v}</div></div></div>
         ))}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
-        {[
-          { icon: Flame, l: "Calories", v: cal != null ? `${cal} kcal` : "--" },
-          { icon: Gauge, l: "Pace", v: pace },
-          { icon: TrendingUp, l: "Top Speed", v: maxSpd },
-        ].map(x => (
-          <div key={x.l} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <x.icon style={{ width: 13, height: 13, color: DEEP, flexShrink: 0 }} />
-            <div><div style={{ fontSize: 9.5, color: SUB, fontWeight: 700 }}>{x.l}</div><div style={{ fontSize: 12.5, color: TEXT, fontWeight: 1000, fontFamily: "'Sora',sans-serif" }}>{x.v}</div></div>
-          </div>
+        {[{ icon: Flame, l: "Calories", v: cal != null ? `${cal} kcal` : "--" }, { icon: Gauge, l: "Pace", v: pace }, { icon: TrendingUp, l: "Top Speed", v: maxSpd }].map(x => (
+          <div key={x.l} style={{ display: "flex", alignItems: "center", gap: 6 }}><x.icon style={{ width: 13, height: 13, color: DEEP, flexShrink: 0 }} /><div><div style={{ fontSize: 9.5, color: SUB, fontWeight: 700 }}>{x.l}</div><div style={{ fontSize: 12.5, color: TEXT, fontWeight: 1000, fontFamily: "'Sora',sans-serif" }}>{x.v}</div></div></div>
         ))}
       </div>
     </Glass>
@@ -231,7 +209,6 @@ function PermissionBanner({ permGps, permMotion, onRequestGps, onRequestMotion }
 function BodyMetricsCard({ weightInput, setWeightInput, feetInput, setFeetInput, inchInput, setInchInput, savingMetrics, onSave, hasWeight, hasHeight }) {
   const [editing, setEditing] = useState(!hasWeight || !hasHeight);
   useEffect(() => { if (hasWeight && hasHeight) setEditing(false); }, [hasWeight, hasHeight]);
-
   if (hasWeight && hasHeight && !editing) {
     return (
       <Glass style={{ padding: 14, marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -243,7 +220,6 @@ function BodyMetricsCard({ weightInput, setWeightInput, feetInput, setFeetInput,
       </Glass>
     );
   }
-
   return (
     <Glass style={{ padding: 14, marginBottom: 16, background: !hasWeight || !hasHeight ? "#FFF9EE" : "#F4FBF8", border: !hasWeight || !hasHeight ? "1px solid rgba(245,158,11,0.22)" : `1px solid ${BORDER}` }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
@@ -268,7 +244,6 @@ function BodyMetricsCard({ weightInput, setWeightInput, feetInput, setFeetInput,
   );
 }
 
-/* ═══ Google Map ═══ */
 function loadGMaps(k) {
   return new Promise((res, rej) => {
     if (!k) { rej(new Error("No key")); return; }
@@ -284,10 +259,8 @@ function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSession
   const [mapsReady, setMapsReady] = useState(false), [mapsFailed, setMapsFailed] = useState(false);
   const selSess = useMemo(() => (!selectedMapSessionId || selectedMapSessionId === "live") ? null : recentEndedSessions.find(s => s._id === selectedMapSessionId) || null, [recentEndedSessions, selectedMapSessionId]);
   const displayPts = useMemo(() => selSess?.points?.length ? selSess.points : currentPoints || [], [currentPoints, selSess]);
-
   useEffect(() => { let m = true; loadGMaps(GOOGLE_MAPS_KEY).then(() => m && setMapsReady(true)).catch(() => m && setMapsFailed(true)); return () => { m = false; }; }, []);
   useEffect(() => { if (!mapsReady || !mapRef.current || !window.google?.maps || mapInst.current) return; mapInst.current = new window.google.maps.Map(mapRef.current, { center: { lat: 27.18, lng: 78.02 }, zoom: 14, disableDefaultUI: true, zoomControl: true, styles: [{ elementType: "geometry", stylers: [{ color: "#edf5f1" }] }, { featureType: "poi", stylers: [{ visibility: "off" }] }, { featureType: "transit", stylers: [{ visibility: "off" }] }, { featureType: "road", elementType: "geometry", stylers: [{ color: "#d6e6df" }] }, { featureType: "water", elementType: "geometry", stylers: [{ color: "#d7efe6" }] }] }); }, [mapsReady]);
-
   useEffect(() => {
     if (!mapsReady || !mapInst.current || !window.google?.maps) return;
     const map = mapInst.current, maps = window.google.maps;
@@ -303,7 +276,6 @@ function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSession
     const bounds = new maps.LatLngBounds(); path.forEach(p => bounds.extend(p)); map.fitBounds(bounds, 40);
     if (path.length === 1) { map.setCenter(path[0]); map.setZoom(16); }
   }, [displayPts, mapsReady, selSess]);
-
   const tabs = (
     <div style={{ display: "flex", gap: 8, overflowX: "auto", marginTop: 10, paddingBottom: 2 }}>
       {[{ id: "live", label: "Live walk" }, ...recentEndedSessions.slice(0, 5).map((s, i) => ({ id: s._id, label: `Walk ${i + 1}` }))].map(t => (
@@ -311,9 +283,7 @@ function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSession
       ))}
     </div>
   );
-
   if (!GOOGLE_MAPS_KEY || mapsFailed) return <div><FallbackRouteMap points={displayPts} title={selSess ? "Walk Route" : "Live Route"} badge={selSess ? "History" : "Outdoor"} />{tabs}</div>;
-
   return (
     <Glass style={{ padding: 14, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
@@ -327,7 +297,7 @@ function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSession
 }
 
 /* ═══════════════════════════════════════════
-   MAIN
+   MAIN — with SIMPLE pedometer (old working approach)
    ═══════════════════════════════════════════ */
 export default function StepTracker() {
   const navigate = useNavigate();
@@ -360,33 +330,17 @@ export default function StepTracker() {
   const watchIdRef = useRef(null), timerRef = useRef(null), pointsBufferRef = useRef([]), lastPointRef = useRef(null);
   const motionEnabledRef = useRef(false), motionHandlerRef = useRef(null);
   const distanceRef = useRef(0), stepsRef = useRef(0), durationRef = useRef(0), caloriesRef = useRef(null), manualStepsRef = useRef(0);
+  const lastMotionPeakTsRef = useRef(0);
+  const lastAccMagRef = useRef(9.81);
 
-  /* Pedometer state with warmup + consecutive validation */
-  const pedoState = useRef({
-    phase: "idle",
-    lastPeakTs: 0,
-    lastMag: 9.81,
-    peakVal: 0,
-    startedAt: 0,            // when tracking started — for warmup
-    consecutiveValid: 0,      // must hit CONSECUTIVE_NEEDED before real counting
-    warmupDone: false,
-  });
-
-  /* ─── FIX: Disable iOS shake-to-undo ─── */
+  /* Disable iOS shake-to-undo */
   useEffect(() => {
-    // Disable iOS shake-to-undo popup during walking
     const meta = document.createElement("meta");
-    meta.name = "apple-mobile-web-app-capable";
-    meta.content = "yes";
+    meta.name = "apple-mobile-web-app-capable"; meta.content = "yes";
     document.head.appendChild(meta);
-
-    window.addEventListener("beforeinput", (e) => {
-      if (e.inputType === "historyUndo" || e.inputType === "historyRedo") e.preventDefault();
-    });
-
-    return () => {
-      if (meta.parentNode) meta.parentNode.removeChild(meta);
-    };
+    const handler = (e) => { if (e.inputType === "historyUndo" || e.inputType === "historyRedo") e.preventDefault(); };
+    window.addEventListener("beforeinput", handler);
+    return () => { if (meta.parentNode) meta.parentNode.removeChild(meta); window.removeEventListener("beforeinput", handler); };
   }, []);
 
   useEffect(() => {
@@ -414,7 +368,6 @@ export default function StepTracker() {
   const requestGps = useCallback(async () => {
     try { await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 10000 })); setPermGps("granted"); setPermissionError(""); } catch { setPermGps("denied"); setPermissionError("Location blocked. Enable in browser settings."); }
   }, []);
-
   const requestMotion = useCallback(async () => {
     try { if (typeof DeviceMotionEvent?.requestPermission === "function") { const r = await DeviceMotionEvent.requestPermission(); setPermMotion(r === "granted" ? "granted" : "denied"); } else setPermMotion("granted"); } catch { setPermMotion("denied"); }
   }, []);
@@ -436,66 +389,50 @@ export default function StepTracker() {
     finally { setSavingMetrics(false); }
   }, [authHeaders, feetInput, inchInput, setUser, user, weightInput]);
 
-  /* ═══ Pedometer with warmup + consecutive filter ═══ */
+  /*
+   * SIMPLE MOTION HANDLER — the old approach that actually works for detecting walking.
+   * Low-pass filter + threshold + debounce. Uses refs so no stale closures.
+   */
   const setupMotion = useCallback(() => {
     if (motionHandlerRef.current) window.removeEventListener("devicemotion", motionHandlerRef.current);
+
     const handler = (e) => {
       if (!motionEnabledRef.current) return;
-      const st = pedoState.current;
-
-      // Warmup: ignore first N seconds
-      if (!st.warmupDone) {
-        if (Date.now() - st.startedAt < WARMUP_MS) return;
-        st.warmupDone = true;
-      }
 
       const hasPure = e.acceleration && (e.acceleration.x !== null || e.acceleration.y !== null);
       const acc = hasPure ? e.acceleration : e.accelerationIncludingGravity;
       if (!acc) return;
 
-      const mag = Math.sqrt((Number(acc.x || 0)) ** 2 + (Number(acc.y || 0)) ** 2 + (Number(acc.z || 0)) ** 2);
-      const smoothed = 0.25 * mag + 0.75 * st.lastMag;
-      st.lastMag = smoothed;
+      const x = Number(acc.x || 0), y = Number(acc.y || 0), z = Number(acc.z || 0);
+      const magnitude = Math.sqrt(x * x + y * y + z * z);
 
-      const peakT = hasPure ? STEP_PEAK_PURE : STEP_PEAK_GRAVITY;
-      const valT = hasPure ? STEP_VALLEY_PURE : STEP_VALLEY_GRAVITY;
+      // Low-pass filter
+      const smoothed = 0.3 * magnitude + 0.7 * lastAccMagRef.current;
+      lastAccMagRef.current = smoothed;
+
       const now = Date.now();
+      const threshold = hasPure ? MOTION_THRESHOLD_PURE : MOTION_THRESHOLD_GRAVITY;
 
-      if (st.phase === "idle") {
-        if (smoothed > peakT) { st.phase = "peaked"; st.peakVal = smoothed; }
-      } else if (st.phase === "peaked") {
-        if (smoothed > st.peakVal) st.peakVal = smoothed;
-        if (smoothed < valT) {
-          const elapsed = now - st.lastPeakTs;
-          st.lastPeakTs = now;
-          st.phase = "idle";
-          st.peakVal = 0;
+      if (smoothed > threshold && now - lastMotionPeakTsRef.current > MOTION_DEBOUNCE_MS) {
+        lastMotionPeakTsRef.current = now;
+        manualStepsRef.current += 1;
 
-          if (elapsed > STEP_MIN_MS && elapsed < STEP_MAX_MS) {
-            st.consecutiveValid += 1;
+        const curDist = distanceRef.current;
+        const curStride = strideMRef.current;
+        const curWeight = weightKgRef.current;
 
-            // Only start counting after CONSECUTIVE_NEEDED valid cycles
-            // This filters out single random jolts
-            if (st.consecutiveValid >= CONSECUTIVE_NEEDED) {
-              // If we just passed the threshold, retroactively add the warmup steps
-              if (st.consecutiveValid === CONSECUTIVE_NEEDED) {
-                manualStepsRef.current += CONSECUTIVE_NEEDED;
-              } else {
-                manualStepsRef.current += 1;
-              }
+        const newSteps = calcSteps(curDist, manualStepsRef.current, curStride);
+        stepsRef.current = newSteps;
+        setSteps(newSteps);
 
-              const d = distanceRef.current, str = strideMRef.current, w = weightKgRef.current;
-              const ns = calcSteps(d, manualStepsRef.current, str);
-              stepsRef.current = ns; setSteps(ns);
-              if (w > 0) { const c = calcCal({ distanceMeters: d, steps: ns, weightKg: w }); caloriesRef.current = c; setCalories(c); }
-            }
-          } else {
-            // Invalid interval — reset consecutive counter
-            st.consecutiveValid = 0;
-          }
+        if (curWeight && curWeight > 0) {
+          const newCal = calcCal({ distanceMeters: curDist, steps: newSteps, weightKg: curWeight });
+          caloriesRef.current = newCal;
+          setCalories(newCal);
         }
       }
     };
+
     motionHandlerRef.current = handler;
     window.addEventListener("devicemotion", handler);
   }, []);
@@ -579,10 +516,7 @@ export default function StepTracker() {
       setRoutePoints([{ ...sp, recordedAt: new Date().toISOString(), speed: 0, heading: null, source: "gps" }]);
       lastPointRef.current = sp; manualStepsRef.current = 0;
       durationRef.current = 0; distanceRef.current = 0; stepsRef.current = 0; caloriesRef.current = hasWeight ? 0 : null;
-
-      // Reset pedometer with warmup
-      pedoState.current = { phase: "idle", lastPeakTs: 0, lastMag: 9.81, peakVal: 0, startedAt: Date.now(), consecutiveValid: 0, warmupDone: false };
-
+      lastAccMagRef.current = 9.81; lastMotionPeakTsRef.current = Date.now();
       setDurationSec(0); setDistanceMeters(0); setSteps(0); setCalories(hasWeight ? 0 : null); setPace("--");
       beginTimer(); startGps();
     } catch (e) {
@@ -592,18 +526,13 @@ export default function StepTracker() {
   }, [authHeaders, beginTimer, enableMotion, hasWeight, startGps]);
 
   const handlePause = useCallback(async () => { if (!sessionId) return; stopAll(); await flushPts(); try { await axios.patch(`${API}/api/step-tracker/sessions/${sessionId}/pause`, {}, { headers: authHeaders }); } catch {} setStatus("paused"); }, [authHeaders, flushPts, sessionId, stopAll]);
-
   const handleResume = useCallback(async () => {
     if (!sessionId) return;
     try { await axios.patch(`${API}/api/step-tracker/sessions/${sessionId}/resume`, {}, { headers: authHeaders }); } catch {}
-    // Reset warmup on resume too
-    pedoState.current.startedAt = Date.now();
-    pedoState.current.warmupDone = false;
-    pedoState.current.consecutiveValid = 0;
+    lastMotionPeakTsRef.current = Date.now();
     await enableMotion(); beginTimer(); startGps();
     setStatus("tracking"); setSelectedMapSessionId("live");
   }, [authHeaders, beginTimer, enableMotion, sessionId, startGps]);
-
   const handleEnd = useCallback(async () => {
     if (!sessionId) return; stopAll(); await flushPts();
     try { const el = routePoints.length > 0 ? { lat: routePoints[routePoints.length - 1].lat, lng: routePoints[routePoints.length - 1].lng, accuracy: routePoints[routePoints.length - 1].accuracy } : null; await axios.patch(`${API}/api/step-tracker/sessions/${sessionId}/end`, { endLocation: el, steps: stepsRef.current, distanceMeters: distanceRef.current, caloriesKcal: caloriesRef.current, durationSec: durationRef.current }, { headers: authHeaders }); } catch {}
@@ -622,7 +551,6 @@ export default function StepTracker() {
     <div style={{ minHeight: "100vh", width: "100%", maxWidth: 520, margin: "0 auto", background: `linear-gradient(180deg,${BG_TOP} 0%,${BG_MID} 48%,${BG_BOT} 100%)`, position: "relative", overflowX: "hidden", fontFamily: "'Plus Jakarta Sans',sans-serif", paddingBottom: 40 }}>
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(circle at top right, rgba(24,226,161,0.08), transparent 26%), radial-gradient(circle at bottom left, rgba(15,122,83,0.05), transparent 30%)" }} />
 
-      {/* Sticky Header */}
       <div style={{ position: "sticky", top: 0, zIndex: 10, padding: "14px 18px 16px", backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)", background: "linear-gradient(180deg, rgba(244,251,248,0.94), rgba(244,251,248,0.82))", borderBottom: "1px solid rgba(12,90,62,0.05)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
           <motion.button whileTap={{ scale: 0.92 }} onClick={() => navigate("/home")} style={{ width: 44, height: 44, borderRadius: 16, background: GLASS, border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 12px 28px rgba(16,24,40,0.04)", flexShrink: 0 }}><ArrowLeft style={{ width: 18, height: 18, color: TEXT }} /></motion.button>
@@ -632,7 +560,6 @@ export default function StepTracker() {
             <span style={{ fontSize: 10.5, fontWeight: 900, color: status === "tracking" ? DEEP : TEXT }}>{status === "tracking" ? "LIVE" : status === "paused" ? "PAUSED" : "READY"}</span>
           </div>
         </div>
-
         <Glass style={{ padding: 16, marginBottom: 14 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
             <div style={{ flex: 1 }}>
@@ -643,7 +570,6 @@ export default function StepTracker() {
             <div style={{ minWidth: 72, height: 72, borderRadius: "50%", background: `conic-gradient(${DEEP} 0 ${goalPct}%, rgba(24,226,161,0.12) ${goalPct}% 100%)`, display: "grid", placeItems: "center" }}><div style={{ width: 56, height: 56, borderRadius: "50%", background: "#fff", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 1000, color: TEXT, fontFamily: "'Sora',sans-serif" }}>{goalPct}%</div></div>
           </div>
         </Glass>
-
         <Glass style={{ padding: 14 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
             <div><div style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 1000, color: TEXT }}>Control Center</div><div style={{ fontSize: 11.5, color: SUB, fontWeight: 700, marginTop: 3 }}>Manage your walk</div></div>
@@ -667,13 +593,10 @@ export default function StepTracker() {
         </Glass>
       </div>
 
-      {/* Content */}
       <div style={{ padding: "18px 18px 0", position: "relative", zIndex: 1 }}>
         <PermissionBanner permGps={permGps} permMotion={permMotion} onRequestGps={requestGps} onRequestMotion={requestMotion} />
         <BodyMetricsCard weightInput={weightInput} setWeightInput={setWeightInput} feetInput={feetInput} setFeetInput={setFeetInput} inchInput={inchInput} setInchInput={setInchInput} savingMetrics={savingMetrics} onSave={saveMetrics} hasWeight={hasWeight} hasHeight={hasHeight} />
-
         {permissionError && <Glass style={{ padding: 14, marginBottom: 16, border: "1px solid #FECACA", background: "#FFF8F6" }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><AlertTriangle style={{ width: 16, height: 16, color: "#DC2626", flexShrink: 0 }} /><div style={{ fontSize: 12, color: "#991B1B", fontWeight: 700 }}>{permissionError}</div></div></Glass>}
-
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10, marginBottom: 18 }}>
           <StatCard icon={Footprints} label="Steps" value={steps.toLocaleString()} helper={`Source: ${liveSource}`} accent={status === "tracking"} />
           <StatCard icon={Route} label="Distance" value={`${metersToKm(distanceMeters)} km`} helper="GPS route distance" />
@@ -682,11 +605,7 @@ export default function StepTracker() {
           <StatCard icon={Clock3} label="Duration" value={formatDuration(durationSec)} helper="Active time" />
           <StatCard icon={Activity} label="Status" value={status === "idle" ? "Ready" : status === "tracking" ? "Tracking" : status === "paused" ? "Paused" : "Completed"} helper="Session state" />
         </div>
-
-        <div style={{ marginBottom: 18 }}>
-          <GoogleRouteMap currentPoints={routePoints} recentEndedSessions={endedWithPts} selectedMapSessionId={selectedMapSessionId} onSelectSession={setSelectedMapSessionId} />
-        </div>
-
+        <div style={{ marginBottom: 18 }}><GoogleRouteMap currentPoints={routePoints} recentEndedSessions={endedWithPts} selectedMapSessionId={selectedMapSessionId} onSelectSession={setSelectedMapSessionId} /></div>
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
             <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 1000, color: TEXT }}>Walk History</div>
