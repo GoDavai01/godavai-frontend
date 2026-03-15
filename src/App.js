@@ -104,8 +104,9 @@ function AppContent() {
   const hideNavbar =
     location.pathname === "/" ||
     location.pathname === "/home" ||
-    location.pathname.startsWith("/ai");
-
+    location.pathname.startsWith("/ai") ||
+    location.pathname.startsWith("/step-tracker");
+    
   React.useEffect(() => {
     const isWelcome = location.pathname === "/";
     document.documentElement.classList.toggle("gd-welcome", isWelcome);

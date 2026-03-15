@@ -15,14 +15,18 @@ import {
   Activity,
   ChevronRight,
   ShieldCheck,
+  Lock,
+  UserRound,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+const GOOGLE_MAPS_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
 
 const DEEP = "#0A5A3B";
 const MID = "#0F7A53";
+const ACCENT = "#18E2A1";
 const BG_TOP = "#F4FBF8";
 const BG_MID = "#EEF8F4";
 const BG_BOT = "#F7FAFF";
@@ -75,14 +79,16 @@ function haversineMeters(a, b) {
   return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
-function calculateEstimatedSteps(distanceMeters = 0, manualSteps = 0) {
-  const distanceBasedSteps = Math.round(Number(distanceMeters || 0) / 0.78);
+function calculateEstimatedSteps(distanceMeters = 0, manualSteps = 0, strideMeters = 0.78) {
+  const safeStride = Number(strideMeters || 0.78) > 0 ? Number(strideMeters || 0.78) : 0.78;
+  const distanceBasedSteps = Math.round(Number(distanceMeters || 0) / safeStride);
   return Math.max(Number(manualSteps || 0), distanceBasedSteps, 0);
 }
 
-function calculateCalories({ distanceMeters = 0, steps = 0, weightKg = 70 }) {
+function calculateCalories({ distanceMeters = 0, steps = 0, weightKg = null }) {
+  if (!weightKg || Number(weightKg) <= 0) return null;
   const distanceKm = Number(distanceMeters || 0) / 1000;
-  const byDistance = distanceKm * Number(weightKg || 70) * 0.75;
+  const byDistance = distanceKm * Number(weightKg) * 0.75;
   const bySteps = Number(steps || 0) * 0.04;
   return Math.round(Math.max(byDistance, bySteps, 0));
 }
@@ -96,7 +102,7 @@ function calculatePace(durationSec = 0, distanceMeters = 0) {
   return `${min}:${String(sec).padStart(2, "0")} /km`;
 }
 
-function normalizePointsForPath(points, width = 320, height = 180, pad = 14) {
+function normalizePointsForPath(points, width = 320, height = 220, pad = 16) {
   if (!points || points.length < 2) return "";
   const lats = points.map((p) => p.lat);
   const lngs = points.map((p) => p.lng);
@@ -117,7 +123,7 @@ function normalizePointsForPath(points, width = 320, height = 180, pad = 14) {
     .join(" ");
 }
 
-function MiniRouteMap({ points }) {
+function FallbackRouteMap({ points, title = "Live Route", badge = "Outdoor" }) {
   const poly = normalizePointsForPath(points);
   const hasRoute = points && points.length >= 2;
 
@@ -139,9 +145,7 @@ function MiniRouteMap({ points }) {
             <MapPinned style={{ width: 17, height: 17, color: DEEP }} />
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, fontFamily: "'Sora',sans-serif" }}>
-              Live Route
-            </div>
+            <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, fontFamily: "'Sora',sans-serif" }}>{title}</div>
             <div style={{ fontSize: 11, color: SUB, fontWeight: 700 }}>Start → path → end</div>
           </div>
         </div>
@@ -155,14 +159,14 @@ function MiniRouteMap({ points }) {
             borderRadius: 999,
           }}
         >
-          Outdoor
+          {badge}
         </div>
       </div>
 
       <div
         style={{
           width: "100%",
-          height: 190,
+          height: 260,
           borderRadius: 20,
           background:
             "radial-gradient(circle at top right, rgba(24,226,161,0.12), transparent 26%), linear-gradient(180deg,#F8FCFA 0%,#EEF8F4 100%)",
@@ -171,9 +175,9 @@ function MiniRouteMap({ points }) {
           overflow: "hidden",
         }}
       >
-        <svg width="100%" height="100%" viewBox="0 0 320 190" preserveAspectRatio="none">
+        <svg width="100%" height="100%" viewBox="0 0 320 220" preserveAspectRatio="none">
           <defs>
-            <linearGradient id="routeGradient" x1="0%" x2="100%">
+            <linearGradient id="routeGradientFallback" x1="0%" x2="100%">
               <stop offset="0%" stopColor="#0A5A3B" />
               <stop offset="100%" stopColor="#18E2A1" />
             </linearGradient>
@@ -184,7 +188,7 @@ function MiniRouteMap({ points }) {
               <polyline
                 points={poly}
                 fill="none"
-                stroke="url(#routeGradient)"
+                stroke="url(#routeGradientFallback)"
                 strokeWidth="5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -197,8 +201,8 @@ function MiniRouteMap({ points }) {
               })()}
             </>
           ) : (
-            <text x="160" y="95" textAnchor="middle" fill="#8AA39A" fontSize="13" fontWeight="700">
-              Start a walk to see your live route
+            <text x="160" y="110" textAnchor="middle" fill="#8AA39A" fontSize="13" fontWeight="700">
+              Start a walk to see your route
             </text>
           )}
         </svg>
@@ -233,7 +237,7 @@ function StatCard({ icon: Icon, label, value, helper }) {
   );
 }
 
-function SessionCard({ session }) {
+function SessionCard({ session, onOpenMap }) {
   return (
     <Glass style={{ padding: 14 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
@@ -245,17 +249,35 @@ function SessionCard({ session }) {
             {new Date(session.startedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
           </div>
         </div>
-        <div
-          style={{
-            fontSize: 10.5,
-            fontWeight: 900,
-            color: session.status === "ended" ? DEEP : "#C2410C",
-            background: session.status === "ended" ? "rgba(24,226,161,0.10)" : "#FFF7ED",
-            padding: "6px 10px",
-            borderRadius: 999,
-          }}
-        >
-          {session.status === "ended" ? "Completed" : "Active"}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            onClick={() => onOpenMap?.(session)}
+            style={{
+              border: "none",
+              background: "rgba(24,226,161,0.10)",
+              color: DEEP,
+              borderRadius: 999,
+              padding: "8px 12px",
+              fontSize: 10.5,
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            View route
+          </button>
+          <div
+            style={{
+              fontSize: 10.5,
+              fontWeight: 900,
+              color: session.status === "ended" ? DEEP : "#C2410C",
+              background: session.status === "ended" ? "rgba(24,226,161,0.10)" : "#FFF7ED",
+              padding: "6px 10px",
+              borderRadius: 999,
+            }}
+          >
+            {session.status === "ended" ? "Completed" : "Active"}
+          </div>
         </div>
       </div>
 
@@ -275,9 +297,363 @@ function SessionCard({ session }) {
         <div>
           <div style={{ fontSize: 10.5, color: SUB, fontWeight: 700 }}>Calories</div>
           <div style={{ fontSize: 13.5, color: TEXT, fontWeight: 1000, fontFamily: "'Sora',sans-serif" }}>
-            {Math.round(session.stats?.caloriesKcal || 0)} kcal
+            {session.stats?.caloriesKcal != null ? Math.round(session.stats.caloriesKcal) : "--"} kcal
           </div>
         </div>
+      </div>
+    </Glass>
+  );
+}
+
+function loadGoogleMapsScript(apiKey) {
+  return new Promise((resolve, reject) => {
+    if (!apiKey) {
+      reject(new Error("Missing Google Maps API key"));
+      return;
+    }
+
+    if (window.google && window.google.maps) {
+      resolve(window.google.maps);
+      return;
+    }
+
+    const existing = document.getElementById("godavaii-google-maps-script");
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.google.maps));
+      existing.addEventListener("error", reject);
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = "godavaii-google-maps-script";
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve(window.google.maps);
+    script.onerror = reject;
+    document.body.appendChild(script);
+  });
+}
+
+function getBoundsForPoints(maps, points) {
+  const bounds = new maps.LatLngBounds();
+  points.forEach((p) => bounds.extend({ lat: Number(p.lat), lng: Number(p.lng) }));
+  return bounds;
+}
+
+function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSessionId, onSelectSession }) {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const livePolylineRef = useRef(null);
+  const selectedPolylineRef = useRef(null);
+  const currentMarkerRef = useRef(null);
+  const startMarkerRef = useRef(null);
+  const endMarkerRef = useRef(null);
+  const [mapsReady, setMapsReady] = useState(false);
+  const [mapsFailed, setMapsFailed] = useState(false);
+
+  const selectedSession = useMemo(() => {
+    if (!selectedMapSessionId || selectedMapSessionId === "live") return null;
+    return recentEndedSessions.find((s) => s._id === selectedMapSessionId) || null;
+  }, [recentEndedSessions, selectedMapSessionId]);
+
+  const displayedPoints = useMemo(() => {
+    if (selectedSession && Array.isArray(selectedSession.points) && selectedSession.points.length) {
+      return selectedSession.points;
+    }
+    return currentPoints || [];
+  }, [currentPoints, selectedSession]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    loadGoogleMapsScript(GOOGLE_MAPS_KEY)
+      .then(() => {
+        if (!mounted) return;
+        setMapsReady(true);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setMapsFailed(true);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mapsReady || !mapRef.current || !window.google?.maps || mapInstanceRef.current) return;
+
+    const map = new window.google.maps.Map(mapRef.current, {
+      center: { lat: 28.6139, lng: 77.209 },
+      zoom: 14,
+      disableDefaultUI: true,
+      zoomControl: true,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      styles: [
+        { elementType: "geometry", stylers: [{ color: "#edf5f1" }] },
+        { elementType: "labels.text.fill", stylers: [{ color: "#31594b" }] },
+        { elementType: "labels.text.stroke", stylers: [{ color: "#f3faf7" }] },
+        { featureType: "poi", stylers: [{ visibility: "off" }] },
+        { featureType: "transit", stylers: [{ visibility: "off" }] },
+        { featureType: "road", elementType: "geometry", stylers: [{ color: "#d6e6df" }] },
+        { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#c7ddd4" }] },
+        { featureType: "water", elementType: "geometry", stylers: [{ color: "#d7efe6" }] },
+      ],
+    });
+
+    mapInstanceRef.current = map;
+  }, [mapsReady]);
+
+  useEffect(() => {
+    if (!mapsReady || !mapInstanceRef.current || !window.google?.maps) return;
+    const map = mapInstanceRef.current;
+    const maps = window.google.maps;
+
+    if (livePolylineRef.current) {
+      livePolylineRef.current.setMap(null);
+      livePolylineRef.current = null;
+    }
+    if (selectedPolylineRef.current) {
+      selectedPolylineRef.current.setMap(null);
+      selectedPolylineRef.current = null;
+    }
+    if (currentMarkerRef.current) {
+      currentMarkerRef.current.setMap(null);
+      currentMarkerRef.current = null;
+    }
+    if (startMarkerRef.current) {
+      startMarkerRef.current.setMap(null);
+      startMarkerRef.current = null;
+    }
+    if (endMarkerRef.current) {
+      endMarkerRef.current.setMap(null);
+      endMarkerRef.current = null;
+    }
+
+    if (!displayedPoints || displayedPoints.length === 0) return;
+
+    const path = displayedPoints.map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) }));
+
+    const polyline = new maps.Polyline({
+      path,
+      geodesic: true,
+      strokeColor: selectedSession ? "#0F7A53" : "#0A5A3B",
+      strokeOpacity: 0.95,
+      strokeWeight: 5,
+      map,
+    });
+
+    if (selectedSession) selectedPolylineRef.current = polyline;
+    else livePolylineRef.current = polyline;
+
+    const first = path[0];
+    const last = path[path.length - 1];
+
+    startMarkerRef.current = new maps.Marker({
+      position: first,
+      map,
+      title: "Start",
+      icon: {
+        path: maps.SymbolPath.CIRCLE,
+        scale: 6,
+        fillColor: "#0A5A3B",
+        fillOpacity: 1,
+        strokeColor: "#ffffff",
+        strokeWeight: 2,
+      },
+    });
+
+    endMarkerRef.current = new maps.Marker({
+      position: last,
+      map,
+      title: "End",
+      icon: {
+        path: maps.SymbolPath.CIRCLE,
+        scale: 7,
+        fillColor: "#18E2A1",
+        fillOpacity: 1,
+        strokeColor: "#0A5A3B",
+        strokeWeight: 2,
+      },
+    });
+
+    if (!selectedSession) {
+      currentMarkerRef.current = new maps.Marker({
+        position: last,
+        map,
+        title: "Current",
+        icon: {
+          path: maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: "#18E2A1",
+          fillOpacity: 1,
+          strokeColor: "#0A5A3B",
+          strokeWeight: 3,
+        },
+      });
+    }
+
+    const bounds = getBoundsForPoints(maps, path);
+    map.fitBounds(bounds, 40);
+
+    if (path.length === 1) {
+      map.setCenter(path[0]);
+      map.setZoom(16);
+    }
+  }, [displayedPoints, mapsReady, selectedSession]);
+
+  if (!GOOGLE_MAPS_KEY || mapsFailed) {
+    return (
+      <div>
+        <FallbackRouteMap
+          points={displayedPoints}
+          title={selectedSession ? "Walk Route Replay" : "Live Route"}
+          badge={selectedSession ? "History" : "Outdoor"}
+        />
+
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", marginTop: 10, paddingBottom: 2 }}>
+          <button
+            onClick={() => onSelectSession("live")}
+            style={{
+              border: "none",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              borderRadius: 999,
+              padding: "9px 14px",
+              fontSize: 11.5,
+              fontWeight: 900,
+              background: selectedMapSessionId === "live" ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff",
+              color: selectedMapSessionId === "live" ? "#fff" : TEXT,
+              boxShadow: selectedMapSessionId === "live" ? "0 8px 20px rgba(10,90,59,0.16)" : "0 2px 10px rgba(0,0,0,0.04)",
+              border: selectedMapSessionId === "live" ? "none" : `1px solid ${BORDER}`,
+            }}
+          >
+            Live walk
+          </button>
+
+          {recentEndedSessions.slice(0, 5).map((s, idx) => (
+            <button
+              key={s._id}
+              onClick={() => onSelectSession(s._id)}
+              style={{
+                border: "none",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                borderRadius: 999,
+                padding: "9px 14px",
+                fontSize: 11.5,
+                fontWeight: 900,
+                background: selectedMapSessionId === s._id ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff",
+                color: selectedMapSessionId === s._id ? "#fff" : TEXT,
+                boxShadow: selectedMapSessionId === s._id ? "0 8px 20px rgba(10,90,59,0.16)" : "0 2px 10px rgba(0,0,0,0.04)",
+                border: selectedMapSessionId === s._id ? "none" : `1px solid ${BORDER}`,
+              }}
+            >
+              Walk {idx + 1}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Glass style={{ padding: 14, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 14,
+              background: "rgba(24,226,161,0.12)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <MapPinned style={{ width: 17, height: 17, color: DEEP }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, fontFamily: "'Sora',sans-serif" }}>
+              {selectedSession ? "Walk Route Replay" : "Live Route"}
+            </div>
+            <div style={{ fontSize: 11, color: SUB, fontWeight: 700 }}>
+              {selectedSession ? "Last 5 walks route history" : "Exact moving location path"}
+            </div>
+          </div>
+        </div>
+        <div
+          style={{
+            fontSize: 10.5,
+            fontWeight: 900,
+            color: DEEP,
+            background: "rgba(24,226,161,0.10)",
+            padding: "6px 10px",
+            borderRadius: 999,
+          }}
+        >
+          Google style
+        </div>
+      </div>
+
+      <div
+        ref={mapRef}
+        style={{
+          width: "100%",
+          height: 320,
+          borderRadius: 20,
+          overflow: "hidden",
+          border: `1px solid ${BORDER}`,
+          background: "#eef6f2",
+        }}
+      />
+
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", marginTop: 10, paddingBottom: 2 }}>
+        <button
+          onClick={() => onSelectSession("live")}
+          style={{
+            border: "none",
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+            borderRadius: 999,
+            padding: "9px 14px",
+            fontSize: 11.5,
+            fontWeight: 900,
+            background: selectedMapSessionId === "live" ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff",
+            color: selectedMapSessionId === "live" ? "#fff" : TEXT,
+            boxShadow: selectedMapSessionId === "live" ? "0 8px 20px rgba(10,90,59,0.16)" : "0 2px 10px rgba(0,0,0,0.04)",
+            border: selectedMapSessionId === "live" ? "none" : `1px solid ${BORDER}`,
+          }}
+        >
+          Live walk
+        </button>
+
+        {recentEndedSessions.slice(0, 5).map((s, idx) => (
+          <button
+            key={s._id}
+            onClick={() => onSelectSession(s._id)}
+            style={{
+              border: "none",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              borderRadius: 999,
+              padding: "9px 14px",
+              fontSize: 11.5,
+              fontWeight: 900,
+              background: selectedMapSessionId === s._id ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff",
+              color: selectedMapSessionId === s._id ? "#fff" : TEXT,
+              boxShadow: selectedMapSessionId === s._id ? "0 8px 20px rgba(10,90,59,0.16)" : "0 2px 10px rgba(0,0,0,0.04)",
+              border: selectedMapSessionId === s._id ? "none" : `1px solid ${BORDER}`,
+            }}
+          >
+            Walk {idx + 1}
+          </button>
+        ))}
       </div>
     </Glass>
   );
@@ -293,7 +669,7 @@ export default function StepTracker() {
   const [durationSec, setDurationSec] = useState(0);
   const [distanceMeters, setDistanceMeters] = useState(0);
   const [steps, setSteps] = useState(0);
-  const [calories, setCalories] = useState(0);
+  const [calories, setCalories] = useState(null);
   const [pace, setPace] = useState("--");
   const [todaySummary, setTodaySummary] = useState(null);
   const [recentSessions, setRecentSessions] = useState([]);
@@ -302,6 +678,7 @@ export default function StepTracker() {
   const [syncing, setSyncing] = useState(false);
   const [permissionError, setPermissionError] = useState("");
   const [liveSource, setLiveSource] = useState("gps+estimate");
+  const [selectedMapSessionId, setSelectedMapSessionId] = useState("live");
 
   const watchIdRef = useRef(null);
   const timerRef = useRef(null);
@@ -311,7 +688,13 @@ export default function StepTracker() {
   const motionEnabledRef = useRef(false);
   const lastMotionPeakTsRef = useRef(0);
 
-  const weightKg = Number(user?.weightKg || user?.weight || 70);
+  const weightKgRaw = user?.weightKg || user?.weight || null;
+  const heightCmRaw = user?.heightCm || user?.height || null;
+  const weightKg = weightKgRaw ? Number(weightKgRaw) : null;
+  const heightCm = heightCmRaw ? Number(heightCmRaw) : null;
+  const hasWeight = !!weightKg && Number(weightKg) > 0;
+  const hasHeight = !!heightCm && Number(heightCm) > 0;
+  const strideMeters = hasHeight ? Math.max(0.5, Number(heightCm) * 0.00415) : 0.78;
 
   const authHeaders = useMemo(() => {
     const token = localStorage.getItem("token");
@@ -335,11 +718,11 @@ export default function StepTracker() {
         lastMotionPeakTsRef.current = now;
         manualMotionStepsRef.current += 1;
         setSteps((prev) =>
-          Math.max(prev + 1, calculateEstimatedSteps(distanceMeters, manualMotionStepsRef.current))
+          Math.max(prev + 1, calculateEstimatedSteps(distanceMeters, manualMotionStepsRef.current, strideMeters))
         );
       }
     },
-    [distanceMeters]
+    [distanceMeters, strideMeters]
   );
 
   const refreshHistory = useCallback(async () => {
@@ -349,8 +732,11 @@ export default function StepTracker() {
         axios.get(`${API}/api/step-tracker/summary/today`, { headers: authHeaders }),
         axios.get(`${API}/api/step-tracker/sessions`, { headers: authHeaders }),
       ]);
+
       setTodaySummary(summaryRes.data || null);
-      setRecentSessions(Array.isArray(sessionsRes.data?.sessions) ? sessionsRes.data.sessions : []);
+
+      const sessions = Array.isArray(sessionsRes.data?.sessions) ? sessionsRes.data.sessions : [];
+      setRecentSessions(sessions);
     } catch {
       setTodaySummary(null);
       setRecentSessions([]);
@@ -405,13 +791,13 @@ export default function StepTracker() {
 
   const recomputeLiveMetrics = useCallback(
     (nextDistance, explicitSteps = null) => {
-      const computedSteps = calculateEstimatedSteps(nextDistance, explicitSteps ?? manualMotionStepsRef.current);
+      const computedSteps = calculateEstimatedSteps(nextDistance, explicitSteps ?? manualMotionStepsRef.current, strideMeters);
       const nextCalories = calculateCalories({ distanceMeters: nextDistance, steps: computedSteps, weightKg });
       setSteps(computedSteps);
       setCalories(nextCalories);
       setPace(calculatePace(durationSec, nextDistance));
     },
-    [durationSec, weightKg]
+    [durationSec, strideMeters, weightKg]
   );
 
   const enableMotionTracking = useCallback(async () => {
@@ -494,8 +880,7 @@ export default function StepTracker() {
 
     try {
       const motionOk = await enableMotionTracking();
-      if (motionOk) setLiveSource("gps+motion");
-      else setLiveSource("gps+estimate");
+      setLiveSource(motionOk ? "gps+motion" : "gps+estimate");
 
       const current = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -526,6 +911,7 @@ export default function StepTracker() {
       const id = res.data?.session?._id;
       setSessionId(id);
       setStatus("tracking");
+      setSelectedMapSessionId("live");
       setRoutePoints([
         {
           ...startPoint,
@@ -540,7 +926,7 @@ export default function StepTracker() {
       setDurationSec(0);
       setDistanceMeters(0);
       setSteps(0);
-      setCalories(0);
+      setCalories(hasWeight ? 0 : null);
 
       beginTimer();
       startGpsWatch();
@@ -549,7 +935,7 @@ export default function StepTracker() {
     } finally {
       setStarting(false);
     }
-  }, [authHeaders, beginTimer, enableMotionTracking, startGpsWatch]);
+  }, [authHeaders, beginTimer, enableMotionTracking, hasWeight, startGpsWatch]);
 
   const handlePause = useCallback(async () => {
     if (!sessionId) return;
@@ -582,6 +968,7 @@ export default function StepTracker() {
     beginTimer();
     startGpsWatch();
     setStatus("tracking");
+    setSelectedMapSessionId("live");
   }, [authHeaders, beginTimer, enableMotionTracking, sessionId, startGpsWatch]);
 
   const handleEnd = useCallback(async () => {
@@ -644,11 +1031,19 @@ export default function StepTracker() {
     return () => clearInterval(t);
   }, [flushPoints, sessionId, status]);
 
+  const endedSessionsWithPoints = useMemo(() => {
+    return recentSessions
+      .filter((s) => s.status === "ended" && Array.isArray(s.points) && s.points.length > 1)
+      .slice(0, 5);
+  }, [recentSessions]);
+
   const todaySteps = Number(todaySummary?.steps || 0) + (status === "tracking" || status === "paused" ? steps : 0);
   const todayDistance =
     Number(todaySummary?.distanceMeters || 0) + (status === "tracking" || status === "paused" ? distanceMeters : 0);
-  const todayCalories =
-    Number(todaySummary?.caloriesKcal || 0) + (status === "tracking" || status === "paused" ? calories : 0);
+  const todayCaloriesBase = Number(todaySummary?.caloriesKcal || 0);
+  const todayCaloriesLive = status === "tracking" || status === "paused" ? Number(calories || 0) : 0;
+  const todayCalories = hasWeight ? todayCaloriesBase + todayCaloriesLive : null;
+
   const stepGoal = 10000;
   const goalPct = Math.min(100, Math.round((todaySteps / stepGoal) * 100));
 
@@ -663,7 +1058,7 @@ export default function StepTracker() {
         position: "relative",
         overflowX: "hidden",
         fontFamily: "'Plus Jakarta Sans',sans-serif",
-        paddingBottom: 120,
+        paddingBottom: 40,
       }}
     >
       <div
@@ -714,7 +1109,7 @@ export default function StepTracker() {
               Step Tracker
             </div>
             <div style={{ fontSize: 12, color: SUB, fontWeight: 700, marginTop: 4 }}>
-              Premium outdoor walk tracking for GoDavaii Health OS
+              Premium outdoor walking tracker for GoDavaii Health OS
             </div>
           </div>
 
@@ -742,9 +1137,10 @@ export default function StepTracker() {
                 {todaySteps.toLocaleString()} / {stepGoal.toLocaleString()}
               </div>
               <div style={{ fontSize: 11.5, color: "#82938D", fontWeight: 700 }}>
-                Distance {metersToKm(todayDistance)} km · {Math.round(todayCalories)} kcal
+                Distance {metersToKm(todayDistance)} km · {hasWeight ? `${Math.round(todayCalories || 0)} kcal` : "weight needed for kcal"}
               </div>
             </div>
+
             <div
               style={{
                 minWidth: 72,
@@ -777,6 +1173,80 @@ export default function StepTracker() {
       </div>
 
       <div style={{ padding: "18px 18px 0", position: "relative", zIndex: 1 }}>
+        {!hasWeight && (
+          <Glass style={{ padding: 14, marginBottom: 16, border: "1px solid rgba(245,158,11,0.22)", background: "#FFF9EE" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 14,
+                  background: "rgba(245,158,11,0.10)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Lock style={{ width: 16, height: 16, color: "#B45309" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 900, color: "#92400E", marginBottom: 4 }}>
+                  Calories locked until weight is saved
+                </div>
+                <div style={{ fontSize: 11.5, color: "#A16207", fontWeight: 700, lineHeight: 1.5 }}>
+                  Main fake number nahi dikhara. Weight save karo profile me, tabhi calories properly calculate hongi.
+                </div>
+                <button
+                  onClick={() => navigate("/profile")}
+                  style={{
+                    marginTop: 10,
+                    border: "none",
+                    cursor: "pointer",
+                    background: "#fff",
+                    color: "#92400E",
+                    borderRadius: 999,
+                    padding: "9px 14px",
+                    fontSize: 11.5,
+                    fontWeight: 900,
+                  }}
+                >
+                  Open profile
+                </button>
+              </div>
+            </div>
+          </Glass>
+        )}
+
+        {!hasHeight && (
+          <Glass style={{ padding: 14, marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 14,
+                  background: "rgba(24,226,161,0.10)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <UserRound style={{ width: 16, height: 16, color: DEEP }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, marginBottom: 4 }}>
+                  Height missing
+                </div>
+                <div style={{ fontSize: 11.5, color: SUB, fontWeight: 700, lineHeight: 1.5 }}>
+                  Steps abhi GPS + default stride estimate pe chal rahe hain. Height save karoge toh stride aur better ho jayega.
+                </div>
+              </div>
+            </div>
+          </Glass>
+        )}
+
         {permissionError ? (
           <Glass style={{ padding: 14, marginBottom: 16, border: "1px solid #FECACA", background: "#FFF8F6" }}>
             <div style={{ fontSize: 13, fontWeight: 900, color: "#991B1B", marginBottom: 4 }}>Permission issue</div>
@@ -784,30 +1254,12 @@ export default function StepTracker() {
           </Glass>
         ) : null}
 
-        <div style={{ marginBottom: 18 }}>
-          <MiniRouteMap points={routePoints} />
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10, marginBottom: 18 }}>
-          <StatCard icon={Footprints} label="Steps" value={steps.toLocaleString()} helper={`Source: ${liveSource}`} />
-          <StatCard icon={Route} label="Distance" value={`${metersToKm(distanceMeters)} km`} helper="Live outdoor route distance" />
-          <StatCard icon={Flame} label="Calories" value={`${Math.round(calories)} kcal`} helper={`Based on ${weightKg} kg estimate`} />
-          <StatCard icon={Gauge} label="Pace" value={pace} helper="Average pace for current session" />
-          <StatCard icon={Clock3} label="Duration" value={formatDuration(durationSec)} helper="Walk session timer" />
-          <StatCard
-            icon={Activity}
-            label="Status"
-            value={status === "idle" ? "Ready" : status === "tracking" ? "Tracking" : status === "paused" ? "Paused" : "Completed"}
-            helper="Live session mode"
-          />
-        </div>
-
         <Glass style={{ padding: 14, marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
             <div>
               <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 1000, color: TEXT }}>Control Center</div>
               <div style={{ fontSize: 11.5, color: SUB, fontWeight: 700, marginTop: 3 }}>
-                Start, pause, resume, and end your premium walking session
+                Start, pause, resume and end your walk manually
               </div>
             </div>
             {syncing ? (
@@ -897,6 +1349,53 @@ export default function StepTracker() {
           </div>
         </Glass>
 
+        <Glass style={{ padding: 14, marginBottom: 18, background: "linear-gradient(135deg, rgba(10,90,59,0.96), rgba(15,122,83,0.96))" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 15,
+                background: "rgba(255,255,255,0.12)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <ShieldCheck style={{ width: 17, height: 17, color: "#C9FFEB" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 900, color: "#fff", marginBottom: 4 }}>
+                Reality check
+              </div>
+              <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.76)", fontWeight: 700, lineHeight: 1.55 }}>
+                Web/app me tracker <strong>khud se silently auto-start</strong> nahi ho sakta without user action because permissions/background restrictions.
+                True <strong>pedometer sync</strong> ke liye native Android/iOS me later <strong>Health Connect / HealthKit</strong> integration chahiye.
+              </div>
+            </div>
+          </div>
+        </Glass>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10, marginBottom: 18 }}>
+          <StatCard icon={Footprints} label="Steps" value={steps.toLocaleString()} helper={`Source: ${liveSource}`} />
+          <StatCard icon={Route} label="Distance" value={`${metersToKm(distanceMeters)} km`} helper="Live outdoor route distance" />
+          <StatCard
+            icon={Flame}
+            label="Calories"
+            value={hasWeight ? `${Math.round(calories || 0)} kcal` : "--"}
+            helper={hasWeight ? `Based on ${weightKg} kg` : "Add weight in profile"}
+          />
+          <StatCard icon={Gauge} label="Pace" value={pace} helper="Average pace for current session" />
+          <StatCard icon={Clock3} label="Duration" value={formatDuration(durationSec)} helper="Walk session timer" />
+          <StatCard
+            icon={Activity}
+            label="Status"
+            value={status === "idle" ? "Ready" : status === "tracking" ? "Tracking" : status === "paused" ? "Paused" : "Completed"}
+            helper="Live session mode"
+          />
+        </div>
+
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
             <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 1000, color: TEXT }}>
@@ -916,8 +1415,17 @@ export default function StepTracker() {
             </Glass>
           ) : recentSessions.length ? (
             <div style={{ display: "grid", gap: 10 }}>
-              {recentSessions.map((s) => (
-                <SessionCard key={s._id} session={s} />
+              {recentSessions.slice(0, 5).map((s) => (
+                <SessionCard
+                  key={s._id}
+                  session={s}
+                  onOpenMap={(session) => {
+                    if (session?.status === "ended" && Array.isArray(session.points) && session.points.length > 1) {
+                      setSelectedMapSessionId(session._id);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }
+                  }}
+                />
               ))}
             </div>
           ) : (
@@ -928,6 +1436,15 @@ export default function StepTracker() {
               </div>
             </Glass>
           )}
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <GoogleRouteMap
+            currentPoints={routePoints}
+            recentEndedSessions={endedSessionsWithPoints}
+            selectedMapSessionId={selectedMapSessionId}
+            onSelectSession={setSelectedMapSessionId}
+          />
         </div>
 
         <Glass style={{ padding: 14, marginBottom: 32 }}>
@@ -949,8 +1466,8 @@ export default function StepTracker() {
             <div>
               <div style={{ fontSize: 13, fontWeight: 900, color: TEXT }}>Launch-ready note</div>
               <div style={{ fontSize: 11.5, color: SUB, fontWeight: 700, lineHeight: 1.5 }}>
-                GPS route, duration, distance, estimated steps, and calories are fully supported here. On native Android/iOS later,
-                you can enhance this same product with Health Connect / HealthKit pedometer sync.
+                Live GPS route, exact start/end path, last 5 walk replays, duration, pace, distance, and step estimation are working here.
+                Native pedometer sync later separate integration se aayega.
               </div>
             </div>
           </div>
