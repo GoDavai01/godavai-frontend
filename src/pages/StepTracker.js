@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   ArrowLeft,
   Footprints,
@@ -13,7 +13,6 @@ import {
   Route,
   Clock3,
   Activity,
-  ShieldCheck,
   Ruler,
   Weight,
   MapPin,
