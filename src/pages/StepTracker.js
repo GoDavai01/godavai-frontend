@@ -22,6 +22,8 @@ import {
   ChevronUp,
   Pencil,
   Navigation,
+  Timer,
+  TrendingUp,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -40,37 +42,29 @@ const BORDER = "rgba(12,90,62,0.08)";
 const TEXT = "#10231A";
 const SUB = "#6A7A73";
 
-/* ───────── GPS accuracy threshold (meters) ───────── */
 const MAX_ACCURACY_METERS = 30;
 const MIN_DISTANCE_DELTA = 2.0;
 const MAX_DISTANCE_DELTA = 150;
 
-/* ──────── Proper pedometer: peak-valley detection ──────── */
-const STEP_PEAK_THRESHOLD_GRAVITY = 11.2;
-const STEP_VALLEY_THRESHOLD_GRAVITY = 9.2;
-const STEP_PEAK_THRESHOLD_PURE = 2.2;
-const STEP_VALLEY_THRESHOLD_PURE = 0.8;
-const STEP_MIN_INTERVAL_MS = 250;
-const STEP_MAX_INTERVAL_MS = 2000;
+/* ── Pedometer tuning ── */
+const STEP_PEAK_GRAVITY = 11.4;    // raised slightly from 11.2
+const STEP_VALLEY_GRAVITY = 9.0;
+const STEP_PEAK_PURE = 2.5;        // raised from 2.2
+const STEP_VALLEY_PURE = 0.6;
+const STEP_MIN_MS = 280;           // ~214 steps/min max (fast run)
+const STEP_MAX_MS = 2000;
+const WARMUP_MS = 3000;            // ignore first 3s of motion after start
+const CONSECUTIVE_NEEDED = 3;      // need 3 valid cycles before we start counting
 
 function Glass({ children, style, ...rest }) {
-  return (
-    <div
-      style={{
-        background: GLASS, border: `1px solid ${BORDER}`, borderRadius: 24,
-        boxShadow: "0 16px 34px rgba(16,24,40,0.05)",
-        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", ...style,
-      }}
-      {...rest}
-    >{children}</div>
-  );
+  return (<div style={{ background: GLASS, border: `1px solid ${BORDER}`, borderRadius: 24, boxShadow: "0 16px 34px rgba(16,24,40,0.05)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", ...style }} {...rest}>{children}</div>);
 }
 
-function formatDuration(totalSec = 0) {
-  const sec = Math.max(0, Math.floor(totalSec));
-  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-  if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+function formatDuration(t = 0) {
+  const s = Math.max(0, Math.floor(t));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+  return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 function metersToKm(m = 0) { return (Number(m || 0) / 1000).toFixed(2); }
 
@@ -82,42 +76,36 @@ function haversineMeters(a, b) {
   return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
-function calculateEstimatedSteps(dist = 0, manual = 0, stride = 0.78) {
-  const s = Number(stride || 0.78) > 0 ? Number(stride || 0.78) : 0.78;
+function calcSteps(dist = 0, manual = 0, stride = 0.78) {
+  const s = Number(stride || 0.78) > 0 ? Number(stride) : 0.78;
   return Math.max(Number(manual || 0), Math.round(Number(dist || 0) / s), 0);
 }
 
-function calculateCalories({ distanceMeters = 0, steps = 0, weightKg = null }) {
+function calcCal({ distanceMeters = 0, steps = 0, weightKg = null }) {
   if (!weightKg || Number(weightKg) <= 0) return null;
   const km = Number(distanceMeters || 0) / 1000;
   return Math.round(Math.max(km * Number(weightKg) * 0.75, Number(steps || 0) * 0.04, 0));
 }
 
-function calculatePace(dur = 0, dist = 0) {
+function calcPace(dur = 0, dist = 0) {
   const km = Number(dist || 0) / 1000;
   if (!km || km <= 0) return "--";
   const mpk = dur / 60 / km, min = Math.floor(mpk), sec = Math.round((mpk - min) * 60);
   return `${min}:${String(sec).padStart(2, "0")} /km`;
 }
 
-function normalizePointsForPath(points, w = 320, h = 220, pad = 16) {
-  if (!points || points.length < 2) return "";
-  const lats = points.map((p) => p.lat), lngs = points.map((p) => p.lng);
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
-  const latR = maxLat - minLat || 0.0001, lngR = maxLng - minLng || 0.0001;
-  return points.map((p) => `${pad + ((p.lng - minLng) / lngR) * (w - pad * 2)},${h - pad - ((p.lat - minLat) / latR) * (h - pad * 2)}`).join(" ");
+function normPtsPath(pts, w = 320, h = 220, pad = 16) {
+  if (!pts || pts.length < 2) return "";
+  const lats = pts.map(p => p.lat), lngs = pts.map(p => p.lng);
+  const mnLat = Math.min(...lats), mxLat = Math.max(...lats), mnLng = Math.min(...lngs), mxLng = Math.max(...lngs);
+  const lR = mxLat - mnLat || 0.0001, gR = mxLng - mnLng || 0.0001;
+  return pts.map(p => `${pad + ((p.lng - mnLng) / gR) * (w - pad * 2)},${h - pad - ((p.lat - mnLat) / lR) * (h - pad * 2)}`).join(" ");
 }
 
-function cmToFeetInches(cm) {
-  const c = Number(cm || 0); if (!c || c <= 0) return { feet: "", inches: "" };
-  const tot = c / 2.54, f = Math.floor(tot / 12), i = Math.round(tot - f * 12);
-  if (i === 12) return { feet: String(f + 1), inches: "0" };
-  return { feet: String(f), inches: String(i) };
-}
+function cmToFtIn(cm) { const c = Number(cm || 0); if (!c || c <= 0) return { feet: "", inches: "" }; const tot = c / 2.54, f = Math.floor(tot / 12), i = Math.round(tot - f * 12); if (i === 12) return { feet: String(f + 1), inches: "0" }; return { feet: String(f), inches: String(i) }; }
+function ftInToCm(f, i) { const tot = Number(f || 0) * 12 + Number(i || 0); return tot <= 0 ? null : Math.round(tot * 2.54); }
 
-function feetInchesToCm(f, i) { const tot = Number(f || 0) * 12 + Number(i || 0); return tot <= 0 ? null : Math.round(tot * 2.54); }
-
-function extractAnyToken(t) {
+function extractToken(t) {
   if (t) return t;
   const c = [localStorage.getItem("token"), localStorage.getItem("authToken"), localStorage.getItem("accessToken"), localStorage.getItem("userToken")].filter(Boolean);
   if (c.length) return c[0];
@@ -126,11 +114,10 @@ function extractAnyToken(t) {
   return null;
 }
 
-/* ═══════════ SUB-COMPONENTS ═══════════ */
+/* ═══ Sub-components ═══ */
 
 function FallbackRouteMap({ points, title = "Live Route", badge = "Outdoor" }) {
-  const poly = normalizePointsForPath(points);
-  const hasRoute = points && points.length >= 2;
+  const poly = normPtsPath(points); const hasR = points && points.length >= 2;
   return (
     <Glass style={{ padding: 14, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -140,10 +127,10 @@ function FallbackRouteMap({ points, title = "Live Route", badge = "Outdoor" }) {
         </div>
         <div style={{ fontSize: 10.5, fontWeight: 900, color: DEEP, background: "rgba(24,226,161,0.10)", padding: "6px 10px", borderRadius: 999 }}>{badge}</div>
       </div>
-      <div style={{ width: "100%", height: 260, borderRadius: 20, background: "linear-gradient(180deg,#F8FCFA 0%,#EEF8F4 100%)", border: `1px solid ${BORDER}`, overflow: "hidden" }}>
+      <div style={{ width: "100%", height: 260, borderRadius: 20, background: "linear-gradient(180deg,#F8FCFA,#EEF8F4)", border: `1px solid ${BORDER}`, overflow: "hidden" }}>
         <svg width="100%" height="100%" viewBox="0 0 320 220" preserveAspectRatio="none">
           <defs><linearGradient id="rGF" x1="0%" x2="100%"><stop offset="0%" stopColor="#0A5A3B" /><stop offset="100%" stopColor="#18E2A1" /></linearGradient></defs>
-          {hasRoute ? (<><polyline points={poly} fill="none" stroke="url(#rGF)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" opacity="0.95" /><circle cx={poly.split(" ")[0].split(",")[0]} cy={poly.split(" ")[0].split(",")[1]} r="6" fill="#0A5A3B" />{(() => { const l = poly.split(" ").slice(-1)[0].split(","); return <circle cx={l[0]} cy={l[1]} r="7" fill="#18E2A1" stroke="#0A5A3B" strokeWidth="2" />; })()}</>) : (<text x="160" y="110" textAnchor="middle" fill="#8AA39A" fontSize="13" fontWeight="700">Start a walk to see your route</text>)}
+          {hasR ? (<><polyline points={poly} fill="none" stroke="url(#rGF)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" opacity="0.95" /><circle cx={poly.split(" ")[0].split(",")[0]} cy={poly.split(" ")[0].split(",")[1]} r="6" fill="#0A5A3B" />{(() => { const l = poly.split(" ").slice(-1)[0].split(","); return <circle cx={l[0]} cy={l[1]} r="7" fill="#18E2A1" stroke="#0A5A3B" strokeWidth="2" />; })()}</>) : (<text x="160" y="110" textAnchor="middle" fill="#8AA39A" fontSize="13" fontWeight="700">Start a walk to see your route</text>)}
         </svg>
       </div>
     </Glass>
@@ -153,9 +140,7 @@ function FallbackRouteMap({ points, title = "Live Route", badge = "Outdoor" }) {
 function StatCard({ icon: Icon, label, value, helper, accent }) {
   return (
     <Glass style={{ padding: 14, minHeight: 118 }}>
-      <div style={{ width: 40, height: 40, borderRadius: 15, background: accent ? "rgba(24,226,161,0.18)" : "rgba(24,226,161,0.10)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
-        <Icon style={{ width: 17, height: 17, color: accent ? ACCENT : DEEP }} />
-      </div>
+      <div style={{ width: 40, height: 40, borderRadius: 15, background: accent ? "rgba(24,226,161,0.18)" : "rgba(24,226,161,0.10)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}><Icon style={{ width: 17, height: 17, color: accent ? ACCENT : DEEP }} /></div>
       <div style={{ fontSize: 11, fontWeight: 800, color: SUB, marginBottom: 4 }}>{label}</div>
       <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 18, fontWeight: 1000, color: TEXT, marginBottom: 4 }}>{value}</div>
       <div style={{ fontSize: 11, fontWeight: 700, color: "#8A9A94", lineHeight: 1.4 }}>{helper}</div>
@@ -163,24 +148,54 @@ function StatCard({ icon: Icon, label, value, helper, accent }) {
   );
 }
 
+/* ═══ Enhanced Session Card with full walk details ═══ */
 function SessionCard({ session, onOpenMap }) {
+  const st = session.stats || {};
+  const dur = Number(st.durationSec || 0);
+  const dist = Number(st.distanceMeters || 0);
+  const steps = Number(st.steps || 0);
+  const cal = st.caloriesKcal != null ? Math.round(st.caloriesKcal) : null;
+  const pace = st.avgPaceMinPerKm && st.avgPaceMinPerKm > 0 ? `${Math.floor(st.avgPaceMinPerKm)}:${String(Math.round((st.avgPaceMinPerKm % 1) * 60)).padStart(2, "0")} /km` : "--";
+  const maxSpd = st.maxSpeedKmh ? `${st.maxSpeedKmh.toFixed(1)} km/h` : "--";
+
   return (
     <Glass style={{ padding: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
         <div>
           <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 900, color: TEXT }}>{new Date(session.startedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</div>
-          <div style={{ fontSize: 11, color: SUB, fontWeight: 700, marginTop: 2 }}>{new Date(session.startedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</div>
+          <div style={{ fontSize: 11, color: SUB, fontWeight: 700, marginTop: 2 }}>{new Date(session.startedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} {session.endedAt ? `— ${new Date(session.endedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : ""}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <motion.button whileTap={{ scale: 0.95 }} onClick={() => onOpenMap?.(session)} style={{ border: "none", background: `linear-gradient(135deg,${DEEP},${MID})`, color: "#fff", borderRadius: 999, padding: "8px 14px", fontSize: 10.5, fontWeight: 900, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-            <Navigation style={{ width: 12, height: 12 }} /> View Route
+            <Navigation style={{ width: 12, height: 12 }} /> Route
           </motion.button>
           <div style={{ fontSize: 10.5, fontWeight: 900, color: session.status === "ended" ? DEEP : "#C2410C", background: session.status === "ended" ? "rgba(24,226,161,0.10)" : "#FFF7ED", padding: "6px 10px", borderRadius: 999 }}>{session.status === "ended" ? "Done" : "Active"}</div>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
-        {[{ l: "Steps", v: Number(session.stats?.steps || 0).toLocaleString() }, { l: "Distance", v: `${metersToKm(session.stats?.distanceMeters)} km` }, { l: "Calories", v: session.stats?.caloriesKcal != null ? `${Math.round(session.stats.caloriesKcal)} kcal` : "--" }].map((x) => (
-          <div key={x.l}><div style={{ fontSize: 10.5, color: SUB, fontWeight: 700 }}>{x.l}</div><div style={{ fontSize: 13.5, color: TEXT, fontWeight: 1000, fontFamily: "'Sora',sans-serif" }}>{x.v}</div></div>
+
+      {/* Stats grid — 2 rows */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 8 }}>
+        {[
+          { icon: Footprints, l: "Steps", v: steps.toLocaleString() },
+          { icon: Route, l: "Distance", v: `${metersToKm(dist)} km` },
+          { icon: Timer, l: "Duration", v: formatDuration(dur) },
+        ].map(x => (
+          <div key={x.l} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <x.icon style={{ width: 13, height: 13, color: DEEP, flexShrink: 0 }} />
+            <div><div style={{ fontSize: 9.5, color: SUB, fontWeight: 700 }}>{x.l}</div><div style={{ fontSize: 12.5, color: TEXT, fontWeight: 1000, fontFamily: "'Sora',sans-serif" }}>{x.v}</div></div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+        {[
+          { icon: Flame, l: "Calories", v: cal != null ? `${cal} kcal` : "--" },
+          { icon: Gauge, l: "Pace", v: pace },
+          { icon: TrendingUp, l: "Top Speed", v: maxSpd },
+        ].map(x => (
+          <div key={x.l} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <x.icon style={{ width: 13, height: 13, color: DEEP, flexShrink: 0 }} />
+            <div><div style={{ fontSize: 9.5, color: SUB, fontWeight: 700 }}>{x.l}</div><div style={{ fontSize: 12.5, color: TEXT, fontWeight: 1000, fontFamily: "'Sora',sans-serif" }}>{x.v}</div></div>
+          </div>
         ))}
       </div>
     </Glass>
@@ -197,7 +212,7 @@ function PermissionBanner({ permGps, permMotion, onRequestGps, onRequestMotion }
         {permGps !== "granted" && (
           <motion.button whileTap={{ scale: 0.97 }} onClick={onRequestGps} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 16, border: "1px solid rgba(10,90,59,0.12)", background: "#fff", cursor: "pointer", width: "100%", textAlign: "left" }}>
             <div style={{ width: 36, height: 36, borderRadius: 12, background: permGps === "denied" ? "#FEE2E2" : "rgba(24,226,161,0.10)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><MapPin style={{ width: 16, height: 16, color: permGps === "denied" ? "#DC2626" : DEEP }} /></div>
-            <div style={{ flex: 1 }}><div style={{ fontSize: 12.5, fontWeight: 900, color: TEXT }}>Location Access</div><div style={{ fontSize: 11, color: SUB, fontWeight: 700 }}>{permGps === "denied" ? "Blocked — open browser settings" : "Tap to allow GPS"}</div></div>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 12.5, fontWeight: 900, color: TEXT }}>Location Access</div><div style={{ fontSize: 11, color: SUB, fontWeight: 700 }}>{permGps === "denied" ? "Blocked — open settings" : "Tap to allow GPS"}</div></div>
             {permGps !== "denied" && <div style={{ fontSize: 10.5, fontWeight: 900, color: "#fff", background: DEEP, padding: "6px 12px", borderRadius: 999 }}>Allow</div>}
           </motion.button>
         )}
@@ -237,13 +252,13 @@ function BodyMetricsCard({ weightInput, setWeightInput, feetInput, setFeetInput,
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.75fr 0.75fr auto", gap: 10, alignItems: "end" }}>
         {[
-          { label: "Weight (kg)", val: weightInput, set: (v) => setWeightInput(v.replace(/[^\d.]/g, "").slice(0, 5)), ph: "70", icon: Weight, mode: "decimal" },
-          { label: "Feet", val: feetInput, set: (v) => setFeetInput(v.replace(/[^\d]/g, "").slice(0, 1)), ph: "5", icon: Ruler, mode: "numeric" },
-          { label: "Inch", val: inchInput, set: (v) => setInchInput(v.replace(/[^\d]/g, "").slice(0, 2)), ph: "8", icon: Ruler, mode: "numeric" },
-        ].map((f) => (
+          { label: "Weight (kg)", val: weightInput, set: v => setWeightInput(v.replace(/[^\d.]/g, "").slice(0, 5)), ph: "70", icon: Weight, mode: "decimal" },
+          { label: "Feet", val: feetInput, set: v => setFeetInput(v.replace(/[^\d]/g, "").slice(0, 1)), ph: "5", icon: Ruler, mode: "numeric" },
+          { label: "Inch", val: inchInput, set: v => setInchInput(v.replace(/[^\d]/g, "").slice(0, 2)), ph: "8", icon: Ruler, mode: "numeric" },
+        ].map(f => (
           <div key={f.label}><div style={{ fontSize: 10.5, fontWeight: 800, color: SUB, marginBottom: 6 }}>{f.label}</div>
             <div style={{ height: 46, borderRadius: 14, border: "1px solid rgba(12,90,62,0.10)", background: "#fff", display: "flex", alignItems: "center", padding: "0 12px", gap: 8 }}>
-              <f.icon style={{ width: 15, height: 15, color: DEEP }} /><input value={f.val} onChange={(e) => f.set(e.target.value)} placeholder={f.ph} inputMode={f.mode} style={{ border: "none", outline: "none", width: "100%", background: "transparent", fontSize: 14, fontWeight: 800, color: TEXT }} />
+              <f.icon style={{ width: 15, height: 15, color: DEEP }} /><input value={f.val} onChange={e => f.set(e.target.value)} placeholder={f.ph} inputMode={f.mode} style={{ border: "none", outline: "none", width: "100%", background: "transparent", fontSize: 14, fontWeight: 800, color: TEXT }} />
             </div></div>
         ))}
         <motion.button whileTap={{ scale: 0.96 }} onClick={onSave} disabled={savingMetrics} style={{ height: 46, padding: "0 16px", borderRadius: 14, border: "none", background: `linear-gradient(135deg,${DEEP},${MID})`, color: "#fff", fontWeight: 1000, fontFamily: "'Sora',sans-serif", cursor: savingMetrics ? "wait" : "pointer", whiteSpace: "nowrap" }}>{savingMetrics ? "..." : "Save"}</motion.button>
@@ -267,67 +282,52 @@ function loadGMaps(k) {
 function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSessionId, onSelectSession }) {
   const mapRef = useRef(null), mapInst = useRef(null), polyRef = useRef(null), markersRef = useRef([]);
   const [mapsReady, setMapsReady] = useState(false), [mapsFailed, setMapsFailed] = useState(false);
-
-  const selectedSession = useMemo(() => {
-    if (!selectedMapSessionId || selectedMapSessionId === "live") return null;
-    return recentEndedSessions.find((s) => s._id === selectedMapSessionId) || null;
-  }, [recentEndedSessions, selectedMapSessionId]);
-
-  const displayedPoints = useMemo(() => {
-    if (selectedSession?.points?.length) return selectedSession.points;
-    return currentPoints || [];
-  }, [currentPoints, selectedSession]);
+  const selSess = useMemo(() => (!selectedMapSessionId || selectedMapSessionId === "live") ? null : recentEndedSessions.find(s => s._id === selectedMapSessionId) || null, [recentEndedSessions, selectedMapSessionId]);
+  const displayPts = useMemo(() => selSess?.points?.length ? selSess.points : currentPoints || [], [currentPoints, selSess]);
 
   useEffect(() => { let m = true; loadGMaps(GOOGLE_MAPS_KEY).then(() => m && setMapsReady(true)).catch(() => m && setMapsFailed(true)); return () => { m = false; }; }, []);
-
-  useEffect(() => {
-    if (!mapsReady || !mapRef.current || !window.google?.maps || mapInst.current) return;
-    mapInst.current = new window.google.maps.Map(mapRef.current, { center: { lat: 27.18, lng: 78.02 }, zoom: 14, disableDefaultUI: true, zoomControl: true, styles: [{ elementType: "geometry", stylers: [{ color: "#edf5f1" }] }, { featureType: "poi", stylers: [{ visibility: "off" }] }, { featureType: "transit", stylers: [{ visibility: "off" }] }, { featureType: "road", elementType: "geometry", stylers: [{ color: "#d6e6df" }] }, { featureType: "water", elementType: "geometry", stylers: [{ color: "#d7efe6" }] }] });
-  }, [mapsReady]);
+  useEffect(() => { if (!mapsReady || !mapRef.current || !window.google?.maps || mapInst.current) return; mapInst.current = new window.google.maps.Map(mapRef.current, { center: { lat: 27.18, lng: 78.02 }, zoom: 14, disableDefaultUI: true, zoomControl: true, styles: [{ elementType: "geometry", stylers: [{ color: "#edf5f1" }] }, { featureType: "poi", stylers: [{ visibility: "off" }] }, { featureType: "transit", stylers: [{ visibility: "off" }] }, { featureType: "road", elementType: "geometry", stylers: [{ color: "#d6e6df" }] }, { featureType: "water", elementType: "geometry", stylers: [{ color: "#d7efe6" }] }] }); }, [mapsReady]);
 
   useEffect(() => {
     if (!mapsReady || !mapInst.current || !window.google?.maps) return;
     const map = mapInst.current, maps = window.google.maps;
     if (polyRef.current) { polyRef.current.setMap(null); polyRef.current = null; }
-    markersRef.current.forEach((m) => m.setMap(null)); markersRef.current = [];
-    if (!displayedPoints?.length) return;
-    const path = displayedPoints.map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) }));
-    polyRef.current = new maps.Polyline({ path, geodesic: true, strokeColor: selectedSession ? MID : DEEP, strokeOpacity: 0.95, strokeWeight: 5, map });
-    const first = path[0], last = path[path.length - 1];
+    markersRef.current.forEach(m => m.setMap(null)); markersRef.current = [];
+    if (!displayPts?.length) return;
+    const path = displayPts.map(p => ({ lat: Number(p.lat), lng: Number(p.lng) }));
+    polyRef.current = new maps.Polyline({ path, geodesic: true, strokeColor: selSess ? MID : DEEP, strokeOpacity: 0.95, strokeWeight: 5, map });
     markersRef.current.push(
-      new maps.Marker({ position: first, map, title: "Start", icon: { path: maps.SymbolPath.CIRCLE, scale: 6, fillColor: DEEP, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2 } }),
-      new maps.Marker({ position: last, map, title: selectedSession ? "End" : "Now", icon: { path: maps.SymbolPath.CIRCLE, scale: 8, fillColor: ACCENT, fillOpacity: 1, strokeColor: DEEP, strokeWeight: 2 } }),
+      new maps.Marker({ position: path[0], map, title: "Start", icon: { path: maps.SymbolPath.CIRCLE, scale: 6, fillColor: DEEP, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2 } }),
+      new maps.Marker({ position: path[path.length - 1], map, title: selSess ? "End" : "Now", icon: { path: maps.SymbolPath.CIRCLE, scale: 8, fillColor: ACCENT, fillOpacity: 1, strokeColor: DEEP, strokeWeight: 2 } }),
     );
-    const bounds = new maps.LatLngBounds(); path.forEach((p) => bounds.extend(p)); map.fitBounds(bounds, 40);
+    const bounds = new maps.LatLngBounds(); path.forEach(p => bounds.extend(p)); map.fitBounds(bounds, 40);
     if (path.length === 1) { map.setCenter(path[0]); map.setZoom(16); }
-  }, [displayedPoints, mapsReady, selectedSession]);
+  }, [displayPts, mapsReady, selSess]);
 
-  const tabBtns = (
+  const tabs = (
     <div style={{ display: "flex", gap: 8, overflowX: "auto", marginTop: 10, paddingBottom: 2 }}>
-      {[{ id: "live", label: "Live walk" }, ...recentEndedSessions.slice(0, 5).map((s, i) => ({ id: s._id, label: `Walk ${i + 1}` }))].map((t) => (
+      {[{ id: "live", label: "Live walk" }, ...recentEndedSessions.slice(0, 5).map((s, i) => ({ id: s._id, label: `Walk ${i + 1}` }))].map(t => (
         <button key={t.id} onClick={() => onSelectSession(t.id)} style={{ cursor: "pointer", whiteSpace: "nowrap", borderRadius: 999, padding: "9px 14px", fontSize: 11.5, fontWeight: 900, background: selectedMapSessionId === t.id ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff", color: selectedMapSessionId === t.id ? "#fff" : TEXT, boxShadow: selectedMapSessionId === t.id ? "0 8px 20px rgba(10,90,59,0.16)" : "0 2px 10px rgba(0,0,0,0.04)", border: selectedMapSessionId === t.id ? "none" : `1px solid ${BORDER}` }}>{t.label}</button>
       ))}
     </div>
   );
 
-  if (!GOOGLE_MAPS_KEY || mapsFailed) return <div><FallbackRouteMap points={displayedPoints} title={selectedSession ? "Walk Route" : "Live Route"} badge={selectedSession ? "History" : "Outdoor"} />{tabBtns}</div>;
+  if (!GOOGLE_MAPS_KEY || mapsFailed) return <div><FallbackRouteMap points={displayPts} title={selSess ? "Walk Route" : "Live Route"} badge={selSess ? "History" : "Outdoor"} />{tabs}</div>;
 
   return (
     <Glass style={{ padding: 14, overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 14, background: "rgba(24,226,161,0.12)", display: "flex", alignItems: "center", justifyContent: "center" }}><MapPinned style={{ width: 17, height: 17, color: DEEP }} /></div>
-          <div><div style={{ fontSize: 13, fontWeight: 900, color: TEXT, fontFamily: "'Sora',sans-serif" }}>{selectedSession ? "Walk Route" : "Live Route"}</div><div style={{ fontSize: 11, color: SUB, fontWeight: 700 }}>{selectedSession ? "Route replay" : "Real-time GPS"}</div></div>
-        </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 14, background: "rgba(24,226,161,0.12)", display: "flex", alignItems: "center", justifyContent: "center" }}><MapPinned style={{ width: 17, height: 17, color: DEEP }} /></div>
+        <div><div style={{ fontSize: 13, fontWeight: 900, color: TEXT, fontFamily: "'Sora',sans-serif" }}>{selSess ? "Walk Route" : "Live Route"}</div><div style={{ fontSize: 11, color: SUB, fontWeight: 700 }}>{selSess ? "Route replay" : "Real-time GPS"}</div></div>
       </div>
       <div ref={mapRef} style={{ width: "100%", height: 320, borderRadius: 20, overflow: "hidden", border: `1px solid ${BORDER}`, background: "#eef6f2" }} />
-      {tabBtns}
+      {tabs}
     </Glass>
   );
 }
 
 /* ═══════════════════════════════════════════
-   MAIN COMPONENT
+   MAIN
    ═══════════════════════════════════════════ */
 export default function StepTracker() {
   const navigate = useNavigate();
@@ -350,7 +350,7 @@ export default function StepTracker() {
   const [liveSource, setLiveSource] = useState("gps+estimate");
   const [selectedMapSessionId, setSelectedMapSessionId] = useState("live");
   const [weightInput, setWeightInput] = useState(String(user?.weightKg || user?.weight || ""));
-  const initH = cmToFeetInches(user?.heightCm || user?.height || "");
+  const initH = cmToFtIn(user?.heightCm || user?.height || "");
   const [feetInput, setFeetInput] = useState(initH.feet);
   const [inchInput, setInchInput] = useState(initH.inches);
   const [savingMetrics, setSavingMetrics] = useState(false);
@@ -359,42 +359,69 @@ export default function StepTracker() {
 
   const watchIdRef = useRef(null), timerRef = useRef(null), pointsBufferRef = useRef([]), lastPointRef = useRef(null);
   const motionEnabledRef = useRef(false), motionHandlerRef = useRef(null);
-  const distanceRef = useRef(0), stepsRef = useRef(0), durationRef = useRef(0), caloriesRef = useRef(null), manualMotionStepsRef = useRef(0);
+  const distanceRef = useRef(0), stepsRef = useRef(0), durationRef = useRef(0), caloriesRef = useRef(null), manualStepsRef = useRef(0);
 
-  const pedometerState = useRef({ phase: "idle", lastPeakTs: 0, lastMagnitude: 9.81, peakValue: 0 });
+  /* Pedometer state with warmup + consecutive validation */
+  const pedoState = useRef({
+    phase: "idle",
+    lastPeakTs: 0,
+    lastMag: 9.81,
+    peakVal: 0,
+    startedAt: 0,            // when tracking started — for warmup
+    consecutiveValid: 0,      // must hit CONSECUTIVE_NEEDED before real counting
+    warmupDone: false,
+  });
+
+  /* ─── FIX: Disable iOS shake-to-undo ─── */
+  useEffect(() => {
+    const blockUndo = (e) => { e.preventDefault(); };
+    // This meta approach + event prevention stops "Undo Typing" on iOS Safari
+    const meta = document.createElement("meta");
+    meta.name = "apple-mobile-web-app-capable";
+    meta.content = "yes";
+    document.head.appendChild(meta);
+
+    window.addEventListener("beforeinput", (e) => {
+      if (e.inputType === "historyUndo" || e.inputType === "historyRedo") e.preventDefault();
+    });
+
+    return () => {
+      if (meta.parentNode) meta.parentNode.removeChild(meta);
+    };
+  }, []);
 
   useEffect(() => {
     setWeightInput(String(user?.weightKg || user?.weight || ""));
-    const h = cmToFeetInches(user?.heightCm || user?.height || "");
+    const h = cmToFtIn(user?.heightCm || user?.height || "");
     setFeetInput(h.feet); setInchInput(h.inches);
   }, [user?.weightKg, user?.weight, user?.heightCm, user?.height]);
 
   const weightKg = useMemo(() => { const r = user?.weightKg || user?.weight; return r ? Number(r) : null; }, [user?.weightKg, user?.weight]);
   const heightCm = useMemo(() => { const r = user?.heightCm || user?.height; return r ? Number(r) : null; }, [user?.heightCm, user?.height]);
   const hasWeight = !!weightKg && weightKg > 0, hasHeight = !!heightCm && heightCm > 0;
-  const strideMeters = hasHeight ? Math.max(0.5, heightCm * 0.00415) : 0.78;
-  const strideMRef = useRef(strideMeters), weightKgRef = useRef(weightKg);
-  useEffect(() => { strideMRef.current = strideMeters; }, [strideMeters]);
+  const strideM = hasHeight ? Math.max(0.5, heightCm * 0.00415) : 0.78;
+  const strideMRef = useRef(strideM), weightKgRef = useRef(weightKg);
+  useEffect(() => { strideMRef.current = strideM; }, [strideM]);
   useEffect(() => { weightKgRef.current = weightKg; }, [weightKg]);
 
-  const authHeaders = useMemo(() => { const t = extractAnyToken(token); return t ? { Authorization: `Bearer ${t}` } : {}; }, [token]);
+  const authHeaders = useMemo(() => { const t = extractToken(token); return t ? { Authorization: `Bearer ${t}` } : {}; }, [token]);
 
   useEffect(() => {
-    if (navigator.permissions) navigator.permissions.query({ name: "geolocation" }).then((r) => { setPermGps(r.state); r.onchange = () => setPermGps(r.state); }).catch(() => {});
+    if (navigator.permissions) navigator.permissions.query({ name: "geolocation" }).then(r => { setPermGps(r.state); r.onchange = () => setPermGps(r.state); }).catch(() => {});
     if (typeof DeviceMotionEvent === "undefined") setPermMotion("na");
     else if (typeof DeviceMotionEvent.requestPermission !== "function") setPermMotion("granted");
   }, []);
 
-  const requestGpsPermission = useCallback(async () => {
+  const requestGps = useCallback(async () => {
     try { await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 10000 })); setPermGps("granted"); setPermissionError(""); } catch { setPermGps("denied"); setPermissionError("Location blocked. Enable in browser settings."); }
   }, []);
 
-  const requestMotionPermission = useCallback(async () => {
+  const requestMotion = useCallback(async () => {
     try { if (typeof DeviceMotionEvent?.requestPermission === "function") { const r = await DeviceMotionEvent.requestPermission(); setPermMotion(r === "granted" ? "granted" : "denied"); } else setPermMotion("granted"); } catch { setPermMotion("denied"); }
   }, []);
 
-  const saveMetricsInline = useCallback(async () => {
-    const nW = Number(weightInput), nH = feetInchesToCm(feetInput, inchInput);
+  const saveMetrics = useCallback(async () => {
+    const nW = Number(weightInput), nH = ftInToCm(feetInput, inchInput);
     if (!nW || nW <= 0) { setPermissionError("Enter valid weight."); return; }
     if (!nH || nH <= 0) { setPermissionError("Enter valid height."); return; }
     if (!user?._id) { setPermissionError("User not found."); return; }
@@ -404,43 +431,69 @@ export default function StepTracker() {
       await axios.put(`${API}/api/users/${user._id}`, p, { headers: authHeaders });
       if (typeof setUser === "function") setUser(p);
       weightKgRef.current = nW;
-      const cal = calculateCalories({ distanceMeters: distanceRef.current, steps: stepsRef.current, weightKg: nW });
+      const cal = calcCal({ distanceMeters: distanceRef.current, steps: stepsRef.current, weightKg: nW });
       setCalories(cal); caloriesRef.current = cal;
     } catch (e) { setPermissionError(e?.response?.data?.message || "Unable to save."); }
     finally { setSavingMetrics(false); }
   }, [authHeaders, feetInput, inchInput, setUser, user, weightInput]);
 
-  /* ═══ Proper Pedometer — Peak-Valley ═══ */
-  const setupMotionHandler = useCallback(() => {
+  /* ═══ Pedometer with warmup + consecutive filter ═══ */
+  const setupMotion = useCallback(() => {
     if (motionHandlerRef.current) window.removeEventListener("devicemotion", motionHandlerRef.current);
     const handler = (e) => {
       if (!motionEnabledRef.current) return;
+      const st = pedoState.current;
+
+      // Warmup: ignore first N seconds
+      if (!st.warmupDone) {
+        if (Date.now() - st.startedAt < WARMUP_MS) return;
+        st.warmupDone = true;
+      }
+
       const hasPure = e.acceleration && (e.acceleration.x !== null || e.acceleration.y !== null);
       const acc = hasPure ? e.acceleration : e.accelerationIncludingGravity;
       if (!acc) return;
-      const mag = Math.sqrt((Number(acc.x||0))**2 + (Number(acc.y||0))**2 + (Number(acc.z||0))**2);
-      const alpha = 0.25;
-      const smoothed = alpha * mag + (1 - alpha) * pedometerState.current.lastMagnitude;
-      pedometerState.current.lastMagnitude = smoothed;
 
-      const peakT = hasPure ? STEP_PEAK_THRESHOLD_PURE : STEP_PEAK_THRESHOLD_GRAVITY;
-      const valT = hasPure ? STEP_VALLEY_THRESHOLD_PURE : STEP_VALLEY_THRESHOLD_GRAVITY;
-      const now = Date.now(), st = pedometerState.current;
+      const mag = Math.sqrt((Number(acc.x || 0)) ** 2 + (Number(acc.y || 0)) ** 2 + (Number(acc.z || 0)) ** 2);
+      const smoothed = 0.25 * mag + 0.75 * st.lastMag;
+      st.lastMag = smoothed;
+
+      const peakT = hasPure ? STEP_PEAK_PURE : STEP_PEAK_GRAVITY;
+      const valT = hasPure ? STEP_VALLEY_PURE : STEP_VALLEY_GRAVITY;
+      const now = Date.now();
 
       if (st.phase === "idle") {
-        if (smoothed > peakT) { st.phase = "peaked"; st.peakValue = smoothed; }
+        if (smoothed > peakT) { st.phase = "peaked"; st.peakVal = smoothed; }
       } else if (st.phase === "peaked") {
-        if (smoothed > st.peakValue) st.peakValue = smoothed;
+        if (smoothed > st.peakVal) st.peakVal = smoothed;
         if (smoothed < valT) {
           const elapsed = now - st.lastPeakTs;
-          if (elapsed > STEP_MIN_INTERVAL_MS && elapsed < STEP_MAX_INTERVAL_MS) {
-            manualMotionStepsRef.current += 1;
-            const d = distanceRef.current, str = strideMRef.current, w = weightKgRef.current;
-            const ns = calculateEstimatedSteps(d, manualMotionStepsRef.current, str);
-            stepsRef.current = ns; setSteps(ns);
-            if (w > 0) { const c = calculateCalories({ distanceMeters: d, steps: ns, weightKg: w }); caloriesRef.current = c; setCalories(c); }
+          st.lastPeakTs = now;
+          st.phase = "idle";
+          st.peakVal = 0;
+
+          if (elapsed > STEP_MIN_MS && elapsed < STEP_MAX_MS) {
+            st.consecutiveValid += 1;
+
+            // Only start counting after CONSECUTIVE_NEEDED valid cycles
+            // This filters out single random jolts
+            if (st.consecutiveValid >= CONSECUTIVE_NEEDED) {
+              // If we just passed the threshold, retroactively add the warmup steps
+              if (st.consecutiveValid === CONSECUTIVE_NEEDED) {
+                manualStepsRef.current += CONSECUTIVE_NEEDED;
+              } else {
+                manualStepsRef.current += 1;
+              }
+
+              const d = distanceRef.current, str = strideMRef.current, w = weightKgRef.current;
+              const ns = calcSteps(d, manualStepsRef.current, str);
+              stepsRef.current = ns; setSteps(ns);
+              if (w > 0) { const c = calcCal({ distanceMeters: d, steps: ns, weightKg: w }); caloriesRef.current = c; setCalories(c); }
+            }
+          } else {
+            // Invalid interval — reset consecutive counter
+            st.consecutiveValid = 0;
           }
-          st.lastPeakTs = now; st.phase = "idle"; st.peakValue = 0;
         }
       }
     };
@@ -464,7 +517,7 @@ export default function StepTracker() {
     if (motionHandlerRef.current) window.removeEventListener("devicemotion", motionHandlerRef.current);
   }, []);
 
-  const flushPoints = useCallback(async (extra = {}) => {
+  const flushPts = useCallback(async (extra = {}) => {
     if (!sessionId) return;
     const batch = [...pointsBufferRef.current]; if (!batch.length && !Object.keys(extra).length) return;
     pointsBufferRef.current = []; setSyncing(true);
@@ -473,20 +526,20 @@ export default function StepTracker() {
     finally { setSyncing(false); }
   }, [authHeaders, sessionId]);
 
-  const enableMotionTracking = useCallback(async () => {
+  const enableMotion = useCallback(async () => {
     try {
       if (typeof DeviceMotionEvent?.requestPermission === "function") { const r = await DeviceMotionEvent.requestPermission(); if (r !== "granted") { setPermMotion("denied"); return false; } }
-      motionEnabledRef.current = true; setPermMotion("granted"); setupMotionHandler(); return true;
+      motionEnabledRef.current = true; setPermMotion("granted"); setupMotion(); return true;
     } catch { return false; }
-  }, [setupMotionHandler]);
+  }, [setupMotion]);
 
-  const startGpsWatch = useCallback(() => {
+  const startGps = useCallback(() => {
     if (!navigator.geolocation) { setPermissionError("Geolocation not supported."); return; }
     if (watchIdRef.current !== null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
-    watchIdRef.current = navigator.geolocation.watchPosition((pos) => {
+    watchIdRef.current = navigator.geolocation.watchPosition(pos => {
       const acc = pos.coords.accuracy; if (acc > MAX_ACCURACY_METERS) return;
       const pt = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: acc, speed: pos.coords.speed ?? 0, heading: pos.coords.heading ?? null, recordedAt: new Date().toISOString(), source: "gps" };
-      setRoutePoints((prev) => [...prev, pt].slice(-1500));
+      setRoutePoints(prev => [...prev, pt].slice(-1500));
       pointsBufferRef.current.push(pt);
       if (lastPointRef.current) {
         const delta = haversineMeters(lastPointRef.current, pt);
@@ -494,18 +547,18 @@ export default function StepTracker() {
         const minD = Math.max(MIN_DISTANCE_DELTA, combAcc * 0.5);
         if (delta > minD && delta < MAX_DISTANCE_DELTA) {
           const nd = distanceRef.current + delta; distanceRef.current = nd; setDistanceMeters(nd);
-          const ns = calculateEstimatedSteps(nd, manualMotionStepsRef.current, strideMRef.current); stepsRef.current = ns; setSteps(ns);
-          const cal = calculateCalories({ distanceMeters: nd, steps: ns, weightKg: weightKgRef.current }); caloriesRef.current = cal; setCalories(cal);
-          setPace(calculatePace(durationRef.current, nd));
+          const ns = calcSteps(nd, manualStepsRef.current, strideMRef.current); stepsRef.current = ns; setSteps(ns);
+          const cal = calcCal({ distanceMeters: nd, steps: ns, weightKg: weightKgRef.current }); caloriesRef.current = cal; setCalories(cal);
+          setPace(calcPace(durationRef.current, nd));
         }
       }
       lastPointRef.current = pt;
-    }, (err) => { setPermGps("denied"); setPermissionError("Location denied. Enable in browser settings."); }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 });
+    }, () => { setPermGps("denied"); setPermissionError("Location denied. Enable in settings."); }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 });
   }, []);
 
   const beginTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => { durationRef.current += 1; setDurationSec(durationRef.current); if (distanceRef.current > 0) setPace(calculatePace(durationRef.current, distanceRef.current)); }, 1000);
+    timerRef.current = setInterval(() => { durationRef.current += 1; setDurationSec(durationRef.current); if (distanceRef.current > 0) setPace(calcPace(durationRef.current, distanceRef.current)); }, 1000);
   }, []);
 
   const stopAll = useCallback(() => {
@@ -518,35 +571,49 @@ export default function StepTracker() {
   const handleStart = useCallback(async () => {
     setStarting(true); setPermissionError("");
     try {
-      const motionOk = await enableMotionTracking(); setLiveSource(motionOk ? "gps+pedometer" : "gps+estimate");
+      const motionOk = await enableMotion(); setLiveSource(motionOk ? "gps+pedometer" : "gps+estimate");
       const cur = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }));
       setPermGps("granted");
       const sp = { lat: cur.coords.latitude, lng: cur.coords.longitude, accuracy: cur.coords.accuracy };
       const r = await axios.post(`${API}/api/step-tracker/start`, { startLocation: sp, device: { platform: navigator.platform, userAgent: navigator.userAgent } }, { headers: authHeaders });
       setSessionId(r.data?.session?._id); setStatus("tracking"); setSelectedMapSessionId("live");
       setRoutePoints([{ ...sp, recordedAt: new Date().toISOString(), speed: 0, heading: null, source: "gps" }]);
-      lastPointRef.current = sp; manualMotionStepsRef.current = 0;
+      lastPointRef.current = sp; manualStepsRef.current = 0;
       durationRef.current = 0; distanceRef.current = 0; stepsRef.current = 0; caloriesRef.current = hasWeight ? 0 : null;
-      pedometerState.current = { phase: "idle", lastPeakTs: Date.now(), lastMagnitude: 9.81, peakValue: 0 };
+
+      // Reset pedometer with warmup
+      pedoState.current = { phase: "idle", lastPeakTs: 0, lastMag: 9.81, peakVal: 0, startedAt: Date.now(), consecutiveValid: 0, warmupDone: false };
+
       setDurationSec(0); setDistanceMeters(0); setSteps(0); setCalories(hasWeight ? 0 : null); setPace("--");
-      beginTimer(); startGpsWatch();
+      beginTimer(); startGps();
     } catch (e) {
       if (e?.code === 1) { setPermGps("denied"); setPermissionError("Location denied. Enable in browser settings."); }
       else setPermissionError(e?.response?.data?.message || e?.message || "Unable to start.");
     } finally { setStarting(false); }
-  }, [authHeaders, beginTimer, enableMotionTracking, hasWeight, startGpsWatch]);
+  }, [authHeaders, beginTimer, enableMotion, hasWeight, startGps]);
 
-  const handlePause = useCallback(async () => { if (!sessionId) return; stopAll(); await flushPoints(); try { await axios.patch(`${API}/api/step-tracker/sessions/${sessionId}/pause`, {}, { headers: authHeaders }); } catch {} setStatus("paused"); }, [authHeaders, flushPoints, sessionId, stopAll]);
-  const handleResume = useCallback(async () => { if (!sessionId) return; try { await axios.patch(`${API}/api/step-tracker/sessions/${sessionId}/resume`, {}, { headers: authHeaders }); } catch {} await enableMotionTracking(); beginTimer(); startGpsWatch(); setStatus("tracking"); setSelectedMapSessionId("live"); }, [authHeaders, beginTimer, enableMotionTracking, sessionId, startGpsWatch]);
+  const handlePause = useCallback(async () => { if (!sessionId) return; stopAll(); await flushPts(); try { await axios.patch(`${API}/api/step-tracker/sessions/${sessionId}/pause`, {}, { headers: authHeaders }); } catch {} setStatus("paused"); }, [authHeaders, flushPts, sessionId, stopAll]);
+
+  const handleResume = useCallback(async () => {
+    if (!sessionId) return;
+    try { await axios.patch(`${API}/api/step-tracker/sessions/${sessionId}/resume`, {}, { headers: authHeaders }); } catch {}
+    // Reset warmup on resume too
+    pedoState.current.startedAt = Date.now();
+    pedoState.current.warmupDone = false;
+    pedoState.current.consecutiveValid = 0;
+    await enableMotion(); beginTimer(); startGps();
+    setStatus("tracking"); setSelectedMapSessionId("live");
+  }, [authHeaders, beginTimer, enableMotion, sessionId, startGps]);
+
   const handleEnd = useCallback(async () => {
-    if (!sessionId) return; stopAll(); await flushPoints();
+    if (!sessionId) return; stopAll(); await flushPts();
     try { const el = routePoints.length > 0 ? { lat: routePoints[routePoints.length - 1].lat, lng: routePoints[routePoints.length - 1].lng, accuracy: routePoints[routePoints.length - 1].accuracy } : null; await axios.patch(`${API}/api/step-tracker/sessions/${sessionId}/end`, { endLocation: el, steps: stepsRef.current, distanceMeters: distanceRef.current, caloriesKcal: caloriesRef.current, durationSec: durationRef.current }, { headers: authHeaders }); } catch {}
     setStatus("ended"); setSessionId(null); await refreshHistory();
-  }, [authHeaders, flushPoints, refreshHistory, routePoints, sessionId, stopAll]);
+  }, [authHeaders, flushPts, refreshHistory, routePoints, sessionId, stopAll]);
 
-  useEffect(() => { if (status !== "tracking" || !sessionId) return; const t = setInterval(() => flushPoints(), 12000); return () => clearInterval(t); }, [flushPoints, sessionId, status]);
+  useEffect(() => { if (status !== "tracking" || !sessionId) return; const t = setInterval(() => flushPts(), 12000); return () => clearInterval(t); }, [flushPts, sessionId, status]);
 
-  const endedWithPts = useMemo(() => recentSessions.filter((s) => s.status === "ended" && s.points?.length > 1).slice(0, 5), [recentSessions]);
+  const endedWithPts = useMemo(() => recentSessions.filter(s => s.status === "ended" && s.points?.length > 1).slice(0, 5), [recentSessions]);
   const todaySteps = Number(todaySummary?.steps || 0) + (status === "tracking" || status === "paused" ? steps : 0);
   const todayDist = Number(todaySummary?.distanceMeters || 0) + (status === "tracking" || status === "paused" ? distanceMeters : 0);
   const todayCal = hasWeight ? Number(todaySummary?.caloriesKcal || 0) + (status === "tracking" || status === "paused" ? Number(calories || 0) : 0) : null;
@@ -588,7 +655,7 @@ export default function StepTracker() {
               { label: starting ? "Starting..." : "Start", icon: Play, onClick: handleStart, disabled: starting || status === "tracking" || status === "paused", active: status === "idle" || status === "ended", gradient: true },
               { label: status === "paused" ? "Resume" : "Pause", icon: status === "paused" ? Play : Pause, onClick: status === "paused" ? handleResume : handlePause, disabled: status !== "tracking" && status !== "paused" },
               { label: "End", icon: Square, onClick: handleEnd, disabled: status !== "tracking" && status !== "paused", danger: true },
-            ].map((b) => (
+            ].map(b => (
               <motion.button key={b.label} whileTap={{ scale: 0.96 }} onClick={b.onClick} disabled={b.disabled} style={{
                 height: 54, borderRadius: 16, border: b.danger ? "1px solid rgba(239,68,68,0.16)" : b.gradient && b.active ? "none" : "1px solid rgba(12,90,62,0.10)",
                 background: b.danger ? "#FFF5F5" : b.gradient && b.active ? `linear-gradient(135deg,${DEEP},${MID})` : b.disabled ? "#E2E8F0" : "#fff",
@@ -603,8 +670,8 @@ export default function StepTracker() {
 
       {/* Content */}
       <div style={{ padding: "18px 18px 0", position: "relative", zIndex: 1 }}>
-        <PermissionBanner permGps={permGps} permMotion={permMotion} onRequestGps={requestGpsPermission} onRequestMotion={requestMotionPermission} />
-        <BodyMetricsCard weightInput={weightInput} setWeightInput={setWeightInput} feetInput={feetInput} setFeetInput={setFeetInput} inchInput={inchInput} setInchInput={setInchInput} savingMetrics={savingMetrics} onSave={saveMetricsInline} hasWeight={hasWeight} hasHeight={hasHeight} />
+        <PermissionBanner permGps={permGps} permMotion={permMotion} onRequestGps={requestGps} onRequestMotion={requestMotion} />
+        <BodyMetricsCard weightInput={weightInput} setWeightInput={setWeightInput} feetInput={feetInput} setFeetInput={setFeetInput} inchInput={inchInput} setInchInput={setInchInput} savingMetrics={savingMetrics} onSave={saveMetrics} hasWeight={hasWeight} hasHeight={hasHeight} />
 
         {permissionError && <Glass style={{ padding: 14, marginBottom: 16, border: "1px solid #FECACA", background: "#FFF8F6" }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><AlertTriangle style={{ width: 16, height: 16, color: "#DC2626", flexShrink: 0 }} /><div style={{ fontSize: 12, color: "#991B1B", fontWeight: 700 }}>{permissionError}</div></div></Glass>}
 
@@ -627,12 +694,12 @@ export default function StepTracker() {
             <button onClick={refreshHistory} style={{ background: "none", border: "none", color: DEEP, fontWeight: 900, cursor: "pointer", fontSize: 12.5 }}>Refresh</button>
           </div>
           {loadingHistory ? <Glass style={{ padding: 16 }}><div style={{ fontSize: 13, color: SUB, fontWeight: 800 }}>Loading...</div></Glass> : recentSessions.length ? (
-            <div style={{ display: "grid", gap: 10 }}>{recentSessions.slice(0, 5).map((s) => <SessionCard key={s._id} session={s} onOpenMap={(session) => { setSelectedMapSessionId(session._id); window.scrollTo({ top: 0, behavior: "smooth" }); }} />)}</div>
+            <div style={{ display: "grid", gap: 10 }}>{recentSessions.slice(0, 8).map(s => <SessionCard key={s._id} session={s} onOpenMap={session => { setSelectedMapSessionId(session._id); window.scrollTo({ top: 0, behavior: "smooth" }); }} />)}</div>
           ) : <Glass style={{ padding: 16 }}><div style={{ fontSize: 13, fontWeight: 900, color: TEXT, marginBottom: 4 }}>No sessions yet</div><div style={{ fontSize: 11.5, color: SUB, fontWeight: 700 }}>Start your first walk above.</div></Glass>}
         </div>
         <div style={{ height: 12 }} />
       </div>
-      <style>{`@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.3); } }`}</style>
+      <style>{`@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}`}</style>
     </div>
   );
 }
