@@ -1,9 +1,3 @@
-// src/components/BottomNavBar.js — GoDavaii 2035 Premium Health OS
-// ✅ Same routes/logic
-// ✅ Cleaner premium bottom bar
-// ✅ AI center tab still highlighted, but more refined
-// ✅ Tone matched with GoDavaii AI / Home
-
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { LazyMotion, domAnimation, m, useReducedMotion } from "framer-motion";
@@ -150,9 +144,15 @@ function BottomNavBarImpl() {
                         inset: -2,
                         zIndex: -1,
                         borderRadius: 20,
-                        background: active ? "linear-gradient(135deg, #CFFFF0, #18E2A1)" : "linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))",
-                        border: active ? "2px solid rgba(255,255,255,0.40)" : "1.5px solid rgba(255,255,255,0.12)",
-                        boxShadow: active ? "0 10px 24px rgba(24,226,161,0.22)" : "0 4px 12px rgba(0,0,0,0.22)",
+                        background: active
+                          ? "linear-gradient(135deg, #CFFFF0, #18E2A1)"
+                          : "linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))",
+                        border: active
+                          ? "2px solid rgba(255,255,255,0.40)"
+                          : "1.5px solid rgba(255,255,255,0.12)",
+                        boxShadow: active
+                          ? "0 10px 24px rgba(24,226,161,0.22)"
+                          : "0 4px 12px rgba(0,0,0,0.22)",
                         transition: "all 0.3s ease",
                       }}
                     />
@@ -165,7 +165,8 @@ function BottomNavBarImpl() {
                         inset: -6,
                         zIndex: -2,
                         borderRadius: 24,
-                        background: "radial-gradient(circle at center, rgba(24,226,161,0.22) 0%, transparent 70%)",
+                        background:
+                          "radial-gradient(circle at center, rgba(24,226,161,0.22) 0%, transparent 70%)",
                         animation: "gdAIGlow 2s ease-in-out infinite",
                         pointerEvents: "none",
                       }}
@@ -190,7 +191,8 @@ function BottomNavBarImpl() {
                           borderRadius: "50%",
                           pointerEvents: "none",
                           zIndex: -1,
-                          background: "radial-gradient(circle, rgba(255,255,255,0.40) 0%, rgba(255,255,255,0) 70%)",
+                          background:
+                            "radial-gradient(circle, rgba(255,255,255,0.40) 0%, rgba(255,255,255,0) 70%)",
                         }}
                       />
                     </LazyMotion>
@@ -203,7 +205,9 @@ function BottomNavBarImpl() {
                       marginBottom: 2,
                       transition: "transform 0.2s",
                       transform: active ? "scale(1.06)" : "scale(1)",
-                      filter: active && !isCenter ? "drop-shadow(0 3px 12px rgba(255,255,255,0.25))" : "none",
+                      filter: active && !isCenter
+                        ? "drop-shadow(0 3px 12px rgba(255,255,255,0.25))"
+                        : "none",
                       color: isCenter && active ? DEEP : "#fff",
                     }}
                   />
