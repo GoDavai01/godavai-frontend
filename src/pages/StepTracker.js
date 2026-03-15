@@ -889,7 +889,7 @@ export default function StepTracker() {
   const [starting, setStarting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [permissionError, setPermissionError] = useState("");
-  const [authError, setAuthError] = useState("");
+  const [, setAuthError] = useState("");
   const [liveSource, setLiveSource] = useState("gps+estimate");
   const [selectedMapSessionId, setSelectedMapSessionId] = useState("live");
   const [weightInput, setWeightInput] = useState(String(user?.weightKg || user?.weight || ""));
