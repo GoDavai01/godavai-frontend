@@ -101,6 +101,20 @@ function normalizePaymentStatus(status) {
   return s || "pending";
 }
 
+function normalizeRefundStatus(status) {
+  const s = String(status || "").toLowerCase().trim();
+  if (["completed", "refunded"].includes(s)) return "completed";
+  if (["initiated", "processing", "pending"].includes(s)) return "initiated";
+  if (["failed"].includes(s)) return "failed";
+  return "none";
+}
+
+function normalizeDoctorAction(action) {
+  const a = String(action || "").toLowerCase().trim();
+  if (["accepted", "rescheduled", "rejected", "cancelled"].includes(a)) return a;
+  return "none";
+}
+
 function normalizeConsultStatus(item = {}) {
   const raw = String(item?.status || "").toLowerCase().trim();
   const paymentStatus = normalizePaymentStatus(item?.paymentStatus);
@@ -181,9 +195,15 @@ function normalizeConsult(item = {}) {
     paymentRef,
     paymentMethod: item?.paymentMethod || "",
     paymentStatus: normalizePaymentStatus(item?.paymentStatus),
+    refundStatus: normalizeRefundStatus(item?.refundStatus),
+    refundedAt: item?.refundedAt || "",
     status: normalizeConsultStatus(item),
     consultRoomId: item?.consultRoomId || "",
     callState: item?.callState || "",
+    doctorAction: normalizeDoctorAction(item?.doctorAction),
+    doctorActionAt: item?.doctorActionAt || "",
+    rescheduledAt: item?.rescheduledAt || "",
+    cancelReason: item?.cancelReason || "",
     fee: Number(item?.fee || 0),
     patientName: item?.patientName || "Self",
     reason: item?.reason || item?.symptoms || "",
@@ -332,13 +352,46 @@ function Glass({ children, style }) {
 function getPatientStatusMeta(item = {}) {
   const status = normalizeConsultStatus(item);
   const paymentStatus = normalizePaymentStatus(item?.paymentStatus);
+  const refundStatus = normalizeRefundStatus(item?.refundStatus);
+  const doctorAction = normalizeDoctorAction(item?.doctorAction);
 
-  if (paymentStatus !== "paid" || status === "pending_payment") {
+  if (!["paid", "refunded"].includes(paymentStatus) || status === "pending_payment") {
     return {
       label: "Complete payment",
       bg: "#FFF7ED",
       border: "#FDBA74",
       accent: "#C2410C",
+    };
+  }
+
+  if (
+    doctorAction === "rejected" ||
+    doctorAction === "cancelled" ||
+    (status === "cancelled" && /doctor/i.test(String(item?.cancelReason || "")))
+  ) {
+    if (paymentStatus === "refunded" || refundStatus === "completed") {
+      return {
+        label: "Refunded",
+        bg: "#EFF6FF",
+        border: "#93C5FD",
+        accent: "#1D4ED8",
+      };
+    }
+
+    if (refundStatus === "initiated") {
+      return {
+        label: "Refund in progress",
+        bg: "#EFF6FF",
+        border: "#93C5FD",
+        accent: "#1D4ED8",
+      };
+    }
+
+    return {
+      label: doctorAction === "cancelled" ? "Cancelled by doctor" : "Rejected by doctor",
+      bg: "#FEF2F2",
+      border: "#FECACA",
+      accent: "#B91C1C",
     };
   }
 
@@ -353,7 +406,7 @@ function getPatientStatusMeta(item = {}) {
 
   if (status === "accepted") {
     return {
-      label: "Doctor accepted",
+      label: doctorAction === "rescheduled" ? "Rescheduled" : "Doctor accepted",
       bg: "#E0F2FE",
       border: "#7DD3FC",
       accent: "#0369A1",
@@ -362,7 +415,7 @@ function getPatientStatusMeta(item = {}) {
 
   if (status === "upcoming") {
     return {
-      label: "Upcoming",
+      label: doctorAction === "rescheduled" ? "Rescheduled" : "Upcoming",
       bg: "#DCFCE7",
       border: "#86EFAC",
       accent: "#166534",
@@ -402,6 +455,115 @@ function getPatientStatusMeta(item = {}) {
     border: "#E2E8F0",
     accent: "#475569",
   };
+}
+
+function getPatientStatusMessage(item = {}) {
+  const status = normalizeConsultStatus(item);
+  const paymentStatus = normalizePaymentStatus(item?.paymentStatus);
+  const refundStatus = normalizeRefundStatus(item?.refundStatus);
+  const doctorAction = normalizeDoctorAction(item?.doctorAction);
+  const cancelReason = String(item?.cancelReason || "").trim();
+  const datePart = item?.dateLabel || item?.date || "the updated schedule";
+  const slotPart = item?.slot ? ` at ${item.slot}` : "";
+
+  if (!["paid", "refunded"].includes(paymentStatus) || status === "pending_payment") {
+    return {
+      tone: "warning",
+      text: "Complete payment to confirm this booking.",
+    };
+  }
+
+  if (doctorAction === "rescheduled" && ["accepted", "upcoming", "live_now"].includes(status)) {
+    return {
+      tone: "info",
+      text: `Doctor rescheduled this consult to ${datePart}${slotPart}. Join will use the updated slot.`,
+    };
+  }
+
+  if (doctorAction === "accepted" && ["accepted", "upcoming", "live_now"].includes(status)) {
+    return {
+      tone: "success",
+      text: "Doctor accepted your booking. You can join from this card.",
+    };
+  }
+
+  if (paymentStatus === "paid" && status === "pending") {
+    return {
+      tone: "warning",
+      text: "Payment received. Join appears here after the doctor accepts your booking.",
+    };
+  }
+
+  if (
+    doctorAction === "rejected" ||
+    doctorAction === "cancelled" ||
+    (status === "cancelled" && /doctor/i.test(cancelReason))
+  ) {
+    const baseAction =
+      doctorAction === "cancelled" ? "Doctor cancelled this booking." : "Doctor rejected this booking.";
+    const reasonText =
+      cancelReason && !/cancelled by doctor/i.test(cancelReason)
+        ? ` Reason: ${cancelReason}.`
+        : "";
+
+    if (paymentStatus === "refunded" || refundStatus === "completed") {
+      return {
+        tone: "error",
+        text: `${baseAction} Refund completed to your original payment method.${reasonText}`,
+      };
+    }
+
+    if (refundStatus === "initiated") {
+      return {
+        tone: "info",
+        text: `${baseAction} Refund initiated to your original payment method.${reasonText}`,
+      };
+    }
+
+    if (refundStatus === "failed") {
+      return {
+        tone: "error",
+        text: `${baseAction} Auto-refund failed and the team needs to process it manually.${reasonText}`,
+      };
+    }
+
+    return {
+      tone: "error",
+      text: `${baseAction}${reasonText}`,
+    };
+  }
+
+  return null;
+}
+
+function getStatusMessageStyles(tone = "info") {
+  switch (tone) {
+    case "success":
+      return {
+        color: "#166534",
+        background: "#ECFDF5",
+        border: "#A7F3D0",
+      };
+    case "warning":
+      return {
+        color: "#92400E",
+        background: "#FFFBEB",
+        border: "#FDE68A",
+      };
+    case "error":
+      return {
+        color: "#991B1B",
+        background: "#FEF2F2",
+        border: "#FECACA",
+      };
+    case "info":
+    default:
+      return {
+        color: "#1D4ED8",
+        background: "#EFF6FF",
+        border: "#BFDBFE",
+      };
+  }
 }
 
 function DoctorCard({ doctor, mode, onBook }) {
@@ -652,6 +814,10 @@ export default function Doctors() {
             items: localBookings.map((item) => ({
               bookingId: item.id || item.bookingId,
               paymentRef: item.paymentRef || "",
+              doctorId: item.doctorId || "",
+              date: item.date || "",
+              slot: item.slot || "",
+              mode: item.mode || "",
             })),
           },
           token ? { headers: userHeaders() } : undefined
@@ -1165,7 +1331,6 @@ export default function Doctors() {
 const nowMs = Date.now();
 const isLive = a.callState === "live" || a.status === "live_now";
 const hasPrescription = !!a?.prescription?.fileUrl;
-const isAwaitingDoctor = a.paymentStatus === "paid" && a.status === "pending";
 
 const withinJoinWindow =
   appointmentMs > 0 && nowMs >= appointmentMs - 30 * 60 * 1000;
@@ -1184,6 +1349,10 @@ const canJoin =
               const roomId = a.consultRoomId || `consult_${String(a.id || a.bookingId || "").slice(-8)}`;
 
               const meta = getPatientStatusMeta(a);
+              const statusMessage = getPatientStatusMessage(a);
+              const statusMessageStyles = statusMessage
+                ? getStatusMessageStyles(statusMessage.tone)
+                : null;
 
               return (
                 <div
@@ -1430,20 +1599,20 @@ const canJoin =
                       </div>
                     )}
 
-                    {isAwaitingDoctor && (
+                    {statusMessage && (
                       <div
                         style={{
                           fontSize: 11,
                           fontWeight: 800,
-                          color: "#92400E",
-                          background: "#FFFBEB",
+                          color: statusMessageStyles?.color || "#1D4ED8",
+                          background: statusMessageStyles?.background || "#EFF6FF",
                           borderRadius: 10,
                           padding: "6px 10px",
-                          border: "1px solid #FDE68A",
+                          border: `1px solid ${statusMessageStyles?.border || "#BFDBFE"}`,
                           marginBottom: 8,
                         }}
                       >
-                        Payment received. Join appears here after the doctor accepts your booking.
+                        {statusMessage.text}
                       </div>
                     )}
 
