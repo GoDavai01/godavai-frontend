@@ -15,8 +15,8 @@ import {
   Activity,
   ChevronRight,
   ShieldCheck,
-  Lock,
-  UserRound,
+  Ruler,
+  Weight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -57,7 +57,9 @@ function formatDuration(totalSec = 0) {
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
-  if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  if (h > 0) {
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
@@ -654,9 +656,151 @@ function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSession
   );
 }
 
+function BodyMetricsCard({
+  weightInput,
+  setWeightInput,
+  heightInput,
+  setHeightInput,
+  savingMetrics,
+  onSave,
+  hasWeight,
+  hasHeight,
+}) {
+  const missingText = [
+    !hasWeight ? "weight" : null,
+    !hasHeight ? "height" : null,
+  ]
+    .filter(Boolean)
+    .join(" + ");
+
+  return (
+    <Glass
+      style={{
+        padding: 14,
+        marginBottom: 16,
+        background: !hasWeight || !hasHeight ? "#FFF9EE" : "#F4FBF8",
+        border: !hasWeight || !hasHeight ? "1px solid rgba(245,158,11,0.22)" : `1px solid ${BORDER}`,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 14,
+            background: "rgba(245,158,11,0.10)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <Weight style={{ width: 17, height: 17, color: "#B45309" }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 900, color: "#92400E", marginBottom: 4 }}>
+            {!hasWeight || !hasHeight ? `Add ${missingText} here` : "Body metrics saved"}
+          </div>
+          <div style={{ fontSize: 11.5, color: "#A16207", fontWeight: 700, lineHeight: 1.5 }}>
+            Calories aur step estimate better karne ke liye yahi se update karo. Profile pe jane ki zarurat nahi.
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "end" }}>
+        <div>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: SUB, marginBottom: 6 }}>Weight (kg)</div>
+          <div
+            style={{
+              height: 46,
+              borderRadius: 14,
+              border: "1px solid rgba(12,90,62,0.10)",
+              background: "#fff",
+              display: "flex",
+              alignItems: "center",
+              padding: "0 12px",
+              gap: 8,
+            }}
+          >
+            <Weight style={{ width: 15, height: 15, color: DEEP }} />
+            <input
+              value={weightInput}
+              onChange={(e) => setWeightInput(e.target.value.replace(/[^\d.]/g, "").slice(0, 5))}
+              placeholder="70"
+              inputMode="decimal"
+              style={{
+                border: "none",
+                outline: "none",
+                width: "100%",
+                background: "transparent",
+                fontSize: 14,
+                fontWeight: 800,
+                color: TEXT,
+              }}
+            />
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: SUB, marginBottom: 6 }}>Height (cm)</div>
+          <div
+            style={{
+              height: 46,
+              borderRadius: 14,
+              border: "1px solid rgba(12,90,62,0.10)",
+              background: "#fff",
+              display: "flex",
+              alignItems: "center",
+              padding: "0 12px",
+              gap: 8,
+            }}
+          >
+            <Ruler style={{ width: 15, height: 15, color: DEEP }} />
+            <input
+              value={heightInput}
+              onChange={(e) => setHeightInput(e.target.value.replace(/[^\d.]/g, "").slice(0, 5))}
+              placeholder="170"
+              inputMode="decimal"
+              style={{
+                border: "none",
+                outline: "none",
+                width: "100%",
+                background: "transparent",
+                fontSize: 14,
+                fontWeight: 800,
+                color: TEXT,
+              }}
+            />
+          </div>
+        </div>
+
+        <motion.button
+          whileTap={{ scale: 0.96 }}
+          onClick={onSave}
+          disabled={savingMetrics}
+          style={{
+            height: 46,
+            padding: "0 16px",
+            borderRadius: 14,
+            border: "none",
+            background: `linear-gradient(135deg,${DEEP},${MID})`,
+            color: "#fff",
+            fontWeight: 1000,
+            fontFamily: "'Sora',sans-serif",
+            cursor: savingMetrics ? "wait" : "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {savingMetrics ? "Saving..." : "Save"}
+        </motion.button>
+      </div>
+    </Glass>
+  );
+}
+
 export default function StepTracker() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, setUser, token } = useAuth();
 
   const [sessionId, setSessionId] = useState(null);
   const [status, setStatus] = useState("idle");
@@ -672,8 +816,12 @@ export default function StepTracker() {
   const [starting, setStarting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [permissionError, setPermissionError] = useState("");
+  const [authError, setAuthError] = useState("");
   const [liveSource, setLiveSource] = useState("gps+estimate");
   const [selectedMapSessionId, setSelectedMapSessionId] = useState("live");
+  const [weightInput, setWeightInput] = useState(String(user?.weightKg || user?.weight || ""));
+  const [heightInput, setHeightInput] = useState(String(user?.heightCm || user?.height || ""));
+  const [savingMetrics, setSavingMetrics] = useState(false);
 
   const watchIdRef = useRef(null);
   const timerRef = useRef(null);
@@ -682,6 +830,11 @@ export default function StepTracker() {
   const manualMotionStepsRef = useRef(0);
   const motionEnabledRef = useRef(false);
   const lastMotionPeakTsRef = useRef(0);
+
+  useEffect(() => {
+    setWeightInput(String(user?.weightKg || user?.weight || ""));
+    setHeightInput(String(user?.heightCm || user?.height || ""));
+  }, [user?.weightKg, user?.weight, user?.heightCm, user?.height]);
 
   const weightKgRaw = user?.weightKg || user?.weight || null;
   const heightCmRaw = user?.heightCm || user?.height || null;
@@ -692,9 +845,67 @@ export default function StepTracker() {
   const strideMeters = hasHeight ? Math.max(0.5, Number(heightCm) * 0.00415) : 0.78;
 
   const authHeaders = useMemo(() => {
-    const token = localStorage.getItem("token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  }, []);
+    const t = token || localStorage.getItem("token");
+    return t ? { Authorization: `Bearer ${t}` } : {};
+  }, [token]);
+
+  const saveMetricsInline = useCallback(async () => {
+    const nextWeight = Number(weightInput);
+    const nextHeight = Number(heightInput);
+
+    if (!nextWeight || nextWeight <= 0) {
+      setPermissionError("Please enter valid weight.");
+      return;
+    }
+
+    if (!nextHeight || nextHeight <= 0) {
+      setPermissionError("Please enter valid height.");
+      return;
+    }
+
+    if (!user?._id) {
+      setPermissionError("User not found.");
+      return;
+    }
+
+    try {
+      setSavingMetrics(true);
+      setPermissionError("");
+
+      const payload = {
+        ...user,
+        weightKg: nextWeight,
+        weight: nextWeight,
+        heightCm: nextHeight,
+        height: nextHeight,
+        profileCompleted: true,
+      };
+
+      await axios.put(`${API}/api/users/${user._id}`, payload, {
+        headers: authHeaders,
+      });
+
+      const nextUser = {
+        ...user,
+        weightKg: nextWeight,
+        weight: nextWeight,
+        heightCm: nextHeight,
+        height: nextHeight,
+        profileCompleted: true,
+      };
+
+      if (typeof setUser === "function") setUser(nextUser);
+
+      setCalories((prev) => {
+        if (prev == null && distanceMeters === 0 && steps === 0) return 0;
+        return calculateCalories({ distanceMeters, steps, weightKg: nextWeight });
+      });
+    } catch (err) {
+      setPermissionError(err?.response?.data?.message || "Unable to save weight/height.");
+    } finally {
+      setSavingMetrics(false);
+    }
+  }, [authHeaders, distanceMeters, heightInput, setUser, steps, user, weightInput]);
 
   const handleDeviceMotion = useCallback(
     (e) => {
@@ -721,7 +932,15 @@ export default function StepTracker() {
   );
 
   const refreshHistory = useCallback(async () => {
+    const hasAuth = Object.keys(authHeaders).length > 0;
+    if (!hasAuth) {
+      setAuthError("Session missing. Please login again.");
+      return;
+    }
+
     setLoadingHistory(true);
+    setAuthError("");
+
     try {
       const [summaryRes, sessionsRes] = await Promise.all([
         axios.get(`${API}/api/step-tracker/summary/today`, { headers: authHeaders }),
@@ -729,10 +948,14 @@ export default function StepTracker() {
       ]);
 
       setTodaySummary(summaryRes.data || null);
-
       const sessions = Array.isArray(sessionsRes.data?.sessions) ? sessionsRes.data.sessions : [];
       setRecentSessions(sessions);
-    } catch {
+    } catch (err) {
+      if (err?.response?.status === 401) {
+        setAuthError("Login expired. Please login again.");
+      } else {
+        setAuthError("");
+      }
       setTodaySummary(null);
       setRecentSessions([]);
     } finally {
@@ -872,6 +1095,7 @@ export default function StepTracker() {
   const handleStart = useCallback(async () => {
     setStarting(true);
     setPermissionError("");
+    setAuthError("");
 
     try {
       const motionOk = await enableMotionTracking();
@@ -926,7 +1150,11 @@ export default function StepTracker() {
       beginTimer();
       startGpsWatch();
     } catch (err) {
-      setPermissionError(err?.message || "Unable to start tracking.");
+      if (err?.response?.status === 401) {
+        setAuthError("Login expired. Please login again.");
+      } else {
+        setPermissionError(err?.message || "Unable to start tracking.");
+      }
     } finally {
       setStarting(false);
     }
@@ -948,7 +1176,6 @@ export default function StepTracker() {
     try {
       await axios.patch(`${API}/api/step-tracker/sessions/${sessionId}/pause`, {}, { headers: authHeaders });
     } catch {}
-
     setStatus("paused");
   }, [authHeaders, flushPoints, handleDeviceMotion, sessionId]);
 
@@ -1124,7 +1351,7 @@ export default function StepTracker() {
           </div>
         </div>
 
-        <Glass style={{ padding: 16 }}>
+        <Glass style={{ padding: 16, marginBottom: 14 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 11, color: SUB, fontWeight: 800, marginBottom: 5 }}>Today goal</div>
@@ -1165,91 +1392,8 @@ export default function StepTracker() {
             </div>
           </div>
         </Glass>
-      </div>
 
-      <div style={{ padding: "18px 18px 0", position: "relative", zIndex: 1 }}>
-        {!hasWeight && (
-          <Glass style={{ padding: 14, marginBottom: 16, border: "1px solid rgba(245,158,11,0.22)", background: "#FFF9EE" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-              <div
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 14,
-                  background: "rgba(245,158,11,0.10)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <Lock style={{ width: 16, height: 16, color: "#B45309" }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 900, color: "#92400E", marginBottom: 4 }}>
-                  Calories locked until weight is saved
-                </div>
-                <div style={{ fontSize: 11.5, color: "#A16207", fontWeight: 700, lineHeight: 1.5 }}>
-                  Main fake number nahi dikhara. Weight save karo profile me, tabhi calories properly calculate hongi.
-                </div>
-                <button
-                  onClick={() => navigate("/profile")}
-                  style={{
-                    marginTop: 10,
-                    border: "none",
-                    cursor: "pointer",
-                    background: "#fff",
-                    color: "#92400E",
-                    borderRadius: 999,
-                    padding: "9px 14px",
-                    fontSize: 11.5,
-                    fontWeight: 900,
-                  }}
-                >
-                  Open profile
-                </button>
-              </div>
-            </div>
-          </Glass>
-        )}
-
-        {!hasHeight && (
-          <Glass style={{ padding: 14, marginBottom: 16 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-              <div
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 14,
-                  background: "rgba(24,226,161,0.10)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <UserRound style={{ width: 16, height: 16, color: DEEP }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, marginBottom: 4 }}>
-                  Height missing
-                </div>
-                <div style={{ fontSize: 11.5, color: SUB, fontWeight: 700, lineHeight: 1.5 }}>
-                  Steps abhi GPS + default stride estimate pe chal rahe hain. Height save karoge toh stride aur better ho jayega.
-                </div>
-              </div>
-            </div>
-          </Glass>
-        )}
-
-        {permissionError ? (
-          <Glass style={{ padding: 14, marginBottom: 16, border: "1px solid #FECACA", background: "#FFF8F6" }}>
-            <div style={{ fontSize: 13, fontWeight: 900, color: "#991B1B", marginBottom: 4 }}>Permission issue</div>
-            <div style={{ fontSize: 12, color: "#B45309", fontWeight: 700 }}>{permissionError}</div>
-          </Glass>
-        ) : null}
-
-        <Glass style={{ padding: 14, marginBottom: 20 }}>
+        <Glass style={{ padding: 14 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
             <div>
               <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 1000, color: TEXT }}>Control Center</div>
@@ -1343,34 +1487,33 @@ export default function StepTracker() {
             </motion.button>
           </div>
         </Glass>
+      </div>
 
-        <Glass style={{ padding: 14, marginBottom: 18, background: "linear-gradient(135deg, rgba(10,90,59,0.96), rgba(15,122,83,0.96))" }}>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 15,
-                background: "rgba(255,255,255,0.12)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <ShieldCheck style={{ width: 17, height: 17, color: "#C9FFEB" }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 900, color: "#fff", marginBottom: 4 }}>
-                Reality check
-              </div>
-              <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.76)", fontWeight: 700, lineHeight: 1.55 }}>
-                Web/app me tracker <strong>khud se silently auto-start</strong> nahi ho sakta without user action because permissions/background restrictions.
-                True <strong>pedometer sync</strong> ke liye native Android/iOS me later <strong>Health Connect / HealthKit</strong> integration chahiye.
-              </div>
-            </div>
-          </div>
-        </Glass>
+      <div style={{ padding: "18px 18px 0", position: "relative", zIndex: 1 }}>
+        <BodyMetricsCard
+          weightInput={weightInput}
+          setWeightInput={setWeightInput}
+          heightInput={heightInput}
+          setHeightInput={setHeightInput}
+          savingMetrics={savingMetrics}
+          onSave={saveMetricsInline}
+          hasWeight={hasWeight}
+          hasHeight={hasHeight}
+        />
+
+        {authError ? (
+          <Glass style={{ padding: 14, marginBottom: 16, border: "1px solid #FECACA", background: "#FFF8F6" }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#991B1B", marginBottom: 4 }}>Session issue</div>
+            <div style={{ fontSize: 12, color: "#B45309", fontWeight: 700 }}>{authError}</div>
+          </Glass>
+        ) : null}
+
+        {permissionError ? (
+          <Glass style={{ padding: 14, marginBottom: 16, border: "1px solid #FECACA", background: "#FFF8F6" }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#991B1B", marginBottom: 4 }}>Issue</div>
+            <div style={{ fontSize: 12, color: "#B45309", fontWeight: 700 }}>{permissionError}</div>
+          </Glass>
+        ) : null}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10, marginBottom: 18 }}>
           <StatCard icon={Footprints} label="Steps" value={steps.toLocaleString()} helper={`Source: ${liveSource}`} />
@@ -1379,7 +1522,7 @@ export default function StepTracker() {
             icon={Flame}
             label="Calories"
             value={hasWeight ? `${Math.round(calories || 0)} kcal` : "--"}
-            helper={hasWeight ? `Based on ${weightKg} kg` : "Add weight in profile"}
+            helper={hasWeight ? `Based on ${weightKg} kg` : "Save weight above"}
           />
           <StatCard icon={Gauge} label="Pace" value={pace} helper="Average pace for current session" />
           <StatCard icon={Clock3} label="Duration" value={formatDuration(durationSec)} helper="Walk session timer" />
@@ -1442,31 +1585,7 @@ export default function StepTracker() {
           />
         </div>
 
-        <Glass style={{ padding: 14, marginBottom: 32 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 16,
-                background: "rgba(24,226,161,0.10)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <ChevronRight style={{ width: 18, height: 18, color: DEEP }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 900, color: TEXT }}>Launch-ready note</div>
-              <div style={{ fontSize: 11.5, color: SUB, fontWeight: 700, lineHeight: 1.5 }}>
-                Live GPS route, exact start/end path, last 5 walk replays, duration, pace, distance, and step estimation are working here.
-                Native pedometer sync later separate integration se aayega.
-              </div>
-            </div>
-          </div>
-        </Glass>
+        <div style={{ height: 12 }} />
       </div>
     </div>
   );
