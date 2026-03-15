@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   readStoredConsultBookings,
   upsertStoredConsultBooking,
-  mergeConsultBookings,
   sortConsultBookings,
   getConsultStatusMeta,
 } from "../utils/consultBookings";
@@ -114,6 +113,60 @@ function Glass({ children, style }) {
       {children}
     </div>
   );
+}
+
+function buildAppointmentIdentityKey(item = {}) {
+  return [
+    String(item?.id || item?.bookingId || ""),
+    String(item?.paymentRef || ""),
+    String(item?.doctorId || ""),
+    String(item?.date || ""),
+    String(item?.slot || ""),
+    String(item?.mode || ""),
+  ].join("|");
+}
+
+function mergeAppointmentsPreferServer(serverBookings = [], localBookings = []) {
+  const byKey = new Map();
+
+  for (const item of Array.isArray(localBookings) ? localBookings : []) {
+    const key = buildAppointmentIdentityKey(item);
+    if (!key) continue;
+    byKey.set(key, { ...item });
+  }
+
+  for (const item of Array.isArray(serverBookings) ? serverBookings : []) {
+    const key = buildAppointmentIdentityKey(item);
+    if (!key) continue;
+
+    const existing = byKey.get(key) || {};
+
+    byKey.set(key, {
+      ...existing,
+      ...item,
+      id: item?.id || existing?.id || existing?.bookingId,
+      bookingId: item?.id || existing?.bookingId || existing?.id,
+      status: item?.status || existing?.status,
+      paymentStatus: item?.paymentStatus || existing?.paymentStatus,
+      paymentMethod: item?.paymentMethod || existing?.paymentMethod,
+      consultRoomId: item?.consultRoomId || existing?.consultRoomId || "",
+      callState: item?.callState || existing?.callState || "",
+      prescription: item?.prescription || existing?.prescription || null,
+      clinicLocation: item?.clinicLocation || existing?.clinicLocation || null,
+      locationUnlockedForPatient:
+        typeof item?.locationUnlockedForPatient === "boolean"
+          ? item.locationUnlockedForPatient
+          : !!existing?.locationUnlockedForPatient,
+      clinicRevealAllowed:
+        typeof item?.clinicRevealAllowed === "boolean"
+          ? item.clinicRevealAllowed
+          : !!existing?.clinicRevealAllowed,
+      updatedAt: item?.updatedAt || existing?.updatedAt,
+      createdAt: item?.createdAt || existing?.createdAt,
+    });
+  }
+
+  return Array.from(byKey.values());
 }
 
 function DoctorCard({ doctor, mode, onBook }) {
@@ -339,17 +392,21 @@ export default function Doctors() {
     const localBookings = readStoredConsultBookings();
     const token = localStorage.getItem("token");
 
+    setLoadingAppts(true);
+
     if (!token) {
       setAppointments(sortConsultBookings(localBookings));
       setLoadingAppts(false);
       return;
     }
 
-    setLoadingAppts(true);
     try {
       const r = await axios.get(`${API}/api/consults/my`, { headers: userHeaders() });
-      const list = Array.isArray(r?.data?.consults) ? r.data.consults : [];
-      setAppointments(sortConsultBookings(mergeConsultBookings(list, localBookings)));
+      const serverBookings = Array.isArray(r?.data?.consults) ? r.data.consults : [];
+
+      const merged = mergeAppointmentsPreferServer(serverBookings, localBookings);
+      setAppointments(sortConsultBookings(merged));
+      setError("");
     } catch (_) {
       setAppointments(sortConsultBookings(localBookings));
     } finally {
@@ -359,6 +416,15 @@ export default function Doctors() {
 
   useEffect(() => {
     loadMyConsults();
+  }, [loadMyConsults]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      loadMyConsults();
+    };
+
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [loadMyConsults]);
 
   const loadSlotsForDoctor = useCallback(
@@ -506,7 +572,7 @@ export default function Doctors() {
                 patientSummary: patientSummary.trim(),
                 paymentMethod,
                 paymentStatus: "paid",
-                status: verifiedConsult?.status || "pending",
+                status: verifiedConsult?.status || consult?.status || "confirmed",
                 fee: Number(
                   verifiedConsult?.fee ||
                     (bookingMode === "video"
@@ -517,6 +583,7 @@ export default function Doctors() {
                     0
                 ),
                 createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
                 clinicLocation: verifiedConsult?.clinicLocation || null,
                 prescription: verifiedConsult?.prescription || null,
                 consultRoomId: verifiedConsult?.consultRoomId || consult?.consultRoomId || "",
