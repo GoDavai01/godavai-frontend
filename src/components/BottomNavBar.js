@@ -1,27 +1,24 @@
-// src/components/BottomNavBar.js — GoDavaii 2035 Health OS
-// ✅ FIXED DUPLICACY: Removed Profile & Search — they live in Navbar
-// ✅ NEW: 5-tab: Home, Medicines, AI (center hero), Doctor, Lab Test
-// ✅ AI center tab — elevated, glow animation, stands out
-// ✅ KEPT: Spring physics, haptics, memo, burst animation
-// ─────────────────────────────────────────────────────────
-// WHY: Navbar already has Location + Profile + Search bar
-//       → bottom bar has ZERO overlap now
+// src/components/BottomNavBar.js — GoDavaii 2035 Premium Health OS
+// ✅ Same routes/logic
+// ✅ Cleaner premium bottom bar
+// ✅ AI center tab still highlighted, but more refined
+// ✅ Tone matched with GoDavaii AI / Home
 
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { LazyMotion, domAnimation, m, useReducedMotion } from "framer-motion";
 import { Home, Pill, Sparkles, Stethoscope, FlaskConical } from "lucide-react";
 
-const DEEP = "#0C5A3E";
-const MID = "#0E7A4F";
-const ACC = "#00D97E";
+const DEEP = "#0A5A3B";
+const MID = "#0F7A53";
+const ACC = "#18E2A1";
 
 const navs = [
-  { label: "Home",      path: "/home",      icon: Home,         isCenter: false },
-  { label: "Medicines", path: "/all-medicines", icon: Pill,      isCenter: false },
-  { label: "AI",        path: "/ai",        icon: Sparkles,     isCenter: true  },
-  { label: "Doctor",    path: "/doctors",   icon: Stethoscope,  isCenter: false },
-  { label: "Lab Test",  path: "/lab-tests", icon: FlaskConical, isCenter: false },
+  { label: "Home", path: "/home", icon: Home, isCenter: false },
+  { label: "Medicines", path: "/all-medicines", icon: Pill, isCenter: false },
+  { label: "AI", path: "/ai", icon: Sparkles, isCenter: true },
+  { label: "Doctor", path: "/doctors", icon: Stethoscope, isCenter: false },
+  { label: "Lab Test", path: "/lab-tests", icon: FlaskConical, isCenter: false },
 ];
 
 function BottomNavBarImpl() {
@@ -67,18 +64,21 @@ function BottomNavBarImpl() {
         style={{
           position: "relative",
           overflow: "hidden",
-          borderTop: "1px solid rgba(255,255,255,0.12)",
-          boxShadow: "0 -8px 32px -8px rgba(0,0,0,0.28)",
+          borderTop: "1px solid rgba(255,255,255,0.10)",
+          boxShadow: "0 -12px 30px -10px rgba(0,0,0,0.24)",
           paddingBottom: "max(0.6rem, env(safe-area-inset-bottom))",
-          background: `linear-gradient(160deg, ${DEEP} 0%, #083D28 100%)`,
+          background: `linear-gradient(160deg, ${DEEP} 0%, #083D28 65%, ${MID} 100%)`,
+          backdropFilter: "blur(16px)",
         }}
       >
-        {/* Top accent line */}
         <div
           style={{
-            position: "absolute", top: 0, left: "10%", right: "10%",
+            position: "absolute",
+            top: 0,
+            left: "10%",
+            right: "10%",
             height: 1,
-            background: `linear-gradient(90deg, transparent, ${ACC}40, transparent)`,
+            background: "linear-gradient(90deg, transparent, rgba(24,226,161,0.30), transparent)",
             pointerEvents: "none",
           }}
         />
@@ -126,57 +126,53 @@ function BottomNavBarImpl() {
                   aria-current={active ? "page" : undefined}
                   aria-label={item.label}
                 >
-                  {/* Active pill — non-center tabs */}
                   {active && !isCenter && (
                     <LazyMotion features={domAnimation}>
                       <m.span
                         layoutId="gd-neo-pill"
                         transition={spring}
                         style={{
-                          position: "absolute", inset: 0, zIndex: -1,
+                          position: "absolute",
+                          inset: 0,
+                          zIndex: -1,
                           borderRadius: 16,
-                          background: "rgba(255,255,255,0.12)",
-                          border: "1px solid rgba(255,255,255,0.18)",
+                          background: "rgba(255,255,255,0.10)",
+                          border: "1px solid rgba(255,255,255,0.14)",
                           backdropFilter: "blur(2px)",
                         }}
                       />
                     </LazyMotion>
                   )}
 
-                  {/* Center AI tab — elevated bg */}
                   {isCenter && (
                     <div
                       style={{
-                        position: "absolute", inset: -2, zIndex: -1,
+                        position: "absolute",
+                        inset: -2,
+                        zIndex: -1,
                         borderRadius: 20,
-                        background: active
-                          ? `linear-gradient(135deg, ${ACC}, #00E5FF)`
-                          : `linear-gradient(135deg, ${MID}, ${DEEP})`,
-                        border: active
-                          ? `2px solid ${ACC}`
-                          : "2px solid rgba(255,255,255,0.15)",
-                        boxShadow: active
-                          ? `0 4px 20px ${ACC}60, 0 0 30px ${ACC}25`
-                          : "0 4px 12px rgba(0,0,0,0.25)",
+                        background: active ? "linear-gradient(135deg, #CFFFF0, #18E2A1)" : "linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))",
+                        border: active ? "2px solid rgba(255,255,255,0.40)" : "1.5px solid rgba(255,255,255,0.12)",
+                        boxShadow: active ? "0 10px 24px rgba(24,226,161,0.22)" : "0 4px 12px rgba(0,0,0,0.22)",
                         transition: "all 0.3s ease",
                       }}
                     />
                   )}
 
-                  {/* AI glow pulse */}
                   {isCenter && active && (
                     <div
                       style={{
-                        position: "absolute", inset: -6, zIndex: -2,
+                        position: "absolute",
+                        inset: -6,
+                        zIndex: -2,
                         borderRadius: 24,
-                        background: `radial-gradient(circle at center, ${ACC}30 0%, transparent 70%)`,
+                        background: "radial-gradient(circle at center, rgba(24,226,161,0.22) 0%, transparent 70%)",
                         animation: "gdAIGlow 2s ease-in-out infinite",
                         pointerEvents: "none",
                       }}
                     />
                   )}
 
-                  {/* Click burst */}
                   {burstIdx === idx && !shouldReduce && (
                     <LazyMotion features={domAnimation}>
                       <m.span
@@ -187,12 +183,15 @@ function BottomNavBarImpl() {
                         onAnimationComplete={() => setBurstIdx(null)}
                         style={{
                           position: "absolute",
-                          left: "50%", top: "50%",
-                          width: 40, height: 40,
+                          left: "50%",
+                          top: "50%",
+                          width: 40,
+                          height: 40,
                           transform: "translate(-50%, -50%)",
                           borderRadius: "50%",
-                          pointerEvents: "none", zIndex: -1,
-                          background: "radial-gradient(circle, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 70%)",
+                          pointerEvents: "none",
+                          zIndex: -1,
+                          background: "radial-gradient(circle, rgba(255,255,255,0.40) 0%, rgba(255,255,255,0) 70%)",
                         }}
                       />
                     </LazyMotion>
@@ -204,22 +203,19 @@ function BottomNavBarImpl() {
                       height: isCenter ? 22 : 19,
                       marginBottom: 2,
                       transition: "transform 0.2s",
-                      transform: active ? "scale(1.08)" : "scale(1)",
-                      filter: active
-                        ? isCenter
-                          ? "drop-shadow(0 2px 8px rgba(0,0,0,0.3))"
-                          : "drop-shadow(0 3px 12px rgba(255,255,255,0.55))"
-                        : "none",
+                      transform: active ? "scale(1.06)" : "scale(1)",
+                      filter: active && !isCenter ? "drop-shadow(0 3px 12px rgba(255,255,255,0.25))" : "none",
                       color: isCenter && active ? DEEP : "#fff",
                     }}
                   />
+
                   <span
                     style={{
                       fontSize: isCenter ? 10 : 10.5,
                       lineHeight: 1.2,
                       fontFamily: "'Sora', sans-serif",
                       fontWeight: active ? 800 : 600,
-                      opacity: active ? 1 : 0.7,
+                      opacity: active ? 1 : 0.72,
                       color: isCenter && active ? DEEP : "#fff",
                       letterSpacing: "-0.1px",
                     }}
@@ -235,8 +231,8 @@ function BottomNavBarImpl() {
 
       <style>{`
         @keyframes gdAIGlow {
-          0%, 100% { opacity: 0.5; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.05); }
+          0%, 100% { opacity: 0.45; transform: scale(1); }
+          50% { opacity: 0.9; transform: scale(1.04); }
         }
       `}</style>
     </div>
