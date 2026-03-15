@@ -111,7 +111,9 @@ function normalizeConsultStatus(item = {}) {
   if (raw === "upcoming") return "upcoming";
   if (raw === "cancelled" || raw === "rejected" || raw === "refunded") return "cancelled";
   if (raw === "no_show") return "no_show";
-  if (raw === "pending_payment") return "pending_payment";
+  if (raw === "pending_payment") {
+    return paymentStatus === "paid" ? "pending" : "pending_payment";
+  }
 
   if (raw === "confirmed") {
   return paymentStatus === "paid" ? "pending" : "pending_payment";
@@ -331,7 +333,7 @@ function getPatientStatusMeta(item = {}) {
   const status = normalizeConsultStatus(item);
   const paymentStatus = normalizePaymentStatus(item?.paymentStatus);
 
-  if (paymentStatus === "pending" || status === "pending_payment") {
+  if (paymentStatus !== "paid" || status === "pending_payment") {
     return {
       label: "Complete payment",
       bg: "#FFF7ED",
@@ -838,11 +840,23 @@ export default function Doctors() {
                 razorpaySignature: response?.razorpay_signature || "",
               });
 
-              const verifiedConsult = normalizeConsult(verifyRes?.data?.consult || consult);
+              const verifiedConsult = normalizeConsult(
+                verifyRes?.data?.consult || {
+                  ...consult,
+                  status: verifyRes?.data?.status || "confirmed",
+                  paymentStatus: verifyRes?.data?.paymentStatus || "paid",
+                  paymentRef:
+                    verifyRes?.data?.paymentRef || paymentRef || consult?.paymentRef || "",
+                  consultRoomId:
+                    verifyRes?.data?.consultRoomId || consult?.consultRoomId || "",
+                }
+              );
 
               upsertStoredConsultBooking({
                 id: verifiedConsult?.id || consult.id,
                 bookingId: verifiedConsult?.id || consult.id,
+                paymentRef:
+                  verifiedConsult?.paymentRef || paymentRef || consult?.paymentRef || "",
                 doctorId: bookingDoctor.id,
                 doctorName: bookingDoctor.name,
                 specialty: bookingDoctor.specialty,
@@ -866,8 +880,8 @@ export default function Doctors() {
                         : bookingDoctor.feeInPerson) ||
                     0
                 ),
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
+                createdAt: verifiedConsult?.createdAt || new Date().toISOString(),
+                updatedAt: verifiedConsult?.updatedAt || new Date().toISOString(),
                 clinicLocation: verifiedConsult?.clinicLocation || null,
                 prescription: verifiedConsult?.prescription || null,
                 consultRoomId: verifiedConsult?.consultRoomId || consult?.consultRoomId || "",
@@ -1151,6 +1165,7 @@ export default function Doctors() {
 const nowMs = Date.now();
 const isLive = a.callState === "live" || a.status === "live_now";
 const hasPrescription = !!a?.prescription?.fileUrl;
+const isAwaitingDoctor = a.paymentStatus === "paid" && a.status === "pending";
 
 const withinJoinWindow =
   appointmentMs > 0 && nowMs >= appointmentMs - 30 * 60 * 1000;
@@ -1158,10 +1173,7 @@ const withinJoinWindow =
 const canJoin =
   a.paymentStatus === "paid" &&
   a.mode !== "inperson" &&
-  (
-    ["accepted", "upcoming", "live_now"].includes(a.status) ||
-    (withinJoinWindow && !!a.consultRoomId)
-  );
+  ["accepted", "upcoming", "live_now"].includes(a.status);
 
               const modeIcon = a.mode === "video" ? Video : a.mode === "call" ? Phone : MapPin;
               const modeLabel = a.mode === "video" ? "Video" : a.mode === "call" ? "Audio" : "In-Person";
@@ -1418,6 +1430,23 @@ const canJoin =
                       </div>
                     )}
 
+                    {isAwaitingDoctor && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 800,
+                          color: "#92400E",
+                          background: "#FFFBEB",
+                          borderRadius: 10,
+                          padding: "6px 10px",
+                          border: "1px solid #FDE68A",
+                          marginBottom: 8,
+                        }}
+                      >
+                        Payment received. Join appears here after the doctor accepts your booking.
+                      </div>
+                    )}
+
                     {canJoin && (
                       <div style={{ display: "flex", gap: 8 }}>
                         <motion.button
@@ -1452,7 +1481,7 @@ const canJoin =
                           ) : (
                             <PhoneCall style={{ width: 14, height: 14 }} />
                           )}
-                          {isLive ? "Join Now — LIVE" : withinJoinWindow ? "Join Now" : "Open Room"}
+                          {isLive ? "Join Now — LIVE" : withinJoinWindow ? "Join Now" : "Join Room"}
                         </motion.button>
 
                         <motion.button

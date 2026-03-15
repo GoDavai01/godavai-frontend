@@ -1010,18 +1010,24 @@ export default function DoctorDashboard() {
         getDoctorAuthConfig()
       );
       const joined = data?.dashboardConsult || booking;
-      setCallSession(joined);
-      setCallState({
-        micOn: true,
-        camOn: joined.mode === CONSULT_MODES.VIDEO,
-        connected: true,
-        notes: joined.notes || "",
-      });
-      setCallOpen(true);
       setUpcomingConsults((prev) =>
         prev.map((item) => (item._id === joined._id ? { ...item, ...joined } : item))
       );
-      pushSnackbar(`Joined consult with ${joined.patientName}`, "success");
+      const roomId =
+        data?.session?.roomId ||
+        joined?.consultRoomId ||
+        booking?.consultRoomId ||
+        "";
+
+      if (!roomId) {
+        throw new Error("Consult room is not ready yet");
+      }
+
+      if (typeof window !== "undefined") {
+        window.open(`https://meet.jit.si/${roomId}`, "_blank", "noopener,noreferrer");
+      }
+
+      pushSnackbar(`Opened consult room for ${joined.patientName}`, "success");
     } catch (error) {
       pushSnackbar(error?.response?.data?.error || `Failed to join consult for ${booking.patientName}`, "error");
     }
@@ -2862,3 +2868,4 @@ export default function DoctorDashboard() {
     </div>
   );
 }
+
