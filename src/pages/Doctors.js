@@ -5,7 +5,6 @@ import {
   readStoredConsultBookings,
   upsertStoredConsultBooking,
   sortConsultBookings,
-  getConsultStatusMeta,
 } from "../utils/consultBookings";
 import {
   CalendarDays,
@@ -68,7 +67,11 @@ function next7Days() {
       iso: `${localYear}-${localMonth}-${localDate}`,
       day: d.toLocaleDateString("en-IN", { weekday: "short" }),
       date: d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-      full: d.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" }),
+      full: d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      }),
     });
   }
   return arr;
@@ -81,6 +84,201 @@ function userHeaders() {
 
 function mapModeForBackend(mode) {
   return mode === "call" ? "call" : mode;
+}
+
+function normalizeMode(mode) {
+  const m = String(mode || "").toLowerCase().trim();
+  if (m === "audio" || m === "call") return "call";
+  if (m === "in-person" || m === "inperson") return "inperson";
+  return "video";
+}
+
+function normalizePaymentStatus(status) {
+  const s = String(status || "").toLowerCase().trim();
+  if (["paid", "success", "successful", "captured"].includes(s)) return "paid";
+  if (["failed", "failure"].includes(s)) return "failed";
+  if (["refunded"].includes(s)) return "refunded";
+  return s || "pending";
+}
+
+function normalizeConsultStatus(item = {}) {
+  const raw = String(item?.status || "").toLowerCase().trim();
+  const paymentStatus = normalizePaymentStatus(item?.paymentStatus);
+
+  if (raw === "live" || raw === "live_now") return "live_now";
+  if (raw === "completed") return "completed";
+  if (raw === "accepted") return "accepted";
+  if (raw === "upcoming") return "upcoming";
+  if (raw === "cancelled" || raw === "rejected" || raw === "refunded") return "cancelled";
+  if (raw === "no_show") return "no_show";
+  if (raw === "pending_payment") return "pending_payment";
+
+  if (raw === "confirmed" || raw === "pending") {
+    return paymentStatus === "paid" ? "pending" : "pending_payment";
+  }
+
+  return raw || (paymentStatus === "paid" ? "pending" : "pending_payment");
+}
+
+function getAppointmentAt(item = {}) {
+  if (item?.appointmentAt) {
+    const d = new Date(item.appointmentAt);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  if (item?.bookedFor) {
+    const d = new Date(item.bookedFor);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  if (item?.date && item?.slot) {
+    const d = new Date(`${item.date} ${item.slot}`);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return "";
+}
+
+function normalizeConsult(item = {}) {
+  const mode = normalizeMode(item?.mode);
+  const id = String(item?.id || item?.bookingId || item?._id || "");
+  const doctorId = String(item?.doctorId || "");
+  const paymentRef = String(item?.paymentRef || "");
+  const date = String(item?.date || "");
+  const slot = String(item?.slot || "");
+  const appointmentAt = getAppointmentAt(item);
+
+  return {
+    ...item,
+    id,
+    bookingId: id || String(item?.bookingId || ""),
+    doctorId,
+    doctorName: item?.doctorName || item?.doctor || "",
+    specialty: item?.specialty || "",
+    mode,
+    date,
+    slot,
+    appointmentAt,
+    dateLabel:
+      item?.dateLabel ||
+      item?.fullDateLabel ||
+      item?.bookedForLabel ||
+      item?.date ||
+      "",
+    paymentRef,
+    paymentMethod: item?.paymentMethod || "",
+    paymentStatus: normalizePaymentStatus(item?.paymentStatus),
+    status: normalizeConsultStatus(item),
+    consultRoomId: item?.consultRoomId || "",
+    callState: item?.callState || "",
+    fee: Number(item?.fee || 0),
+    patientName: item?.patientName || "Self",
+    reason: item?.reason || item?.symptoms || "",
+    patientSummary: item?.patientSummary || "",
+    prescription: item?.prescription || null,
+    clinicLocation: item?.clinicLocation || item?.clinicLocationSnapshot || null,
+    locationUnlockedForPatient:
+      typeof item?.locationUnlockedForPatient === "boolean"
+        ? item.locationUnlockedForPatient
+        : false,
+    clinicRevealAllowed:
+      typeof item?.clinicRevealAllowed === "boolean"
+        ? item.clinicRevealAllowed
+        : false,
+    medicalRecordNames: Array.isArray(item?.medicalRecordNames)
+      ? item.medicalRecordNames
+      : [],
+    createdAt: item?.createdAt || "",
+    updatedAt: item?.updatedAt || "",
+  };
+}
+
+function getIdentityKeys(item = {}) {
+  const keys = [];
+  const id = String(item?.id || item?.bookingId || "");
+  const paymentRef = String(item?.paymentRef || "");
+  const doctorId = String(item?.doctorId || "");
+  const date = String(item?.date || "");
+  const slot = String(item?.slot || "");
+  const mode = String(item?.mode || "");
+
+  if (id) keys.push(`id:${id}`);
+  if (paymentRef) keys.push(`paymentRef:${paymentRef}`);
+  if (doctorId && date && slot && mode) {
+    keys.push(`slot:${doctorId}|${date}|${slot}|${mode}`);
+  }
+  if (date && slot && mode && String(item?.doctorName || "")) {
+    keys.push(`namedSlot:${String(item.doctorName)}|${date}|${slot}|${mode}`);
+  }
+
+  return keys;
+}
+
+function mergeAppointmentsPreferServer(serverBookings = [], localBookings = []) {
+  const merged = [];
+  const keyToIndex = new Map();
+
+  function attach(item, preferServer = false) {
+    const normalized = normalizeConsult(item);
+    const keys = getIdentityKeys(normalized);
+
+    let foundIndex = -1;
+    for (const key of keys) {
+      if (keyToIndex.has(key)) {
+        foundIndex = keyToIndex.get(key);
+        break;
+      }
+    }
+
+    if (foundIndex === -1) {
+      const nextIndex = merged.length;
+      merged.push(normalized);
+      keys.forEach((key) => keyToIndex.set(key, nextIndex));
+      return;
+    }
+
+    const existing = merged[foundIndex];
+    const next = preferServer
+      ? {
+          ...existing,
+          ...normalized,
+          id: normalized.id || existing.id,
+          bookingId: normalized.bookingId || existing.bookingId,
+          status: normalized.status || existing.status,
+          paymentStatus: normalized.paymentStatus || existing.paymentStatus,
+          paymentMethod: normalized.paymentMethod || existing.paymentMethod,
+          consultRoomId: normalized.consultRoomId || existing.consultRoomId,
+          callState: normalized.callState || existing.callState,
+          prescription: normalized.prescription || existing.prescription,
+          clinicLocation: normalized.clinicLocation || existing.clinicLocation,
+          dateLabel: normalized.dateLabel || existing.dateLabel,
+          appointmentAt: normalized.appointmentAt || existing.appointmentAt,
+          updatedAt: normalized.updatedAt || existing.updatedAt,
+          createdAt: normalized.createdAt || existing.createdAt,
+        }
+      : {
+          ...normalized,
+          ...existing,
+          id: existing.id || normalized.id,
+          bookingId: existing.bookingId || normalized.bookingId,
+          status: existing.status || normalized.status,
+          paymentStatus: existing.paymentStatus || normalized.paymentStatus,
+          paymentMethod: existing.paymentMethod || normalized.paymentMethod,
+          consultRoomId: existing.consultRoomId || normalized.consultRoomId,
+          callState: existing.callState || normalized.callState,
+          prescription: existing.prescription || normalized.prescription,
+          clinicLocation: existing.clinicLocation || normalized.clinicLocation,
+          dateLabel: existing.dateLabel || normalized.dateLabel,
+          appointmentAt: existing.appointmentAt || normalized.appointmentAt,
+          updatedAt: existing.updatedAt || normalized.updatedAt,
+          createdAt: existing.createdAt || normalized.createdAt,
+        };
+
+    merged[foundIndex] = next;
+    getIdentityKeys(next).forEach((key) => keyToIndex.set(key, foundIndex));
+  }
+
+  (Array.isArray(localBookings) ? localBookings : []).forEach((item) => attach(item, false));
+  (Array.isArray(serverBookings) ? serverBookings : []).forEach((item) => attach(item, true));
+
+  return merged;
 }
 
 function loadRazorpayScript(src) {
@@ -115,58 +313,79 @@ function Glass({ children, style }) {
   );
 }
 
-function buildAppointmentIdentityKey(item = {}) {
-  return [
-    String(item?.id || item?.bookingId || ""),
-    String(item?.paymentRef || ""),
-    String(item?.doctorId || ""),
-    String(item?.date || ""),
-    String(item?.slot || ""),
-    String(item?.mode || ""),
-  ].join("|");
-}
+function getPatientStatusMeta(item = {}) {
+  const status = normalizeConsultStatus(item);
+  const paymentStatus = normalizePaymentStatus(item?.paymentStatus);
 
-function mergeAppointmentsPreferServer(serverBookings = [], localBookings = []) {
-  const byKey = new Map();
-
-  for (const item of Array.isArray(localBookings) ? localBookings : []) {
-    const key = buildAppointmentIdentityKey(item);
-    if (!key) continue;
-    byKey.set(key, { ...item });
+  if (paymentStatus === "pending" || status === "pending_payment") {
+    return {
+      label: "Complete payment",
+      bg: "#FFF7ED",
+      border: "#FDBA74",
+      accent: "#C2410C",
+    };
   }
 
-  for (const item of Array.isArray(serverBookings) ? serverBookings : []) {
-    const key = buildAppointmentIdentityKey(item);
-    if (!key) continue;
-
-    const existing = byKey.get(key) || {};
-
-    byKey.set(key, {
-      ...existing,
-      ...item,
-      id: item?.id || existing?.id || existing?.bookingId,
-      bookingId: item?.id || existing?.bookingId || existing?.id,
-      status: item?.status || existing?.status,
-      paymentStatus: item?.paymentStatus || existing?.paymentStatus,
-      paymentMethod: item?.paymentMethod || existing?.paymentMethod,
-      consultRoomId: item?.consultRoomId || existing?.consultRoomId || "",
-      callState: item?.callState || existing?.callState || "",
-      prescription: item?.prescription || existing?.prescription || null,
-      clinicLocation: item?.clinicLocation || existing?.clinicLocation || null,
-      locationUnlockedForPatient:
-        typeof item?.locationUnlockedForPatient === "boolean"
-          ? item.locationUnlockedForPatient
-          : !!existing?.locationUnlockedForPatient,
-      clinicRevealAllowed:
-        typeof item?.clinicRevealAllowed === "boolean"
-          ? item.clinicRevealAllowed
-          : !!existing?.clinicRevealAllowed,
-      updatedAt: item?.updatedAt || existing?.updatedAt,
-      createdAt: item?.createdAt || existing?.createdAt,
-    });
+  if (status === "pending") {
+    return {
+      label: "Awaiting doctor",
+      bg: "#FFFBEB",
+      border: "#FCD34D",
+      accent: "#B45309",
+    };
   }
 
-  return Array.from(byKey.values());
+  if (status === "accepted") {
+    return {
+      label: "Doctor accepted",
+      bg: "#E0F2FE",
+      border: "#7DD3FC",
+      accent: "#0369A1",
+    };
+  }
+
+  if (status === "upcoming") {
+    return {
+      label: "Upcoming",
+      bg: "#DCFCE7",
+      border: "#86EFAC",
+      accent: "#166534",
+    };
+  }
+
+  if (status === "live_now") {
+    return {
+      label: "Live now",
+      bg: "#DCFCE7",
+      border: "#34D399",
+      accent: "#065F46",
+    };
+  }
+
+  if (status === "completed") {
+    return {
+      label: "Completed",
+      bg: "#ECFDF5",
+      border: "#A7F3D0",
+      accent: "#065F46",
+    };
+  }
+
+  if (status === "cancelled") {
+    return {
+      label: "Cancelled",
+      bg: "#FEF2F2",
+      border: "#FECACA",
+      accent: "#B91C1C",
+    };
+  }
+
+  return {
+    label: status || "Pending",
+    bg: "#F8FAFC",
+    border: "#E2E8F0",
+    accent: "#475569",
+  };
 }
 
 function DoctorCard({ doctor, mode, onBook }) {
@@ -389,7 +608,8 @@ export default function Doctors() {
   }, [query, specialty, sort, mode]);
 
   const loadMyConsults = useCallback(async () => {
-    const localBookings = readStoredConsultBookings();
+    const localBookingsRaw = readStoredConsultBookings();
+    const localBookings = (Array.isArray(localBookingsRaw) ? localBookingsRaw : []).map(normalizeConsult);
     const token = localStorage.getItem("token");
 
     setLoadingAppts(true);
@@ -402,9 +622,21 @@ export default function Doctors() {
 
     try {
       const r = await axios.get(`${API}/api/consults/my`, { headers: userHeaders() });
-      const serverBookings = Array.isArray(r?.data?.consults) ? r.data.consults : [];
+      const serverBookingsRaw = Array.isArray(r?.data?.consults) ? r.data.consults : [];
+      const serverBookings = serverBookingsRaw.map(normalizeConsult);
 
       const merged = mergeAppointmentsPreferServer(serverBookings, localBookings);
+
+      merged.forEach((item) => {
+        if (item?.id || item?.bookingId) {
+          upsertStoredConsultBooking({
+            ...item,
+            id: item.id || item.bookingId,
+            bookingId: item.bookingId || item.id,
+          });
+        }
+      });
+
       setAppointments(sortConsultBookings(merged));
       setError("");
     } catch (_) {
@@ -419,12 +651,26 @@ export default function Doctors() {
   }, [loadMyConsults]);
 
   useEffect(() => {
-    const onFocus = () => {
-      loadMyConsults();
+    const onFocus = () => loadMyConsults();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") loadMyConsults();
     };
 
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [loadMyConsults]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadMyConsults();
+    }, 10000);
+
+    return () => clearInterval(timer);
   }, [loadMyConsults]);
 
   const loadSlotsForDoctor = useCallback(
@@ -467,17 +713,19 @@ export default function Doctors() {
 
   const consultCards = useMemo(() => {
     return sortConsultBookings(
-      appointments.filter((a) =>
-        [
-          "pending",
-          "pending_payment",
-          "confirmed",
-          "accepted",
-          "upcoming",
-          "live_now",
-          "completed",
-        ].includes(a.status)
-      )
+      appointments
+        .map(normalizeConsult)
+        .filter((a) =>
+          [
+            "pending",
+            "pending_payment",
+            "accepted",
+            "upcoming",
+            "live_now",
+            "completed",
+            "cancelled",
+          ].includes(a.status)
+        )
     ).slice(0, 12);
   }, [appointments]);
 
@@ -554,7 +802,7 @@ export default function Doctors() {
                 razorpaySignature: response?.razorpay_signature || "",
               });
 
-              const verifiedConsult = verifyRes?.data?.consult || consult;
+              const verifiedConsult = normalizeConsult(verifyRes?.data?.consult || consult);
 
               upsertStoredConsultBooking({
                 id: verifiedConsult?.id || consult.id,
@@ -572,7 +820,7 @@ export default function Doctors() {
                 patientSummary: patientSummary.trim(),
                 paymentMethod,
                 paymentStatus: "paid",
-                status: verifiedConsult?.status || consult?.status || "confirmed",
+                status: verifiedConsult?.status || "pending",
                 fee: Number(
                   verifiedConsult?.fee ||
                     (bookingMode === "video"
@@ -861,11 +1109,12 @@ export default function Doctors() {
               No appointment yet. Select a doctor and book your first slot.
             </div>
           ) : (
-            consultCards.map((a) => {
+            consultCards.map((rawItem) => {
+              const a = normalizeConsult(rawItem);
               const isLive = a.callState === "live" || a.status === "live_now";
               const hasPrescription = !!a?.prescription?.fileUrl;
               const canJoin =
-                ["confirmed", "accepted", "live_now", "upcoming"].includes(a.status) &&
+                ["accepted", "upcoming", "live_now"].includes(a.status) &&
                 a.paymentStatus === "paid" &&
                 a.mode !== "inperson";
 
@@ -877,7 +1126,7 @@ export default function Doctors() {
               const ModeIcon = modeIcon;
               const roomId = a.consultRoomId || `consult_${String(a.id || a.bookingId || "").slice(-8)}`;
 
-              const meta = getConsultStatusMeta(a);
+              const meta = getPatientStatusMeta(a);
 
               return (
                 <div
