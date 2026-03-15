@@ -6,6 +6,8 @@
 //  ✅ Less cartoonish, less rainbow, more medical-luxury
 //  ✅ Added Daily Care strip: Step / Water / Medicine Reminder
 //  ✅ Kept product-first medicine feed and trust messaging
+//  ✅ Integrated Doctor Consultations section into NEW layout
+//  ✅ Shows LIVE badge, Join button, Prescription link, pending indicator
 // ============================================================
 
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
@@ -127,6 +129,22 @@ function getGreeting() {
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
+}
+
+function getConsultDateLabel(consult) {
+  if (consult?.dateLabel) return consult.dateLabel;
+  if (!consult?.date) return "Scheduled";
+  try {
+    const dt = new Date(consult.date);
+    if (Number.isNaN(dt.getTime())) return consult.date;
+    return dt.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return consult.date;
+  }
 }
 
 // ─── Atoms ───────────────────────────────────────────────────
@@ -1363,6 +1381,7 @@ export default function Home() {
   const [selectedMed, setSelectedMed] = useState(null);
   const [userCoords, setUserCoords] = useState(null);
   const [conflictSheet, setConflictSheet] = useState({ open: false, pendingMed: null });
+  const [myConsults, setMyConsults] = useState([]);
 
   const popupTimeout = useRef(null);
   const noMedicinesTimer = useRef(null);
@@ -1461,6 +1480,25 @@ export default function Home() {
     getActive();
   }, [user]);
 
+  // My consults for home doctor section
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setMyConsults([]);
+      return;
+    }
+
+    axios
+      .get(`${API}/api/consults/my`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((r) => {
+        const list = Array.isArray(r?.data?.consults) ? r.data.consults : [];
+        setMyConsults(list);
+      })
+      .catch(() => setMyConsults([]));
+  }, [user?._id, user?.userId]);
+
   // Nearby pharmacies + top meds
   useEffect(() => {
     if (!userCoords) return;
@@ -1531,14 +1569,14 @@ export default function Home() {
   }, [selectedCategory, pharmaciesNearby, allMedsByPharmacy]);
 
   useEffect(() => {
-  const popupTimer = popupTimeout.current;
-  const medicinesTimer = noMedicinesTimer.current;
+    const popupTimer = popupTimeout.current;
+    const medicinesTimer = noMedicinesTimer.current;
 
-  return () => {
-    clearTimeout(popupTimer);
-    clearTimeout(medicinesTimer);
-  };
-}, []);
+    return () => {
+      clearTimeout(popupTimer);
+      clearTimeout(medicinesTimer);
+    };
+  }, []);
 
   const handleAddToCart = (med) => {
     if (!canDeliver) {
@@ -1582,6 +1620,13 @@ export default function Home() {
     }
     return out;
   }, [pharmaciesNearby, mostOrderedByPharmacy, selectedCategory, allMedsByPharmacy, showFallbackMeds]);
+
+  const visibleConsults = useMemo(() => {
+    return myConsults
+      .filter((c) => ["confirmed", "accepted", "live_now", "completed"].includes(c.status))
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))
+      .slice(0, 3);
+  }, [myConsults]);
 
   const userName = user?.name?.split(" ")?.[0] || "there";
   const locationText = currentAddress?.formatted
@@ -1832,29 +1877,29 @@ export default function Home() {
 
         {/* Daily care */}
         <div style={{ marginBottom: 20 }}>
-  <Section title="Daily Care" badge="Phase 1" />
-  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
-    <DailyCareCard
-      icon={Footprints}
-      title="Step Tracker"
-      value="Start walk"
-      helper="Live route, steps, calories, pace."
-      onClick={() => navigate("/step-tracker")}
-    />
-    <DailyCareCard
-      icon={Droplets}
-      title="Water Tracker"
-      value="5 / 8 glasses"
-      helper="Stay hydrated through the day."
-    />
-    <DailyCareCard
-      icon={BellRing}
-      title="Medicine Reminder"
-      value="2 reminders"
-      helper="Morning and evening medicines."
-    />
-  </div>
-</div>
+          <Section title="Daily Care" badge="Phase 1" />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+            <DailyCareCard
+              icon={Footprints}
+              title="Step Tracker"
+              value="Start walk"
+              helper="Live route, steps, calories, pace."
+              onClick={() => navigate("/step-tracker")}
+            />
+            <DailyCareCard
+              icon={Droplets}
+              title="Water Tracker"
+              value="5 / 8 glasses"
+              helper="Stay hydrated through the day."
+            />
+            <DailyCareCard
+              icon={BellRing}
+              title="Medicine Reminder"
+              value="2 reminders"
+              helper="Morning and evening medicines."
+            />
+          </div>
+        </div>
 
         <AnimatePresence>
           {activeOrder && (
@@ -1863,6 +1908,273 @@ export default function Home() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Doctor Consultations */}
+        {visibleConsults.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <Section title="Doctor Consultations" badge="LIVE" onSeeAll={() => navigate("/doctors")} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {visibleConsults.map((c) => {
+                const isLive = c.callState === "live" || c.status === "live_now";
+                const canJoin =
+                  ["confirmed", "accepted", "live_now"].includes(c.status) &&
+                  c.paymentStatus === "paid" &&
+                  c.mode !== "inperson";
+                const hasPrescription = !!c?.prescription?.fileUrl;
+                const dateLabel = getConsultDateLabel(c);
+
+                return (
+                  <Glass key={c.id || c._id} style={{ padding: 14, overflow: "hidden", position: "relative" }}>
+                    {isLive && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          height: 3,
+                          background: "linear-gradient(90deg,#10B981,#34D399,#10B981)",
+                          backgroundSize: "200% 100%",
+                          animation: "hmLiveBar 1.5s linear infinite",
+                        }}
+                      />
+                    )}
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                      <div
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: 16,
+                          background: "linear-gradient(135deg,#EEF8F4,#DDF5EA)",
+                          display: "grid",
+                          placeItems: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Stethoscope style={{ width: 18, height: 18, color: DEEP }} />
+                      </div>
+
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 13.5, fontWeight: 1000, color: TEXT }}>
+                          {c.doctorName}
+                        </div>
+                        <div style={{ fontSize: 10.5, color: "#64748B", fontWeight: 700 }}>
+                          {c.specialty} · {dateLabel} · {c.slot}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                        {isLive && (
+                          <span
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: "50%",
+                              background: "#10B981",
+                              animation: "glowPulse 1.5s ease-in-out infinite",
+                            }}
+                          />
+                        )}
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 900,
+                            color: isLive ? "#065F46" : c.status === "completed" ? "#065F46" : "#92400E",
+                            background: isLive ? "#D1FAE5" : c.status === "completed" ? "#ECFDF5" : "#FEF3C7",
+                            padding: "4px 10px",
+                            borderRadius: 999,
+                            border: `1px solid ${isLive ? "#A7F3D0" : c.status === "completed" ? "#A7F3D0" : "#FDE68A"}`,
+                          }}
+                        >
+                          {isLive ? "LIVE" : c.status === "completed" ? "Done" : "Upcoming"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {c.mode === "inperson" && (
+                      <div
+                        style={{
+                          marginBottom: 10,
+                          fontSize: 10.8,
+                          fontWeight: 800,
+                          color: "#0F172A",
+                          background: "#F8FAFC",
+                          borderRadius: 12,
+                          padding: "8px 10px",
+                          border: "1px solid #E2E8F0",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <MapPin style={{ width: 12, height: 12 }} />
+                        <span>
+                          {c?.clinicLocation?.locality || c?.clinicLocation?.fullAddress || "Clinic address unavailable"}
+                        </span>
+                        {c?.clinicLocation?.exactUnlocked && c?.clinicLocation?.coordinates?.lat ? (
+                          <a
+                            href={`https://www.google.com/maps/search/?api=1&query=${c.clinicLocation.coordinates.lat},${c.clinicLocation.coordinates.lng}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              color: DEEP,
+                              fontWeight: 900,
+                              fontSize: 10.5,
+                              textDecoration: "none",
+                              marginLeft: "auto",
+                            }}
+                          >
+                            Maps →
+                          </a>
+                        ) : null}
+                      </div>
+                    )}
+
+                    {hasPrescription && (
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          background: "#F0FDF4",
+                          border: "1px solid #BBF7D0",
+                          borderRadius: 12,
+                          padding: "9px 12px",
+                          marginBottom: 10,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 10,
+                            background: "#DCFCE7",
+                            display: "grid",
+                            placeItems: "center",
+                            flexShrink: 0,
+                            color: "#15803D",
+                            fontSize: 14,
+                            fontWeight: 900,
+                          }}
+                        >
+                          📋
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 11.5, fontWeight: 900, color: "#166534" }}>Prescription Available</div>
+                          <div style={{ fontSize: 10, color: "#4B7A62", fontWeight: 700 }}>Uploaded by doctor</div>
+                        </div>
+
+                        <a
+                          href={c.prescription.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            height: 32,
+                            padding: "0 12px",
+                            borderRadius: 999,
+                            background: "linear-gradient(135deg,#15803D,#22C55E)",
+                            color: "#fff",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            textDecoration: "none",
+                            fontSize: 10.5,
+                            fontWeight: 900,
+                            fontFamily: "'Sora',sans-serif",
+                            flexShrink: 0,
+                          }}
+                        >
+                          View
+                        </a>
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {canJoin && (
+                        <>
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                              const roomId = c.consultRoomId || `consult_${(c.id || c._id || "").toString().slice(-8)}`;
+                              window.open(`https://meet.jit.si/${roomId}`, "_blank");
+                            }}
+                            style={{
+                              flex: 1,
+                              height: 38,
+                              border: "none",
+                              borderRadius: 12,
+                              background: isLive ? "linear-gradient(135deg,#059669,#10B981)" : `linear-gradient(135deg,${DEEP},${MID})`,
+                              color: "#fff",
+                              fontFamily: "'Sora',sans-serif",
+                              fontWeight: 900,
+                              fontSize: 11.5,
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 6,
+                              boxShadow: "0 6px 18px rgba(12,90,62,0.2)",
+                            }}
+                          >
+                            📹 {isLive ? "Join Now" : "Join Consultation"}
+                          </motion.button>
+
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                              const roomId = c.consultRoomId || `consult_${(c.id || c._id || "").toString().slice(-8)}`;
+                              window.open(
+                                `https://meet.jit.si/${roomId}#config.startWithVideoMuted=true&config.startWithAudioMuted=true`,
+                                "_blank"
+                              );
+                            }}
+                            style={{
+                              width: 42,
+                              height: 38,
+                              borderRadius: 12,
+                              border: "1px solid #E2E8F0",
+                              background: "#fff",
+                              cursor: "pointer",
+                              display: "grid",
+                              placeItems: "center",
+                              fontSize: 16,
+                            }}
+                            title="Open chat room"
+                          >
+                            💬
+                          </motion.button>
+                        </>
+                      )}
+
+                      {!canJoin && !hasPrescription && c.status === "completed" && (
+                        <div
+                          style={{
+                            flex: 1,
+                            height: 38,
+                            borderRadius: 12,
+                            background: "#FFFBEB",
+                            border: "1px solid #FDE68A",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 11,
+                            fontWeight: 800,
+                            color: "#92400E",
+                          }}
+                        >
+                          ⏳ Prescription pending
+                        </div>
+                      )}
+                    </div>
+                  </Glass>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* AI card */}
         <div style={{ marginBottom: 20 }}>
@@ -2176,6 +2488,7 @@ export default function Home() {
         }
         @keyframes hmSpin { to{transform:rotate(360deg)} }
         @keyframes micPulse { 0%,100%{opacity:0;transform:scale(1)} 50%{opacity:1;transform:scale(1.35)} }
+        @keyframes hmLiveBar { 0%{background-position:0% 0} 100%{background-position:200% 0} }
       `}</style>
     </div>
   );
