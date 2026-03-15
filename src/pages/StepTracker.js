@@ -26,7 +26,6 @@ const GOOGLE_MAPS_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "";
 
 const DEEP = "#0A5A3B";
 const MID = "#0F7A53";
-const ACCENT = "#18E2A1";
 const BG_TOP = "#F4FBF8";
 const BG_MID = "#EEF8F4";
 const BG_BOT = "#F7FAFF";
@@ -519,7 +518,6 @@ function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSession
           <button
             onClick={() => onSelectSession("live")}
             style={{
-              border: "none",
               cursor: "pointer",
               whiteSpace: "nowrap",
               borderRadius: 999,
@@ -540,7 +538,6 @@ function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSession
               key={s._id}
               onClick={() => onSelectSession(s._id)}
               style={{
-                border: "none",
                 cursor: "pointer",
                 whiteSpace: "nowrap",
                 borderRadius: 999,
@@ -617,7 +614,6 @@ function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSession
         <button
           onClick={() => onSelectSession("live")}
           style={{
-            border: "none",
             cursor: "pointer",
             whiteSpace: "nowrap",
             borderRadius: 999,
@@ -638,7 +634,6 @@ function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSession
             key={s._id}
             onClick={() => onSelectSession(s._id)}
             style={{
-              border: "none",
               cursor: "pointer",
               whiteSpace: "nowrap",
               borderRadius: 999,
