@@ -2,6 +2,7 @@
 // ✅ /all-medicines -> Medicines (already)
 // ✅ /pharmacies-near-you -> Medicines (redirect-like)
 // ✅ PharmaciesNearYou import REMOVED
+// ✅ StepTracker route ADDED
 // ✅ Everything else unchanged
 
 import React, { useEffect } from "react";
@@ -51,6 +52,7 @@ import LabTests from "./pages/LabTests";
 import LabPartnerRegister from "./pages/LabPartnerRegister";
 import LabPartnerLogin from "./pages/LabPartnerLogin";
 import LabPartnerDashboard from "./pages/LabPartnerDashboard";
+import StepTracker from "./pages/StepTracker";
 import { LocationProvider } from "./context/LocationContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -98,10 +100,11 @@ function AppShell({ children }) {
 
 function AppContent() {
   const location = useLocation();
+
   const hideNavbar =
-  location.pathname === "/" ||
-  location.pathname === "/home" ||
-  location.pathname.startsWith("/ai");
+    location.pathname === "/" ||
+    location.pathname === "/home" ||
+    location.pathname.startsWith("/ai");
 
   React.useEffect(() => {
     const isWelcome = location.pathname === "/";
@@ -118,6 +121,7 @@ function AppContent() {
   return (
     <>
       {!hideNavbar && <Navbar />}
+
       <Routes>
         <Route path="/" element={<WelcomePage />} />
         <Route path="/otp-login" element={<OtpLogin />} />
@@ -383,6 +387,16 @@ function AppContent() {
             }
           />
 
+          {/* ✅ NEW: Step Tracker */}
+          <Route
+            path="/step-tracker"
+            element={
+              <ProtectedRoute>
+                <StepTracker />
+              </ProtectedRoute>
+            }
+          />
+
           {/* ✅ BAND: AllMedicines route already points to marketplace */}
           <Route
             path="/all-medicines"
@@ -437,7 +451,10 @@ function App() {
             if (!jwt) return;
             await CapacitorHttp.post({
               url: (process.env.REACT_APP_API_BASE_URL || "http://localhost:5000") + "/api/prescriptions/register-fcm",
-              headers: { Authorization: "Bearer " + jwt, "Content-Type": "application/json" },
+              headers: {
+                Authorization: "Bearer " + jwt,
+                "Content-Type": "application/json",
+              },
               data: { token: token?.value || token },
             });
           } catch {}
@@ -451,7 +468,7 @@ function App() {
       } catch {}
     })();
   }, []);
-  
+
   return (
     <ThemeProvider>
       <CssBaseline />
@@ -471,5 +488,3 @@ function App() {
 }
 
 export default App;
-
-

@@ -627,9 +627,10 @@ function LabTestCard({ test, onClick }) {
 }
 
 // ─── Daily Care Card ─────────────────────────────────────────
-function DailyCareCard({ icon, title, value, helper, accent }) {
+function DailyCareCard({ icon, title, value, helper, accent, onClick }) {
   const Icon = icon;
-  return (
+
+  const content = (
     <Glass style={{ padding: 14, minHeight: 132 }}>
       <div
         style={{
@@ -652,6 +653,19 @@ function DailyCareCard({ icon, title, value, helper, accent }) {
       </div>
       <div style={{ fontSize: 11, fontWeight: 700, color: "#8A9A94", lineHeight: 1.45 }}>{helper}</div>
     </Glass>
+  );
+
+  if (!onClick) return content;
+
+  return (
+    <motion.button
+      whileTap={{ scale: 0.985 }}
+      whileHover={{ y: -1 }}
+      onClick={onClick}
+      style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+    >
+      {content}
+    </motion.button>
   );
 }
 
@@ -1809,13 +1823,29 @@ export default function Home() {
 
         {/* Daily care */}
         <div style={{ marginBottom: 20 }}>
-          <Section title="Daily Care" badge="Phase 1" />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
-            <DailyCareCard icon={Footprints} title="Step Tracker" value="6,240 steps" helper="Keep your daily movement consistent." />
-            <DailyCareCard icon={Droplets} title="Water Tracker" value="5 / 8 glasses" helper="Stay hydrated through the day." />
-            <DailyCareCard icon={BellRing} title="Medicine Reminder" value="2 reminders" helper="Morning and evening medicines." />
-          </div>
-        </div>
+  <Section title="Daily Care" badge="Phase 1" />
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+    <DailyCareCard
+      icon={Footprints}
+      title="Step Tracker"
+      value="Start walk"
+      helper="Live route, steps, calories, pace."
+      onClick={() => navigate("/step-tracker")}
+    />
+    <DailyCareCard
+      icon={Droplets}
+      title="Water Tracker"
+      value="5 / 8 glasses"
+      helper="Stay hydrated through the day."
+    />
+    <DailyCareCard
+      icon={BellRing}
+      title="Medicine Reminder"
+      value="2 reminders"
+      helper="Morning and evening medicines."
+    />
+  </div>
+</div>
 
         <AnimatePresence>
           {activeOrder && (
