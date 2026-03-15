@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
+import { readStoredConsultBookings, upsertStoredConsultBooking, mergeConsultBookings, sortConsultBookings, getConsultStatusMeta } from "../utils/consultBookings";
 import {
   CalendarDays,
   CheckCircle2,
@@ -246,9 +247,10 @@ export default function Doctors() {
   }, [query, specialty, sort, mode]);
 
   const loadMyConsults = useCallback(async () => {
+    const localBookings = readStoredConsultBookings();
     const token = localStorage.getItem("token");
     if (!token) {
-      setAppointments([]);
+      setAppointments(sortConsultBookings(localBookings));
       setLoadingAppts(false);
       return;
     }
@@ -256,9 +258,9 @@ export default function Doctors() {
     try {
       const r = await axios.get(`${API}/api/consults/my`, { headers: userHeaders() });
       const list = Array.isArray(r?.data?.consults) ? r.data.consults : [];
-      setAppointments(list);
+      setAppointments(sortConsultBookings(mergeConsultBookings(list, localBookings)));
     } catch (_) {
-      setAppointments([]);
+      setAppointments(sortConsultBookings(localBookings));
     } finally {
       setLoadingAppts(false);
     }
@@ -304,10 +306,9 @@ export default function Doctors() {
   }, [bookingDoctor?.id, bookingDate, loadSlotsForDoctor]);
 
   const upcoming = useMemo(() => {
-    return [...appointments]
-      .filter((a) => ["pending_payment", "confirmed", "accepted"].includes(a.status))
-      .sort((a, b) => new Date(`${a.date} ${a.slot}`) - new Date(`${b.date} ${b.slot}`))
-      .slice(0, 6);
+    return sortConsultBookings(
+      appointments.filter((a) => ["pending", "pending_payment", "confirmed", "accepted", "upcoming", "live_now"].includes(a.status))
+    ).slice(0, 6);
   }, [appointments]);
 
   async function bookNow() {
@@ -345,6 +346,8 @@ export default function Doctors() {
       const paymentRef = createRes?.data?.paymentIntent?.paymentRef || consult?.paymentRef || "";
       if (!consult?.id) throw new Error("Consult hold failed");
 
+      const selectedDateOption = dateList.find((d) => d.iso === bookingDate) || null;
+      const bookingMode = mapModeForBackend(mode);
       const rzpLoaded = await loadRazorpayScript("https://checkout.razorpay.com/v1/checkout.js");
       if (!rzpLoaded) throw new Error("Razorpay SDK failed to load. Try again.");
 
@@ -364,13 +367,36 @@ export default function Doctors() {
           order_id: orderBackend.data.orderId || orderBackend.data.id,
           handler: async (response) => {
             try {
-              await axios.post(`${API}/api/payments/verify`, {
+              const verifyRes = await axios.post(`${API}/api/payments/verify`, {
                 consultId: consult.id,
                 paymentRef,
                 paymentMethod,
                 transactionId: response?.razorpay_payment_id || `TXN-${Date.now()}`,
                 razorpayOrderId: response?.razorpay_order_id || "",
                 razorpaySignature: response?.razorpay_signature || "",
+              });
+              const verifiedConsult = verifyRes?.data?.consult || consult;
+              upsertStoredConsultBooking({
+                id: verifiedConsult?.id || consult.id,
+                bookingId: verifiedConsult?.id || consult.id,
+                doctorId: bookingDoctor.id,
+                doctorName: bookingDoctor.name,
+                specialty: bookingDoctor.specialty,
+                mode: bookingMode,
+                date: bookingDate,
+                slot: bookingSlot,
+                dateLabel: selectedDateOption?.full || bookingDate,
+                patientName: patientName.trim() || (patientType === "self" ? "Self" : "Family Member"),
+                reason: reason.trim() || "General consultation",
+                patientSummary: patientSummary.trim(),
+                paymentMethod,
+                paymentStatus: "paid",
+                status: verifiedConsult?.status || "pending",
+                fee: Number(verifiedConsult?.fee || (bookingMode === "video" ? bookingDoctor.feeVideo : bookingMode === "call" ? bookingDoctor.feeCall : bookingDoctor.feeInPerson) || 0),
+                createdAt: new Date().toISOString(),
+                clinicLocation: verifiedConsult?.clinicLocation || null,
+                prescription: verifiedConsult?.prescription || null,
+                medicalRecordNames: medicalRecords.map((file) => file.name),
               });
               resolve();
             } catch (verifyErr) {
@@ -535,6 +561,12 @@ export default function Doctors() {
                   <span style={{ fontSize: 10.5, color: "#475569", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 4 }}>
                     <Wallet style={{ width: 12, height: 12 }} /> Paid via {a.paymentMethod || "-"}
                   </span>
+                  <span style={{ fontSize: 10, fontWeight: 900, color: getConsultStatusMeta(a).accent, background: getConsultStatusMeta(a).bg, border: `1px solid ${getConsultStatusMeta(a).border}`, padding: "4px 8px", borderRadius: 999 }}>
+                    {getConsultStatusMeta(a).label}
+                  </span>
+                </div>
+                <div style={{ marginTop: 6, fontSize: 10.8, fontWeight: 800, color: "#475569" }}>
+                  {getConsultStatusMeta(a).helper}
                 </div>
                 {a.mode === "inperson" ? (
                   <div style={{ marginTop: 6, fontSize: 10.8, fontWeight: 800, color: "#0F172A" }}>

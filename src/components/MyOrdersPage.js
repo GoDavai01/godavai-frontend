@@ -1,20 +1,21 @@
-// src/components/MyOrdersPage.js — GoDavaii 2030 ELITE
-// ✅ ALL ORIGINAL LOGIC 100% PRESERVED — zero logic changes
-// ✅ Fixed: removed 52px top padding (Navbar already above)
-// ✅ Fixed: Google Fonts injected inline (Sora + Plus Jakarta Sans)
-// ✅ New features: Timeline, savings badge, speed indicator, swipe-to-reorder hint
+// src/components/MyOrdersPage.js â€” GoDavaii 2030 ELITE
+// âœ… ALL ORIGINAL LOGIC 100% PRESERVED â€” zero logic changes
+// âœ… Fixed: removed 52px top padding (Navbar already above)
+// âœ… Fixed: Google Fonts injected inline (Sora + Plus Jakarta Sans)
+// âœ… New features: Timeline, savings badge, speed indicator, swipe-to-reorder hint
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ReceiptText, X, MapPin, Clock, Package,
-  ChevronRight, RefreshCw, Zap,
+  ChevronRight, RefreshCw, Zap, CalendarDays, PhoneCall, Video, Stethoscope,
 } from "lucide-react";
 
 import QuoteReviewModal from "./QuoteReviewModal";
 import PrescriptionUploadModal from "./PrescriptionUploadModal";
 import { useCart } from "../context/CartContext";
+import { readStoredConsultBookings, mergeConsultBookings, sortConsultBookings, getConsultStatusMeta, formatConsultDateTime } from "../utils/consultBookings";
 
 import { Button } from "../components/ui/button";
 import {
@@ -29,7 +30,7 @@ const DEEP   = "#0C5A3E";
 const MID    = "#0E7A4F";
 const ACCENT = "#00D97E";
 
-// ── Inject Google Fonts once ─────────────────────────────────
+// â”€â”€ Inject Google Fonts once â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const FONTS_ID = "gd-google-fonts";
 if (typeof document !== "undefined" && !document.getElementById(FONTS_ID)) {
   const link = document.createElement("link");
@@ -39,9 +40,9 @@ if (typeof document !== "undefined" && !document.getElementById(FONTS_ID)) {
   document.head.appendChild(link);
 }
 
-// ══════════════════════════════════════════════════════════════
-// ALL ORIGINAL HELPER FUNCTIONS — 100% IDENTICAL
-// ══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ALL ORIGINAL HELPER FUNCTIONS â€” 100% IDENTICAL
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const toAbsUrl = (u = "") =>
   u.startsWith("/uploads/") ? `${API_BASE_URL}${u}` : u;
 
@@ -175,27 +176,27 @@ function getDisplayAddress(address) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════
-// STATUS CONFIG — 2030 elite with glow
-// ══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// STATUS CONFIG â€” 2030 elite with glow
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const STATUS_CFG = {
-  pending:              { label: "Pending",       color: "#92400E", bg: "#FEF3C7", border: "#FDE68A", emoji: "🕐",  dot: "#F59E0B", live: false },
-  placed:               { label: "Placed",        color: "#1E40AF", bg: "#EFF6FF", border: "#BFDBFE", emoji: "📋", dot: "#3B82F6", live: false },
-  quoted:               { label: "Quote Ready",   color: "#5B21B6", bg: "#F5F3FF", border: "#C4B5FD", emoji: "💬", dot: "#8B5CF6", live: false },
-  pending_user_confirm: { label: "Action Needed", color: "#991B1B", bg: "#FEF2F2", border: "#FECACA", emoji: "⚠️", dot: "#EF4444", live: false },
-  processing:           { label: "Processing",    color: "#92400E", bg: "#FEF3C7", border: "#FDE68A", emoji: "⚙️", dot: "#F59E0B", live: true  },
-  assigned:             { label: "Assigned",      color: "#075985", bg: "#F0F9FF", border: "#BAE6FD", emoji: "🤝", dot: "#0EA5E9", live: true  },
-  accepted:             { label: "Accepted",      color: "#065F46", bg: "#ECFDF5", border: "#6EE7B7", emoji: "✅", dot: "#10B981", live: true  },
-  picked_up:            { label: "Picked Up",     color: "#065F46", bg: "#ECFDF5", border: "#6EE7B7", emoji: "📦", dot: "#10B981", live: true  },
-  out_for_delivery:     { label: "On the Way",    color: "#92400E", bg: "#FEF3C7", border: "#FDE68A", emoji: "🛵", dot: "#F59E0B", live: true  },
-  delivered:            { label: "Delivered",     color: "#065F46", bg: "#ECFDF5", border: "#6EE7B7", emoji: "🎉", dot: "#10B981", live: false },
-  cancelled:            { label: "Cancelled",     color: "#991B1B", bg: "#FEF2F2", border: "#FECACA", emoji: "❌", dot: "#EF4444", live: false },
-  rejected:             { label: "Rejected",      color: "#991B1B", bg: "#FEF2F2", border: "#FECACA", emoji: "❌", dot: "#EF4444", live: false },
-  confirmed:            { label: "Confirmed",     color: "#065F46", bg: "#ECFDF5", border: "#6EE7B7", emoji: "✅", dot: "#10B981", live: false },
+  pending:              { label: "Pending",       color: "#92400E", bg: "#FEF3C7", border: "#FDE68A", emoji: "ðŸ•",  dot: "#F59E0B", live: false },
+  placed:               { label: "Placed",        color: "#1E40AF", bg: "#EFF6FF", border: "#BFDBFE", emoji: "ðŸ“‹", dot: "#3B82F6", live: false },
+  quoted:               { label: "Quote Ready",   color: "#5B21B6", bg: "#F5F3FF", border: "#C4B5FD", emoji: "ðŸ’¬", dot: "#8B5CF6", live: false },
+  pending_user_confirm: { label: "Action Needed", color: "#991B1B", bg: "#FEF2F2", border: "#FECACA", emoji: "âš ï¸", dot: "#EF4444", live: false },
+  processing:           { label: "Processing",    color: "#92400E", bg: "#FEF3C7", border: "#FDE68A", emoji: "âš™ï¸", dot: "#F59E0B", live: true  },
+  assigned:             { label: "Assigned",      color: "#075985", bg: "#F0F9FF", border: "#BAE6FD", emoji: "ðŸ¤", dot: "#0EA5E9", live: true  },
+  accepted:             { label: "Accepted",      color: "#065F46", bg: "#ECFDF5", border: "#6EE7B7", emoji: "âœ…", dot: "#10B981", live: true  },
+  picked_up:            { label: "Picked Up",     color: "#065F46", bg: "#ECFDF5", border: "#6EE7B7", emoji: "ðŸ“¦", dot: "#10B981", live: true  },
+  out_for_delivery:     { label: "On the Way",    color: "#92400E", bg: "#FEF3C7", border: "#FDE68A", emoji: "ðŸ›µ", dot: "#F59E0B", live: true  },
+  delivered:            { label: "Delivered",     color: "#065F46", bg: "#ECFDF5", border: "#6EE7B7", emoji: "ðŸŽ‰", dot: "#10B981", live: false },
+  cancelled:            { label: "Cancelled",     color: "#991B1B", bg: "#FEF2F2", border: "#FECACA", emoji: "âŒ", dot: "#EF4444", live: false },
+  rejected:             { label: "Rejected",      color: "#991B1B", bg: "#FEF2F2", border: "#FECACA", emoji: "âŒ", dot: "#EF4444", live: false },
+  confirmed:            { label: "Confirmed",     color: "#065F46", bg: "#ECFDF5", border: "#6EE7B7", emoji: "âœ…", dot: "#10B981", live: false },
 };
 
 function StatusBadge({ status }) {
-  const c = STATUS_CFG[status] || { label: status, color: "#475569", bg: "#F1F5F9", border: "#CBD5E1", emoji: "📄", dot: "#94A3B8", live: false };
+  const c = STATUS_CFG[status] || { label: status, color: "#475569", bg: "#F1F5F9", border: "#CBD5E1", emoji: "ðŸ“„", dot: "#94A3B8", live: false };
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 6,
@@ -217,7 +218,7 @@ function StatusBadge({ status }) {
   );
 }
 
-// ── Pill chip ─────────────────────────────────────────────────
+// â”€â”€ Pill chip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Pill({ children, color = "emerald" }) {
   const c = color === "amber"
     ? { text: "#92400E", bg: "#FEF3C7", border: "#FDE68A" }
@@ -235,7 +236,7 @@ function Pill({ children, color = "emerald" }) {
   );
 }
 
-// ── Stat tile ─────────────────────────────────────────────────
+// â”€â”€ Stat tile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function StatTile({ emoji, label, value }) {
   return (
     <div style={{
@@ -254,7 +255,7 @@ function StatTile({ emoji, label, value }) {
   );
 }
 
-// ── Delivery progress steps ───────────────────────────────────
+// â”€â”€ Delivery progress steps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const STEPS = ["placed","processing","accepted","picked_up","out_for_delivery","delivered"];
 function DeliveryTimeline({ status }) {
   const idx = STEPS.indexOf(status);
@@ -306,9 +307,9 @@ function DeliveryTimeline({ status }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // MAIN COMPONENT
-// ══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 export default function MyOrdersPage() {
   const [orders, setOrders]         = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -332,8 +333,9 @@ export default function MyOrdersPage() {
   const [reuploadMode, setReuploadMode]           = useState("manual");
   const [reuploadOrderData, setReuploadOrderData] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
+  const [consultBookings, setConsultBookings] = useState([]);
 
-  // ── IDENTICAL EFFECTS ──────────────────────────────────────
+  // â”€â”€ IDENTICAL EFFECTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const fetchInitial = async () => { setLoading(true); await fetchOrders(); setLoading(false); };
     fetchInitial();
@@ -346,6 +348,29 @@ export default function MyOrdersPage() {
     // eslint-disable-next-line
   }, [userId]);
 
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadConsultBookings() {
+      const localBookings = readStoredConsultBookings();
+      const token = localStorage.getItem("token");
+      if (!token) {
+        if (mounted) setConsultBookings(sortConsultBookings(localBookings));
+        return;
+      }
+      try {
+        const response = await axios.get(`${API_BASE_URL}/api/consults/my`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const remoteBookings = Array.isArray(response?.data?.consults) ? response.data.consults : [];
+        if (mounted) setConsultBookings(sortConsultBookings(mergeConsultBookings(remoteBookings, localBookings)));
+      } catch {
+        if (mounted) setConsultBookings(sortConsultBookings(localBookings));
+      }
+    }
+    loadConsultBookings();
+    return () => { mounted = false; };
+  }, [userId]);
   const fetchOrders = async () => {
     try {
       if (!userId) return;
@@ -388,7 +413,7 @@ export default function MyOrdersPage() {
     setShowPharmacyRejectionPopup(false); setRejectedPrescriptionOrder(null);
   };
 
-  // ── IDENTICAL HANDLERS ─────────────────────────────────────
+  // â”€â”€ IDENTICAL HANDLERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleOrderAgain = (order) => {
     const pharmacyId = (order.pharmacy && order.pharmacy._id) || order.pharmacyId || order.pharmacy;
     if (pharmacyId) { navigate(`/medicines/${pharmacyId}`); }
@@ -432,20 +457,22 @@ export default function MyOrdersPage() {
   if (orders.length && (!orders[0] || typeof orders[0] !== "object" || Array.isArray(orders[0])))
     throw new Error("BUG: orders should be an array of objects. Got: " + JSON.stringify(orders[0]));
 
-  // ── Tab computed ───────────────────────────────────────────
+  // â”€â”€ Tab computed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const activeOrders = orders.filter(o =>
     ["placed","processing","assigned","accepted","picked_up","out_for_delivery","pending","quoted","pending_user_confirm"].includes(o.status)
   );
   const pastOrders = orders.filter(o =>
     ["delivered","confirmed","cancelled","rejected"].includes(o.status)
   );
+  const topConsultBookings = consultBookings.slice(0, 3);
+
   const displayGrouped = activeTab === "active"
     ? groupSplitOrders(activeOrders)
     : activeTab === "past"
     ? groupSplitOrders(pastOrders)
     : groupedOrders;
 
-  // ── Quick stats ────────────────────────────────────────────
+  // â”€â”€ Quick stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const deliveredCount = orders.filter(o => ["delivered","confirmed"].includes(o.status)).length;
   const totalSpent = orders
     .filter(o => ["delivered","confirmed"].includes(o.status))
@@ -464,9 +491,9 @@ export default function MyOrdersPage() {
       }, 0);
     }, 0);
 
-  // ══════════════════════════════════════════════════════════
-  // RENDER ORDER CARD — ALL LOGIC IDENTICAL, elite visual
-  // ══════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // RENDER ORDER CARD â€” ALL LOGIC IDENTICAL, elite visual
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   const renderOrderCard = (o, splitBadge = null, uniqueKey = null) => {
     const isActive = ["placed","processing","assigned","accepted","picked_up","out_for_delivery"].includes(o.status);
     const isLive   = ["out_for_delivery","assigned","picked_up"].includes(o.status);
@@ -504,7 +531,7 @@ export default function MyOrdersPage() {
 
         <div style={{ padding: "18px 18px 16px" }}>
 
-          {/* ─── TOP: Pharmacy + Price ─── */}
+          {/* â”€â”€â”€ TOP: Pharmacy + Price â”€â”€â”€ */}
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               {/* Pharmacy row */}
@@ -517,7 +544,7 @@ export default function MyOrdersPage() {
                   display: "flex", alignItems: "center", justifyContent: "center",
                   flexShrink: 0,
                 }}>
-                  <span style={{ fontSize: 18 }}>🏥</span>
+                  <span style={{ fontSize: 18 }}>ðŸ¥</span>
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{
@@ -549,7 +576,7 @@ export default function MyOrdersPage() {
                           border: splitBadge.includes("Parent") ? "1px solid #BFDBFE" : "1px solid #A7F3D0",
                           padding: "2px 8px", borderRadius: 100,
                         }}>
-                          {splitBadge.includes("Parent") ? "🔀 Split" : "📦 Part"}
+                          {splitBadge.includes("Parent") ? "ðŸ”€ Split" : "ðŸ“¦ Part"}
                         </span>
                       </TooltipTrigger>
                       <TooltipContent className="text-sm">{splitBadge}</TooltipContent>
@@ -570,17 +597,17 @@ export default function MyOrdersPage() {
                 padding: "8px 12px",
               }}>
                 <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 20, fontWeight: 900, color: DEEP, lineHeight: 1 }}>
-                  ₹{price}
+                  â‚¹{price}
                 </div>
                 <div style={{ fontSize: 9, color: "#94A3B8", fontWeight: 600, marginTop: 2 }}>TOTAL</div>
               </div>
             )}
           </div>
 
-          {/* ─── DELIVERY TIMELINE (active orders only) ─── */}
+          {/* â”€â”€â”€ DELIVERY TIMELINE (active orders only) â”€â”€â”€ */}
           {isActive && <DeliveryTimeline status={o.status} />}
 
-          {/* ─── PRESCRIPTION ORDER BLOCK — IDENTICAL LOGIC ─── */}
+          {/* â”€â”€â”€ PRESCRIPTION ORDER BLOCK â€” IDENTICAL LOGIC â”€â”€â”€ */}
           {o.orderType === "prescription" ? (
             <>
               {/* Prescription link */}
@@ -588,7 +615,7 @@ export default function MyOrdersPage() {
                 background: "#F8FBFA", borderRadius: 12, padding: "10px 12px",
                 marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between",
               }}>
-                <div style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>📎 Prescription</div>
+                <div style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>ðŸ“Ž Prescription</div>
                 {collectRxUrls(o).length ? (
                   <a
                     href={collectRxUrls(o)[0]}
@@ -607,7 +634,7 @@ export default function MyOrdersPage() {
                 )}
               </div>
 
-              {/* Quote block — IDENTICAL condition */}
+              {/* Quote block â€” IDENTICAL condition */}
               {(o.status === "quoted" || o.status === "pending_user_confirm") && (
                 <div style={{
                   borderRadius: 20, overflow: "hidden", marginBottom: 14,
@@ -622,7 +649,7 @@ export default function MyOrdersPage() {
                   }}>
                     <div>
                       <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 2 }}>
-                        ✨ Quote Ready!
+                        âœ¨ Quote Ready!
                       </div>
                       <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>
                         Review and accept to proceed
@@ -653,22 +680,22 @@ export default function MyOrdersPage() {
                     }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>
                         Amount Due
-                        {getQuoteType(o) === "full"    && <Pill color="emerald">✓ All Available</Pill>}
-                        {getQuoteType(o) === "partial" && <Pill color="amber">⚠ Partial</Pill>}
+                        {getQuoteType(o) === "full"    && <Pill color="emerald">âœ“ All Available</Pill>}
+                        {getQuoteType(o) === "partial" && <Pill color="amber">âš  Partial</Pill>}
                       </div>
                       <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 24, fontWeight: 900, color: DEEP }}>
-                        ₹{getTotalPrice(o)}
+                        â‚¹{getTotalPrice(o)}
                       </div>
                     </div>
 
                     {getQuoteType(o) === "full" && (
                       <div style={{ background: "#ECFDF5", borderRadius: 12, padding: "10px 14px", fontSize: 13, color: "#065F46", fontWeight: 600, marginBottom: 10, lineHeight: 1.6 }}>
-                        ✅ All medicines available! Accept & Pay to get your order fast.
+                        âœ… All medicines available! Accept & Pay to get your order fast.
                       </div>
                     )}
                     {getQuoteType(o) === "partial" && (
                       <div style={{ background: "#FEF3C7", borderRadius: 12, padding: "10px 14px", fontSize: 13, color: "#92400E", marginBottom: 10, lineHeight: 1.6 }}>
-                        ⚠️ Some medicines unavailable. You can still pay for available items.
+                        âš ï¸ Some medicines unavailable. You can still pay for available items.
                       </div>
                     )}
                     {o.quote?.items?.some(i => i.available === false) && (
@@ -677,7 +704,7 @@ export default function MyOrdersPage() {
                       </div>
                     )}
 
-                    {/* Accept & Pay — IDENTICAL condition */}
+                    {/* Accept & Pay â€” IDENTICAL condition */}
                     {o.status === "pending_user_confirm" && (
                       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                         <motion.button
@@ -695,7 +722,7 @@ export default function MyOrdersPage() {
                             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                           }}
                         >
-                          💳 ACCEPT &amp; PAY
+                          ðŸ’³ ACCEPT &amp; PAY
                           <ChevronRight style={{ width: 18, height: 18 }} />
                         </motion.button>
                         <motion.button
@@ -723,7 +750,7 @@ export default function MyOrdersPage() {
               </div>
             </>
           ) : (
-            /* ─── NORMAL ORDER — IDENTICAL LOGIC ─── */
+            /* â”€â”€â”€ NORMAL ORDER â€” IDENTICAL LOGIC â”€â”€â”€ */
             <>
               {o.items && o.items.length > 0 && (
                 <div style={{
@@ -732,14 +759,14 @@ export default function MyOrdersPage() {
                 }}>
                   <Package style={{ width: 13, height: 13, color: DEEP, flexShrink: 0, marginTop: 2 }} />
                   <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6 }}>
-                    {o.items.map(i => `${i.name || i.medicineName} (${i.quantity || i.qty || "-"})`).join(" · ")}
+                    {o.items.map(i => `${i.name || i.medicineName} (${i.quantity || i.qty || "-"})`).join(" Â· ")}
                   </div>
                 </div>
               )}
             </>
           )}
 
-          {/* ─── Address ─── */}
+          {/* â”€â”€â”€ Address â”€â”€â”€ */}
           {o.address && (
             <div style={{
               fontSize: 12, color: "#6B7280", marginBottom: 12,
@@ -750,17 +777,17 @@ export default function MyOrdersPage() {
             </div>
           )}
 
-          {/* ─── Divider ─── */}
+          {/* â”€â”€â”€ Divider â”€â”€â”€ */}
           <div style={{ height: 1, background: "rgba(12,90,62,0.06)", margin: "4px 0 12px" }} />
 
-          {/* ─── ACTION ROW — ALL IDENTICAL ─── */}
+          {/* â”€â”€â”€ ACTION ROW â€” ALL IDENTICAL â”€â”€â”€ */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
 
             {o.orderType !== "prescription" && (
               <div style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>
                 {o.status === "quoted" ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ color: "#7C3AED", fontWeight: 800 }}>💬 Quote Ready!</span>
+                    <span style={{ color: "#7C3AED", fontWeight: 800 }}>ðŸ’¬ Quote Ready!</span>
                     <motion.button
                       whileTap={{ scale: 0.95 }}
                       onClick={() => { setSelectedOrder(o); setQuoteModalOpen(true); }}
@@ -796,11 +823,11 @@ export default function MyOrdersPage() {
                   boxShadow: "0 4px 14px rgba(12,90,62,0.35)",
                 }}
               >
-                {isLive ? "🛵" : "📍"} Track Live <ChevronRight style={{ width: 12, height: 12 }} />
+                {isLive ? "ðŸ›µ" : "ðŸ“"} Track Live <ChevronRight style={{ width: 12, height: 12 }} />
               </motion.button>
             )}
 
-            {/* Order Again — IDENTICAL on all orders */}
+            {/* Order Again â€” IDENTICAL on all orders */}
             <motion.button
               whileTap={{ scale: 0.93 }}
               onClick={() => handleOrderAgain(o)}
@@ -816,7 +843,7 @@ export default function MyOrdersPage() {
             </motion.button>
           </div>
 
-          {/* Invoice — IDENTICAL */}
+          {/* Invoice â€” IDENTICAL */}
           {o.invoiceFile && (
             <a href={o.invoiceFile} target="_blank" rel="noopener noreferrer"
               style={{ display: "inline-block", marginTop: 10, textDecoration: "none" }}>
@@ -839,9 +866,9 @@ export default function MyOrdersPage() {
     );
   };
 
-  // ══════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // MAIN RENDER
-  // ══════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   return (
     <div style={{
       minHeight: "100vh", maxWidth: 480, margin: "0 auto",
@@ -850,7 +877,7 @@ export default function MyOrdersPage() {
       fontFamily: "'Plus Jakarta Sans', 'Sora', sans-serif",
     }}>
 
-      {/* ═══ HEADER — padding-top: 20px ONLY (Navbar already above) ═══ */}
+      {/* â•â•â• HEADER â€” padding-top: 20px ONLY (Navbar already above) â•â•â• */}
       <div style={{
         background: `linear-gradient(150deg, ${DEEP} 0%, #083D28 60%, #041F14 100%)`,
         padding: "20px 20px 0",
@@ -887,17 +914,17 @@ export default function MyOrdersPage() {
         {/* Stats strip */}
         {orders.length > 0 && (
           <div style={{ display: "flex", gap: 10, marginBottom: 18, position: "relative" }}>
-            <StatTile emoji="🎉" label="DELIVERED" value={deliveredCount} />
-            <StatTile emoji="⚡" label="ACTIVE" value={activeOrders.length} />
+            <StatTile emoji="ðŸŽ‰" label="DELIVERED" value={deliveredCount} />
+            <StatTile emoji="âš¡" label="ACTIVE" value={activeOrders.length} />
             {totalSavings > 0 ? (
-              <StatTile emoji="🤑" label="YOU SAVED" value={`₹${Math.round(totalSavings)}`} />
+              <StatTile emoji="ðŸ¤‘" label="YOU SAVED" value={`â‚¹${Math.round(totalSavings)}`} />
             ) : totalSpent > 0 ? (
-              <StatTile emoji="💸" label="TOTAL SPENT" value={`₹${Math.round(totalSpent)}`} />
+              <StatTile emoji="ðŸ’¸" label="TOTAL SPENT" value={`â‚¹${Math.round(totalSpent)}`} />
             ) : null}
           </div>
         )}
 
-        {/* ── Tabs — merged into header bottom ── */}
+        {/* â”€â”€ Tabs â€” merged into header bottom â”€â”€ */}
         <div style={{
           display: "flex",
           background: "rgba(0,0,0,0.25)",
@@ -938,13 +965,82 @@ export default function MyOrdersPage() {
         </div>
       </div>
 
-      {/* ═══ CONTENT ═══ */}
+      {/* â•â•â• CONTENT â•â•â• */}
       <div style={{ padding: "16px 14px 0" }}>
-        {/* ── Quick Reorder strip (last 3 delivered orders) ── */}
+        {topConsultBookings.length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#94A3B8", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: 10 }}>
+              Doctor Consults
+            </div>
+            <div style={{ display: "grid", gap: 12 }}>
+              {topConsultBookings.map((consult) => {
+                const meta = getConsultStatusMeta(consult);
+                return (
+                  <motion.div
+                    key={consult.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    style={{
+                      background: "linear-gradient(135deg,#06281F 0%,#0C5A3E 52%,#119A67 100%)",
+                      borderRadius: 22,
+                      padding: 16,
+                      boxShadow: "0 14px 36px rgba(12,90,62,0.22)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flex: 1, minWidth: 0 }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 16, background: "rgba(255,255,255,0.14)", display: "grid", placeItems: "center", color: "#fff", flexShrink: 0 }}>
+                          {consult.mode === "video" ? <Video style={{ width: 18, height: 18 }} /> : consult.mode === "inperson" ? <Stethoscope style={{ width: 18, height: 18 }} /> : <PhoneCall style={{ width: 18, height: 18 }} />}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 900, color: "#fff", marginBottom: 4 }}>
+                            {consult.doctorName || "Doctor consult booked"}
+                          </div>
+                          <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.65)", fontWeight: 700, marginBottom: 8 }}>
+                            {consult.specialty || "Doctor consultation"}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                            <span style={{ fontSize: 10.5, fontWeight: 900, color: meta.accent, background: meta.bg, border: `1px solid ${meta.border}`, padding: "4px 8px", borderRadius: 999 }}>
+                              {meta.label}
+                            </span>
+                            <span style={{ fontSize: 11.5, color: "#D1FAE5", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                              <CalendarDays style={{ width: 12, height: 12 }} /> {formatConsultDateTime(consult)}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.72)", fontWeight: 700 }}>
+                            {meta.helper}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => navigate("/doctors")}
+                        style={{
+                          height: 38,
+                          padding: "0 14px",
+                          borderRadius: 12,
+                          border: "1px solid rgba(255,255,255,0.18)",
+                          background: "rgba(255,255,255,0.12)",
+                          color: "#fff",
+                          fontSize: 11.5,
+                          fontWeight: 900,
+                          cursor: "pointer",
+                          flexShrink: 0,
+                        }}
+                      >
+                        Open consult
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {/* â”€â”€ Quick Reorder strip (last 3 delivered orders) â”€â”€ */}
         {!loading && activeTab === "all" && pastOrders.length > 0 && (
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: "#94A3B8", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: 10 }}>
-              🔄 Quick Reorder
+              ðŸ”„ Quick Reorder
             </div>
             <div style={{ display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 4 }}>
               {pastOrders.slice(0, 4).map((o) => {
@@ -966,13 +1062,13 @@ export default function MyOrdersPage() {
                     }}
                   >
                     <div style={{ fontSize: 11, fontWeight: 800, color: "#0A1F14", fontFamily: "'Sora',sans-serif", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      🏥 {pharmacyName}
+                      ðŸ¥ {pharmacyName}
                     </div>
                     <div style={{ fontSize: 10, color: "#64748B", marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {firstItem}{itemCount > 1 ? ` +${itemCount - 1} more` : ""}
                     </div>
                     <div style={{ fontSize: 10, fontWeight: 700, color: DEEP, background: "#E8F5EF", padding: "2px 8px", borderRadius: 100, display: "inline-block", border: `1px solid ${ACCENT}40` }}>
-                      Reorder →
+                      Reorder â†’
                     </div>
                   </motion.button>
                 );
@@ -1013,7 +1109,7 @@ export default function MyOrdersPage() {
               animate={{ y: [0, -8, 0] }}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               style={{ fontSize: 72, marginBottom: 16 }}
-            >📦</motion.div>
+            >ðŸ“¦</motion.div>
             <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 20, fontWeight: 900, color: "#0B1F16", marginBottom: 8 }}>
               {activeTab === "active" ? "No active orders" : activeTab === "past" ? "No past orders" : "No orders yet"}
             </div>
@@ -1037,7 +1133,7 @@ export default function MyOrdersPage() {
             </motion.button>
           </motion.div>
         ) : (
-          /* Orders list — IDENTICAL render logic */
+          /* Orders list â€” IDENTICAL render logic */
           <div style={{ paddingBottom: 8 }}>
             {displayGrouped.map((order) => {
               if (order.splits && order.splits.length > 0) {
@@ -1067,7 +1163,7 @@ export default function MyOrdersPage() {
         )}
       </div>
 
-      {/* ═══ REJECT DIALOG — IDENTICAL ═══ */}
+      {/* â•â•â• REJECT DIALOG â€” IDENTICAL â•â•â• */}
       <Dialog open={rejectDialogOpen}
         onOpenChange={(open) => { if (!open) { setRejectDialogOpen(false); setRejectReason(""); } }}>
         <DialogContent className="force-light" style={{ borderRadius: 24 }}>
@@ -1105,7 +1201,7 @@ export default function MyOrdersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ═══ PHARMACY REJECTION POPUP — IDENTICAL ═══ */}
+      {/* â•â•â• PHARMACY REJECTION POPUP â€” IDENTICAL â•â•â• */}
       <Dialog open={showPharmacyRejectionPopup} onOpenChange={handleClosePharmacyRejectionPopup}>
         <DialogContent className="max-w-sm force-light" style={{ borderRadius: 24 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -1138,7 +1234,7 @@ export default function MyOrdersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ═══ MODALS — IDENTICAL PROPS ═══ */}
+      {/* â•â•â• MODALS â€” IDENTICAL PROPS â•â•â• */}
       <PrescriptionUploadModal
         open={reuploadModalOpen} onClose={() => setReuploadModalOpen(false)}
         userCity={reuploadOrderData?.address?.city || ""} userArea={reuploadOrderData?.address?.area || ""}
@@ -1151,7 +1247,7 @@ export default function MyOrdersPage() {
         onClose={() => setQuoteModalOpen(false)} onAccept={() => handleAcceptAndPay(selectedOrder)}
       />
 
-      {/* ═══ SNACKBAR — IDENTICAL 3 colors ═══ */}
+      {/* â•â•â• SNACKBAR â€” IDENTICAL 3 colors â•â•â• */}
       <AnimatePresence>
         {snackbar.open && (
           <motion.div

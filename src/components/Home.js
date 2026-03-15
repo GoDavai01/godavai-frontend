@@ -1,14 +1,14 @@
 // ============================================================
-//  Home.js — GoDavaii 2035 Health OS
-//  ✅ Pharmacy section REMOVED (Flipkart marketplace model)
-//  ✅ Product-first medicine feed (seller hidden)
-//  ✅ "Fulfilled by GoDavaii" trust line on product detail
-//  ✅ Bottom sheet replaces alert() for cart pharmacy conflict
-//  ✅ AI Health Assistant card
-//  ✅ Doctor consult + Lab tests sections
-//  ✅ Health Vault quick action
-//  ✅ Portal-based search dropdown (no clipping)
-//  ✅ ALL existing API logic + cart rules preserved
+//  Home.js Ã¢â‚¬â€ GoDavaii 2035 Health OS
+//  Ã¢Å“â€¦ Pharmacy section REMOVED (Flipkart marketplace model)
+//  Ã¢Å“â€¦ Product-first medicine feed (seller hidden)
+//  Ã¢Å“â€¦ "Fulfilled by GoDavaii" trust line on product detail
+//  Ã¢Å“â€¦ Bottom sheet replaces alert() for cart pharmacy conflict
+//  Ã¢Å“â€¦ AI Health Assistant card
+//  Ã¢Å“â€¦ Doctor consult + Lab tests sections
+//  Ã¢Å“â€¦ Health Vault quick action
+//  Ã¢Å“â€¦ Portal-based search dropdown (no clipping)
+//  Ã¢Å“â€¦ ALL existing API logic + cart rules preserved
 // ============================================================
 
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
@@ -22,6 +22,7 @@ import BottomNavBar from "./BottomNavBar";
 import PrescriptionUploadModal from "./PrescriptionUploadModal";
 import LocationModal from "./LocationModal";
 import axios from "axios";
+import { readStoredConsultBookings, mergeConsultBookings, sortConsultBookings, getConsultStatusMeta, formatConsultDateTime } from "../utils/consultBookings";
 import {
   UploadCloud, Clock, ChevronRight, MapPin, Search, Mic, MicOff,
   RefreshCw, AlertTriangle, ChevronDown, User, X, TrendingUp,
@@ -29,7 +30,7 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 
-// ─── Constants ───────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Constants Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 const DEEP = "#0C5A3E";
@@ -38,20 +39,20 @@ const ACCENT = "#00D97E";
 const DARK = "#041F15";
 
 const CATEGORIES = [
-  { label: "Fever", emoji: "🌡️" },
-  { label: "Diabetes", emoji: "💉" },
-  { label: "Cold", emoji: "🤧" },
-  { label: "Heart", emoji: "❤️" },
-  { label: "Antibiotic", emoji: "💊" },
-  { label: "Ayurveda", emoji: "🌿" },
-  { label: "Painkiller", emoji: "🔵" },
-  { label: "Cough", emoji: "🫁" },
+  { label: "Fever", emoji: "Ã°Å¸Å’Â¡Ã¯Â¸Â" },
+  { label: "Diabetes", emoji: "Ã°Å¸â€™â€°" },
+  { label: "Cold", emoji: "Ã°Å¸Â¤Â§" },
+  { label: "Heart", emoji: "Ã¢ÂÂ¤Ã¯Â¸Â" },
+  { label: "Antibiotic", emoji: "Ã°Å¸â€™Å " },
+  { label: "Ayurveda", emoji: "Ã°Å¸Å’Â¿" },
+  { label: "Painkiller", emoji: "Ã°Å¸â€Âµ" },
+  { label: "Cough", emoji: "Ã°Å¸Â«Â" },
 ];
 
 const BANNERS = [
-  { tag: "💰 Save Big", title: "Generic = Same\nMedicine, 80% Off", sub: "Switch & save today", emoji: "💊", grad: "linear-gradient(135deg,#064E3B 0%,#0A6B4A 100%)" },
-  { tag: "⚡ Express", title: "30-Minute\nDelivery Guarantee", sub: "Or next order free", emoji: "🛵", grad: "linear-gradient(135deg,#1A3A6B 0%,#2563EB 100%)" },
-  { tag: "🧠 AI Health", title: "Ask GoDavaii AI\nAnything Health", sub: "Symptoms, medicines, reports", emoji: "🤖", grad: "linear-gradient(135deg,#7C3AED 0%,#A855F7 100%)" },
+  { tag: "Ã°Å¸â€™Â° Save Big", title: "Generic = Same\nMedicine, 80% Off", sub: "Switch & save today", emoji: "Ã°Å¸â€™Å ", grad: "linear-gradient(135deg,#064E3B 0%,#0A6B4A 100%)" },
+  { tag: "Ã¢Å¡Â¡ Express", title: "30-Minute\nDelivery Guarantee", sub: "Or next order free", emoji: "Ã°Å¸â€ºÂµ", grad: "linear-gradient(135deg,#1A3A6B 0%,#2563EB 100%)" },
+  { tag: "Ã°Å¸Â§Â  AI Health", title: "Ask GoDavaii AI\nAnything Health", sub: "Symptoms, medicines, reports", emoji: "Ã°Å¸Â¤â€“", grad: "linear-gradient(135deg,#7C3AED 0%,#A855F7 100%)" },
 ];
 
 const ACTIVE_STATUSES = new Set([
@@ -61,7 +62,7 @@ const ACTIVE_STATUSES = new Set([
 
 const TRENDING = ["Paracetamol", "Vitamin D3", "Pantoprazole", "Cetirizine", "Azithromycin", "Metformin"];
 
-// ─── Helpers ─────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function isMedicineInCategory(med, cat) {
   if (!med || !cat) return false;
   const t = cat.trim().toLowerCase();
@@ -84,7 +85,7 @@ function statusLabel(s) {
   return m[s] || s;
 }
 
-// ─── Atoms ───────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Atoms Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function Glass({ children, style }) {
   return (
     <div style={{ background: "rgba(255,255,255,0.85)", border: "1px solid rgba(12,90,62,0.08)", borderRadius: 22, boxShadow: "0 8px 32px rgba(2,10,7,0.06)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", ...style }}>
@@ -112,11 +113,11 @@ function Section({ title, badge, onSeeAll }) {
 function MedImage({ med, size = 62 }) {
   const src = getImageUrl(med?.img || med?.image || med?.imageUrl);
   const [failed, setFailed] = useState(!src);
-  if (failed || !src) return <div style={{ width: size, height: size, borderRadius: 16, background: "linear-gradient(135deg,#E8F5EF,#D1EDE0)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: size * 0.5 }}>💊</div>;
+  if (failed || !src) return <div style={{ width: size, height: size, borderRadius: 16, background: "linear-gradient(135deg,#E8F5EF,#D1EDE0)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: size * 0.5 }}>Ã°Å¸â€™Å </div>;
   return <div style={{ width: size, height: size, borderRadius: 16, overflow: "hidden", background: "#F0F9F4", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><img src={src} alt={med?.brand || med?.name || ""} loading="lazy" onError={() => setFailed(true)} style={{ width: "100%", height: "100%", objectFit: "contain" }} /></div>;
 }
 
-// ─── Medicine Card (marketplace style — NO pharmacy name) ────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Medicine Card (marketplace style Ã¢â‚¬â€ NO pharmacy name) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function MedCard({ med, onAdd, onOpen, canDeliver }) {
   const price = med.price ?? med.mrp ?? "--";
   const origPrice = med.mrp && med.price && Number(med.price) < Number(med.mrp) ? med.mrp : null;
@@ -134,16 +135,16 @@ function MedCard({ med, onAdd, onOpen, canDeliver }) {
             <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 12.5, fontWeight: 900, color: "#0B1F16", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: 1.25, marginBottom: 4 }}>{title}</div>
             {sub ? <div style={{ fontSize: 10, color: "#94A3B8", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 6 }}>{sub}</div> : <div style={{ height: 16 }} />}
             <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
-              <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 1000, color: DEEP }}>₹{price}</span>
-              {origPrice && <span style={{ fontSize: 10.5, color: "#CBD5E1", textDecoration: "line-through", fontWeight: 800 }}>₹{origPrice}</span>}
+              <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 1000, color: DEEP }}>Ã¢â€šÂ¹{price}</span>
+              {origPrice && <span style={{ fontSize: 10.5, color: "#CBD5E1", textDecoration: "line-through", fontWeight: 800 }}>Ã¢â€šÂ¹{origPrice}</span>}
               {discount && <span style={{ fontSize: 9, fontWeight: 900, color: "#059669", background: "#ECFDF5", padding: "2px 6px", borderRadius: 999 }}>{discount}%</span>}
             </div>
-            {/* ✅ Trust line — no pharmacy name shown */}
+            {/* Ã¢Å“â€¦ Trust line Ã¢â‚¬â€ no pharmacy name shown */}
             <div style={{ fontSize: 9, fontWeight: 800, color: "#6B9E88", marginBottom: 6, display: "flex", alignItems: "center", gap: 3 }}>
               <Shield style={{ width: 9, height: 9 }} /> Fulfilled by GoDavaii
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 9.5, fontWeight: 800, color: "#94A3B8", display: "flex", alignItems: "center", gap: 3 }}><Clock style={{ width: 10, height: 10 }} /> ≤30 min</span>
+              <span style={{ fontSize: 9.5, fontWeight: 800, color: "#94A3B8", display: "flex", alignItems: "center", gap: 3 }}><Clock style={{ width: 10, height: 10 }} /> Ã¢â€°Â¤30 min</span>
               <motion.button whileTap={{ scale: 0.88 }} onClick={(e) => { e.stopPropagation(); if (canDeliver) onAdd(med); }} disabled={!canDeliver}
                 style={{ height: 28, padding: "0 12px", borderRadius: 999, border: "none", cursor: canDeliver ? "pointer" : "not-allowed", background: canDeliver ? `linear-gradient(135deg,${DEEP},${MID})` : "#E2E8F0", color: canDeliver ? "#fff" : "#94A3B8", fontSize: 11, fontWeight: 900, fontFamily: "'Sora',sans-serif", boxShadow: canDeliver ? "0 4px 14px rgba(12,90,62,0.22)" : "none" }}>
                 + Add
@@ -156,7 +157,7 @@ function MedCard({ med, onAdd, onOpen, canDeliver }) {
   );
 }
 
-// ─── Banner Card ─────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Banner Card Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function BannerCard({ banner }) {
   return (
     <motion.div whileTap={{ scale: 0.98 }} style={{ flexShrink: 0, width: 272, height: 124, borderRadius: 24, background: banner.grad, position: "relative", overflow: "hidden", cursor: "pointer", boxShadow: "0 12px 36px rgba(0,0,0,0.16)" }}>
@@ -171,7 +172,7 @@ function BannerCard({ banner }) {
   );
 }
 
-// ─── Active Order Bar ────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Active Order Bar Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function ActiveOrderBar({ order, onClick }) {
   const steps = [{ key: "placed", label: "Placed" }, { key: "processing", label: "Processing" }, { key: "picked_up", label: "Packed" }, { key: "out_for_delivery", label: "On Way" }, { key: "delivered", label: "Done" }];
   const statusOrder = ["placed", "quoted", "processing", "assigned", "accepted", "picked_up", "out_for_delivery", "delivered"];
@@ -181,13 +182,13 @@ function ActiveOrderBar({ order, onClick }) {
       style={{ width: "100%", borderRadius: 22, overflow: "hidden", background: `linear-gradient(135deg,${DEEP} 0%,${DARK} 55%,${MID} 100%)`, boxShadow: "0 12px 36px rgba(12,90,62,0.30)", border: "none", cursor: "pointer", textAlign: "left" }}>
       <div style={{ padding: "12px 14px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 13, background: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>🛵</div>
+          <div style={{ width: 36, height: 36, borderRadius: 13, background: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>Ã°Å¸â€ºÂµ</div>
           <div>
             <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 12.5, fontWeight: 1000, color: "#fff" }}>Live Order Tracking</div>
-            <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.6)", marginTop: 1, fontWeight: 700 }}>{statusLabel(order.status)} · Tap to view</div>
+            <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.6)", marginTop: 1, fontWeight: 700 }}>{statusLabel(order.status)} Ã‚Â· Tap to view</div>
           </div>
         </div>
-        <div style={{ background: ACCENT, color: DEEP, fontSize: 10.5, fontWeight: 1000, padding: "6px 12px", borderRadius: 999, fontFamily: "'Sora',sans-serif" }}>Track →</div>
+        <div style={{ background: ACCENT, color: DEEP, fontSize: 10.5, fontWeight: 1000, padding: "6px 12px", borderRadius: 999, fontFamily: "'Sora',sans-serif" }}>Track Ã¢â€ â€™</div>
       </div>
       <div style={{ padding: "2px 14px 12px" }}>
         <div style={{ display: "flex", alignItems: "center" }}>
@@ -196,7 +197,7 @@ function ActiveOrderBar({ order, onClick }) {
             return (
               <React.Fragment key={step.key}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flex: 1 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: done ? ACCENT : "rgba(255,255,255,0.2)", border: active ? `2px solid ${ACCENT}` : "none", boxShadow: active ? `0 0 0 4px rgba(0,217,126,0.2)` : "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, color: done ? DEEP : "transparent", fontWeight: 1000 }}>{done ? "✓" : ""}</div>
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: done ? ACCENT : "rgba(255,255,255,0.2)", border: active ? `2px solid ${ACCENT}` : "none", boxShadow: active ? `0 0 0 4px rgba(0,217,126,0.2)` : "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, color: done ? DEEP : "transparent", fontWeight: 1000 }}>{done ? "Ã¢Å“â€œ" : ""}</div>
                   <span style={{ fontSize: 7.5, color: "rgba(255,255,255,0.5)", fontWeight: 800 }}>{step.label}</span>
                 </div>
                 {i < steps.length - 1 && <div style={{ flex: 1, height: 2, background: done ? ACCENT : "rgba(255,255,255,0.15)", borderRadius: 1, marginBottom: 12 }} />}
@@ -209,13 +210,13 @@ function ActiveOrderBar({ order, onClick }) {
   );
 }
 
-// ─── Doctor Card ─────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Doctor Card Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function DoctorCard({ doctor, onClick }) {
   return (
     <motion.div whileTap={{ scale: 0.98 }} onClick={onClick} style={{ width: 185, flexShrink: 0, cursor: "pointer" }}>
       <Glass style={{ padding: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 42, height: 42, borderRadius: 16, background: "linear-gradient(135deg,#E8F5EF,#C6E8D8)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>👨‍⚕️</div>
+          <div style={{ width: 42, height: 42, borderRadius: 16, background: "linear-gradient(135deg,#E8F5EF,#C6E8D8)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>Ã°Å¸â€˜Â¨Ã¢â‚¬ÂÃ¢Å¡â€¢Ã¯Â¸Â</div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 12.5, fontWeight: 1000, color: "#0B1F16" }}>{doctor.name}</div>
             <div style={{ fontSize: 10.5, color: "#94A3B8", marginTop: 1, fontWeight: 800 }}>{doctor.spec}</div>
@@ -230,20 +231,20 @@ function DoctorCard({ doctor, onClick }) {
   );
 }
 
-// ─── Lab Test Card ───────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Lab Test Card Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function LabTestCard({ test, onClick }) {
   return (
     <motion.div whileTap={{ scale: 0.98 }} onClick={onClick} style={{ width: 175, flexShrink: 0, cursor: "pointer" }}>
       <Glass style={{ padding: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 42, height: 42, borderRadius: 16, background: "linear-gradient(135deg,#EEF2FF,#DDD6FE)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>🧪</div>
+          <div style={{ width: 42, height: 42, borderRadius: 16, background: "linear-gradient(135deg,#EEF2FF,#DDD6FE)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>Ã°Å¸Â§Âª</div>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 900, color: "#0B1F16", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{test.name}</div>
             <div style={{ fontSize: 10.5, color: "#94A3B8", marginTop: 1, fontWeight: 700 }}>{test.sub}</div>
           </div>
         </div>
         <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 1000, color: DEEP }}>₹{test.price}</span>
+          <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 1000, color: DEEP }}>Ã¢â€šÂ¹{test.price}</span>
           <span style={{ fontSize: 10, fontWeight: 800, color: "#7C3AED", background: "#F5F3FF", padding: "4px 10px", borderRadius: 999 }}>Book</span>
         </div>
       </Glass>
@@ -251,7 +252,7 @@ function LabTestCard({ test, onClick }) {
   );
 }
 
-// ─── Cart Conflict Bottom Sheet (replaces alert) ─────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Cart Conflict Bottom Sheet (replaces alert) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function CartConflictSheet({ open, onSwitch, onCancel }) {
   return (
     <AnimatePresence>
@@ -266,7 +267,7 @@ function CartConflictSheet({ open, onSwitch, onCancel }) {
             {/* Handle */}
             <div style={{ width: 40, height: 4, borderRadius: 2, background: "#E2E8F0", margin: "0 auto 18px" }} />
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 18, background: "#FFF7ED", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>🔄</div>
+              <div style={{ width: 48, height: 48, borderRadius: 18, background: "#FFF7ED", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>Ã°Å¸â€â€ž</div>
               <div>
                 <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 1000, color: "#0B1F16" }}>Different pharmacy</div>
                 <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 700, marginTop: 2 }}>This medicine is from another nearby pharmacy. Switch to continue.</div>
@@ -289,7 +290,7 @@ function CartConflictSheet({ open, onSwitch, onCancel }) {
   );
 }
 
-// ─── Med Detail Dialog (with "Fulfilled by GoDavaii") ────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Med Detail Dialog (with "Fulfilled by GoDavaii") Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function MedDetailDialog({ med, open, onClose, onAddToCart, canDeliver }) {
   const [activeImg, setActiveImg] = useState(0);
   const images = useMemo(() => {
@@ -325,7 +326,7 @@ function MedDetailDialog({ med, open, onClose, onAddToCart, canDeliver }) {
               const imgSrc = getImageUrl(src);
               return (
                 <div key={i} style={{ minWidth: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {imgSrc ? <img src={imgSrc} alt={med.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} draggable={false} /> : <div style={{ fontSize: 64 }}>💊</div>}
+                  {imgSrc ? <img src={imgSrc} alt={med.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} draggable={false} /> : <div style={{ fontSize: 64 }}>Ã°Å¸â€™Å </div>}
                 </div>
               );
             })}
@@ -335,15 +336,15 @@ function MedDetailDialog({ med, open, onClose, onAddToCart, canDeliver }) {
         <div style={{ padding: "16px 20px 0" }}>
           {/* Price */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 26, fontWeight: 1000, color: DEEP }}>₹{price}</span>
-            {origPrice && <span style={{ fontSize: 14, color: "#CBD5E1", textDecoration: "line-through", fontWeight: 900 }}>₹{origPrice}</span>}
+            <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 26, fontWeight: 1000, color: DEEP }}>Ã¢â€šÂ¹{price}</span>
+            {origPrice && <span style={{ fontSize: 14, color: "#CBD5E1", textDecoration: "line-through", fontWeight: 900 }}>Ã¢â€šÂ¹{origPrice}</span>}
             {discount && <span style={{ fontSize: 12, fontWeight: 900, color: "#059669", background: "#ECFDF5", padding: "3px 10px", borderRadius: 999 }}>{discount}% OFF</span>}
           </div>
 
-          {/* ✅ TRUST LINE — Seller hidden */}
+          {/* Ã¢Å“â€¦ TRUST LINE Ã¢â‚¬â€ Seller hidden */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, padding: "8px 12px", background: "#F0FDF4", borderRadius: 12, border: "1px solid #BBF7D0" }}>
             <Shield style={{ width: 14, height: 14, color: "#059669" }} />
-            <span style={{ fontSize: 11.5, fontWeight: 800, color: "#065F46" }}>Fulfilled by GoDavaii · Nearby verified pharmacy</span>
+            <span style={{ fontSize: 11.5, fontWeight: 800, color: "#065F46" }}>Fulfilled by GoDavaii Ã‚Â· Nearby verified pharmacy</span>
           </div>
 
           {med.composition && <div style={{ fontSize: 13, color: "#4A6B5A", marginBottom: 6, fontWeight: 700 }}><strong>Composition:</strong> {med.composition}</div>}
@@ -355,7 +356,7 @@ function MedDetailDialog({ med, open, onClose, onAddToCart, canDeliver }) {
           <button onClick={onClose} style={{ flex: 1, height: 50, borderRadius: 14, background: "#F8FAFC", color: "#64748B", border: "1.5px solid #E2E8F0", fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>Close</button>
           <motion.button whileTap={{ scale: 0.97 }} disabled={!canDeliver} onClick={() => { if (canDeliver) { onAddToCart(med); onClose(); } }}
             style={{ flex: 2, height: 50, borderRadius: 14, border: "none", background: canDeliver ? `linear-gradient(135deg,${DEEP},${MID})` : "#E2E8F0", color: canDeliver ? "#fff" : "#94A3B8", fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 1000, cursor: canDeliver ? "pointer" : "not-allowed", boxShadow: canDeliver ? "0 6px 18px rgba(12,90,62,0.25)" : "none" }}>
-            {canDeliver ? "Add to Cart 🛒" : "Delivery Unavailable"}
+            {canDeliver ? "Add to Cart Ã°Å¸â€ºâ€™" : "Delivery Unavailable"}
           </motion.button>
         </div>
       </DialogContent>
@@ -363,9 +364,9 @@ function MedDetailDialog({ med, open, onClose, onAddToCart, canDeliver }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  HomeSearch — Portal dropdown (no clipping)
-// ═══════════════════════════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+//  HomeSearch Ã¢â‚¬â€ Portal dropdown (no clipping)
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 function HomeSearch({ currentAddress, navigate }) {
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState([]);
@@ -509,11 +510,11 @@ function HomeSearch({ currentAddress, navigate }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  MAIN COMPONENT — 2035 Health OS Home
-// ═══════════════════════════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+//  MAIN COMPONENT Ã¢â‚¬â€ 2035 Health OS Home
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 export default function Home() {
-  // ── State ──────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ State Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const [pharmaciesNearby, setPharmaciesNearby] = useState([]);
   const [mostOrderedByPharmacy, setMostOrderedByPharmacy] = useState({});
   const [allMedsByPharmacy, setAllMedsByPharmacy] = useState({});
@@ -522,18 +523,19 @@ export default function Home() {
   const [canDeliver, setCanDeliver] = useState(true);
   const [lastOrder, setLastOrder] = useState(null);
   const [activeOrder, setActiveOrder] = useState(null);
+  const [consultBookings, setConsultBookings] = useState([]);
   const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [selectedMed, setSelectedMed] = useState(null);
   const [userCoords, setUserCoords] = useState(null);
-  // ✅ Cart conflict bottom sheet state (replaces alert)
+  // Ã¢Å“â€¦ Cart conflict bottom sheet state (replaces alert)
   const [conflictSheet, setConflictSheet] = useState({ open: false, pendingMed: null });
 
   const popupTimeout = useRef(null);
   const noMedicinesTimer = useRef(null);
 
   const { user } = useAuth();
-  // ✅ clearCartAndPharmacy may not exist in your current CartContext yet
+  // Ã¢Å“â€¦ clearCartAndPharmacy may not exist in your current CartContext yet
   //    If not, we fallback to clearing cart items manually
   const cartCtx = useCart();
   const { cart, addToCart } = cartCtx;
@@ -548,9 +550,34 @@ export default function Home() {
 
   const cartCount = cart?.length || 0;
   const dockBottom = `calc(${cartCount > 0 ? 144 : 72}px + env(safe-area-inset-bottom,0px) + 12px)`;
+  const upcomingConsult = useMemo(() => consultBookings[0] || null, [consultBookings]);
+  const upcomingConsultMeta = useMemo(() => (upcomingConsult ? getConsultStatusMeta(upcomingConsult) : null), [upcomingConsult]);
+  const upcomingConsultWhen = useMemo(() => (upcomingConsult ? formatConsultDateTime(upcomingConsult) : ""), [upcomingConsult]);
 
-  // ── Effects (ALL LOGIC PRESERVED from original) ────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Effects (ALL LOGIC PRESERVED from original) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
+  useEffect(() => {
+    let mounted = true;
+    async function loadConsultBookings() {
+      const localBookings = readStoredConsultBookings();
+      const token = localStorage.getItem("token");
+      if (!token) {
+        if (mounted) setConsultBookings(sortConsultBookings(localBookings));
+        return;
+      }
+      try {
+        const response = await axios.get(`${API}/api/consults/my`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const remoteBookings = Array.isArray(response?.data?.consults) ? response.data.consults : [];
+        if (mounted) setConsultBookings(sortConsultBookings(mergeConsultBookings(remoteBookings, localBookings)));
+      } catch {
+        if (mounted) setConsultBookings(sortConsultBookings(localBookings));
+      }
+    }
+    loadConsultBookings();
+    return () => { mounted = false; };
+  }, [user?._id, user?.userId]);
   // Profile completion redirect
   useEffect(() => {
     if (!user) return;
@@ -601,7 +628,7 @@ export default function Home() {
     getActive();
   }, [user]);
 
-  // ✅ Nearby pharmacies + top meds (SAME LOGIC — but pharmacies NOT shown to user)
+  // Ã¢Å“â€¦ Nearby pharmacies + top meds (SAME LOGIC Ã¢â‚¬â€ but pharmacies NOT shown to user)
   useEffect(() => {
     if (!userCoords) return;
     fetch(`${API}/api/pharmacies/nearby?lat=${userCoords.lat}&lng=${userCoords.lng}&maxDistance=8000`)
@@ -648,7 +675,7 @@ export default function Home() {
 
   useEffect(() => () => { clearTimeout(popupTimeout.current); clearTimeout(noMedicinesTimer.current); }, []);
 
-  // ✅ Cart add handler — BOTTOM SHEET instead of alert
+  // Ã¢Å“â€¦ Cart add handler Ã¢â‚¬â€ BOTTOM SHEET instead of alert
   const handleAddToCart = (med) => {
     if (!canDeliver) {
       alert("Sorry, delivery isn't available at your location right now.");
@@ -658,7 +685,7 @@ export default function Home() {
       const cartPharmacyId = cart[0]?.pharmacyId || cart[0]?.pharmacy?._id || cart[0]?.pharmacy;
       const medPharmacyId = med.pharmacyId || med.pharmacy?._id || med.pharmacy;
       if (medPharmacyId && cartPharmacyId && medPharmacyId !== cartPharmacyId) {
-        // ✅ Show bottom sheet instead of alert
+        // Ã¢Å“â€¦ Show bottom sheet instead of alert
         setConflictSheet({ open: true, pendingMed: med });
         return;
       }
@@ -666,7 +693,7 @@ export default function Home() {
     addToCart(med);
   };
 
-  // ✅ Handle "Switch & Add" from conflict sheet
+  // Ã¢Å“â€¦ Handle "Switch & Add" from conflict sheet
   const handleConflictSwitch = () => {
     const med = conflictSheet.pendingMed;
     if (clearCartAndPharmacy) clearCartAndPharmacy();
@@ -674,7 +701,7 @@ export default function Home() {
     setConflictSheet({ open: false, pendingMed: null });
   };
 
-  // ✅ Flatten medicines from pharmacies — product-first feed
+  // Ã¢Å“â€¦ Flatten medicines from pharmacies Ã¢â‚¬â€ product-first feed
   const topMedsNearYou = useMemo(() => {
     const phs = pharmaciesNearby.slice(0, 6);
     const pickFrom = phs.flatMap((ph) => {
@@ -697,14 +724,14 @@ export default function Home() {
 
   const userName = user?.name?.split(" ")?.[0] || "there";
   const locationText = currentAddress?.formatted
-    ? currentAddress.formatted.length > 36 ? currentAddress.formatted.slice(0, 36) + "…" : currentAddress.formatted
+    ? currentAddress.formatted.length > 36 ? currentAddress.formatted.slice(0, 36) + "Ã¢â‚¬Â¦" : currentAddress.formatted
     : "Set delivery location";
 
-  // ─── RENDER ────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ RENDER Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   return (
     <div style={{ minHeight: "100vh", width: "100%", maxWidth: 480, margin: "0 auto", background: "linear-gradient(180deg,#F2F7F4 0%,#E8F5EF 30%,#F0F9FF 60%,#F5F3FF 80%,#F2F7F4 100%)", paddingBottom: 120, position: "relative", overflowX: "hidden", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
 
-      {/* ══════════ HERO HEADER ══════════ */}
+      {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â HERO HEADER Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
       <div style={{ background: `linear-gradient(160deg,${DEEP} 0%,${DARK} 42%,#0A4631 100%)`, paddingBottom: 18, position: "relative", borderBottomLeftRadius: 34, borderBottomRightRadius: 34, boxShadow: "0 18px 54px rgba(12,90,62,0.24)" }}>
         <div style={{ position: "absolute", right: -70, top: -70, width: 280, height: 280, borderRadius: "50%", background: "radial-gradient(circle,rgba(0,217,126,0.18) 0%,rgba(0,229,255,0.05) 45%,transparent 72%)", pointerEvents: "none", animation: "orbFloat 8s ease-in-out infinite" }} />
         <div style={{ position: "absolute", left: -90, bottom: -80, width: 260, height: 260, borderRadius: "50%", background: "radial-gradient(circle,rgba(168,85,247,0.08) 0%,transparent 70%)", pointerEvents: "none", animation: "orbFloat 10s ease-in-out infinite reverse" }} />
@@ -732,9 +759,9 @@ export default function Home() {
         {/* Greeting */}
         <div style={{ padding: "0 18px 16px" }}>
           <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 22, fontWeight: 1000, color: "#fff", lineHeight: 1.2, marginBottom: 6 }}>
-            Hi, {userName}! <span style={{ color: ACCENT }}>👋</span>
+            Hi, {userName}! <span style={{ color: ACCENT }}>Ã°Å¸â€˜â€¹</span>
           </div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 14, fontWeight: 700 }}>Your personal health companion — medicines, doctors, tests.</div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 14, fontWeight: 700 }}>Your personal health companion Ã¢â‚¬â€ medicines, doctors, tests.</div>
           <HomeSearch currentAddress={currentAddress} navigate={navigate} />
 
           {/* Trust row */}
@@ -753,7 +780,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ══════════ CONTENT ══════════ */}
+      {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â CONTENT Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
       <div style={{ padding: "18px 18px 0" }}>
 
         {/* No delivery warning */}
@@ -767,17 +794,17 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* ✅ Quick Actions — 2035 Health OS (6 actions) */}
+        {/* Ã¢Å“â€¦ Quick Actions Ã¢â‚¬â€ 2035 Health OS (6 actions) */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
             {[
-              { label: "Upload Rx", emoji: "📋", bg: `linear-gradient(135deg,${DEEP},${MID})`, glow: "rgba(12,90,62,0.30)", onClick: () => setPrescriptionModalOpen(true) },
-              // ✅ PATCH: Medicines quick action -> /all-medicines
-              { label: "Medicines", emoji: "💊", bg: "linear-gradient(135deg,#0891B2,#0EA5E9)", glow: "rgba(8,145,178,0.26)", onClick: () => navigate("/all-medicines") },
-              { label: "Consult", emoji: "🩺", bg: "linear-gradient(135deg,#D97706,#F59E0B)", glow: "rgba(217,119,6,0.26)", onClick: () => navigate("/doctors") },
-              { label: "Lab Tests", emoji: "🧪", bg: "linear-gradient(135deg,#7C3AED,#A855F7)", glow: "rgba(124,58,237,0.26)", onClick: () => navigate("/lab-tests") },
-              { label: "GoDavaii AI", emoji: "🧠", bg: "linear-gradient(135deg,#DC2626,#F87171)", glow: "rgba(220,38,38,0.24)", onClick: () => navigate("/ai") },
-              { label: "Health Vault", emoji: "🗂️", bg: "linear-gradient(135deg,#0369A1,#38BDF8)", glow: "rgba(3,105,161,0.24)", onClick: () => navigate("/health") },
+              { label: "Upload Rx", emoji: "Ã°Å¸â€œâ€¹", bg: `linear-gradient(135deg,${DEEP},${MID})`, glow: "rgba(12,90,62,0.30)", onClick: () => setPrescriptionModalOpen(true) },
+              // Ã¢Å“â€¦ PATCH: Medicines quick action -> /all-medicines
+              { label: "Medicines", emoji: "Ã°Å¸â€™Å ", bg: "linear-gradient(135deg,#0891B2,#0EA5E9)", glow: "rgba(8,145,178,0.26)", onClick: () => navigate("/all-medicines") },
+              { label: "Consult", emoji: "Ã°Å¸Â©Âº", bg: "linear-gradient(135deg,#D97706,#F59E0B)", glow: "rgba(217,119,6,0.26)", onClick: () => navigate("/doctors") },
+              { label: "Lab Tests", emoji: "Ã°Å¸Â§Âª", bg: "linear-gradient(135deg,#7C3AED,#A855F7)", glow: "rgba(124,58,237,0.26)", onClick: () => navigate("/lab-tests") },
+              { label: "GoDavaii AI", emoji: "Ã°Å¸Â§Â ", bg: "linear-gradient(135deg,#DC2626,#F87171)", glow: "rgba(220,38,38,0.24)", onClick: () => navigate("/ai") },
+              { label: "Health Vault", emoji: "Ã°Å¸â€”â€šÃ¯Â¸Â", bg: "linear-gradient(135deg,#0369A1,#38BDF8)", glow: "rgba(3,105,161,0.24)", onClick: () => navigate("/health") },
             ].map((act) => (
               <motion.button key={act.label} whileTap={{ scale: 0.90 }} whileHover={{ y: -2 }} onClick={act.onClick}
                 style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 7, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
@@ -800,13 +827,66 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* ✅ AI Health Assistant Card */}
+        <AnimatePresence>
+          {upcomingConsult && upcomingConsultMeta && (
+            <motion.button
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              whileTap={{ scale: 0.985 }}
+              onClick={() => navigate("/doctors")}
+              style={{
+                width: "100%",
+                borderRadius: 22,
+                overflow: "hidden",
+                background: "linear-gradient(135deg,#06281F 0%,#0C5A3E 52%,#119A67 100%)",
+                boxShadow: "0 14px 36px rgba(12,90,62,0.28)",
+                border: "none",
+                cursor: "pointer",
+                textAlign: "left",
+                padding: "16px 18px",
+                marginBottom: 18,
+                position: "relative",
+              }}
+            >
+              <div style={{ position: "absolute", right: -22, top: -18, width: 110, height: 110, borderRadius: "50%", background: "rgba(255,255,255,0.08)" }} />
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.7px", textTransform: "uppercase", color: "#A7F3D0" }}>Upcoming Doctor Consult</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 900, color: upcomingConsultMeta.accent, background: upcomingConsultMeta.bg, border: `1px solid ${upcomingConsultMeta.border}`, padding: "4px 8px", borderRadius: 999 }}>
+                      {upcomingConsultMeta.label}
+                    </span>
+                  </div>
+                  <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 1000, color: "#fff", marginBottom: 4 }}>
+                    {upcomingConsult.doctorName || "Doctor consult booked"}
+                  </div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", fontWeight: 700, marginBottom: 8 }}>
+                    {upcomingConsult.specialty || "Doctor consultation"}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 7 }}>
+                    <span style={{ fontSize: 11, fontWeight: 900, color: "#D1FAE5", background: "rgba(255,255,255,0.08)", padding: "5px 10px", borderRadius: 999 }}>
+                      {upcomingConsult.mode === "video" ? "Video" : upcomingConsult.mode === "inperson" ? "In-Person" : "Audio"}
+                    </span>
+                    <span style={{ fontSize: 11.5, fontWeight: 800, color: "#fff" }}>{upcomingConsultWhen}</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.72)", fontWeight: 700 }}>
+                    {upcomingConsultMeta.helper}
+                  </div>
+                </div>
+                <div style={{ alignSelf: "center", color: "#fff", fontSize: 12, fontWeight: 1000, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)", padding: "10px 14px", borderRadius: 14 }}>
+                  View consult
+                </div>
+              </div>
+            </motion.button>
+          )}
+        </AnimatePresence>
+        {/* Ã¢Å“â€¦ AI Health Assistant Card */}
         <div style={{ marginBottom: 20 }}>
           <motion.button whileTap={{ scale: 0.98 }} onClick={() => navigate("/ai")}
             style={{ width: "100%", borderRadius: 22, overflow: "hidden", background: "linear-gradient(135deg,#1E1B4B 0%,#312E81 50%,#4C1D95 100%)", boxShadow: "0 12px 36px rgba(76,29,149,0.24)", border: "none", cursor: "pointer", textAlign: "left", padding: "16px 18px", position: "relative" }}>
             <div style={{ position: "absolute", right: -20, top: -20, width: 120, height: 120, borderRadius: "50%", background: "rgba(167,139,250,0.15)" }} />
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 18, background: "rgba(167,139,250,0.20)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, flexShrink: 0 }}>🧠</div>
+              <div style={{ width: 48, height: 48, borderRadius: 18, background: "rgba(167,139,250,0.20)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, flexShrink: 0 }}>Ã°Å¸Â§Â </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 1000, color: "#fff", marginBottom: 3 }}>Ask GoDavaii AI</div>
                 <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>Symptoms, medicines, Rx explain, lab reports</div>
@@ -818,7 +898,7 @@ export default function Home() {
 
         {/* Deals */}
         <div style={{ marginBottom: 20 }}>
-          <Section title="Deals & Offers" badge="HOT 🔥" />
+          <Section title="Deals & Offers" badge="HOT Ã°Å¸â€Â¥" />
           <div style={{ display: "flex", gap: 12, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 4 }}>
             {BANNERS.map((b, i) => <BannerCard key={i} banner={b} />)}
           </div>
@@ -842,9 +922,9 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ✅ Top medicines near you — PRODUCT FIRST, NO PHARMACY NAMES */}
+        {/* Ã¢Å“â€¦ Top medicines near you Ã¢â‚¬â€ PRODUCT FIRST, NO PHARMACY NAMES */}
         <div style={{ marginBottom: 20 }}>
-          {/* ✅ PATCH: title text capitalization + See all -> /all-medicines */}
+          {/* Ã¢Å“â€¦ PATCH: title text capitalization + See all -> /all-medicines */}
           <Section
             title={selectedCategory ? `${selectedCategory} picks near you` : "Top Medicines Near You"}
             onSeeAll={() => navigate("/all-medicines")}
@@ -858,7 +938,7 @@ export default function Home() {
           ) : (
             <Glass style={{ padding: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 16, background: "#F1F5F9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🔍</div>
+                <div style={{ width: 40, height: 40, borderRadius: 16, background: "#F1F5F9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>Ã°Å¸â€Â</div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 1000, color: "#0B1F16" }}>No medicines loaded yet</div>
                   <div style={{ fontSize: 11.5, fontWeight: 750, color: "#94A3B8" }}>Try searching above or change category.</div>
@@ -868,7 +948,7 @@ export default function Home() {
           )}
         </div>
 
-        {/* ✅ NO "Pharmacies Nearby" section — REMOVED (Flipkart model) */}
+        {/* Ã¢Å“â€¦ NO "Pharmacies Nearby" section Ã¢â‚¬â€ REMOVED (Flipkart model) */}
 
         {/* Consult a Doctor */}
         <div style={{ marginBottom: 20 }}>
@@ -883,12 +963,12 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ✅ NEW: Popular Lab Tests */}
+        {/* Ã¢Å“â€¦ NEW: Popular Lab Tests */}
         <div style={{ marginBottom: 20 }}>
           <Section title="Popular Lab Tests" onSeeAll={() => navigate("/lab-tests")} />
           <div style={{ display: "flex", gap: 12, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 6 }}>
             {[
-              { name: "Complete Blood Count", sub: "CBC · 12hr report", price: 299 },
+              { name: "Complete Blood Count", sub: "CBC Ã‚Â· 12hr report", price: 299 },
               { name: "Thyroid Profile", sub: "T3, T4, TSH", price: 399 },
               { name: "HbA1c", sub: "Diabetes monitor", price: 349 },
               { name: "Lipid Profile", sub: "Cholesterol check", price: 449 },
@@ -902,12 +982,12 @@ export default function Home() {
           <Section title="Order Again" badge="Quick Reorder" />
           <Glass style={{ padding: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <div style={{ width: 50, height: 50, borderRadius: 18, background: "linear-gradient(135deg,#E8F5EF,#C6E8D8)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>📦</div>
+              <div style={{ width: 50, height: 50, borderRadius: 18, background: "linear-gradient(135deg,#E8F5EF,#C6E8D8)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>Ã°Å¸â€œÂ¦</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 13.5, fontWeight: 1000, color: "#0B1F16", marginBottom: 3 }}>Last Order</div>
                 <div style={{ fontSize: 11.5, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 750 }}>
                   {lastOrder && Array.isArray(lastOrder.items) && lastOrder.items.length
-                    ? lastOrder.items.map((i) => `${i.name || i.medicineName} ×${i.quantity || 1}`).join(", ")
+                    ? lastOrder.items.map((i) => `${i.name || i.medicineName} Ãƒâ€”${i.quantity || 1}`).join(", ")
                     : "No recent orders yet"}
                 </div>
               </div>
@@ -934,7 +1014,7 @@ export default function Home() {
         </motion.button>
       </motion.div>
 
-      {/* ✅ Cart Conflict Bottom Sheet (replaces alert) */}
+      {/* Ã¢Å“â€¦ Cart Conflict Bottom Sheet (replaces alert) */}
       <CartConflictSheet open={conflictSheet.open} onSwitch={handleConflictSwitch} onCancel={() => setConflictSheet({ open: false, pendingMed: null })} />
 
       {/* Modals */}
