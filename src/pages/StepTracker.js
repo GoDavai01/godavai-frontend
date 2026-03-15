@@ -13,7 +13,6 @@ import {
   Route,
   Clock3,
   Activity,
-  ChevronRight,
   ShieldCheck,
   Ruler,
   Weight,
