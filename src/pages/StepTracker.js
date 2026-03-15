@@ -374,8 +374,7 @@ export default function StepTracker() {
 
   /* ─── FIX: Disable iOS shake-to-undo ─── */
   useEffect(() => {
-    const blockUndo = (e) => { e.preventDefault(); };
-    // This meta approach + event prevention stops "Undo Typing" on iOS Safari
+    // Disable iOS shake-to-undo popup during walking
     const meta = document.createElement("meta");
     meta.name = "apple-mobile-web-app-capable";
     meta.content = "yes";
