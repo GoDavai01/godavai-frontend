@@ -659,10 +659,19 @@ function DailyCareCard({ icon, title, value, helper, accent, onClick }) {
 
   return (
     <motion.button
+      type="button"
       whileTap={{ scale: 0.985 }}
       whileHover={{ y: -1 }}
       onClick={onClick}
-      style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+      style={{
+        width: "100%",
+        display: "block",
+        background: "none",
+        border: "none",
+        padding: 0,
+        cursor: "pointer",
+        textAlign: "left",
+      }}
     >
       {content}
     </motion.button>
@@ -2158,7 +2167,7 @@ export default function Home() {
         userCity={localStorage.getItem("city") || "Mumbai"}
       />
       <MedDetailDialog med={selectedMed} open={!!selectedMed} onClose={() => setSelectedMed(null)} onAddToCart={handleAddToCart} canDeliver={canDeliver} />
-      <BottomNavBar />
+      
 
       <style>{`
         @keyframes glowPulse {
