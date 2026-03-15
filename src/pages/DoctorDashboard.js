@@ -3,6 +3,7 @@ import axios from "axios";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -428,6 +429,7 @@ function TextArea({ value, onChange, placeholder, rows = 4, className = "" }) {
 /* -------------------------------------------------------------------------- */
 
 export default function DoctorDashboard() {
+  const navigate = useNavigate();
   const [doctor, setDoctor] = useState(createEmptyDoctor());
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [upcomingConsults, setUpcomingConsults] = useState([]);
@@ -1002,35 +1004,13 @@ export default function DoctorDashboard() {
     }
   }
 
-  async function handleJoinConsult(booking) {
-    try {
-      const { data } = await axios.post(
-        `${API_BASE_URL}/api/consults/${booking._id}/session/join`,
-        {},
-        getDoctorAuthConfig()
-      );
-      const joined = data?.dashboardConsult || booking;
-      setUpcomingConsults((prev) =>
-        prev.map((item) => (item._id === joined._id ? { ...item, ...joined } : item))
-      );
-      const roomId =
-        data?.session?.roomId ||
-        joined?.consultRoomId ||
-        booking?.consultRoomId ||
-        "";
-
-      if (!roomId) {
-        throw new Error("Consult room is not ready yet");
-      }
-
-      if (typeof window !== "undefined") {
-        window.open(`https://meet.jit.si/${roomId}`, "_blank", "noopener,noreferrer");
-      }
-
-      pushSnackbar(`Opened consult room for ${joined.patientName}`, "success");
-    } catch (error) {
-      pushSnackbar(error?.response?.data?.error || `Failed to join consult for ${booking.patientName}`, "error");
-    }
+  function handleJoinConsult(booking) {
+    navigate(`/consult-room/${booking._id}?role=doctor`, {
+      state: {
+        consult: booking,
+        displayName: doctor?.fullName || doctor?.name || "Doctor",
+      },
+    });
   }
 
   async function handleEndCall() {
@@ -2868,4 +2848,3 @@ export default function DoctorDashboard() {
     </div>
   );
 }
-

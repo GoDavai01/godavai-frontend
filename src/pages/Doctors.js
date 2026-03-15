@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import {
   readStoredConsultBookings,
   upsertStoredConsultBooking,
@@ -721,6 +722,7 @@ function DoctorCard({ doctor, mode, onBook }) {
 }
 
 export default function Doctors() {
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [specialty, setSpecialty] = useState("All");
   const [mode, setMode] = useState("video");
@@ -1621,7 +1623,9 @@ const canJoin =
                         <motion.button
                           whileTap={{ scale: 0.95 }}
                           onClick={() => {
-                            window.open(`https://meet.jit.si/${roomId}`, "_blank");
+                            navigate(`/consult-room/${a.id || a.bookingId}?role=patient`, {
+                              state: { consult: { ...a, consultRoomId: roomId } },
+                            });
                           }}
                           style={{
                             flex: 1,
@@ -1656,10 +1660,12 @@ const canJoin =
                         <motion.button
                           whileTap={{ scale: 0.95 }}
                           onClick={() => {
-                            window.open(
-                              `https://meet.jit.si/${roomId}#config.startWithVideoMuted=true&config.startWithAudioMuted=true`,
-                              "_blank"
-                            );
+                            navigate(`/consult-room/${a.id || a.bookingId}?role=patient&panel=chat`, {
+                              state: {
+                                consult: { ...a, consultRoomId: roomId },
+                                focusChat: true,
+                              },
+                            });
                           }}
                           style={{
                             width: 40,

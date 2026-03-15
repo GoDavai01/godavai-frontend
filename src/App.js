@@ -48,6 +48,7 @@ import Doctors from "./pages/Doctors";
 import DoctorRegister from "./pages/DoctorRegister";
 import DoctorLogin from "./pages/DoctorLogin";
 import DoctorDashboard from "./pages/DoctorDashboard";
+import ConsultRoom from "./pages/ConsultRoom";
 import LabTests from "./pages/LabTests";
 import LabPartnerRegister from "./pages/LabPartnerRegister";
 import LabPartnerLogin from "./pages/LabPartnerLogin";
@@ -105,7 +106,9 @@ function AppContent() {
     location.pathname === "/" ||
     location.pathname === "/home" ||
     location.pathname.startsWith("/ai") ||
-    location.pathname.startsWith("/step-tracker");
+    location.pathname.startsWith("/step-tracker") ||
+    location.pathname.startsWith("/consult-room");
+  const hideViewCartBar = location.pathname.startsWith("/consult-room");
     
   React.useEffect(() => {
     const isWelcome = location.pathname === "/";
@@ -138,6 +141,7 @@ function AppContent() {
         <Route path="/refunds" element={<Refunds />} />
         <Route path="/cookies" element={<Cookies />} />
         <Route path="/delete-account" element={<DeleteAccount />} />
+        <Route path="/consult-room/:consultId" element={<ConsultRoom />} />
 
         <Route path="*" element={<NotFound />} />
 
@@ -411,7 +415,7 @@ function AppContent() {
       </Routes>
 
       {!hideNavbar && <BottomNavBar />}
-      <ViewCartBar />
+      {!hideViewCartBar && <ViewCartBar />}
     </>
   );
 }
