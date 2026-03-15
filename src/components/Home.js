@@ -1508,11 +1508,14 @@ export default function Home() {
   }, [selectedCategory, pharmaciesNearby, allMedsByPharmacy]);
 
   useEffect(() => {
-    return () => {
-      clearTimeout(popupTimeout.current);
-      clearTimeout(noMedicinesTimer.current);
-    };
-  }, []);
+  const popupTimer = popupTimeout.current;
+  const medicinesTimer = noMedicinesTimer.current;
+
+  return () => {
+    clearTimeout(popupTimer);
+    clearTimeout(medicinesTimer);
+  };
+}, []);
 
   const handleAddToCart = (med) => {
     if (!canDeliver) {

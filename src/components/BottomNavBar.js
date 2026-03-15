@@ -11,7 +11,6 @@ import { Home, Pill, Sparkles, Stethoscope, FlaskConical } from "lucide-react";
 
 const DEEP = "#0A5A3B";
 const MID = "#0F7A53";
-const ACC = "#18E2A1";
 
 const navs = [
   { label: "Home", path: "/home", icon: Home, isCenter: false },
