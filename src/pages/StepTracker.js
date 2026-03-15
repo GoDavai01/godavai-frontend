@@ -123,6 +123,50 @@ function normalizePointsForPath(points, width = 320, height = 220, pad = 16) {
     .join(" ");
 }
 
+function cmToFeetInches(cmValue) {
+  const cm = Number(cmValue || 0);
+  if (!cm || cm <= 0) return { feet: "", inches: "" };
+  const totalInches = cm / 2.54;
+  const feet = Math.floor(totalInches / 12);
+  const inches = Math.round(totalInches - feet * 12);
+  if (inches === 12) {
+    return { feet: String(feet + 1), inches: "0" };
+  }
+  return { feet: String(feet), inches: String(inches) };
+}
+
+function feetInchesToCm(feetValue, inchesValue) {
+  const feet = Number(feetValue || 0);
+  const inches = Number(inchesValue || 0);
+  if ((!feet && feet !== 0) || (!inches && inches !== 0)) return null;
+  const totalInches = feet * 12 + inches;
+  if (totalInches <= 0) return null;
+  return Math.round(totalInches * 2.54);
+}
+
+function extractAnyToken(explicitToken) {
+  if (explicitToken) return explicitToken;
+
+  const localCandidates = [
+    localStorage.getItem("token"),
+    localStorage.getItem("authToken"),
+    localStorage.getItem("accessToken"),
+    localStorage.getItem("userToken"),
+  ].filter(Boolean);
+
+  if (localCandidates.length) return localCandidates[0];
+
+  const axiosAuth =
+    axios?.defaults?.headers?.common?.Authorization ||
+    axios?.defaults?.headers?.common?.authorization;
+
+  if (typeof axiosAuth === "string" && axiosAuth.startsWith("Bearer ")) {
+    return axiosAuth.slice(7).trim();
+  }
+
+  return null;
+}
+
 function FallbackRouteMap({ points, title = "Live Route", badge = "Outdoor" }) {
   const poly = normalizePointsForPath(points);
   const hasRoute = points && points.length >= 2;
@@ -658,19 +702,16 @@ function GoogleRouteMap({ currentPoints, recentEndedSessions, selectedMapSession
 function BodyMetricsCard({
   weightInput,
   setWeightInput,
-  heightInput,
-  setHeightInput,
+  feetInput,
+  setFeetInput,
+  inchInput,
+  setInchInput,
   savingMetrics,
   onSave,
   hasWeight,
   hasHeight,
 }) {
-  const missingText = [
-    !hasWeight ? "weight" : null,
-    !hasHeight ? "height" : null,
-  ]
-    .filter(Boolean)
-    .join(" + ");
+  const missingText = [!hasWeight ? "weight" : null, !hasHeight ? "height" : null].filter(Boolean).join(" + ");
 
   return (
     <Glass
@@ -701,12 +742,12 @@ function BodyMetricsCard({
             {!hasWeight || !hasHeight ? `Add ${missingText} here` : "Body metrics saved"}
           </div>
           <div style={{ fontSize: 11.5, color: "#A16207", fontWeight: 700, lineHeight: 1.5 }}>
-            Calories aur step estimate better karne ke liye yahi se update karo. Profile pe jane ki zarurat nahi.
+            Calories aur step estimate better karne ke liye yahi se update karo.
           </div>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "end" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.75fr 0.75fr auto", gap: 10, alignItems: "end" }}>
         <div>
           <div style={{ fontSize: 10.5, fontWeight: 800, color: SUB, marginBottom: 6 }}>Weight (kg)</div>
           <div
@@ -741,7 +782,7 @@ function BodyMetricsCard({
         </div>
 
         <div>
-          <div style={{ fontSize: 10.5, fontWeight: 800, color: SUB, marginBottom: 6 }}>Height (cm)</div>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: SUB, marginBottom: 6 }}>Feet</div>
           <div
             style={{
               height: 46,
@@ -756,10 +797,43 @@ function BodyMetricsCard({
           >
             <Ruler style={{ width: 15, height: 15, color: DEEP }} />
             <input
-              value={heightInput}
-              onChange={(e) => setHeightInput(e.target.value.replace(/[^\d.]/g, "").slice(0, 5))}
-              placeholder="170"
-              inputMode="decimal"
+              value={feetInput}
+              onChange={(e) => setFeetInput(e.target.value.replace(/[^\d]/g, "").slice(0, 1))}
+              placeholder="5"
+              inputMode="numeric"
+              style={{
+                border: "none",
+                outline: "none",
+                width: "100%",
+                background: "transparent",
+                fontSize: 14,
+                fontWeight: 800,
+                color: TEXT,
+              }}
+            />
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: SUB, marginBottom: 6 }}>Inch</div>
+          <div
+            style={{
+              height: 46,
+              borderRadius: 14,
+              border: "1px solid rgba(12,90,62,0.10)",
+              background: "#fff",
+              display: "flex",
+              alignItems: "center",
+              padding: "0 12px",
+              gap: 8,
+            }}
+          >
+            <Ruler style={{ width: 15, height: 15, color: DEEP }} />
+            <input
+              value={inchInput}
+              onChange={(e) => setInchInput(e.target.value.replace(/[^\d]/g, "").slice(0, 2))}
+              placeholder="8"
+              inputMode="numeric"
               style={{
                 border: "none",
                 outline: "none",
@@ -819,7 +893,9 @@ export default function StepTracker() {
   const [liveSource, setLiveSource] = useState("gps+estimate");
   const [selectedMapSessionId, setSelectedMapSessionId] = useState("live");
   const [weightInput, setWeightInput] = useState(String(user?.weightKg || user?.weight || ""));
-  const [heightInput, setHeightInput] = useState(String(user?.heightCm || user?.height || ""));
+  const initialHeight = cmToFeetInches(user?.heightCm || user?.height || "");
+  const [feetInput, setFeetInput] = useState(initialHeight.feet);
+  const [inchInput, setInchInput] = useState(initialHeight.inches);
   const [savingMetrics, setSavingMetrics] = useState(false);
 
   const watchIdRef = useRef(null);
@@ -832,7 +908,9 @@ export default function StepTracker() {
 
   useEffect(() => {
     setWeightInput(String(user?.weightKg || user?.weight || ""));
-    setHeightInput(String(user?.heightCm || user?.height || ""));
+    const nextHeight = cmToFeetInches(user?.heightCm || user?.height || "");
+    setFeetInput(nextHeight.feet);
+    setInchInput(nextHeight.inches);
   }, [user?.weightKg, user?.weight, user?.heightCm, user?.height]);
 
   const weightKgRaw = user?.weightKg || user?.weight || null;
@@ -844,21 +922,21 @@ export default function StepTracker() {
   const strideMeters = hasHeight ? Math.max(0.5, Number(heightCm) * 0.00415) : 0.78;
 
   const authHeaders = useMemo(() => {
-    const t = token || localStorage.getItem("token");
-    return t ? { Authorization: `Bearer ${t}` } : {};
+    const resolvedToken = extractAnyToken(token);
+    return resolvedToken ? { Authorization: `Bearer ${resolvedToken}` } : {};
   }, [token]);
 
   const saveMetricsInline = useCallback(async () => {
     const nextWeight = Number(weightInput);
-    const nextHeight = Number(heightInput);
+    const nextHeightCm = feetInchesToCm(feetInput, inchInput);
 
     if (!nextWeight || nextWeight <= 0) {
       setPermissionError("Please enter valid weight.");
       return;
     }
 
-    if (!nextHeight || nextHeight <= 0) {
-      setPermissionError("Please enter valid height.");
+    if (!nextHeightCm || nextHeightCm <= 0) {
+      setPermissionError("Please enter valid height in feet/inch.");
       return;
     }
 
@@ -870,13 +948,14 @@ export default function StepTracker() {
     try {
       setSavingMetrics(true);
       setPermissionError("");
+      setAuthError("");
 
       const payload = {
         ...user,
         weightKg: nextWeight,
         weight: nextWeight,
-        heightCm: nextHeight,
-        height: nextHeight,
+        heightCm: nextHeightCm,
+        height: nextHeightCm,
         profileCompleted: true,
       };
 
@@ -888,23 +967,24 @@ export default function StepTracker() {
         ...user,
         weightKg: nextWeight,
         weight: nextWeight,
-        heightCm: nextHeight,
-        height: nextHeight,
+        heightCm: nextHeightCm,
+        height: nextHeightCm,
         profileCompleted: true,
       };
 
       if (typeof setUser === "function") setUser(nextUser);
 
-      setCalories((prev) => {
-        if (prev == null && distanceMeters === 0 && steps === 0) return 0;
-        return calculateCalories({ distanceMeters, steps, weightKg: nextWeight });
-      });
+      setCalories(calculateCalories({ distanceMeters, steps, weightKg: nextWeight }));
     } catch (err) {
-      setPermissionError(err?.response?.data?.message || "Unable to save weight/height.");
+      if (err?.response?.status === 401) {
+        setAuthError("Step tracker session sync issue.");
+      } else {
+        setPermissionError(err?.response?.data?.message || "Unable to save weight/height.");
+      }
     } finally {
       setSavingMetrics(false);
     }
-  }, [authHeaders, distanceMeters, heightInput, setUser, steps, user, weightInput]);
+  }, [API, authHeaders, distanceMeters, feetInput, inchInput, setUser, steps, user, weightInput]);
 
   const handleDeviceMotion = useCallback(
     (e) => {
@@ -931,9 +1011,10 @@ export default function StepTracker() {
   );
 
   const refreshHistory = useCallback(async () => {
-    const hasAuth = Object.keys(authHeaders).length > 0;
-    if (!hasAuth) {
-      setAuthError("Session missing. Please login again.");
+    if (!Object.keys(authHeaders).length) {
+      setAuthError("");
+      setTodaySummary(null);
+      setRecentSessions([]);
       return;
     }
 
@@ -947,11 +1028,10 @@ export default function StepTracker() {
       ]);
 
       setTodaySummary(summaryRes.data || null);
-      const sessions = Array.isArray(sessionsRes.data?.sessions) ? sessionsRes.data.sessions : [];
-      setRecentSessions(sessions);
+      setRecentSessions(Array.isArray(sessionsRes.data?.sessions) ? sessionsRes.data.sessions : []);
     } catch (err) {
       if (err?.response?.status === 401) {
-        setAuthError("Login expired. Please login again.");
+        setAuthError("Step tracker session sync issue.");
       } else {
         setAuthError("");
       }
@@ -960,7 +1040,7 @@ export default function StepTracker() {
     } finally {
       setLoadingHistory(false);
     }
-  }, [authHeaders]);
+  }, [API, authHeaders]);
 
   useEffect(() => {
     refreshHistory();
@@ -1003,7 +1083,7 @@ export default function StepTracker() {
         setSyncing(false);
       }
     },
-    [authHeaders, calories, distanceMeters, durationSec, sessionId, steps]
+    [API, authHeaders, calories, distanceMeters, durationSec, sessionId, steps]
   );
 
   const recomputeLiveMetrics = useCallback(
@@ -1150,14 +1230,14 @@ export default function StepTracker() {
       startGpsWatch();
     } catch (err) {
       if (err?.response?.status === 401) {
-        setAuthError("Login expired. Please login again.");
+        setAuthError("Step tracker session sync issue.");
       } else {
         setPermissionError(err?.message || "Unable to start tracking.");
       }
     } finally {
       setStarting(false);
     }
-  }, [authHeaders, beginTimer, enableMotionTracking, hasWeight, startGpsWatch]);
+  }, [API, authHeaders, beginTimer, enableMotionTracking, hasWeight, startGpsWatch]);
 
   const handlePause = useCallback(async () => {
     if (!sessionId) return;
@@ -1175,8 +1255,9 @@ export default function StepTracker() {
     try {
       await axios.patch(`${API}/api/step-tracker/sessions/${sessionId}/pause`, {}, { headers: authHeaders });
     } catch {}
+
     setStatus("paused");
-  }, [authHeaders, flushPoints, handleDeviceMotion, sessionId]);
+  }, [API, authHeaders, flushPoints, handleDeviceMotion, sessionId]);
 
   const handleResume = useCallback(async () => {
     if (!sessionId) return;
@@ -1190,7 +1271,7 @@ export default function StepTracker() {
     startGpsWatch();
     setStatus("tracking");
     setSelectedMapSessionId("live");
-  }, [authHeaders, beginTimer, enableMotionTracking, sessionId, startGpsWatch]);
+  }, [API, authHeaders, beginTimer, enableMotionTracking, sessionId, startGpsWatch]);
 
   const handleEnd = useCallback(async () => {
     if (!sessionId) return;
@@ -1231,18 +1312,7 @@ export default function StepTracker() {
     setStatus("ended");
     setSessionId(null);
     await refreshHistory();
-  }, [
-    authHeaders,
-    calories,
-    distanceMeters,
-    durationSec,
-    flushPoints,
-    handleDeviceMotion,
-    refreshHistory,
-    routePoints,
-    sessionId,
-    steps,
-  ]);
+  }, [API, authHeaders, calories, distanceMeters, durationSec, flushPoints, handleDeviceMotion, refreshHistory, routePoints, sessionId, steps]);
 
   useEffect(() => {
     if (status !== "tracking" || !sessionId) return;
@@ -1492,8 +1562,10 @@ export default function StepTracker() {
         <BodyMetricsCard
           weightInput={weightInput}
           setWeightInput={setWeightInput}
-          heightInput={heightInput}
-          setHeightInput={setHeightInput}
+          feetInput={feetInput}
+          setFeetInput={setFeetInput}
+          inchInput={inchInput}
+          setInchInput={setInchInput}
           savingMetrics={savingMetrics}
           onSave={saveMetricsInline}
           hasWeight={hasWeight}
