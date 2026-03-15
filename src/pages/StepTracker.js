@@ -976,15 +976,11 @@ export default function StepTracker() {
 
       setCalories(calculateCalories({ distanceMeters, steps, weightKg: nextWeight }));
     } catch (err) {
-      if (err?.response?.status === 401) {
-        setAuthError("Step tracker session sync issue.");
-      } else {
-        setPermissionError(err?.response?.data?.message || "Unable to save weight/height.");
-      }
+      setPermissionError(err?.response?.data?.message || "Unable to save weight/height.");
     } finally {
       setSavingMetrics(false);
     }
-  }, [API, authHeaders, distanceMeters, feetInput, inchInput, setUser, steps, user, weightInput]);
+  }, [authHeaders, distanceMeters, feetInput, inchInput, setUser, steps, user, weightInput]);
 
   const handleDeviceMotion = useCallback(
     (e) => {
@@ -1030,17 +1026,13 @@ export default function StepTracker() {
       setTodaySummary(summaryRes.data || null);
       setRecentSessions(Array.isArray(sessionsRes.data?.sessions) ? sessionsRes.data.sessions : []);
     } catch (err) {
-      if (err?.response?.status === 401) {
-        setAuthError("Step tracker session sync issue.");
-      } else {
-        setAuthError("");
-      }
+      setAuthError("");
       setTodaySummary(null);
       setRecentSessions([]);
     } finally {
       setLoadingHistory(false);
     }
-  }, [API, authHeaders]);
+  }, [authHeaders]);
 
   useEffect(() => {
     refreshHistory();
@@ -1083,7 +1075,7 @@ export default function StepTracker() {
         setSyncing(false);
       }
     },
-    [API, authHeaders, calories, distanceMeters, durationSec, sessionId, steps]
+    [authHeaders, calories, distanceMeters, durationSec, sessionId, steps]
   );
 
   const recomputeLiveMetrics = useCallback(
@@ -1229,15 +1221,11 @@ export default function StepTracker() {
       beginTimer();
       startGpsWatch();
     } catch (err) {
-      if (err?.response?.status === 401) {
-        setAuthError("Step tracker session sync issue.");
-      } else {
-        setPermissionError(err?.message || "Unable to start tracking.");
-      }
+      setPermissionError(err?.response?.data?.message || err?.message || "Unable to start tracking.");
     } finally {
       setStarting(false);
     }
-  }, [API, authHeaders, beginTimer, enableMotionTracking, hasWeight, startGpsWatch]);
+  }, [authHeaders, beginTimer, enableMotionTracking, hasWeight, startGpsWatch]);
 
   const handlePause = useCallback(async () => {
     if (!sessionId) return;
@@ -1257,7 +1245,7 @@ export default function StepTracker() {
     } catch {}
 
     setStatus("paused");
-  }, [API, authHeaders, flushPoints, handleDeviceMotion, sessionId]);
+  }, [authHeaders, flushPoints, handleDeviceMotion, sessionId]);
 
   const handleResume = useCallback(async () => {
     if (!sessionId) return;
@@ -1271,7 +1259,7 @@ export default function StepTracker() {
     startGpsWatch();
     setStatus("tracking");
     setSelectedMapSessionId("live");
-  }, [API, authHeaders, beginTimer, enableMotionTracking, sessionId, startGpsWatch]);
+  }, [authHeaders, beginTimer, enableMotionTracking, sessionId, startGpsWatch]);
 
   const handleEnd = useCallback(async () => {
     if (!sessionId) return;
@@ -1312,7 +1300,7 @@ export default function StepTracker() {
     setStatus("ended");
     setSessionId(null);
     await refreshHistory();
-  }, [API, authHeaders, calories, distanceMeters, durationSec, flushPoints, handleDeviceMotion, refreshHistory, routePoints, sessionId, steps]);
+  }, [authHeaders, calories, distanceMeters, durationSec, flushPoints, handleDeviceMotion, refreshHistory, routePoints, sessionId, steps]);
 
   useEffect(() => {
     if (status !== "tracking" || !sessionId) return;
@@ -1571,13 +1559,6 @@ export default function StepTracker() {
           hasWeight={hasWeight}
           hasHeight={hasHeight}
         />
-
-        {authError ? (
-          <Glass style={{ padding: 14, marginBottom: 16, border: "1px solid #FECACA", background: "#FFF8F6" }}>
-            <div style={{ fontSize: 13, fontWeight: 900, color: "#991B1B", marginBottom: 4 }}>Session issue</div>
-            <div style={{ fontSize: 12, color: "#B45309", fontWeight: 700 }}>{authError}</div>
-          </Glass>
-        ) : null}
 
         {permissionError ? (
           <Glass style={{ padding: 14, marginBottom: 16, border: "1px solid #FECACA", background: "#FFF8F6" }}>
