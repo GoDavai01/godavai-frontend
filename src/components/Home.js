@@ -2167,7 +2167,7 @@ export default function Home() {
         userCity={localStorage.getItem("city") || "Mumbai"}
       />
       <MedDetailDialog med={selectedMed} open={!!selectedMed} onClose={() => setSelectedMed(null)} onAddToCart={handleAddToCart} canDeliver={canDeliver} />
-      
+      <BottomNavBar />
 
       <style>{`
         @keyframes glowPulse {

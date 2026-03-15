@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   ArrowLeft,
   Footprints,
   Play,
   Pause,
   Square,
-  TimerReset,
   MapPinned,
   Flame,
   Gauge,
@@ -24,7 +23,6 @@ const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
 const DEEP = "#0A5A3B";
 const MID = "#0F7A53";
-const ACCENT = "#18E2A1";
 const BG_TOP = "#F4FBF8";
 const BG_MID = "#EEF8F4";
 const BG_BOT = "#F7FAFF";
@@ -141,7 +139,9 @@ function MiniRouteMap({ points }) {
             <MapPinned style={{ width: 17, height: 17, color: DEEP }} />
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, fontFamily: "'Sora',sans-serif" }}>Live Route</div>
+            <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, fontFamily: "'Sora',sans-serif" }}>
+              Live Route
+            </div>
             <div style={{ fontSize: 11, color: SUB, fontWeight: 700 }}>Start → path → end</div>
           </div>
         </div>
@@ -288,7 +288,7 @@ export default function StepTracker() {
   const { user } = useAuth();
 
   const [sessionId, setSessionId] = useState(null);
-  const [status, setStatus] = useState("idle"); // idle | tracking | paused | ended
+  const [status, setStatus] = useState("idle");
   const [routePoints, setRoutePoints] = useState([]);
   const [durationSec, setDurationSec] = useState(0);
   const [distanceMeters, setDistanceMeters] = useState(0);
@@ -317,6 +317,30 @@ export default function StepTracker() {
     const token = localStorage.getItem("token");
     return token ? { Authorization: `Bearer ${token}` } : {};
   }, []);
+
+  const handleDeviceMotion = useCallback(
+    (e) => {
+      if (!motionEnabledRef.current) return;
+      const acc = e.accelerationIncludingGravity;
+      if (!acc) return;
+
+      const x = Number(acc.x || 0);
+      const y = Number(acc.y || 0);
+      const z = Number(acc.z || 0);
+
+      const magnitude = Math.sqrt(x * x + y * y + z * z);
+      const now = Date.now();
+
+      if (magnitude > 12.2 && now - lastMotionPeakTsRef.current > 360) {
+        lastMotionPeakTsRef.current = now;
+        manualMotionStepsRef.current += 1;
+        setSteps((prev) =>
+          Math.max(prev + 1, calculateEstimatedSteps(distanceMeters, manualMotionStepsRef.current))
+        );
+      }
+    },
+    [distanceMeters]
+  );
 
   const refreshHistory = useCallback(async () => {
     setLoadingHistory(true);
@@ -347,8 +371,7 @@ export default function StepTracker() {
       if (timerRef.current) clearInterval(timerRef.current);
       window.removeEventListener("devicemotion", handleDeviceMotion);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [handleDeviceMotion]);
 
   const flushPoints = useCallback(
     async (extra = {}) => {
@@ -363,7 +386,7 @@ export default function StepTracker() {
           `${API}/api/step-tracker/sessions/${sessionId}/points`,
           {
             points: batch,
-            steps: steps,
+            steps,
             distanceMeters,
             caloriesKcal: calories,
             durationSec,
@@ -391,25 +414,6 @@ export default function StepTracker() {
     [durationSec, weightKg]
   );
 
-  function handleDeviceMotion(e) {
-    if (!motionEnabledRef.current) return;
-    const acc = e.accelerationIncludingGravity;
-    if (!acc) return;
-
-    const x = Number(acc.x || 0);
-    const y = Number(acc.y || 0);
-    const z = Number(acc.z || 0);
-
-    const magnitude = Math.sqrt(x * x + y * y + z * z);
-    const now = Date.now();
-
-    if (magnitude > 12.2 && now - lastMotionPeakTsRef.current > 360) {
-      lastMotionPeakTsRef.current = now;
-      manualMotionStepsRef.current += 1;
-      setSteps((prev) => Math.max(prev + 1, calculateEstimatedSteps(distanceMeters, manualMotionStepsRef.current)));
-    }
-  }
-
   const enableMotionTracking = useCallback(async () => {
     try {
       if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
@@ -422,7 +426,7 @@ export default function StepTracker() {
     } catch {
       return false;
     }
-  }, [distanceMeters]);
+  }, [handleDeviceMotion]);
 
   const startGpsWatch = useCallback(() => {
     if (!navigator.geolocation) {
@@ -549,6 +553,7 @@ export default function StepTracker() {
 
   const handlePause = useCallback(async () => {
     if (!sessionId) return;
+
     if (watchIdRef.current !== null && navigator.geolocation) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
@@ -562,8 +567,9 @@ export default function StepTracker() {
     try {
       await axios.patch(`${API}/api/step-tracker/sessions/${sessionId}/pause`, {}, { headers: authHeaders });
     } catch {}
+
     setStatus("paused");
-  }, [authHeaders, flushPoints, sessionId]);
+  }, [authHeaders, flushPoints, handleDeviceMotion, sessionId]);
 
   const handleResume = useCallback(async () => {
     if (!sessionId) return;
@@ -617,7 +623,18 @@ export default function StepTracker() {
     setStatus("ended");
     setSessionId(null);
     await refreshHistory();
-  }, [authHeaders, calories, distanceMeters, durationSec, flushPoints, refreshHistory, routePoints, sessionId, steps]);
+  }, [
+    authHeaders,
+    calories,
+    distanceMeters,
+    durationSec,
+    flushPoints,
+    handleDeviceMotion,
+    refreshHistory,
+    routePoints,
+    sessionId,
+    steps,
+  ]);
 
   useEffect(() => {
     if (status !== "tracking" || !sessionId) return;
@@ -628,8 +645,10 @@ export default function StepTracker() {
   }, [flushPoints, sessionId, status]);
 
   const todaySteps = Number(todaySummary?.steps || 0) + (status === "tracking" || status === "paused" ? steps : 0);
-  const todayDistance = Number(todaySummary?.distanceMeters || 0) + (status === "tracking" || status === "paused" ? distanceMeters : 0);
-  const todayCalories = Number(todaySummary?.caloriesKcal || 0) + (status === "tracking" || status === "paused" ? calories : 0);
+  const todayDistance =
+    Number(todaySummary?.distanceMeters || 0) + (status === "tracking" || status === "paused" ? distanceMeters : 0);
+  const todayCalories =
+    Number(todaySummary?.caloriesKcal || 0) + (status === "tracking" || status === "paused" ? calories : 0);
   const stepGoal = 10000;
   const goalPct = Math.min(100, Math.round((todaySteps / stepGoal) * 100));
 
@@ -722,7 +741,9 @@ export default function StepTracker() {
               <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 24, fontWeight: 1000, color: TEXT, marginBottom: 6 }}>
                 {todaySteps.toLocaleString()} / {stepGoal.toLocaleString()}
               </div>
-              <div style={{ fontSize: 11.5, color: "#82938D", fontWeight: 700 }}>Distance {metersToKm(todayDistance)} km · {Math.round(todayCalories)} kcal</div>
+              <div style={{ fontSize: 11.5, color: "#82938D", fontWeight: 700 }}>
+                Distance {metersToKm(todayDistance)} km · {Math.round(todayCalories)} kcal
+              </div>
             </div>
             <div
               style={{
@@ -773,7 +794,12 @@ export default function StepTracker() {
           <StatCard icon={Flame} label="Calories" value={`${Math.round(calories)} kcal`} helper={`Based on ${weightKg} kg estimate`} />
           <StatCard icon={Gauge} label="Pace" value={pace} helper="Average pace for current session" />
           <StatCard icon={Clock3} label="Duration" value={formatDuration(durationSec)} helper="Walk session timer" />
-          <StatCard icon={Activity} label="Status" value={status === "idle" ? "Ready" : status === "tracking" ? "Tracking" : status === "paused" ? "Paused" : "Completed"} helper="Live session mode" />
+          <StatCard
+            icon={Activity}
+            label="Status"
+            value={status === "idle" ? "Ready" : status === "tracking" ? "Tracking" : status === "paused" ? "Paused" : "Completed"}
+            helper="Live session mode"
+          />
         </div>
 
         <Glass style={{ padding: 14, marginBottom: 20 }}>
@@ -785,7 +811,16 @@ export default function StepTracker() {
               </div>
             </div>
             {syncing ? (
-              <div style={{ fontSize: 10.5, fontWeight: 900, color: DEEP, background: "rgba(24,226,161,0.10)", padding: "6px 10px", borderRadius: 999 }}>
+              <div
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 900,
+                  color: DEEP,
+                  background: "rgba(24,226,161,0.10)",
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                }}
+              >
                 Syncing...
               </div>
             ) : null}
@@ -864,7 +899,9 @@ export default function StepTracker() {
 
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 1000, color: TEXT }}>Recent Walk Sessions</div>
+            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 1000, color: TEXT }}>
+              Recent Walk Sessions
+            </div>
             <button
               onClick={refreshHistory}
               style={{ background: "none", border: "none", color: DEEP, fontWeight: 900, cursor: "pointer", fontSize: 12.5 }}
@@ -886,7 +923,9 @@ export default function StepTracker() {
           ) : (
             <Glass style={{ padding: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 900, color: TEXT, marginBottom: 4 }}>No sessions yet</div>
-              <div style={{ fontSize: 11.5, color: SUB, fontWeight: 700 }}>Start your first premium walk session from above.</div>
+              <div style={{ fontSize: 11.5, color: SUB, fontWeight: 700 }}>
+                Start your first premium walk session from above.
+              </div>
             </Glass>
           )}
         </div>
