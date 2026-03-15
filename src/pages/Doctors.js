@@ -113,9 +113,23 @@ function normalizeConsultStatus(item = {}) {
   if (raw === "no_show") return "no_show";
   if (raw === "pending_payment") return "pending_payment";
 
-  if (raw === "confirmed" || raw === "pending") {
-    return paymentStatus === "paid" ? "pending" : "pending_payment";
+  if (raw === "confirmed") {
+  return paymentStatus === "paid" ? "pending" : "pending_payment";
+}
+
+if (raw === "pending") {
+  if (paymentStatus !== "paid") return "pending_payment";
+
+  const appointmentAt = getAppointmentAt(item);
+  if (appointmentAt) {
+    const startMs = new Date(appointmentAt).getTime();
+    const nowMs = Date.now();
+    if (startMs <= nowMs + 60 * 1000) return "live_now";
+    if (startMs <= nowMs + 30 * 60 * 1000) return "upcoming";
   }
+
+  return "pending";
+}
 
   return raw || (paymentStatus === "paid" ? "pending" : "pending_payment");
 }
@@ -608,43 +622,65 @@ export default function Doctors() {
   }, [query, specialty, sort, mode]);
 
   const loadMyConsults = useCallback(async () => {
-    const localBookingsRaw = readStoredConsultBookings();
-    const localBookings = (Array.isArray(localBookingsRaw) ? localBookingsRaw : []).map(normalizeConsult);
-    const token = localStorage.getItem("token");
+  const localBookingsRaw = readStoredConsultBookings();
+  const localBookings = (Array.isArray(localBookingsRaw) ? localBookingsRaw : []).map(normalizeConsult);
+  const token = localStorage.getItem("token");
 
-    setLoadingAppts(true);
+  setLoadingAppts(true);
+  setError("");
 
-    if (!token) {
-      setAppointments(sortConsultBookings(localBookings));
-      setLoadingAppts(false);
-      return;
+  try {
+    let serverBookings = [];
+
+    if (token) {
+      try {
+        const r = await axios.get(`${API}/api/consults/my`, { headers: userHeaders() });
+        serverBookings = (Array.isArray(r?.data?.consults) ? r.data.consults : []).map(normalizeConsult);
+      } catch (_) {
+        serverBookings = [];
+      }
     }
 
-    try {
-      const r = await axios.get(`${API}/api/consults/my`, { headers: userHeaders() });
-      const serverBookingsRaw = Array.isArray(r?.data?.consults) ? r.data.consults : [];
-      const serverBookings = serverBookingsRaw.map(normalizeConsult);
+    let publicSyncedBookings = [];
+    if (localBookings.length) {
+      try {
+        const syncRes = await axios.post(
+          `${API}/api/consults/lookup/batch`,
+          {
+            items: localBookings.map((item) => ({
+              bookingId: item.id || item.bookingId,
+              paymentRef: item.paymentRef || "",
+            })),
+          },
+          token ? { headers: userHeaders() } : undefined
+        );
 
-      const merged = mergeAppointmentsPreferServer(serverBookings, localBookings);
-
-      merged.forEach((item) => {
-        if (item?.id || item?.bookingId) {
-          upsertStoredConsultBooking({
-            ...item,
-            id: item.id || item.bookingId,
-            bookingId: item.bookingId || item.id,
-          });
-        }
-      });
-
-      setAppointments(sortConsultBookings(merged));
-      setError("");
-    } catch (_) {
-      setAppointments(sortConsultBookings(localBookings));
-    } finally {
-      setLoadingAppts(false);
+        publicSyncedBookings = (Array.isArray(syncRes?.data?.consults) ? syncRes.data.consults : []).map(normalizeConsult);
+      } catch (_) {
+        publicSyncedBookings = [];
+      }
     }
-  }, []);
+
+    const mergedServer = mergeAppointmentsPreferServer(serverBookings, publicSyncedBookings);
+    const merged = mergeAppointmentsPreferServer(mergedServer, localBookings);
+
+    merged.forEach((item) => {
+      if (item?.id || item?.bookingId) {
+        upsertStoredConsultBooking({
+          ...item,
+          id: item.id || item.bookingId,
+          bookingId: item.bookingId || item.id,
+        });
+      }
+    });
+
+    setAppointments(sortConsultBookings(merged));
+  } catch (_) {
+    setAppointments(sortConsultBookings(localBookings));
+  } finally {
+    setLoadingAppts(false);
+  }
+}, []);
 
   useEffect(() => {
     loadMyConsults();
@@ -1111,12 +1147,21 @@ export default function Doctors() {
           ) : (
             consultCards.map((rawItem) => {
               const a = normalizeConsult(rawItem);
-              const isLive = a.callState === "live" || a.status === "live_now";
-              const hasPrescription = !!a?.prescription?.fileUrl;
-              const canJoin =
-                ["accepted", "upcoming", "live_now"].includes(a.status) &&
-                a.paymentStatus === "paid" &&
-                a.mode !== "inperson";
+              const appointmentMs = a.appointmentAt ? new Date(a.appointmentAt).getTime() : 0;
+const nowMs = Date.now();
+const isLive = a.callState === "live" || a.status === "live_now";
+const hasPrescription = !!a?.prescription?.fileUrl;
+
+const withinJoinWindow =
+  appointmentMs > 0 && nowMs >= appointmentMs - 30 * 60 * 1000;
+
+const canJoin =
+  a.paymentStatus === "paid" &&
+  a.mode !== "inperson" &&
+  (
+    ["accepted", "upcoming", "live_now"].includes(a.status) ||
+    (withinJoinWindow && !!a.consultRoomId)
+  );
 
               const modeIcon = a.mode === "video" ? Video : a.mode === "call" ? Phone : MapPin;
               const modeLabel = a.mode === "video" ? "Video" : a.mode === "call" ? "Audio" : "In-Person";
@@ -1407,7 +1452,7 @@ export default function Doctors() {
                           ) : (
                             <PhoneCall style={{ width: 14, height: 14 }} />
                           )}
-                          {isLive ? "Join Now — LIVE" : "Join Consultation"}
+                          {isLive ? "Join Now — LIVE" : withinJoinWindow ? "Join Now" : "Open Room"}
                         </motion.button>
 
                         <motion.button
