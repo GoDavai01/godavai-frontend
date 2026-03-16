@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { getDoctorPrescriptionCartSummary } from "../lib/doctorPrescriptionCart";
+import { getUserAuthHeaders, getUserAuthToken } from "../lib/userAuth";
 import { mergeConsultBookings, readStoredConsultBookings, sortConsultBookings, upsertStoredConsultBooking } from "../utils/consultBookings";
 
 // ─── Constants ───────────────────────────────────────────────
@@ -1391,7 +1392,7 @@ export default function Home() {
   const noMedicinesTimer = useRef(null);
   const prescriptionFeedbackTimer = useRef(null);
 
-  const { user } = useAuth();
+  const { user, token: authToken } = useAuth();
   const cartCtx = useCart();
   const { cart, addToCart, clearCartAndPharmacy: clearCartAndPharmacyFromContext, clearCart, removeFromCart } = cartCtx;
 
@@ -1489,8 +1490,8 @@ export default function Home() {
 
   // My consults for home doctor section
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    const token = getUserAuthToken(authToken);
+    const headers = token ? getUserAuthHeaders(token) : undefined;
     let cancelled = false;
 
     async function loadHomeConsults() {
@@ -1568,7 +1569,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [user?._id, user?.userId]);
+  }, [authToken, user?._id, user?.userId]);
 
   // Nearby pharmacies + top meds
   useEffect(() => {

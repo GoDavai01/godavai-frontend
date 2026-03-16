@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { getUserAuthHeaders, getUserAuthToken } from "../lib/userAuth";
 import {
   readStoredConsultBookings,
   upsertStoredConsultBooking,
@@ -78,9 +80,8 @@ function next7Days() {
   return arr;
 }
 
-function userHeaders() {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
+function userHeaders(explicitToken = "") {
+  return getUserAuthHeaders(explicitToken);
 }
 
 function mapModeForBackend(mode) {
@@ -723,6 +724,7 @@ function DoctorCard({ doctor, mode, onBook }) {
 
 export default function Doctors() {
   const navigate = useNavigate();
+  const { token: authToken, user } = useAuth();
   const [query, setQuery] = useState("");
   const [specialty, setSpecialty] = useState("All");
   const [mode, setMode] = useState("video");
@@ -748,6 +750,7 @@ export default function Doctors() {
   const [bookingLoading, setBookingLoading] = useState(false);
 
   const dateList = useMemo(() => next7Days(), []);
+  const activeToken = getUserAuthToken(authToken);
 
   useEffect(() => {
     async function loadSpecialties() {
@@ -790,7 +793,6 @@ export default function Doctors() {
   const loadMyConsults = useCallback(async () => {
   const localBookingsRaw = readStoredConsultBookings();
   const localBookings = (Array.isArray(localBookingsRaw) ? localBookingsRaw : []).map(normalizeConsult);
-  const token = localStorage.getItem("token");
 
   setLoadingAppts(true);
   setError("");
@@ -798,9 +800,9 @@ export default function Doctors() {
   try {
     let serverBookings = [];
 
-    if (token) {
+    if (activeToken) {
       try {
-        const r = await axios.get(`${API}/api/consults/my`, { headers: userHeaders() });
+        const r = await axios.get(`${API}/api/consults/my`, { headers: userHeaders(activeToken) });
         serverBookings = (Array.isArray(r?.data?.consults) ? r.data.consults : []).map(normalizeConsult);
       } catch (_) {
         serverBookings = [];
@@ -822,7 +824,7 @@ export default function Doctors() {
               mode: item.mode || "",
             })),
           },
-          token ? { headers: userHeaders() } : undefined
+          activeToken ? { headers: userHeaders(activeToken) } : undefined
         );
 
         publicSyncedBookings = (Array.isArray(syncRes?.data?.consults) ? syncRes.data.consults : []).map(normalizeConsult);
@@ -850,7 +852,7 @@ export default function Doctors() {
   } finally {
     setLoadingAppts(false);
   }
-}, []);
+}, [activeToken]);
 
   useEffect(() => {
     loadMyConsults();
@@ -937,6 +939,11 @@ export default function Doctors() {
 
   async function bookNow() {
     if (!bookingDoctor || !bookingDate || !bookingSlot || !paymentMethod) return;
+    if (!activeToken) {
+      setError("Session missing. Please login again before booking a consult.");
+      navigate("/otp-login");
+      return;
+    }
 
     setBookingLoading(true);
     setError("");
@@ -945,16 +952,15 @@ export default function Doctors() {
       const createRes = await axios.post(
         `${API}/api/consults/create`,
         (() => {
+          const resolvedPatientName =
+            patientName.trim() || (patientType === "self" ? user?.name?.trim() || "Self" : "Family Member");
           const payload = new FormData();
           payload.append("doctorId", bookingDoctor.id);
           payload.append("mode", mapModeForBackend(mode));
           payload.append("date", bookingDate);
           payload.append("slot", bookingSlot);
           payload.append("patientType", patientType);
-          payload.append(
-            "patientName",
-            patientName.trim() || (patientType === "self" ? "Self" : "Family Member")
-          );
+          payload.append("patientName", resolvedPatientName);
           payload.append("reason", reason.trim() || "General consultation");
           payload.append("symptoms", reason.trim() || "General consultation");
           payload.append("patientSummary", patientSummary.trim());
@@ -964,7 +970,7 @@ export default function Doctors() {
         })(),
         {
           headers: {
-            ...userHeaders(),
+            ...userHeaders(activeToken),
             "Content-Type": "multipart/form-data",
           },
         }
@@ -999,14 +1005,20 @@ export default function Doctors() {
           order_id: orderBackend.data.orderId || orderBackend.data.id,
           handler: async (response) => {
             try {
-              const verifyRes = await axios.post(`${API}/api/payments/verify`, {
-                consultId: consult.id,
-                paymentRef,
-                paymentMethod,
-                transactionId: response?.razorpay_payment_id || `TXN-${Date.now()}`,
-                razorpayOrderId: response?.razorpay_order_id || "",
-                razorpaySignature: response?.razorpay_signature || "",
-              });
+              const verifyRes = await axios.post(
+                `${API}/api/payments/verify`,
+                {
+                  consultId: consult.id,
+                  paymentRef,
+                  paymentMethod,
+                  transactionId: response?.razorpay_payment_id || `TXN-${Date.now()}`,
+                  razorpayOrderId: response?.razorpay_order_id || "",
+                  razorpaySignature: response?.razorpay_signature || "",
+                },
+                {
+                  headers: userHeaders(activeToken),
+                }
+              );
 
               const verifiedConsult = normalizeConsult(
                 verifyRes?.data?.consult || {
@@ -1033,7 +1045,7 @@ export default function Doctors() {
                 slot: bookingSlot,
                 dateLabel: selectedDateOption?.full || bookingDate,
                 patientName:
-                  patientName.trim() || (patientType === "self" ? "Self" : "Family Member"),
+                  patientName.trim() || (patientType === "self" ? user?.name?.trim() || "Self" : "Family Member"),
                 reason: reason.trim() || "General consultation",
                 patientSummary: patientSummary.trim(),
                 paymentMethod,
@@ -1062,7 +1074,7 @@ export default function Doctors() {
             }
           },
           prefill: {
-            name: patientType === "self" ? "Self" : patientName.trim() || "Consult Patient",
+            name: patientType === "self" ? user?.name?.trim() || "Self" : patientName.trim() || "Consult Patient",
           },
           theme: { color: DEEP },
           modal: {
