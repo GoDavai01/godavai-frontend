@@ -1664,12 +1664,52 @@ export default function Home() {
     return out;
   }, [pharmaciesNearby, mostOrderedByPharmacy, selectedCategory, allMedsByPharmacy, showFallbackMeds]);
 
-  const visibleConsults = useMemo(() => {
+  const featuredDoctorPrescription = useMemo(() => {
     return myConsults
-      .filter((c) => ["confirmed", "accepted", "live_now", "completed"].includes(c.status))
-      .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))
-      .slice(0, 3);
+      .map((consult) => {
+        const summary = getDoctorPrescriptionCartSummary(consult?.doctorPrescription);
+        return {
+          consult,
+          summary,
+          sortTime: new Date(summary.createdAt || consult?.updatedAt || consult?.createdAt || 0).getTime(),
+        };
+      })
+      .filter((entry) => !!entry.summary.prescriptionId)
+      .sort((a, b) => b.sortTime - a.sortTime)[0] || null;
   }, [myConsults]);
+
+  const visibleConsults = useMemo(() => {
+    const allowedStatuses = new Set(["confirmed", "accepted", "upcoming", "live_now", "completed"]);
+    return myConsults
+      .map((consult) => {
+        const summary = getDoctorPrescriptionCartSummary(consult?.doctorPrescription);
+        const hasDoctorPrescription = !!summary.prescriptionId;
+        const hasUploadedPrescription = !!consult?.prescription?.fileUrl;
+        const isLive = consult?.callState === "live" || consult?.status === "live_now";
+        return {
+          consult,
+          hasDoctorPrescription,
+          hasUploadedPrescription,
+          isLive,
+          sortTime: new Date(summary.createdAt || consult?.updatedAt || consult?.createdAt || 0).getTime(),
+        };
+      })
+      .filter((entry) => allowedStatuses.has(entry.consult?.status) || entry.hasDoctorPrescription || entry.hasUploadedPrescription)
+      .sort((a, b) => {
+        if (Number(b.hasDoctorPrescription) !== Number(a.hasDoctorPrescription)) {
+          return Number(b.hasDoctorPrescription) - Number(a.hasDoctorPrescription);
+        }
+        if (Number(b.isLive) !== Number(a.isLive)) {
+          return Number(b.isLive) - Number(a.isLive);
+        }
+        return b.sortTime - a.sortTime;
+      })
+      .slice(0, 3)
+      .map((entry) => entry.consult);
+  }, [myConsults]);
+
+  const featuredDoctorPrescriptionConsult = featuredDoctorPrescription?.consult || null;
+  const featuredDoctorPrescriptionSummary = featuredDoctorPrescription?.summary || null;
 
   const userName = user?.name?.split(" ")?.[0] || "there";
   const locationText = currentAddress?.formatted
@@ -1865,6 +1905,127 @@ export default function Home() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {featuredDoctorPrescriptionConsult && featuredDoctorPrescriptionSummary && (
+          <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 18 }}>
+            <Glass style={{ padding: 16, border: "1px solid #BBF7D0", background: "linear-gradient(135deg,#F0FDF4,#ECFDF5)" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 16,
+                    background: "#DCFCE7",
+                    display: "grid",
+                    placeItems: "center",
+                    flexShrink: 0,
+                    color: "#15803D",
+                    fontSize: 15,
+                    fontWeight: 1000,
+                    fontFamily: "'Sora',sans-serif",
+                  }}
+                >
+                  Rx
+                </div>
+
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        fontSize: 9.5,
+                        fontWeight: 1000,
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        color: "#166534",
+                        background: "#DCFCE7",
+                        borderRadius: 999,
+                        padding: "4px 8px",
+                      }}
+                    >
+                      Latest Prescription
+                    </span>
+                    <span style={{ fontSize: 10.5, fontWeight: 800, color: "#4B7A62" }}>
+                      {featuredDoctorPrescriptionConsult.doctorName || "Doctor"} sent this to your home
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: 8, fontSize: 15, fontWeight: 1000, color: "#14532D", fontFamily: "'Sora',sans-serif" }}>
+                    Doctor provided your prescription
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 11, fontWeight: 800, color: "#4B7A62" }}>
+                    {featuredDoctorPrescriptionSummary.medicineCount} medicines suggested
+                    {featuredDoctorPrescriptionSummary.addableCount > 0
+                      ? ` • ${featuredDoctorPrescriptionSummary.addableCount} available to add in one tap`
+                      : " • Review availability on medicine page"}
+                  </div>
+                  {featuredDoctorPrescriptionSummary.diagnosis ? (
+                    <div style={{ marginTop: 6, fontSize: 10.5, fontWeight: 800, color: "#335B4B" }}>
+                      Diagnosis: {featuredDoctorPrescriptionSummary.diagnosis}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+                {featuredDoctorPrescriptionSummary.addableCount > 0 && (
+                  <motion.button
+                    whileTap={{ scale: 0.96 }}
+                    onClick={() => handleAddDoctorPrescription(featuredDoctorPrescriptionConsult.doctorPrescription)}
+                    style={{
+                      height: 38,
+                      padding: "0 14px",
+                      borderRadius: 999,
+                      border: "none",
+                      background: "linear-gradient(135deg,#059669,#10B981)",
+                      color: "#fff",
+                      fontSize: 11,
+                      fontWeight: 900,
+                      fontFamily: "'Sora',sans-serif",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 7,
+                    }}
+                  >
+                    <ShoppingCart style={{ width: 14, height: 14 }} />
+                    Add all available to cart
+                  </motion.button>
+                )}
+
+                <motion.button
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => navigate(`/all-medicines?prescriptionId=${featuredDoctorPrescriptionSummary.prescriptionId}`)}
+                  style={{
+                    height: 38,
+                    padding: "0 14px",
+                    borderRadius: 999,
+                    border: "1px solid #86EFAC",
+                    background: "#fff",
+                    color: "#166534",
+                    fontSize: 11,
+                    fontWeight: 900,
+                    fontFamily: "'Sora',sans-serif",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                  }}
+                >
+                  Medicines Page
+                  <ChevronRight style={{ width: 14, height: 14 }} />
+                </motion.button>
+              </div>
+
+              {prescriptionFeedback.prescriptionId === featuredDoctorPrescriptionSummary.prescriptionId && prescriptionFeedback.message ? (
+                <div style={{ marginTop: 10, fontSize: 10.5, fontWeight: 800, color: "#166534" }}>
+                  {prescriptionFeedback.message}
+                </div>
+              ) : null}
+            </Glass>
+          </motion.div>
+        )}
 
         {/* Primary actions */}
         <div style={{ marginBottom: 20 }}>
