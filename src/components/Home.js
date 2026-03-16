@@ -48,8 +48,10 @@ import {
   BellRing,
   Activity,
   ShoppingCart,
+  FileText,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import DoctorPrescriptionViewDialog from "./DoctorPrescriptionViewDialog";
 import { getDoctorPrescriptionCartSummary } from "../lib/doctorPrescriptionCart";
 import { getUserAuthHeaders, getUserAuthToken } from "../lib/userAuth";
 import { mergeConsultBookings, readStoredConsultBookings, sortConsultBookings, upsertStoredConsultBooking } from "../utils/consultBookings";
@@ -1387,6 +1389,7 @@ export default function Home() {
   const [conflictSheet, setConflictSheet] = useState({ open: false, pendingMed: null });
   const [myConsults, setMyConsults] = useState([]);
   const [prescriptionFeedback, setPrescriptionFeedback] = useState({ prescriptionId: "", message: "" });
+  const [viewingDoctorPrescription, setViewingDoctorPrescription] = useState(null);
 
   const popupTimeout = useRef(null);
   const noMedicinesTimer = useRef(null);
@@ -1703,6 +1706,11 @@ export default function Home() {
     [addToCart, cart, cartCount, clearCartAndPharmacy, showPrescriptionFeedback]
   );
 
+  const openDoctorPrescriptionView = useCallback((doctorPrescription) => {
+    if (!doctorPrescription) return;
+    setViewingDoctorPrescription(doctorPrescription);
+  }, []);
+
   const handleConflictSwitch = () => {
     const med = conflictSheet.pendingMed;
     if (clearCartAndPharmacy) clearCartAndPharmacy();
@@ -1776,6 +1784,9 @@ export default function Home() {
 
   const featuredDoctorPrescriptionConsult = featuredDoctorPrescription?.consult || null;
   const featuredDoctorPrescriptionSummary = featuredDoctorPrescription?.summary || null;
+  const viewedDoctorPrescription = viewingDoctorPrescription;
+  const isDoctorPrescriptionDialogOpen = !!viewingDoctorPrescription;
+  const DoctorPrescriptionDialogComponent = DoctorPrescriptionViewDialog;
 
   const userName = user?.name?.split(" ")?.[0] || "there";
   const locationText = currentAddress?.formatted
@@ -1995,24 +2006,47 @@ export default function Home() {
                 </div>
 
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10, justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
+                      <span
+                        style={{
+                          fontSize: 9.5,
+                          fontWeight: 1000,
+                          letterSpacing: "0.12em",
+                          textTransform: "uppercase",
+                          color: "#166534",
+                          background: "#DCFCE7",
+                          borderRadius: 999,
+                          padding: "4px 8px",
+                        }}
+                      >
+                        Latest Prescription
+                      </span>
+                      <span style={{ fontSize: 10.5, fontWeight: 800, color: "#4B7A62" }}>
+                        {featuredDoctorPrescriptionConsult.doctorName || "Doctor"} sent this to your home
+                      </span>
+                    </div>
+
+                    <motion.button
+                      whileTap={{ scale: 0.94 }}
+                      onClick={() => openDoctorPrescriptionView(featuredDoctorPrescriptionConsult.doctorPrescription)}
+                      aria-label="View doctor prescription"
                       style={{
-                        fontSize: 9.5,
-                        fontWeight: 1000,
-                        letterSpacing: "0.12em",
-                        textTransform: "uppercase",
+                        width: 36,
+                        height: 36,
+                        borderRadius: 12,
+                        border: "1px solid #BBF7D0",
+                        background: "#FFFFFF",
                         color: "#166534",
-                        background: "#DCFCE7",
-                        borderRadius: 999,
-                        padding: "4px 8px",
+                        display: "grid",
+                        placeItems: "center",
+                        cursor: "pointer",
+                        flexShrink: 0,
+                        boxShadow: "0 6px 16px rgba(15,23,42,0.05)",
                       }}
                     >
-                      Latest Prescription
-                    </span>
-                    <span style={{ fontSize: 10.5, fontWeight: 800, color: "#4B7A62" }}>
-                      {featuredDoctorPrescriptionConsult.doctorName || "Doctor"} sent this to your home
-                    </span>
+                      <FileText style={{ width: 15, height: 15 }} />
+                    </motion.button>
                   </div>
 
                   <div style={{ marginTop: 8, fontSize: 15, fontWeight: 1000, color: "#14532D", fontFamily: "'Sora',sans-serif" }}>
@@ -2381,6 +2415,30 @@ export default function Home() {
                               Add {doctorRxSummary.addableCount} to cart
                             </motion.button>
                           )}
+
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => openDoctorPrescriptionView(c.doctorPrescription)}
+                            style={{
+                              height: 34,
+                              padding: "0 12px",
+                              borderRadius: 999,
+                              border: "1px solid #BBF7D0",
+                              background: "#fff",
+                              color: "#166534",
+                              fontSize: 10.5,
+                              fontWeight: 900,
+                              fontFamily: "'Sora',sans-serif",
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <FileText style={{ width: 13, height: 13 }} />
+                            View Rx
+                          </motion.button>
 
                           <motion.button
                             whileTap={{ scale: 0.95 }}
@@ -2860,6 +2918,13 @@ export default function Home() {
         userCity={localStorage.getItem("city") || "Mumbai"}
       />
       <MedDetailDialog med={selectedMed} open={!!selectedMed} onClose={() => setSelectedMed(null)} onAddToCart={handleAddToCart} canDeliver={canDeliver} />
+      <DoctorPrescriptionDialogComponent
+        prescription={viewedDoctorPrescription}
+        open={isDoctorPrescriptionDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) setViewingDoctorPrescription(null);
+        }}
+      />
       <BottomNavBar />
 
       <style>{`

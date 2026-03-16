@@ -19,8 +19,10 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
 import { useParams, useNavigate, useLocation as useRouterLocation } from "react-router-dom";
 import PrescriptionUploadModal from "../components/PrescriptionUploadModal";
+import DoctorPrescriptionViewDialog from "../components/DoctorPrescriptionViewDialog";
 import axios from "axios";
 import { useLocation as useAppLocation } from "../context/LocationContext";
 import { CUSTOMER_CATEGORIES } from "../constants/customerCategories";
@@ -28,6 +30,7 @@ import { TYPE_OPTIONS } from "../constants/packSizes";
 import GenericSuggestionModal from "../components/generics/GenericSuggestionModal";
 import { buildCompositionKey } from "../lib/composition";
 import { getDoctorPrescriptionCartSummary } from "../lib/doctorPrescriptionCart";
+import { getUserAuthHeaders, getUserAuthToken } from "../lib/userAuth";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0C5A3E";
@@ -358,6 +361,7 @@ export default function Medicines() {
   const navigate = useNavigate();
   const routerLocation = useRouterLocation();
   const { cart, addToCart, removeFromCart, clearCartAndStorage, clearCart } = useCart();
+  const { token: authToken } = useAuth();
   const { currentAddress } = useAppLocation();
   const scrollRef = useRef(null);
   const initialQuery = useMemo(
@@ -389,6 +393,7 @@ export default function Medicines() {
   const [doctorPrescription, setDoctorPrescription] = useState(null);
   const [doctorPrescriptionLoading, setDoctorPrescriptionLoading] = useState(false);
   const [doctorPrescriptionMessage, setDoctorPrescriptionMessage] = useState("");
+  const [doctorPrescriptionDialogOpen, setDoctorPrescriptionDialogOpen] = useState(false);
 
   useEffect(() => {
     setSearchQ(initialQuery);
@@ -397,7 +402,8 @@ export default function Medicines() {
 
   useEffect(() => {
     let mounted = true;
-    const token = localStorage.getItem("token");
+    const token = getUserAuthToken(authToken);
+    const headers = token ? getUserAuthHeaders(token) : undefined;
 
     setDoctorPrescriptionMessage("");
     if (!prescriptionId || !token) {
@@ -409,11 +415,15 @@ export default function Medicines() {
     }
 
     setDoctorPrescriptionLoading(true);
-    axios
-      .get(`${API}/api/prescriptions/cart/by-prescription/${prescriptionId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      .then((res) => {
+    (async () => {
+      try {
+        let res = null;
+        try {
+          res = await axios.get(`${API}/api/prescriptions/cart/by-prescription/${prescriptionId}`, { headers });
+        } catch (_) {
+          res = await axios.get(`${API}/api/prescriptions/detail/${prescriptionId}`, { headers });
+        }
+
         if (!mounted) return;
         const prescription = res?.data?.prescription
           ? {
@@ -422,18 +432,22 @@ export default function Medicines() {
             }
           : null;
         setDoctorPrescription(prescription);
-      })
-      .catch(() => {
-        if (mounted) setDoctorPrescription(null);
-      })
-      .finally(() => {
+        if (!prescription) {
+          setDoctorPrescriptionMessage("Doctor prescription details abhi sync nahi hui hain.");
+        }
+      } catch (_) {
+        if (!mounted) return;
+        setDoctorPrescription(null);
+        setDoctorPrescriptionMessage("Doctor prescription load nahi ho paya. Aap homepage se dobara open karke try kar sakte hain.");
+      } finally {
         if (mounted) setDoctorPrescriptionLoading(false);
-      });
+      }
+    })();
 
     return () => {
       mounted = false;
     };
-  }, [prescriptionId]);
+  }, [authToken, prescriptionId]);
 
   const doctorPrescriptionSummary = useMemo(
     () => getDoctorPrescriptionCartSummary(doctorPrescription),
@@ -1109,6 +1123,29 @@ export default function Medicines() {
 
                   <motion.button
                     whileTap={{ scale: 0.95 }}
+                    onClick={() => setDoctorPrescriptionDialogOpen(true)}
+                    style={{
+                      height: 38,
+                      padding: "0 14px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(16,185,129,0.18)",
+                      background: "#fff",
+                      color: DEEP,
+                      fontSize: 12,
+                      fontWeight: 800,
+                      fontFamily: "'Sora',sans-serif",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                    }}
+                  >
+                    View prescription
+                  </motion.button>
+
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
                     onClick={() => navigate("/cart")}
                     style={{
                       height: 38,
@@ -1507,6 +1544,12 @@ export default function Medicines() {
           )}
         </DialogContent>
       </Dialog>
+
+      <DoctorPrescriptionViewDialog
+        prescription={doctorPrescription}
+        open={doctorPrescriptionDialogOpen}
+        onOpenChange={setDoctorPrescriptionDialogOpen}
+      />
 
       {/* Generic Suggestion Modal */}
       <GenericSuggestionModal
