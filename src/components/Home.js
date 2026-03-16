@@ -1392,16 +1392,18 @@ export default function Home() {
 
   const { user } = useAuth();
   const cartCtx = useCart();
-  const { cart, addToCart } = cartCtx;
+  const { cart, addToCart, clearCartAndPharmacy: clearCartAndPharmacyFromContext, clearCart, removeFromCart } = cartCtx;
 
-  const clearCartAndPharmacy =
-    cartCtx.clearCartAndPharmacy ||
-    cartCtx.clearCart ||
-    (() => {
-      if (cartCtx.removeFromCart && Array.isArray(cart)) {
-        cart.forEach((item) => cartCtx.removeFromCart(item));
-      }
-    });
+  const fallbackClearCartAndPharmacy = useCallback(() => {
+    if (removeFromCart && Array.isArray(cart)) {
+      cart.forEach((item) => removeFromCart(item));
+    }
+  }, [cart, removeFromCart]);
+
+  const clearCartAndPharmacy = useMemo(
+    () => clearCartAndPharmacyFromContext || clearCart || fallbackClearCartAndPharmacy,
+    [clearCartAndPharmacyFromContext, clearCart, fallbackClearCartAndPharmacy]
+  );
 
   const navigate = useNavigate();
   const { currentAddress, setCurrentAddress } = useLocation();
