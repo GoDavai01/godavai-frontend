@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Search,
   ShieldCheck,
+  ShoppingCart,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCart } from "../context/CartContext";
@@ -26,6 +27,7 @@ import { CUSTOMER_CATEGORIES } from "../constants/customerCategories";
 import { TYPE_OPTIONS } from "../constants/packSizes";
 import GenericSuggestionModal from "../components/generics/GenericSuggestionModal";
 import { buildCompositionKey } from "../lib/composition";
+import { getDoctorPrescriptionCartSummary } from "../lib/doctorPrescriptionCart";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0C5A3E";
@@ -355,11 +357,15 @@ export default function Medicines() {
   const { pharmacyId } = useParams();
   const navigate = useNavigate();
   const routerLocation = useRouterLocation();
-  const { cart, addToCart, removeFromCart } = useCart();
+  const { cart, addToCart, removeFromCart, clearCartAndStorage, clearCart } = useCart();
   const { currentAddress } = useAppLocation();
   const scrollRef = useRef(null);
   const initialQuery = useMemo(
     () => (new URLSearchParams(routerLocation.search).get("q") || "").trim(),
+    [routerLocation.search]
+  );
+  const prescriptionId = useMemo(
+    () => (new URLSearchParams(routerLocation.search).get("prescriptionId") || "").trim(),
     [routerLocation.search]
   );
 
@@ -380,11 +386,59 @@ export default function Medicines() {
   const [activeImg, setActiveImg] = useState(0);
   const [showSearch, setShowSearch] = useState(!!initialQuery);
   const [searchQ, setSearchQ] = useState(initialQuery);
+  const [doctorPrescription, setDoctorPrescription] = useState(null);
+  const [doctorPrescriptionLoading, setDoctorPrescriptionLoading] = useState(false);
+  const [doctorPrescriptionMessage, setDoctorPrescriptionMessage] = useState("");
 
   useEffect(() => {
     setSearchQ(initialQuery);
     setShowSearch(!!initialQuery);
   }, [initialQuery]);
+
+  useEffect(() => {
+    let mounted = true;
+    const token = localStorage.getItem("token");
+
+    setDoctorPrescriptionMessage("");
+    if (!prescriptionId || !token) {
+      setDoctorPrescription(null);
+      setDoctorPrescriptionLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setDoctorPrescriptionLoading(true);
+    axios
+      .get(`${API}/api/prescriptions/cart/by-prescription/${prescriptionId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((res) => {
+        if (!mounted) return;
+        const prescription = res?.data?.prescription
+          ? {
+              ...res.data.prescription,
+              cartDraft: res.data.prescription.cartDraft || res.data.cartDraft || null,
+            }
+          : null;
+        setDoctorPrescription(prescription);
+      })
+      .catch(() => {
+        if (mounted) setDoctorPrescription(null);
+      })
+      .finally(() => {
+        if (mounted) setDoctorPrescriptionLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [prescriptionId]);
+
+  const doctorPrescriptionSummary = useMemo(
+    () => getDoctorPrescriptionCartSummary(doctorPrescription),
+    [doctorPrescription]
+  );
 
   const isGenericItem = (m) =>
     m?.productKind === "generic" || !m?.brand || String(m.brand).trim() === "";
@@ -578,7 +632,32 @@ export default function Medicines() {
   }
 
   return meds;
-}, [medicines, selectedCategory, selectedType, selectedKind, searchQ]);
+  }, [medicines, selectedCategory, selectedType, selectedKind, searchQ]);
+
+  function handleAddDoctorPrescription() {
+    if (!doctorPrescriptionSummary.addableProducts.length) {
+      setDoctorPrescriptionMessage("Is prescription ke mapped medicines abhi marketplace me available nahi hain.");
+      return;
+    }
+    const nextPharmacyId = doctorPrescriptionSummary.addableProducts[0]?.pharmacyId || "";
+    const cartPharmacyId = cart[0]?.pharmacyId || cart[0]?.pharmacy?._id || cart[0]?.pharmacy || "";
+    const replacedCart =
+      cart.length > 0 &&
+      nextPharmacyId &&
+      cartPharmacyId &&
+      String(nextPharmacyId) !== String(cartPharmacyId);
+
+    if (replacedCart) {
+      if (typeof clearCartAndStorage === "function") clearCartAndStorage();
+      else if (typeof clearCart === "function") clearCart();
+    }
+    doctorPrescriptionSummary.addableProducts.forEach((product) => addToCart(product));
+    setDoctorPrescriptionMessage(
+      replacedCart
+        ? `Purana cart replace karke ${doctorPrescriptionSummary.addableCount} prescribed medicines add kar di gayi.`
+        : `${doctorPrescriptionSummary.addableCount} prescribed medicines cart me add ho gayi.`
+    );
+  }
 
   const images = useMemo(() => {
     if (!selectedMed) return [];
@@ -932,6 +1011,142 @@ export default function Medicines() {
           msOverflowStyle: "none",
         }}
       >
+        {prescriptionId && (
+          <div
+            style={{
+              marginBottom: 12,
+              background: "linear-gradient(135deg,#ECFDF5,#F0FDF4)",
+              border: "1px solid rgba(16,185,129,0.18)",
+              borderRadius: 20,
+              padding: 14,
+              boxShadow: "0 8px 24px rgba(12,90,62,0.08)",
+            }}
+          >
+            {doctorPrescriptionLoading ? (
+              <div style={{ color: "#166534", fontSize: 12, fontWeight: 800 }}>
+                Loading doctor prescription...
+              </div>
+            ) : doctorPrescriptionSummary.prescriptionId ? (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 14,
+                      background: "rgba(16,185,129,0.12)",
+                      display: "grid",
+                      placeItems: "center",
+                      color: "#059669",
+                      fontWeight: 900,
+                      flexShrink: 0,
+                    }}
+                  >
+                    Rx
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 800, color: "#0B1F16" }}>
+                      Doctor prescription is ready
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "#4B7A62", fontWeight: 700, marginTop: 2 }}>
+                      {doctorPrescriptionSummary.medicineCount} suggested medicines ·{" "}
+                      {doctorPrescriptionSummary.addableCount > 0
+                        ? `${doctorPrescriptionSummary.addableCount} available to add in one click`
+                        : "Review availability below"}
+                    </div>
+                  </div>
+                </div>
+
+                {doctorPrescriptionSummary.resolvedItems.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
+                    {doctorPrescriptionSummary.resolvedItems.slice(0, 4).map((item) => (
+                      <span
+                        key={item.id}
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 800,
+                          color: "#166534",
+                          background: "#fff",
+                          border: "1px solid rgba(16,185,129,0.16)",
+                          padding: "5px 9px",
+                          borderRadius: 999,
+                        }}
+                      >
+                        {item.prescribedMedicine || "Medicine"}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleAddDoctorPrescription}
+                    disabled={doctorPrescriptionSummary.addableCount === 0}
+                    style={{
+                      height: 38,
+                      padding: "0 14px",
+                      borderRadius: 999,
+                      border: "none",
+                      background:
+                        doctorPrescriptionSummary.addableCount > 0
+                          ? `linear-gradient(135deg,${DEEP},${MID})`
+                          : "#D1D5DB",
+                      color: "#fff",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      fontFamily: "'Sora',sans-serif",
+                      cursor: doctorPrescriptionSummary.addableCount > 0 ? "pointer" : "not-allowed",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <ShoppingCart style={{ width: 14, height: 14 }} />
+                    Add all available
+                  </motion.button>
+
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => navigate("/cart")}
+                    style={{
+                      height: 38,
+                      padding: "0 14px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(12,90,62,0.14)",
+                      background: "#fff",
+                      color: DEEP,
+                      fontSize: 12,
+                      fontWeight: 800,
+                      fontFamily: "'Sora',sans-serif",
+                      cursor: "pointer",
+                    }}
+                  >
+                    View cart
+                  </motion.button>
+                </div>
+
+                {doctorPrescriptionSummary.unavailableCount > 0 && (
+                  <div style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: "#4B7A62" }}>
+                    {doctorPrescriptionSummary.unavailableCount} medicines abhi unavailable hain. Jo mapped hain woh upar ke button se add ho jayengi.
+                  </div>
+                )}
+
+                {doctorPrescriptionMessage ? (
+                  <div style={{ marginTop: 10, fontSize: 11, fontWeight: 800, color: "#166534" }}>
+                    {doctorPrescriptionMessage}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div style={{ color: "#4B7A62", fontSize: 12, fontWeight: 800 }}>
+                Doctor prescription load nahi ho paya. Aap homepage se dobara open karke try kar sakte hain.
+              </div>
+            )}
+          </div>
+        )}
+
         {loading ? (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {[1, 2, 3, 4, 5, 6].map((i) => (

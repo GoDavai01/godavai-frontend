@@ -1108,7 +1108,7 @@ export default function DoctorDashboard() {
         }),
         ...prev.filter((row) => row._id !== prescriptionId),
       ]);
-      pushSnackbar("Prescription generated and patient preview prepared", "success");
+      pushSnackbar("Prescription patient homepage aur medicine flow me bhej diya gaya", "success");
       loadDashboard();
     } catch (error) {
       pushSnackbar(error?.response?.data?.error || "Failed to create prescription", "error");
@@ -1594,7 +1594,7 @@ export default function DoctorDashboard() {
                       Medicine name and composition support suggestions plus dictation.
                     </div>
                     <div className="rounded-2xl border border-white bg-white p-4">
-                      Cart preview opens only after a real prescription is generated.
+                      Yeh patient homepage aur medicine flow ka preview hai. Real prescription submit hote hi patient side par show hoga.
                     </div>
                   </div>
                 </div>
@@ -1962,7 +1962,7 @@ export default function DoctorDashboard() {
                         </div>
 
                         <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                          <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Current cart item</div>
+                          <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Patient-side mapped product</div>
                           <div className="mt-1 font-black text-slate-900">{selectedName}</div>
                         </div>
 
@@ -2546,7 +2546,7 @@ export default function DoctorDashboard() {
                   onClick={handleSubmitPrescription}
                   className="rounded-2xl bg-emerald-600 font-black text-white hover:bg-emerald-700"
                 >
-                  Generate Prescription & Patient Cart Preview
+                  Generate Prescription & Send To Patient
                 </Button>
               </div>
             </div>
@@ -2560,15 +2560,15 @@ export default function DoctorDashboard() {
           <DialogHeader className="border-b border-slate-100 px-6 py-5">
             <DialogTitle className="flex items-center gap-2 text-2xl font-black text-slate-900">
               <Wallet className="h-6 w-6 text-emerald-700" />
-              Patient Order Page Preview
+              Patient Homepage Preview
             </DialogTitle>
           </DialogHeader>
 
           <div className="px-6 py-5">
             <div className="mb-4 rounded-[24px] border border-emerald-100 bg-[linear-gradient(180deg,#ffffff_0%,#f7fffb_100%)] p-4">
-              <div className="text-sm font-bold text-slate-600">What happens after doctor submits</div>
+              <div className="text-sm font-bold text-slate-600">What patient sees after doctor submits</div>
               <div className="mt-2 text-sm text-slate-700">
-                Prescription instantly reaches patient → all mapped medicines auto-add to cart → branded + generic options shown → savings visible.
+                Prescription instantly patient homepage par show hota hai. Available mapped medicines medicine page aur cart flow me ready rehti hain, saath me branded aur generic options visible hote hain.
               </div>
             </div>
 
@@ -2583,7 +2583,7 @@ export default function DoctorDashboard() {
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="text-lg font-black text-slate-900">{item.prescribed}</div>
                           <Badge className="border border-slate-200 bg-slate-100 font-bold text-slate-700">
-                            Auto-added to cart
+                            Ready on patient side
                           </Badge>
                           {usingGeneric && (
                             <Badge className="border border-emerald-200 bg-emerald-100 font-bold text-emerald-800">

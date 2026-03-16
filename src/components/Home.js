@@ -47,8 +47,10 @@ import {
   Footprints,
   BellRing,
   Activity,
+  ShoppingCart,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { getDoctorPrescriptionCartSummary } from "../lib/doctorPrescriptionCart";
 
 // ─── Constants ───────────────────────────────────────────────
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -1382,9 +1384,11 @@ export default function Home() {
   const [userCoords, setUserCoords] = useState(null);
   const [conflictSheet, setConflictSheet] = useState({ open: false, pendingMed: null });
   const [myConsults, setMyConsults] = useState([]);
+  const [prescriptionFeedback, setPrescriptionFeedback] = useState({ prescriptionId: "", message: "" });
 
   const popupTimeout = useRef(null);
   const noMedicinesTimer = useRef(null);
+  const prescriptionFeedbackTimer = useRef(null);
 
   const { user } = useAuth();
   const cartCtx = useCart();
@@ -1571,10 +1575,12 @@ export default function Home() {
   useEffect(() => {
     const popupTimer = popupTimeout.current;
     const medicinesTimer = noMedicinesTimer.current;
+    const feedbackTimer = prescriptionFeedbackTimer.current;
 
     return () => {
       clearTimeout(popupTimer);
       clearTimeout(medicinesTimer);
+      clearTimeout(feedbackTimer);
     };
   }, []);
 
@@ -1593,6 +1599,41 @@ export default function Home() {
     }
     addToCart(med);
   };
+
+  const showPrescriptionFeedback = useCallback((prescriptionId, message) => {
+    setPrescriptionFeedback({ prescriptionId, message });
+    clearTimeout(prescriptionFeedbackTimer.current);
+    prescriptionFeedbackTimer.current = setTimeout(() => {
+      setPrescriptionFeedback({ prescriptionId: "", message: "" });
+    }, 2400);
+  }, []);
+
+  const handleAddDoctorPrescription = useCallback(
+    (doctorPrescription) => {
+      const summary = getDoctorPrescriptionCartSummary(doctorPrescription);
+      if (!summary.addableProducts.length) {
+        showPrescriptionFeedback(summary.prescriptionId, "Mapped medicines abhi medicine page par available nahi hain.");
+        return;
+      }
+      const nextPharmacyId = summary.addableProducts[0]?.pharmacyId || "";
+      const cartPharmacyId = cart[0]?.pharmacyId || cart[0]?.pharmacy?._id || cart[0]?.pharmacy || "";
+      const replacedCart =
+        cartCount > 0 &&
+        nextPharmacyId &&
+        cartPharmacyId &&
+        String(nextPharmacyId) !== String(cartPharmacyId);
+
+      if (replacedCart && clearCartAndPharmacy) clearCartAndPharmacy();
+      summary.addableProducts.forEach((product) => addToCart(product));
+      showPrescriptionFeedback(
+        summary.prescriptionId,
+        replacedCart
+          ? `Purana cart replace karke ${summary.addableProducts.length} doctor-suggested medicines add kar di gayi.`
+          : `${summary.addableProducts.length} doctor-suggested medicines cart me add ho gayi.`
+      );
+    },
+    [addToCart, cart, cartCount, clearCartAndPharmacy, showPrescriptionFeedback]
+  );
 
   const handleConflictSwitch = () => {
     const med = conflictSheet.pendingMed;
@@ -1921,6 +1962,8 @@ export default function Home() {
                   c.paymentStatus === "paid" &&
                   c.mode !== "inperson";
                 const hasPrescription = !!c?.prescription?.fileUrl;
+                const doctorRxSummary = getDoctorPrescriptionCartSummary(c?.doctorPrescription);
+                const hasDoctorPrescription = !!doctorRxSummary.prescriptionId;
                 const dateLabel = getConsultDateLabel(c);
 
                 return (
@@ -2028,6 +2071,115 @@ export default function Home() {
                           >
                             Maps →
                           </a>
+                        ) : null}
+                      </div>
+                    )}
+
+                    {hasDoctorPrescription && (
+                      <div
+                        style={{
+                          background: "linear-gradient(135deg,#F0FDF4,#ECFDF5)",
+                          border: "1px solid #BBF7D0",
+                          borderRadius: 12,
+                          padding: "10px 12px",
+                          marginBottom: 10,
+                        }}
+                      >
+                        <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                          <div
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 10,
+                              background: "#DCFCE7",
+                              display: "grid",
+                              placeItems: "center",
+                              flexShrink: 0,
+                              color: "#15803D",
+                              fontSize: 12,
+                              fontWeight: 900,
+                            }}
+                          >
+                            Rx
+                          </div>
+
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11.5, fontWeight: 900, color: "#166534" }}>
+                              Doctor provided your prescription
+                            </div>
+                            <div style={{ fontSize: 10, color: "#4B7A62", fontWeight: 700, marginTop: 2 }}>
+                              {doctorRxSummary.medicineCount} medicines ·{" "}
+                              {doctorRxSummary.addableCount > 0
+                                ? `${doctorRxSummary.addableCount} available to add instantly`
+                                : "Open medicine page to review availability"}
+                            </div>
+                            {doctorRxSummary.diagnosis ? (
+                              <div style={{ fontSize: 10, color: "#335B4B", fontWeight: 700, marginTop: 5 }}>
+                                Diagnosis: {doctorRxSummary.diagnosis}
+                              </div>
+                            ) : null}
+                            {doctorRxSummary.unavailableCount > 0 ? (
+                              <div style={{ fontSize: 9.75, color: "#4B7A62", fontWeight: 700, marginTop: 4 }}>
+                                {doctorRxSummary.unavailableCount} medicines abhi unavailable hain, baaki one tap se add ho sakti hain.
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                          {doctorRxSummary.addableCount > 0 && (
+                            <motion.button
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleAddDoctorPrescription(c.doctorPrescription)}
+                              style={{
+                                height: 34,
+                                padding: "0 12px",
+                                borderRadius: 999,
+                                border: "none",
+                                background: "linear-gradient(135deg,#059669,#10B981)",
+                                color: "#fff",
+                                fontSize: 10.5,
+                                fontWeight: 900,
+                                fontFamily: "'Sora',sans-serif",
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 6,
+                              }}
+                            >
+                              <ShoppingCart style={{ width: 13, height: 13 }} />
+                              Add {doctorRxSummary.addableCount} to cart
+                            </motion.button>
+                          )}
+
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => navigate(`/all-medicines?prescriptionId=${doctorRxSummary.prescriptionId}`)}
+                            style={{
+                              height: 34,
+                              padding: "0 12px",
+                              borderRadius: 999,
+                              border: "1px solid #86EFAC",
+                              background: "#fff",
+                              color: "#166534",
+                              fontSize: 10.5,
+                              fontWeight: 900,
+                              fontFamily: "'Sora',sans-serif",
+                              cursor: "pointer",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            Medicine Page
+                          </motion.button>
+                        </div>
+
+                        {prescriptionFeedback.prescriptionId === doctorRxSummary.prescriptionId && prescriptionFeedback.message ? (
+                          <div style={{ marginTop: 8, fontSize: 10.5, fontWeight: 800, color: "#166534" }}>
+                            {prescriptionFeedback.message}
+                          </div>
                         ) : null}
                       </div>
                     )}
@@ -2149,7 +2301,7 @@ export default function Home() {
                         </>
                       )}
 
-                      {!canJoin && !hasPrescription && c.status === "completed" && (
+                      {!canJoin && !hasPrescription && !hasDoctorPrescription && c.status === "completed" && (
                         <div
                           style={{
                             flex: 1,
