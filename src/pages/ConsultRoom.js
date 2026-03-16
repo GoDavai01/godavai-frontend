@@ -5,19 +5,17 @@ import {
   ArrowLeft,
   Camera,
   CameraOff,
-  CheckCircle2,
   Clock3,
   Download,
   FileText,
   MessageCircle,
   Mic,
   MicOff,
+  Phone,
   PhoneOff,
   Send,
   ShieldCheck,
-  Stethoscope,
   Upload,
-  UserRound,
   Video,
   X,
 } from "lucide-react";
@@ -53,15 +51,11 @@ function normalizeConsult(raw = {}) {
     date: raw?.date || "",
     dateLabel: raw?.dateLabel || raw?.date || "",
     slot: raw?.slot || "",
-    fee: Number(raw?.fee || 0),
     paymentStatus: raw?.paymentStatus || "pending",
     refundStatus: raw?.refundStatus || "none",
     status: raw?.status || "pending",
     callState: raw?.callState || "not_started",
     patientAttachments: Array.isArray(raw?.patientAttachments) ? raw.patientAttachments : [],
-    doctorAction: raw?.doctorAction || "none",
-    doctorNotes: raw?.doctorNotes || "",
-    rescheduledAt: raw?.rescheduledAt || null,
     prescription: {
       fileUrl: prescription?.fileUrl || "",
       fileName: prescription?.fileName || "",
@@ -162,34 +156,28 @@ function formatFileSize(value) {
   return `${size} B`;
 }
 
-function getComposerOptions(role) {
-  return role === "doctor"
-    ? [
-        { value: "message", label: "Chat" },
-        { value: "report", label: "Files" },
-      ]
-    : [
-        { value: "message", label: "Chat" },
-        { value: "symptom", label: "Symptoms" },
-        { value: "report", label: "Reports" },
-      ];
-}
-
-function getComposerPlaceholder(kind, role) {
-  if (kind === "symptom") return "Tell the doctor what you are feeling, when it started, and what makes it worse or better.";
-  if (kind === "report") return role === "doctor" ? "Share a care file or follow-up report." : "Add a note about the report you are uploading.";
-  return role === "doctor"
-    ? "Send a consult update, care instruction, or follow-up message."
-    : "Message the doctor about symptoms, medicines, or questions.";
-}
-
 function buildStatusPill(consult) {
   const status = String(consult?.status || "").toLowerCase();
   if (status === "live_now") return { label: "Live now", bg: "#dcfce7", color: "#166534" };
-  if (status === "upcoming" || status === "accepted") return { label: "Join ready", bg: "#dbeafe", color: "#1d4ed8" };
+  if (status === "upcoming" || status === "accepted") return { label: "Ready", bg: "#dbeafe", color: "#1d4ed8" };
   if (status === "completed") return { label: "Completed", bg: "#ede9fe", color: "#5b21b6" };
   if (status === "rejected" || status === "cancelled") return { label: "Closed", bg: "#fee2e2", color: "#991b1b" };
   return { label: status || "Consult", bg: "#e2e8f0", color: "#334155" };
+}
+
+function getComposerPlaceholder(role, kind) {
+  if (kind === "symptom") {
+    return "Symptoms yahan likho. Kab start hua aur kya feel ho raha hai woh bhi bata sakte ho.";
+  }
+  return role === "doctor"
+    ? "Reply, advice, ya follow-up note bhejo."
+    : "Doctor ko message bhejo ya reports ke saath short note likho.";
+}
+
+function getMessageKind(role, composerKind, hasFiles) {
+  if (hasFiles) return "report";
+  if (role === "patient" && composerKind === "symptom") return "symptom";
+  return "message";
 }
 
 function upsertLocalConsult(role, consult) {
@@ -207,7 +195,6 @@ export default function ConsultRoom() {
   const { consultId } = useParams();
   const [searchParams] = useSearchParams();
   const role = searchParams.get("role") === "doctor" ? "doctor" : "patient";
-  const openChatFirst = searchParams.get("panel") === "chat" || !!location.state?.focusChat;
   const initialConsult = location.state?.consult ? normalizeConsult(location.state.consult) : null;
   const initialSession = location.state?.session || null;
   const initialConsultRef = useRef(initialConsult);
@@ -218,18 +205,17 @@ export default function ConsultRoom() {
 
   const [consult, setConsult] = useState(initialConsultRef.current);
   const [sessionInfo, setSessionInfo] = useState(initialSessionRef.current);
-  const [activePanel, setActivePanel] = useState(openChatFirst ? "chat" : "care");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [meetingReady, setMeetingReady] = useState(false);
-  const [leaving, setLeaving] = useState(false);
   const [isCompact, setIsCompact] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth < 1080 : false
+    typeof window !== "undefined" ? window.innerWidth < 1120 : false
   );
-  const [controls, setControls] = useState({
-    micOn: true,
-    camOn: normalizeMode(initialConsultRef.current?.mode) === "video",
-  });
+  const [meetingMode, setMeetingMode] = useState(null);
+  const [meetingReady, setMeetingReady] = useState(false);
+  const [meetingError, setMeetingError] = useState("");
+  const [sessionStarting, setSessionStarting] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [controls, setControls] = useState({ micOn: true, camOn: false });
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(true);
   const [chatError, setChatError] = useState("");
@@ -237,24 +223,15 @@ export default function ConsultRoom() {
   const [composerText, setComposerText] = useState("");
   const [composerFiles, setComposerFiles] = useState([]);
   const [sendingMessage, setSendingMessage] = useState(false);
-  const [notesDraft, setNotesDraft] = useState("");
-  const [notesDirty, setNotesDirty] = useState(false);
-  const [savingNotes, setSavingNotes] = useState(false);
-  const [notesFeedback, setNotesFeedback] = useState("");
-  const [prescriptionFile, setPrescriptionFile] = useState(null);
-  const [prescriptionNote, setPrescriptionNote] = useState("");
-  const [uploadingPrescription, setUploadingPrescription] = useState(false);
-  const [prescriptionFeedback, setPrescriptionFeedback] = useState("");
 
   const containerRef = useRef(null);
   const jitsiApiRef = useRef(null);
-  const chatEndRef = useRef(null);
   const composerFileRef = useRef(null);
-  const prescriptionFileRef = useRef(null);
+  const chatEndRef = useRef(null);
 
   useEffect(() => {
     function onResize() {
-      setIsCompact(window.innerWidth < 1080);
+      setIsCompact(window.innerWidth < 1120);
     }
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
@@ -273,7 +250,6 @@ export default function ConsultRoom() {
       Array.isArray(message?.attachments) ? message.attachments : []
     );
     const seen = new Set();
-
     return [...consultFiles, ...messageFiles].filter((file) => {
       const key = `${String(file?.url || "").trim()}|${String(file?.fileName || "").trim()}`;
       if (key === "|") return false;
@@ -294,8 +270,8 @@ export default function ConsultRoom() {
         let nextSession = initialSessionRef.current;
 
         if (role === "doctor") {
-          const { data } = await axios.post(`${API}/api/consults/${consultId}/session/join`, {}, getDoctorAuthConfig());
-          nextConsult = normalizeConsult(data?.dashboardConsult || data?.consult || nextConsult || {});
+          const { data } = await axios.get(`${API}/api/consults/${consultId}/session`, getDoctorAuthConfig());
+          nextConsult = normalizeConsult(data?.consult || data?.dashboardConsult || nextConsult || {});
           nextSession = data?.session || nextSession;
         } else {
           if (!nextConsult) {
@@ -315,7 +291,9 @@ export default function ConsultRoom() {
             if (matched) nextConsult = normalizeConsult(matched);
           }
 
-          if (!nextConsult) throw new Error("Consult details are not available for this room");
+          if (!nextConsult) {
+            throw new Error("Consult details are not available for this room");
+          }
 
           const syncPayload = {
             bookingId: nextConsult.id || nextConsult.bookingId,
@@ -334,22 +312,33 @@ export default function ConsultRoom() {
           if (synced) nextConsult = normalizeConsult(synced);
         }
 
-        if (!nextConsult?.id && !nextConsult?.bookingId) throw new Error("Consult room could not be initialized");
+        if (!nextConsult?.id && !nextConsult?.bookingId) {
+          throw new Error("Consult room could not be initialized");
+        }
 
         const consultStatus = String(nextConsult?.status || "").toLowerCase();
         if (role === "patient" && !["accepted", "upcoming", "live_now", "completed"].includes(consultStatus)) {
-          if (consultStatus === "pending" || consultStatus === "confirmed") throw new Error("Doctor has not accepted this consult yet");
-          if (["cancelled", "rejected"].includes(consultStatus)) throw new Error("This consult room is no longer available");
+          if (consultStatus === "pending" || consultStatus === "confirmed") {
+            throw new Error("Doctor has not accepted this consult yet");
+          }
+          if (["cancelled", "rejected"].includes(consultStatus)) {
+            throw new Error("This consult room is no longer available");
+          }
         }
 
         if (active) {
           setConsult(nextConsult);
           setSessionInfo(nextSession);
-          setControls((prev) => ({ ...prev, camOn: nextConsult.mode === "video" }));
+          setControls((prev) => ({
+            ...prev,
+            camOn: normalizeMode(nextConsult.mode) === "video",
+          }));
           upsertLocalConsult(role, nextConsult);
         }
       } catch (err) {
-        if (active) setError(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to open consult room");
+        if (active) {
+          setError(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to open consult room");
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -360,68 +349,6 @@ export default function ConsultRoom() {
       active = false;
     };
   }, [consultId, role]);
-
-  useEffect(() => {
-    let disposed = false;
-
-    async function mountJitsi() {
-      if (loading || error || !consult || !roomName || !containerRef.current || jitsiApiRef.current) return;
-
-      const JitsiMeetExternalAPI = await ensureJitsiScript();
-      if (!JitsiMeetExternalAPI || disposed || !containerRef.current) return;
-
-      const displayName =
-        role === "doctor" ? initialDoctorDisplayNameRef.current : String(consult.patientName || "Patient");
-
-      const api = new JitsiMeetExternalAPI("meet.jit.si", {
-        roomName,
-        parentNode: containerRef.current,
-        userInfo: { displayName },
-        configOverwrite: {
-          prejoinPageEnabled: false,
-          disableDeepLinking: true,
-          startWithAudioMuted: false,
-          startWithVideoMuted: consult.mode !== "video",
-          subject: `GoDavaii ${consult.mode === "video" ? "Video" : "Audio"} Consult`,
-        },
-        interfaceConfigOverwrite: {
-          MOBILE_APP_PROMO: false,
-          HIDE_INVITE_MORE_HEADER: true,
-        },
-      });
-
-      jitsiApiRef.current = api;
-      api.addListener("videoConferenceJoined", () => setMeetingReady(true));
-      api.addListener("audioMuteStatusChanged", ({ muted }) => {
-        setControls((prev) => ({ ...prev, micOn: !muted }));
-      });
-      api.addListener("videoMuteStatusChanged", ({ muted }) => {
-        setControls((prev) => ({ ...prev, camOn: !muted }));
-      });
-      api.addListener("readyToClose", () => {
-        navigate(getBackPath(role), { replace: true });
-      });
-    }
-
-    mountJitsi().catch((err) => {
-      if (!disposed) setError(err?.message || "Embedded meeting could not be loaded");
-    });
-
-    return () => {
-      disposed = true;
-      if (jitsiApiRef.current) {
-        try {
-          jitsiApiRef.current.dispose();
-        } catch (_) {}
-        jitsiApiRef.current = null;
-      }
-    };
-  }, [consult, error, loading, navigate, role, roomName]);
-
-  useEffect(() => {
-    if (role !== "doctor" || notesDirty) return;
-    setNotesDraft(String(consult?.doctorNotes || ""));
-  }, [consult?.doctorNotes, notesDirty, role]);
 
   useEffect(() => {
     if (loading || error || !consultId) return undefined;
@@ -451,7 +378,7 @@ export default function ConsultRoom() {
         if (!active) return;
         setMessagesLoading(false);
         firstRun = false;
-        timer = window.setTimeout(pollMessages, 5000);
+        timer = window.setTimeout(pollMessages, 4000);
       }
     }
 
@@ -463,18 +390,124 @@ export default function ConsultRoom() {
   }, [consultId, error, loading, role]);
 
   useEffect(() => {
-    if (activePanel !== "chat" || !chatEndRef.current) return;
+    if (!chatEndRef.current) return;
     chatEndRef.current.scrollIntoView({ behavior: messages.length > 1 ? "smooth" : "auto" });
-  }, [activePanel, messages.length]);
+  }, [messages.length]);
+
+  useEffect(() => {
+    let disposed = false;
+    const currentContainer = containerRef.current;
+
+    async function mountJitsi() {
+      if (!meetingMode || loading || error || !consult || !roomName || !containerRef.current || jitsiApiRef.current) {
+        return;
+      }
+
+      const JitsiMeetExternalAPI = await ensureJitsiScript();
+      if (!JitsiMeetExternalAPI || disposed || !containerRef.current) return;
+
+      const displayName =
+        role === "doctor" ? initialDoctorDisplayNameRef.current : String(consult.patientName || "Patient");
+
+      const api = new JitsiMeetExternalAPI("meet.jit.si", {
+        roomName,
+        parentNode: containerRef.current,
+        userInfo: { displayName },
+        configOverwrite: {
+          prejoinPageEnabled: false,
+          prejoinConfig: { enabled: false },
+          disableDeepLinking: true,
+          startWithAudioMuted: false,
+          startWithVideoMuted: meetingMode !== "video",
+          startAudioOnly: meetingMode !== "video",
+          subject: `GoDavaii ${meetingMode === "video" ? "Video" : "Audio"} Consult`,
+        },
+        interfaceConfigOverwrite: {
+          MOBILE_APP_PROMO: false,
+          HIDE_INVITE_MORE_HEADER: true,
+        },
+      });
+
+      jitsiApiRef.current = api;
+      api.addListener("videoConferenceJoined", () => setMeetingReady(true));
+      api.addListener("audioMuteStatusChanged", ({ muted }) => {
+        setControls((prev) => ({ ...prev, micOn: !muted }));
+      });
+      api.addListener("videoMuteStatusChanged", ({ muted }) => {
+        setControls((prev) => ({ ...prev, camOn: !muted }));
+      });
+      api.addListener("readyToClose", () => {
+        setMeetingMode(null);
+        setMeetingReady(false);
+      });
+    }
+
+    mountJitsi().catch((err) => {
+      if (!disposed) setMeetingError(err?.message || "Call could not be started");
+    });
+
+    return () => {
+      disposed = true;
+      if (jitsiApiRef.current) {
+        try {
+          jitsiApiRef.current.dispose();
+        } catch (_) {}
+        jitsiApiRef.current = null;
+      }
+      if (currentContainer) currentContainer.innerHTML = "";
+      setMeetingReady(false);
+    };
+  }, [consult, error, loading, meetingMode, role, roomName]);
+
+  async function handleStartMeeting(nextMode) {
+    if (!consultId || sessionStarting) return;
+
+    setMeetingError("");
+    setSessionStarting(true);
+    try {
+      let nextConsult = consult;
+      let nextSession = sessionInfo;
+
+      if (role === "doctor") {
+        const { data } = await axios.post(`${API}/api/consults/${consultId}/session/join`, {}, getDoctorAuthConfig());
+        nextConsult = normalizeConsult(data?.dashboardConsult || data?.consult || nextConsult || {});
+        nextSession = data?.session || nextSession;
+      } else if (!nextSession?.roomId) {
+        nextSession = {
+          roomId: roomName,
+          state: "live",
+          joinedAt: new Date().toISOString(),
+        };
+      }
+
+      if (nextConsult) {
+        setConsult(nextConsult);
+        upsertLocalConsult(role, nextConsult);
+      }
+      if (nextSession) setSessionInfo(nextSession);
+
+      setControls({
+        micOn: true,
+        camOn: nextMode === "video",
+      });
+      setMeetingMode(nextMode);
+    } catch (err) {
+      setMeetingError(err?.response?.data?.error || err?.response?.data?.message || "Call could not be started");
+    } finally {
+      setSessionStarting(false);
+    }
+  }
 
   async function handleLeave() {
-    if (role === "doctor") {
-      setLeaving(true);
-      try {
+    setLeaving(true);
+    try {
+      if (role === "doctor") {
         await axios.post(`${API}/api/consults/${consultId}/session/end`, {}, getDoctorAuthConfig());
-      } catch (_) {}
+      }
+    } catch (_) {
+    } finally {
+      navigate(getBackPath(role), { replace: true });
     }
-    navigate(getBackPath(role), { replace: true });
   }
 
   function toggleAudio() {
@@ -483,7 +516,7 @@ export default function ConsultRoom() {
   }
 
   function toggleVideo() {
-    if (!jitsiApiRef.current || consult?.mode !== "video") return;
+    if (!jitsiApiRef.current) return;
     jitsiApiRef.current.executeCommand("toggleVideo");
   }
 
@@ -503,7 +536,7 @@ export default function ConsultRoom() {
     setChatError("");
     try {
       const formData = new FormData();
-      formData.append("kind", composerKind);
+      formData.append("kind", getMessageKind(role, composerKind, composerFiles.length > 0));
       formData.append("text", trimmedText);
       composerFiles.forEach((file) => formData.append("attachments", file));
 
@@ -525,91 +558,41 @@ export default function ConsultRoom() {
     }
   }
 
-  async function handleSaveNotes() {
-    if (role !== "doctor") return;
-    setSavingNotes(true);
-    setNotesFeedback("");
-    try {
-      const { data } = await axios.patch(
-        `${API}/api/consults/${consultId}/session/notes`,
-        { notes: notesDraft },
-        getDoctorAuthConfig()
-      );
-      const normalizedConsult = normalizeConsult(data?.consult || {});
-      setConsult((prev) => ({ ...(prev || {}), ...normalizedConsult }));
-      setNotesDirty(false);
-      setNotesFeedback("Doctor notes synced inside this consult.");
-    } catch (err) {
-      setNotesFeedback(err?.response?.data?.error || err?.response?.data?.message || "Doctor notes could not be saved");
-    } finally {
-      setSavingNotes(false);
-    }
-  }
-
-  async function handleUploadPrescription() {
-    if (role !== "doctor" || !prescriptionFile) return;
-
-    setUploadingPrescription(true);
-    setPrescriptionFeedback("");
-    try {
-      const formData = new FormData();
-      formData.append("prescription", prescriptionFile);
-      formData.append("notes", prescriptionNote.trim());
-
-      const { data } = await axios.patch(
-        `${API}/api/consults/${consultId}/prescription`,
-        formData,
-        getDoctorAuthConfig()
-      );
-      if (data?.consult) {
-        const normalizedConsult = normalizeConsult(data.consult);
-        setConsult((prev) => ({ ...(prev || {}), ...normalizedConsult }));
-      }
-      if (data?.message) setMessages((prev) => mergeMessage(prev, data.message));
-      setPrescriptionFile(null);
-      setPrescriptionNote("");
-      if (prescriptionFileRef.current) prescriptionFileRef.current.value = "";
-      setPrescriptionFeedback("Prescription shared in the consult room.");
-    } catch (err) {
-      setPrescriptionFeedback(err?.response?.data?.error || err?.response?.data?.message || "Prescription upload failed");
-    } finally {
-      setUploadingPrescription(false);
-    }
-  }
+  const meetingLabel = meetingMode === "video" ? "Video consult" : "Audio call";
 
   return (
     <div
       style={{
         minHeight: "100vh",
         background:
-          "radial-gradient(circle at top left, rgba(16,185,129,0.2), transparent 28%), radial-gradient(circle at bottom right, rgba(14,165,233,0.15), transparent 24%), linear-gradient(180deg, #041814 0%, #07231f 48%, #04120f 100%)",
+          "radial-gradient(circle at top left, rgba(16,185,129,0.16), transparent 28%), linear-gradient(180deg, #041814 0%, #07231f 55%, #04120f 100%)",
         color: "#F8FAFC",
         padding: isCompact ? 12 : 18,
       }}
     >
-      <div style={{ maxWidth: 1480, margin: "0 auto" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+      <div style={{ maxWidth: 1440, margin: "0 auto" }}>
+        <div style={pageHeaderStyle(isCompact)}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button type="button" onClick={() => navigate(getBackPath(role))} style={backButtonStyle}>
               <ArrowLeft style={{ width: 18, height: 18 }} />
             </button>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 900, color: "rgba(226,232,240,0.76)" }}>{getRoleLabel(role)}</div>
-              <div style={{ fontSize: isCompact ? 22 : 28, fontWeight: 900, letterSpacing: "-0.03em" }}>{counterpartName}</div>
-              <div style={{ fontSize: 13, color: "rgba(226,232,240,0.74)", marginTop: 2 }}>{consult?.specialty || "General consultation"}</div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: "rgba(226,232,240,0.78)" }}>{getRoleLabel(role)}</div>
+              <div style={{ fontSize: isCompact ? 24 : 30, fontWeight: 900, letterSpacing: "-0.03em" }}>{counterpartName}</div>
+              <div style={{ marginTop: 4, fontSize: 13, color: "rgba(226,232,240,0.68)" }}>{consult?.specialty || "General consultation"}</div>
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <Pill label={statusPill.label} bg={statusPill.bg} color={statusPill.color} />
-            <Pill
-              label={consult?.mode === "video" ? "Video consult" : "Audio consult"}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <StatusPill label={statusPill.label} bg={statusPill.bg} color={statusPill.color} />
+            <StatusPill
+              label={meetingMode ? meetingLabel : consult?.mode === "call" ? "Audio consult" : "Video consult"}
               bg="rgba(255,255,255,0.08)"
               color="#F8FAFC"
-              icon={consult?.mode === "video" ? <Video style={{ width: 14, height: 14 }} /> : <Mic style={{ width: 14, height: 14 }} />}
+              icon={meetingMode === "video" || consult?.mode === "video" ? <Video style={{ width: 14, height: 14 }} /> : <Phone style={{ width: 14, height: 14 }} />}
             />
-            <Pill
-              label={meetingReady ? "Connected" : loading ? "Preparing" : "Joining"}
+            <StatusPill
+              label={meetingReady ? "Connected" : sessionStarting ? "Starting" : "Idle"}
               bg={meetingReady ? "rgba(16,185,129,0.18)" : "rgba(250,204,21,0.14)"}
               color={meetingReady ? "#86efac" : "#fde68a"}
             />
@@ -625,309 +608,230 @@ export default function ConsultRoom() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: isCompact ? "1fr" : "minmax(0,1.55fr) minmax(360px,0.95fr)",
+              gridTemplateColumns: isCompact ? "1fr" : "minmax(0, 1.45fr) 380px",
               gap: 16,
+              alignItems: "start",
             }}
           >
             <div style={stageShellStyle}>
               <div style={stageHeaderStyle}>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 900 }}>GoDavaii Live Consult Suite</div>
-                  <div style={{ fontSize: 12, color: "rgba(226,232,240,0.72)", marginTop: 4 }}>
-                    Use this room for video, symptoms, reports, doctor notes, and prescription handoff without leaving the app.
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ fontSize: 18, fontWeight: 900 }}>Simple consult room</div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <MiniBadge icon={<Clock3 style={{ width: 14, height: 14 }} />} text={formatSchedule(consult)} />
+                    <MiniBadge icon={<ShieldCheck style={{ width: 14, height: 14 }} />} text={consult?.reason || "General consultation"} />
+                    <MiniBadge icon={<MessageCircle style={{ width: 14, height: 14 }} />} text={`${messages.length} chats`} />
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <MiniInfoCard label="Scheduled" value={formatSchedule(consult)} />
-                  <MiniInfoCard label="Room" value={roomName || "Preparing"} />
-                </div>
-              </div>
-
-              <div style={stageCanvasStyle}>
-                <div style={{ position: "absolute", top: 16, left: 16, right: 16, zIndex: 2, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", pointerEvents: "none" }}>
-                  <OverlayBadge text={consult?.callState === "ended" ? "Session ended" : meetingReady ? "Inside app room" : "Connecting room"} />
-                  <OverlayBadge text={consult?.reason || "General consultation"} />
-                </div>
-                <div ref={containerRef} style={{ position: "absolute", inset: 0, zIndex: 1 }} />
-              </div>
-
-              <div style={stageControlsStyle}>
-                <ControlButton
-                  accent={controls.micOn ? "#10b981" : "#475569"}
-                  onClick={toggleAudio}
-                  label={controls.micOn ? "Mute" : "Unmute"}
-                  icon={controls.micOn ? <Mic style={{ width: 16, height: 16 }} /> : <MicOff style={{ width: 16, height: 16 }} />}
-                />
-                {consult?.mode === "video" && (
-                  <ControlButton
-                    accent={controls.camOn ? "#2563eb" : "#475569"}
-                    onClick={toggleVideo}
-                    label={controls.camOn ? "Hide video" : "Show video"}
-                    icon={controls.camOn ? <Camera style={{ width: 16, height: 16 }} /> : <CameraOff style={{ width: 16, height: 16 }} />}
+                  <ActionButton
+                    icon={<Phone style={{ width: 16, height: 16 }} />}
+                    label={sessionInfo?.state === "live" && meetingMode !== "call" ? "Rejoin call" : "Call"}
+                    accent="#14b8a6"
+                    disabled={sessionStarting}
+                    onClick={() => handleStartMeeting("call")}
                   />
+                  <ActionButton
+                    icon={<Video style={{ width: 16, height: 16 }} />}
+                    label={sessionInfo?.state === "live" && meetingMode !== "video" ? "Rejoin video" : "Video call"}
+                    accent="#2563eb"
+                    disabled={sessionStarting}
+                    onClick={() => handleStartMeeting("video")}
+                  />
+                </div>
+              </div>
+
+              <div style={meetingCanvasStyle}>
+                {meetingMode ? (
+                  <>
+                    <div style={meetingOverlayRowStyle}>
+                      <MiniOverlay text={meetingReady ? meetingLabel : sessionStarting ? "Starting consult" : "Connecting"} />
+                      <MiniOverlay text={roomName || "Preparing room"} />
+                    </div>
+                    <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
+                  </>
+                ) : (
+                  <div style={meetingPlaceholderStyle}>
+                    <div style={avatarCircleStyle}>{String(counterpartName || "P").trim().charAt(0).toUpperCase()}</div>
+                    <div style={{ fontSize: isCompact ? 28 : 34, fontWeight: 900, letterSpacing: "-0.03em" }}>{counterpartName}</div>
+                    <div style={{ color: "rgba(226,232,240,0.72)", maxWidth: 540, textAlign: "center", lineHeight: 1.6 }}>
+                      Join meeting ka broken step hata diya hai. Ab seedha `Call` ya `Video call` button dabao aur consult start hoga, chat right side par ready rahegi.
+                    </div>
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+                      <ActionButton
+                        icon={<Phone style={{ width: 16, height: 16 }} />}
+                        label={sessionInfo?.state === "live" ? "Rejoin call" : "Start call"}
+                        accent="#14b8a6"
+                        disabled={sessionStarting}
+                        onClick={() => handleStartMeeting("call")}
+                      />
+                      <ActionButton
+                        icon={<Video style={{ width: 16, height: 16 }} />}
+                        label={sessionInfo?.state === "live" ? "Rejoin video" : "Start video call"}
+                        accent="#2563eb"
+                        disabled={sessionStarting}
+                        onClick={() => handleStartMeeting("video")}
+                      />
+                    </div>
+                    <div style={helpTextStyle}>
+                      Reports, symptom notes, aur consult messages right side chat panel se bhej sakte ho.
+                    </div>
+                  </div>
                 )}
-                <ControlButton
-                  accent="#0ea5e9"
-                  onClick={() => setActivePanel("chat")}
-                  label="Open chat"
-                  icon={<MessageCircle style={{ width: 16, height: 16 }} />}
+              </div>
+
+              <div style={stageFooterStyle}>
+                <ActionButton
+                  icon={controls.micOn ? <Mic style={{ width: 16, height: 16 }} /> : <MicOff style={{ width: 16, height: 16 }} />}
+                  label={controls.micOn ? "Mute" : "Unmute"}
+                  accent={controls.micOn ? "#10b981" : "#475569"}
+                  disabled={!meetingMode}
+                  onClick={toggleAudio}
                 />
-                <ControlButton
-                  accent="#ef4444"
-                  onClick={handleLeave}
-                  disabled={leaving}
-                  label={role === "doctor" ? (leaving ? "Ending..." : "End consult") : "Leave room"}
+                <ActionButton
+                  icon={controls.camOn ? <Camera style={{ width: 16, height: 16 }} /> : <CameraOff style={{ width: 16, height: 16 }} />}
+                  label={controls.camOn ? "Hide video" : "Show video"}
+                  accent={controls.camOn ? "#2563eb" : "#475569"}
+                  disabled={!meetingMode}
+                  onClick={toggleVideo}
+                />
+                <ActionButton
                   icon={<PhoneOff style={{ width: 16, height: 16 }} />}
+                  label={role === "doctor" ? (leaving ? "Ending..." : "End consult") : "Leave"}
+                  accent="#ef4444"
+                  disabled={leaving}
+                  onClick={handleLeave}
                 />
               </div>
+
+              {meetingError ? <div style={{ ...inlineInfoStyle, margin: 16 }}>{meetingError}</div> : null}
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={glassCardStyle}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-                  <div>
-                    <div style={sectionEyebrowStyle}>Consult Snapshot</div>
-                    <div style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.1 }}>{counterpartName}</div>
-                    <div style={{ marginTop: 6, color: "rgba(226,232,240,0.74)", fontSize: 13 }}>{formatSchedule(consult)}</div>
-                  </div>
-                  <div style={summaryCountStyle}>
-                    <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", color: "#A7F3D0" }}>Shared records</div>
-                    <div style={{ marginTop: 10, fontSize: 28, fontWeight: 900 }}>{sharedRecords.length}</div>
-                    <div style={{ fontSize: 12, color: "rgba(226,232,240,0.74)" }}>reports available in-room</div>
+            <div style={chatShellStyle}>
+              <div style={chatHeaderStyle}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                  <div style={chatAvatarStyle}>{String(counterpartName || "P").trim().charAt(0).toUpperCase()}</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{counterpartName}</div>
+                    <div style={{ marginTop: 3, fontSize: 12, color: "rgba(226,232,240,0.64)" }}>{formatSchedule(consult)}</div>
                   </div>
                 </div>
 
-                <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: isCompact ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-                  <InfoRow icon={<ShieldCheck style={{ width: 16, height: 16 }} />} label={role === "doctor" ? "Patient" : "Doctor"} value={counterpartName} />
-                  <InfoRow icon={<Clock3 style={{ width: 16, height: 16 }} />} label="Scheduled" value={formatSchedule(consult)} />
-                  <InfoRow icon={<Stethoscope style={{ width: 16, height: 16 }} />} label="Reason" value={consult?.reason || "General consultation"} />
-                  <InfoRow icon={<UserRound style={{ width: 16, height: 16 }} />} label="Room ID" value={roomName || "Preparing"} />
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <IconActionButton
+                    icon={<Phone style={{ width: 15, height: 15 }} />}
+                    label="Call"
+                    accent="#14b8a6"
+                    onClick={() => handleStartMeeting("call")}
+                  />
+                  <IconActionButton
+                    icon={<Video style={{ width: 15, height: 15 }} />}
+                    label="Video"
+                    accent="#2563eb"
+                    onClick={() => handleStartMeeting("video")}
+                  />
                 </div>
               </div>
 
-              <div style={{ ...glassCardStyle, padding: 14 }}>
-                <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-                  <PanelTab active={activePanel === "chat"} icon={<MessageCircle style={{ width: 15, height: 15 }} />} label="Chat" onClick={() => setActivePanel("chat")} />
-                  <PanelTab active={activePanel === "notes"} icon={<FileText style={{ width: 15, height: 15 }} />} label="Notes" onClick={() => setActivePanel("notes")} />
-                  <PanelTab active={activePanel === "care"} icon={<ShieldCheck style={{ width: 15, height: 15 }} />} label="Care" onClick={() => setActivePanel("care")} />
-                </div>
+              <div style={chatBodyStyle}>
+                {messagesLoading && messages.length === 0 ? (
+                  <EmptyState title="Loading chat" subtitle="Consult messages aur shared files fetch ho rahe hain." />
+                ) : messages.length === 0 ? (
+                  <EmptyState title="Chat start karo" subtitle="Symptoms, quick updates, ya reports right here share karo." />
+                ) : (
+                  messages.map((message) => <MessageBubble key={message.id} message={message} role={role} />)
+                )}
+                <div ref={chatEndRef} />
+              </div>
 
-                {activePanel === "chat" && (
-                  <div style={{ display: "grid", gap: 12 }}>
-                    <div style={softPanelStyle}>
-                      <div style={{ fontSize: 15, fontWeight: 900 }}>Secure consult chat</div>
-                      <div style={{ fontSize: 12, color: "rgba(226,232,240,0.72)", marginTop: 4 }}>
-                        Patient symptoms, report uploads, and doctor replies stay linked to this consult.
-                      </div>
-                    </div>
+              {chatError ? <div style={{ ...inlineInfoStyle, margin: "0 14px 12px" }}>{chatError}</div> : null}
+              <div style={composerShellStyle}>
+                {role === "patient" ? (
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                    <ToggleChip active={composerKind === "symptom"} onClick={() => setComposerKind("symptom")}>
+                      Symptoms
+                    </ToggleChip>
+                    <ToggleChip active={composerKind === "message"} onClick={() => setComposerKind("message")}>
+                      Message
+                    </ToggleChip>
+                  </div>
+                ) : null}
 
-                    <div style={messageListStyle}>
-                      {messagesLoading && messages.length === 0 ? (
-                        <EmptyState title="Loading conversation" subtitle="Pulling consult updates and shared files..." />
-                      ) : messages.length === 0 ? (
-                        <EmptyState title="Start the consult conversation" subtitle="Share symptoms, reports, medication context, or quick care updates here." />
-                      ) : (
-                        messages.map((message) => <MessageBubble key={message.id} message={message} role={role} />)
-                      )}
-                      <div ref={chatEndRef} />
-                    </div>
+                <textarea
+                  value={composerText}
+                  onChange={(event) => setComposerText(event.target.value)}
+                  placeholder={getComposerPlaceholder(role, composerKind)}
+                  rows={3}
+                  style={composerTextareaStyle}
+                />
 
-                    {chatError ? <div style={inlineErrorStyle}>{chatError}</div> : null}
-
-                    <div style={softPanelStyle}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                        {getComposerOptions(role).map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => setComposerKind(option.value)}
-                            style={composerChipStyle(option.value === composerKind)}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      <textarea
-                        value={composerText}
-                        onChange={(event) => setComposerText(event.target.value)}
-                        placeholder={getComposerPlaceholder(composerKind, role)}
-                        rows={4}
-                        style={textareaStyle}
+                {composerFiles.length > 0 ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                    {composerFiles.map((file, index) => (
+                      <FileChip
+                        key={`${file.name}_${file.size}_${index}`}
+                        label={`${file.name}${file.size ? ` | ${formatFileSize(file.size)}` : ""}`}
+                        onRemove={() => removeComposerFile(index)}
                       />
+                    ))}
+                  </div>
+                ) : null}
 
-                      {composerFiles.length > 0 && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-                          {composerFiles.map((file, index) => (
-                            <FileChip
-                              key={`${file.name}_${file.size}_${index}`}
-                              label={`${file.name}${file.size ? ` | ${formatFileSize(file.size)}` : ""}`}
-                              onRemove={() => removeComposerFile(index)}
-                            />
-                          ))}
-                        </div>
-                      )}
-
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
-                        <div>
-                          <input ref={composerFileRef} type="file" multiple accept={REPORT_ACCEPT} onChange={handleComposerFilesChange} style={{ display: "none" }} />
-                          <button type="button" onClick={() => composerFileRef.current?.click()} style={secondaryActionStyle}>
-                            <Upload style={{ width: 15, height: 15 }} />
-                            Upload reports
-                          </button>
-                          <div style={{ marginTop: 8, fontSize: 11, color: "rgba(226,232,240,0.58)" }}>JPG, PNG, WEBP, HEIC, or PDF up to 5MB each.</div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleSendMessage}
-                          disabled={sendingMessage || (!composerText.trim() && !composerFiles.length)}
-                          style={primaryActionStyle(sendingMessage || (!composerText.trim() && !composerFiles.length))}
-                        >
-                          <Send style={{ width: 15, height: 15 }} />
-                          {sendingMessage ? "Sending..." : composerKind === "symptom" ? "Share symptoms" : "Send update"}
-                        </button>
-                      </div>
+                <div style={composerFooterStyle}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <input
+                      ref={composerFileRef}
+                      type="file"
+                      multiple
+                      accept={REPORT_ACCEPT}
+                      onChange={handleComposerFilesChange}
+                      style={{ display: "none" }}
+                    />
+                    <button type="button" onClick={() => composerFileRef.current?.click()} style={uploadButtonStyle}>
+                      <Upload style={{ width: 15, height: 15 }} />
+                      Upload
+                    </button>
+                    <div style={{ fontSize: 11, color: "rgba(226,232,240,0.56)" }}>
+                      JPG, PNG, WEBP, HEIC, or PDF up to 5MB each
                     </div>
                   </div>
-                )}
-                {activePanel === "notes" && (
-                  <div style={{ display: "grid", gap: 12 }}>
-                    <div style={softPanelStyle}>
-                      <div style={{ fontSize: 15, fontWeight: 900 }}>{role === "doctor" ? "Doctor notes" : "Consult brief"}</div>
-                      <div style={{ fontSize: 12, color: "rgba(226,232,240,0.72)", marginTop: 4 }}>
-                        {role === "doctor"
-                          ? "Use private notes for diagnosis points, follow-up tasks, or medication reminders."
-                          : "Doctor notes stay private. You can still review the symptom story and records shared in this consult."}
-                      </div>
-                    </div>
 
-                    {role === "doctor" ? (
-                      <div style={softPanelStyle}>
-                        <textarea
-                          value={notesDraft}
-                          onChange={(event) => {
-                            setNotesDraft(event.target.value);
-                            setNotesDirty(true);
-                            if (notesFeedback) setNotesFeedback("");
-                          }}
-                          placeholder="Write clinical notes, observations, follow-up advice, or reminders before ending the consult."
-                          rows={10}
-                          style={textareaStyle}
-                        />
-                        {notesFeedback ? <div style={{ marginTop: 12, ...feedbackStyle(notesFeedback.toLowerCase().includes("could not")) }}>{notesFeedback}</div> : null}
-                        <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                          <div style={{ fontSize: 12, color: "rgba(226,232,240,0.62)" }}>Notes sync to this consult and stay available alongside the session state.</div>
-                          <button
-                            type="button"
-                            onClick={handleSaveNotes}
-                            disabled={savingNotes || !notesDirty}
-                            style={primaryActionStyle(savingNotes || !notesDirty)}
-                          >
-                            <CheckCircle2 style={{ width: 15, height: 15 }} />
-                            {savingNotes ? "Saving..." : "Save notes"}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={softPanelStyle}>
-                        <div style={{ display: "grid", gap: 10 }}>
-                          <SummaryLine label="Reason" value={consult?.reason || "General consultation"} />
-                          <SummaryLine label="Symptoms shared" value={consult?.symptoms || "No symptom note shared yet."} />
-                          <SummaryLine label="Reports shared" value={`${sharedRecords.length} file(s) attached in this consult`} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {activePanel === "care" && (
-                  <div style={{ display: "grid", gap: 12 }}>
-                    <div style={softPanelStyle}>
-                      <div style={{ fontSize: 15, fontWeight: 900 }}>Prescription and care handoff</div>
-                      <div style={{ fontSize: 12, color: "rgba(226,232,240,0.72)", marginTop: 4 }}>
-                        Prescription, reports, and shared files stay attached to the same consult instead of opening a new tab.
-                      </div>
-                    </div>
-
-                    {consult?.prescription?.fileUrl ? (
-                      <div style={softPanelStyle}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                          <div>
-                            <div style={{ fontSize: 15, fontWeight: 900 }}>Latest prescription</div>
-                            <div style={{ marginTop: 4, color: "rgba(226,232,240,0.74)", fontSize: 12 }}>
-                              {consult.prescription.fileName || "Prescription file"}
-                              {consult.prescription.uploadedAt ? ` | ${formatDateTime(consult.prescription.uploadedAt)}` : ""}
-                            </div>
-                          </div>
-                          <a href={consult.prescription.fileUrl} target="_blank" rel="noreferrer" style={downloadLinkStyle}>
-                            <Download style={{ width: 15, height: 15 }} />
-                            Download
-                          </a>
-                        </div>
-                        {consult?.prescription?.notes ? <div style={{ marginTop: 12, ...pillInfoStyle }}>{consult.prescription.notes}</div> : null}
-                      </div>
-                    ) : (
-                      <div style={softPanelStyle}>
-                        <div style={{ fontSize: 14, fontWeight: 800 }}>No prescription shared yet</div>
-                        <div style={{ marginTop: 6, fontSize: 12, color: "rgba(226,232,240,0.72)" }}>
-                          {role === "doctor" ? "Upload a prescription or care file when you are ready." : "The doctor can upload your prescription here during or after the consult."}
-                        </div>
-                      </div>
-                    )}
-
-                    {role === "doctor" && (
-                      <div style={softPanelStyle}>
-                        <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 12 }}>Upload prescription</div>
-                        <input ref={prescriptionFileRef} type="file" accept={REPORT_ACCEPT} onChange={(event) => setPrescriptionFile(event.target.files?.[0] || null)} style={{ display: "none" }} />
-                        <button type="button" onClick={() => prescriptionFileRef.current?.click()} style={secondaryActionStyle}>
-                          <Upload style={{ width: 15, height: 15 }} />
-                          {prescriptionFile ? prescriptionFile.name : "Choose prescription file"}
-                        </button>
-                        <textarea
-                          value={prescriptionNote}
-                          onChange={(event) => setPrescriptionNote(event.target.value)}
-                          placeholder="Add medicine notes, dosage, or follow-up instructions."
-                          rows={4}
-                          style={{ ...textareaStyle, marginTop: 12 }}
-                        />
-                        {prescriptionFeedback ? <div style={{ marginTop: 12, ...feedbackStyle(prescriptionFeedback.toLowerCase().includes("failed")) }}>{prescriptionFeedback}</div> : null}
-                        <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
-                          <button
-                            type="button"
-                            onClick={handleUploadPrescription}
-                            disabled={uploadingPrescription || !prescriptionFile}
-                            style={primaryActionStyle(uploadingPrescription || !prescriptionFile)}
-                          >
-                            <CheckCircle2 style={{ width: 15, height: 15 }} />
-                            {uploadingPrescription ? "Uploading..." : "Share prescription"}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    <div style={softPanelStyle}>
-                      <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 10 }}>Reports and records</div>
-                      {sharedRecords.length === 0 ? (
-                        <div style={{ fontSize: 12, color: "rgba(226,232,240,0.66)" }}>No reports attached yet. Use the chat panel to upload medical reports or symptom photos.</div>
-                      ) : (
-                        <div style={{ display: "grid", gap: 10 }}>
-                          {sharedRecords.map((file, index) => (
-                            <AttachmentLink key={`${file.url || file.fileName || "record"}_${index}`} file={file} />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                  <button
+                    type="button"
+                    onClick={handleSendMessage}
+                    disabled={sendingMessage || (!composerText.trim() && !composerFiles.length)}
+                    style={sendButtonStyle(sendingMessage || (!composerText.trim() && !composerFiles.length))}
+                  >
+                    <Send style={{ width: 15, height: 15 }} />
+                    {sendingMessage ? "Sending..." : "Send"}
+                  </button>
+                </div>
               </div>
 
-              {sessionInfo?.joinedAt ? (
-                <div style={glassCardStyle}>
-                  <div style={sectionEyebrowStyle}>Session Timeline</div>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <SummaryLine label="Joined" value={formatDateTime(sessionInfo.joinedAt)} />
-                    <SummaryLine label="Room state" value={sessionInfo.state || consult?.callState || "ready"} />
-                    <SummaryLine label="Mode" value={consult?.mode === "video" ? "Video consult" : "Audio consult"} />
+              {consult?.prescription?.fileUrl ? (
+                <a href={consult.prescription.fileUrl} target="_blank" rel="noreferrer" style={prescriptionCardStyle}>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: "#A7F3D0", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                      Prescription
+                    </div>
+                    <div style={{ fontWeight: 800 }}>{consult.prescription.fileName || "Download prescription"}</div>
+                    <div style={{ fontSize: 12, color: "rgba(226,232,240,0.66)" }}>
+                      {consult.prescription.uploadedAt ? formatDateTime(consult.prescription.uploadedAt) : "Available in this consult"}
+                    </div>
+                  </div>
+                  <Download style={{ width: 16, height: 16 }} />
+                </a>
+              ) : null}
+
+              {sharedRecords.length > 0 ? (
+                <div style={sharedFilesStyle}>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: "#A7F3D0", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                    Shared files
+                  </div>
+                  <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                    {sharedRecords.slice(0, 4).map((file, index) => (
+                      <AttachmentLink key={`${file.url || file.fileName || "shared"}_${index}`} file={file} />
+                    ))}
                   </div>
                 </div>
               ) : null}
@@ -939,37 +843,7 @@ export default function ConsultRoom() {
   );
 }
 
-function ControlButton({ accent, disabled, icon, label, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        minWidth: 132,
-        height: 48,
-        borderRadius: 18,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background: disabled ? "#475569" : accent,
-        color: "#fff",
-        fontWeight: 900,
-        fontSize: 13,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        cursor: disabled ? "not-allowed" : "pointer",
-        padding: "0 16px",
-        opacity: disabled ? 0.7 : 1,
-      }}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function Pill({ bg, color, icon, label }) {
+function StatusPill({ bg, color, icon, label }) {
   return (
     <span
       style={{
@@ -990,41 +864,36 @@ function Pill({ bg, color, icon, label }) {
   );
 }
 
-function MiniInfoCard({ label, value }) {
+function MiniBadge({ icon, text }) {
   return (
-    <div style={miniInfoCardStyle}>
-      <div style={{ fontSize: 11, fontWeight: 900, color: "#A7F3D0", textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
-      <div style={{ marginTop: 8, fontSize: 13, fontWeight: 800, color: "#F8FAFC" }}>{value}</div>
+    <div style={miniBadgeStyle}>
+      {icon}
+      <span>{text}</span>
     </div>
   );
 }
 
-function OverlayBadge({ text }) {
-  return (
-    <div style={overlayBadgeStyle}>
-      {text}
-    </div>
-  );
-}
-
-function PanelTab({ active, icon, label, onClick }) {
+function ActionButton({ accent, disabled, icon, label, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       style={{
-        border: active ? "1px solid rgba(16,185,129,0.45)" : "1px solid rgba(255,255,255,0.08)",
-        background: active ? "rgba(16,185,129,0.18)" : "rgba(255,255,255,0.05)",
-        color: active ? "#D1FAE5" : "#E2E8F0",
+        height: 44,
         borderRadius: 16,
-        height: 42,
-        padding: "0 14px",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        cursor: "pointer",
+        border: "1px solid rgba(255,255,255,0.08)",
+        background: disabled ? "#475569" : accent,
+        color: "#fff",
         fontWeight: 900,
         fontSize: 13,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        cursor: disabled ? "not-allowed" : "pointer",
+        padding: "0 16px",
+        minWidth: 126,
       }}
     >
       {icon}
@@ -1033,32 +902,44 @@ function PanelTab({ active, icon, label, onClick }) {
   );
 }
 
+function IconActionButton({ accent, icon, label, onClick }) {
+  return (
+    <button type="button" onClick={onClick} style={{ ...iconActionButtonStyle, background: accent }}>
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function ToggleChip({ active, children, onClick }) {
+  return (
+    <button type="button" onClick={onClick} style={toggleChipStyle(active)}>
+      {children}
+    </button>
+  );
+}
+
 function MessageBubble({ message, role }) {
   const ownMessage =
     (role === "doctor" && message.senderRole === "doctor") ||
     (role === "patient" && message.senderRole === "patient");
-  const isSystem = message.senderRole === "system";
-  const bubbleBg = isSystem
-    ? "rgba(14,165,233,0.14)"
-    : ownMessage
-      ? "linear-gradient(135deg, rgba(16,185,129,0.34), rgba(5,150,105,0.22))"
-      : "rgba(255,255,255,0.06)";
+  const bubbleBg =
+    message.senderRole === "system"
+      ? "rgba(14,165,233,0.12)"
+      : ownMessage
+        ? "linear-gradient(135deg, rgba(22,163,74,0.35), rgba(13,148,136,0.22))"
+        : "rgba(255,255,255,0.06)";
 
   return (
     <div style={{ display: "flex", justifyContent: ownMessage ? "flex-end" : "flex-start" }}>
-      <div style={{ width: "min(100%, 420px)", borderRadius: 22, border: "1px solid rgba(255,255,255,0.08)", background: bubbleBg, padding: "14px 14px 12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ ...messageBubbleStyle, background: bubbleBg }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={{ fontSize: 13, fontWeight: 900 }}>{message.senderName}</div>
-          <div style={{ fontSize: 11, color: "rgba(226,232,240,0.7)", fontWeight: 800 }}>{formatDateTime(message.createdAt)}</div>
+          <div style={{ fontSize: 11, color: "rgba(226,232,240,0.68)", fontWeight: 800 }}>{formatDateTime(message.createdAt)}</div>
         </div>
-        <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <span style={messageKindPillStyle(message.kind)}>{message.kind}</span>
-          {message.senderRole === "doctor" && <span style={miniPillStyle}>doctor</span>}
-          {message.senderRole === "patient" && <span style={miniPillStyle}>patient</span>}
-        </div>
-        {message.text ? <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{message.text}</div> : null}
+        {message.text ? <div style={{ marginTop: 8, whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{message.text}</div> : null}
         {Array.isArray(message.attachments) && message.attachments.length > 0 ? (
-          <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+          <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
             {message.attachments.map((file, index) => (
               <AttachmentLink key={`${message.id}_${file.url || file.fileName || "file"}_${index}`} file={file} compact />
             ))}
@@ -1088,8 +969,12 @@ function AttachmentLink({ compact = false, file }) {
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
         <FileText style={{ width: 16, height: 16, flexShrink: 0 }} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 800, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file?.fileName || "Shared file"}</div>
-          <div style={{ marginTop: 4, fontSize: 11, color: "rgba(226,232,240,0.68)" }}>{[file?.category, sizeLabel].filter(Boolean).join(" | ")}</div>
+          <div style={{ fontWeight: 800, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {file?.fileName || "Shared file"}
+          </div>
+          <div style={{ marginTop: 4, fontSize: 11, color: "rgba(226,232,240,0.68)" }}>
+            {[file?.category, sizeLabel].filter(Boolean).join(" | ")}
+          </div>
         </div>
       </div>
       <Download style={{ width: 15, height: 15, flexShrink: 0 }} />
@@ -1106,168 +991,18 @@ function EmptyState({ subtitle, title }) {
   );
 }
 
-function SummaryLine({ label, value }) {
-  return (
-    <div style={summaryLineStyle}>
-      <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", color: "#A7F3D0" }}>{label}</div>
-      <div style={{ marginTop: 8, fontSize: 13, color: "#F8FAFC", fontWeight: 800, lineHeight: 1.45 }}>{value || "-"}</div>
-    </div>
-  );
+function MiniOverlay({ text }) {
+  return <div style={miniOverlayStyle}>{text}</div>;
 }
 
-function InfoRow({ icon, label, value }) {
-  return (
-    <div style={summaryLineStyle}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#A7F3D0" }}>
-        {icon}
-        <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</span>
-      </div>
-      <div style={{ marginTop: 8, fontSize: 14, fontWeight: 800, color: "#F8FAFC", lineHeight: 1.4 }}>{value || "-"}</div>
-    </div>
-  );
-}
-
-function composerChipStyle(active) {
-  return {
-    borderRadius: 999,
-    padding: "8px 12px",
-    border: active ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(255,255,255,0.08)",
-    background: active ? "rgba(16,185,129,0.18)" : "rgba(255,255,255,0.06)",
-    color: active ? "#D1FAE5" : "#E2E8F0",
-    fontSize: 12,
-    fontWeight: 900,
-    cursor: "pointer",
-  };
-}
-
-function primaryActionStyle(disabled) {
-  return {
-    minWidth: 148,
-    height: 44,
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.08)",
-    background: disabled ? "#334155" : "linear-gradient(135deg, #10b981, #059669)",
-    color: "#fff",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    padding: "0 16px",
-    cursor: disabled ? "not-allowed" : "pointer",
-    fontWeight: 900,
-    fontSize: 13,
-    opacity: disabled ? 0.7 : 1,
-  };
-}
-
-function feedbackStyle(errorState) {
-  return {
-    borderRadius: 16,
-    padding: "12px 14px",
-    background: errorState ? "rgba(127,29,29,0.26)" : "rgba(16,185,129,0.14)",
-    border: errorState ? "1px solid rgba(248,113,113,0.3)" : "1px solid rgba(16,185,129,0.22)",
-    color: errorState ? "#FECACA" : "#D1FAE5",
-    fontSize: 12,
-    fontWeight: 800,
-  };
-}
-
-function messageKindPillStyle(kind) {
-  const label = String(kind || "").toLowerCase();
-  if (label === "symptom") return { ...miniPillStyle, background: "rgba(250,204,21,0.16)", color: "#fde68a" };
-  if (label === "report") return { ...miniPillStyle, background: "rgba(14,165,233,0.16)", color: "#bae6fd" };
-  return miniPillStyle;
-}
-
-const miniPillStyle = {
-  borderRadius: 999,
-  padding: "4px 8px",
-  background: "rgba(255,255,255,0.08)",
-  color: "#E2E8F0",
-  fontSize: 10,
-  fontWeight: 900,
-  textTransform: "uppercase",
-  letterSpacing: "0.08em",
-};
-
-const secondaryActionStyle = {
-  height: 42,
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.08)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#F8FAFC",
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 8,
-  padding: "0 14px",
-  cursor: "pointer",
-  fontWeight: 800,
-  fontSize: 13,
-};
-
-const glassCardStyle = {
-  borderRadius: 30,
-  border: "1px solid rgba(255,255,255,0.08)",
-  background: "rgba(255,255,255,0.06)",
-  backdropFilter: "blur(18px)",
-  padding: 18,
-};
-
-const softPanelStyle = {
-  borderRadius: 24,
-  padding: 16,
-  background: "rgba(2,6,23,0.26)",
-  border: "1px solid rgba(255,255,255,0.06)",
-};
-
-const sectionEyebrowStyle = {
-  fontSize: 12,
-  fontWeight: 900,
-  letterSpacing: "0.14em",
-  textTransform: "uppercase",
-  color: "rgba(167,243,208,0.9)",
-  marginBottom: 14,
-};
-
-const textareaStyle = {
-  width: "100%",
-  borderRadius: 18,
-  border: "1px solid rgba(255,255,255,0.1)",
-  background: "rgba(255,255,255,0.04)",
-  color: "#F8FAFC",
-  padding: 14,
-  resize: "vertical",
-  outline: "none",
-  font: "inherit",
-  lineHeight: 1.5,
-  boxSizing: "border-box",
-};
-
-const messageListStyle = {
-  display: "grid",
-  gap: 12,
-  maxHeight: 420,
-  overflowY: "auto",
-  paddingRight: 4,
-};
-
-const errorCardStyle = {
-  borderRadius: 28,
-  border: "1px solid rgba(248,113,113,0.38)",
-  background: "rgba(127,29,29,0.34)",
-  padding: 22,
-  color: "#FECACA",
-};
-
-const inlineErrorStyle = {
-  borderRadius: 16,
-  padding: "12px 14px",
-  background: "rgba(127,29,29,0.26)",
-  border: "1px solid rgba(248,113,113,0.3)",
-  color: "#FECACA",
-  fontSize: 12,
-  fontWeight: 800,
-};
+const pageHeaderStyle = (isCompact) => ({
+  display: "flex",
+  alignItems: isCompact ? "flex-start" : "center",
+  justifyContent: "space-between",
+  gap: 14,
+  flexWrap: "wrap",
+  marginBottom: 16,
+});
 
 const backButtonStyle = {
   width: 46,
@@ -1281,20 +1016,129 @@ const backButtonStyle = {
   cursor: "pointer",
 };
 
+const errorCardStyle = {
+  borderRadius: 28,
+  border: "1px solid rgba(248,113,113,0.38)",
+  background: "rgba(127,29,29,0.34)",
+  padding: 22,
+  color: "#FECACA",
+};
+
 const stageShellStyle = {
   borderRadius: 34,
   border: "1px solid rgba(255,255,255,0.08)",
-  background: "rgba(3,7,18,0.34)",
+  background: "rgba(3,7,18,0.32)",
   backdropFilter: "blur(18px)",
   overflow: "hidden",
-  minHeight: 720,
+  minHeight: 760,
   display: "flex",
   flexDirection: "column",
-  boxShadow: "0 24px 80px rgba(2, 6, 23, 0.26)",
+  boxShadow: "0 24px 80px rgba(2,6,23,0.26)",
 };
 
 const stageHeaderStyle = {
-  padding: "16px 18px",
+  padding: "18px 20px",
+  borderBottom: "1px solid rgba(255,255,255,0.08)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  flexWrap: "wrap",
+};
+
+const meetingCanvasStyle = {
+  position: "relative",
+  flex: 1,
+  minHeight: 560,
+  background: "linear-gradient(180deg, rgba(5,23,20,0.95) 0%, rgba(2,6,23,1) 100%)",
+};
+
+const meetingPlaceholderStyle = {
+  position: "absolute",
+  inset: 0,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 18,
+  padding: 28,
+  textAlign: "center",
+};
+
+const avatarCircleStyle = {
+  width: 88,
+  height: 88,
+  borderRadius: "50%",
+  background: "linear-gradient(135deg, #14b8a6, #2563eb)",
+  display: "grid",
+  placeItems: "center",
+  fontSize: 34,
+  fontWeight: 900,
+  boxShadow: "0 18px 50px rgba(20,184,166,0.28)",
+};
+
+const helpTextStyle = {
+  fontSize: 12,
+  color: "rgba(226,232,240,0.62)",
+  lineHeight: 1.5,
+};
+
+const meetingOverlayRowStyle = {
+  position: "absolute",
+  top: 16,
+  left: 16,
+  right: 16,
+  zIndex: 2,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+  pointerEvents: "none",
+};
+
+const miniOverlayStyle = {
+  borderRadius: 999,
+  padding: "8px 12px",
+  background: "rgba(2,6,23,0.58)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  color: "#F8FAFC",
+  fontSize: 12,
+  fontWeight: 800,
+  backdropFilter: "blur(8px)",
+};
+
+const stageFooterStyle = {
+  padding: 16,
+  borderTop: "1px solid rgba(255,255,255,0.08)",
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  justifyContent: "center",
+};
+
+const inlineInfoStyle = {
+  borderRadius: 16,
+  padding: "12px 14px",
+  background: "rgba(127,29,29,0.26)",
+  border: "1px solid rgba(248,113,113,0.3)",
+  color: "#FECACA",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const chatShellStyle = {
+  borderRadius: 30,
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.06)",
+  backdropFilter: "blur(18px)",
+  minHeight: 760,
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
+};
+
+const chatHeaderStyle = {
+  padding: "16px 16px 14px",
   borderBottom: "1px solid rgba(255,255,255,0.08)",
   display: "flex",
   alignItems: "center",
@@ -1303,49 +1147,159 @@ const stageHeaderStyle = {
   flexWrap: "wrap",
 };
 
-const stageCanvasStyle = {
-  flex: 1,
-  minHeight: 560,
-  position: "relative",
-  background: "linear-gradient(180deg, rgba(7,31,29,0.95) 0%, rgba(2,6,23,1) 100%)",
+const chatAvatarStyle = {
+  width: 44,
+  height: 44,
+  borderRadius: "50%",
+  background: "linear-gradient(135deg, rgba(20,184,166,0.92), rgba(37,99,235,0.88))",
+  display: "grid",
+  placeItems: "center",
+  fontWeight: 900,
+  fontSize: 18,
 };
 
-const stageControlsStyle = {
+const iconActionButtonStyle = {
+  height: 38,
+  borderRadius: 999,
+  border: "none",
+  color: "#fff",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "0 12px",
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 12,
+};
+
+const chatBodyStyle = {
+  flex: 1,
+  padding: 14,
+  display: "grid",
+  gap: 12,
+  overflowY: "auto",
+  background:
+    "radial-gradient(circle at top right, rgba(16,185,129,0.08), transparent 24%), linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%)",
+};
+
+const messageBubbleStyle = {
+  width: "min(100%, 290px)",
+  borderRadius: 22,
+  border: "1px solid rgba(255,255,255,0.08)",
+  padding: "14px 14px 12px",
+  lineHeight: 1.5,
+};
+
+const composerShellStyle = {
   padding: 14,
   borderTop: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(2,6,23,0.22)",
+};
+
+const composerTextareaStyle = {
+  width: "100%",
+  borderRadius: 18,
+  border: "1px solid rgba(255,255,255,0.1)",
+  background: "rgba(255,255,255,0.05)",
+  color: "#F8FAFC",
+  padding: 14,
+  resize: "vertical",
+  outline: "none",
+  font: "inherit",
+  lineHeight: 1.5,
+  boxSizing: "border-box",
+};
+
+const composerFooterStyle = {
+  marginTop: 12,
   display: "flex",
-  flexWrap: "wrap",
   alignItems: "center",
-  justifyContent: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const toggleChipStyle = (active) => ({
+  borderRadius: 999,
+  padding: "8px 12px",
+  border: active ? "1px solid rgba(16,185,129,0.4)" : "1px solid rgba(255,255,255,0.08)",
+  background: active ? "rgba(16,185,129,0.18)" : "rgba(255,255,255,0.05)",
+  color: active ? "#D1FAE5" : "#E2E8F0",
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 12,
+});
+
+const uploadButtonStyle = {
+  height: 40,
+  borderRadius: 14,
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.06)",
+  color: "#F8FAFC",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "0 14px",
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 13,
+};
+
+const sendButtonStyle = (disabled) => ({
+  height: 42,
+  borderRadius: 14,
+  border: "none",
+  background: disabled ? "#475569" : "linear-gradient(135deg, #14b8a6, #2563eb)",
+  color: "#fff",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "0 16px",
+  cursor: disabled ? "not-allowed" : "pointer",
+  fontWeight: 900,
+  fontSize: 13,
+});
+
+const prescriptionCardStyle = {
+  margin: "0 14px 14px",
+  borderRadius: 20,
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(16,185,129,0.12)",
+  padding: "14px 16px",
+  color: "#F8FAFC",
+  textDecoration: "none",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
   gap: 12,
 };
 
-const summaryCountStyle = {
-  borderRadius: 20,
-  padding: "12px 14px",
-  minWidth: 160,
-  background: "rgba(255,255,255,0.06)",
+const sharedFilesStyle = {
+  margin: "0 14px 14px",
+  borderRadius: 22,
   border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.04)",
+  padding: 14,
 };
 
-const miniInfoCardStyle = {
+const emptyStateStyle = {
+  borderRadius: 24,
+  padding: 24,
+  border: "1px dashed rgba(255,255,255,0.16)",
+  background: "rgba(255,255,255,0.04)",
+  textAlign: "center",
+};
+
+const attachmentLinkStyle = {
   borderRadius: 18,
-  padding: "12px 14px",
-  minWidth: 146,
+  textDecoration: "none",
+  color: "#F8FAFC",
   background: "rgba(255,255,255,0.06)",
   border: "1px solid rgba(255,255,255,0.08)",
-};
-
-const overlayBadgeStyle = {
-  maxWidth: 280,
-  borderRadius: 999,
-  padding: "8px 12px",
-  background: "rgba(2,6,23,0.54)",
-  border: "1px solid rgba(255,255,255,0.12)",
-  fontSize: 12,
-  fontWeight: 800,
-  color: "#F8FAFC",
-  backdropFilter: "blur(8px)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
 };
 
 const fileChipStyle = {
@@ -1370,54 +1324,15 @@ const chipRemoveButtonStyle = {
   padding: 0,
 };
 
-const attachmentLinkStyle = {
-  borderRadius: 18,
-  textDecoration: "none",
-  color: "#F8FAFC",
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.08)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-};
-
-const emptyStateStyle = {
-  borderRadius: 24,
-  padding: 24,
-  border: "1px dashed rgba(255,255,255,0.16)",
-  background: "rgba(255,255,255,0.04)",
-  textAlign: "center",
-};
-
-const summaryLineStyle = {
-  borderRadius: 18,
-  padding: "12px 14px",
-  background: "rgba(2,6,23,0.3)",
-  border: "1px solid rgba(255,255,255,0.06)",
-};
-
-const downloadLinkStyle = {
-  borderRadius: 14,
-  padding: "10px 12px",
-  textDecoration: "none",
-  color: "#F8FAFC",
+const miniBadgeStyle = {
   display: "inline-flex",
   alignItems: "center",
   gap: 8,
-  border: "1px solid rgba(255,255,255,0.08)",
+  padding: "10px 12px",
+  borderRadius: 16,
   background: "rgba(255,255,255,0.06)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  fontSize: 12,
   fontWeight: 800,
-  fontSize: 13,
-};
-
-const pillInfoStyle = {
-  borderRadius: 18,
-  padding: "12px 14px",
-  background: "rgba(16,185,129,0.12)",
-  border: "1px solid rgba(16,185,129,0.22)",
-  color: "#D1FAE5",
-  fontSize: 13,
-  fontWeight: 700,
-  lineHeight: 1.5,
+  color: "#E2E8F0",
 };
