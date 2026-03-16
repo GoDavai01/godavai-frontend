@@ -461,7 +461,7 @@ function FormatReply({ text, screen, uiLang }) {
 }
 
 /* ── Message bubbles ──────────────────────────────────────── */
-function ChatBubble({ m, onSpeak, speakingId, speakLoading, screen, uiLang }) {
+function ChatBubble({ m, onSpeak, onFeedback, speakingId, speakLoading, screen, uiLang }) {
   const isUser = m.role === "user";
   const isSpeaking = speakingId === m.id;
   const isDesktop = screen === "desktop";
@@ -526,43 +526,70 @@ function ChatBubble({ m, onSpeak, speakingId, speakLoading, screen, uiLang }) {
         )}
 
         {!isUser && (
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            onClick={() => onSpeak(m)}
-            disabled={speakLoading}
-            style={{
-              marginTop: 11,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              border: `1px solid ${isSpeaking ? "rgba(24,226,161,0.35)" : "#E5E7EB"}`,
-              borderRadius: 999,
-              background: isSpeaking ? "#ECFDF5" : "#FAFAFA",
-              padding: "6px 12px",
-              fontSize: 11,
-              fontWeight: 800,
-              color: isSpeaking ? "#059669" : "#6B7280",
-              cursor: speakLoading ? "wait" : "pointer",
-            }}
-          >
-            {speakLoading && isSpeaking ? (
-              <div
-                style={{
-                  width: 11,
-                  height: 11,
-                  border: "2px solid #059669",
-                  borderTopColor: "transparent",
-                  borderRadius: "50%",
-                  animation: "gdSpin 0.6s linear infinite",
-                }}
-              />
-            ) : isSpeaking ? (
-              <VolumeX style={{ width: 12, height: 12 }} />
-            ) : (
-              <Volume2 style={{ width: 12, height: 12 }} />
-            )}
-            {speakLoading && isSpeaking ? "Loading..." : isSpeaking ? "Stop" : "Listen"}
-          </motion.button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 11 }}>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={() => onSpeak(m)}
+              disabled={speakLoading}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                border: `1px solid ${isSpeaking ? "rgba(24,226,161,0.35)" : "#E5E7EB"}`,
+                borderRadius: 999,
+                background: isSpeaking ? "#ECFDF5" : "#FAFAFA",
+                padding: "6px 12px",
+                fontSize: 11,
+                fontWeight: 800,
+                color: isSpeaking ? "#059669" : "#6B7280",
+                cursor: speakLoading ? "wait" : "pointer",
+              }}
+            >
+              {speakLoading && isSpeaking ? (
+                <div
+                  style={{
+                    width: 11, height: 11,
+                    border: "2px solid #059669",
+                    borderTopColor: "transparent",
+                    borderRadius: "50%",
+                    animation: "gdSpin 0.6s linear infinite",
+                  }}
+                />
+              ) : isSpeaking ? (
+                <VolumeX style={{ width: 12, height: 12 }} />
+              ) : (
+                <Volume2 style={{ width: 12, height: 12 }} />
+              )}
+              {speakLoading && isSpeaking ? "Loading..." : isSpeaking ? "Stop" : "Listen"}
+            </motion.button>
+
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => onFeedback(m.id, "up")}
+              style={{
+                width: 30, height: 30, borderRadius: 999,
+                border: "1px solid #E5E7EB", background: "#FAFAFA",
+                display: "grid", placeItems: "center",
+                cursor: "pointer", fontSize: 13,
+              }}
+              title="Helpful"
+            >
+              👍
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => onFeedback(m.id, "down")}
+              style={{
+                width: 30, height: 30, borderRadius: 999,
+                border: "1px solid #E5E7EB", background: "#FAFAFA",
+                display: "grid", placeItems: "center",
+                cursor: "pointer", fontSize: 13,
+              }}
+              title="Not helpful"
+            >
+              👎
+            </motion.button>
+          </div>
         )}
       </div>
     </motion.div>
@@ -927,6 +954,23 @@ export default function GoDavaiiAI() {
       setSpeakingId(null);
     }
   }, [speakingId, replyLanguage]);
+
+  async function submitFeedback(msgId, rating, reason = "") {
+    try {
+      await axios.post(
+        `${API}/api/ai/feedback`,
+        {
+          rating,
+          reason,
+          queryType: focus,
+          language: replyLanguage,
+        },
+        { timeout: 5000, headers: getAuthHeaders() }
+      );
+    } catch (err) {
+      console.error("Feedback submit failed:", err);
+    }
+  }
 
   async function transcribeAudioBlob(blob) {
     const mime = blob.type || "audio/webm";
@@ -1626,6 +1670,7 @@ export default function GoDavaiiAI() {
               key={m.id}
               m={m}
               onSpeak={handleSpeak}
+              onFeedback={submitFeedback}
               speakingId={speakingId}
               speakLoading={speakLoading}
               screen={screen}

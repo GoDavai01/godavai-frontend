@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { getDoctorPrescriptionCartSummary } from "../lib/doctorPrescriptionCart";
+import { mergeConsultBookings, readStoredConsultBookings, sortConsultBookings, upsertStoredConsultBooking } from "../utils/consultBookings";
 
 // ─── Constants ───────────────────────────────────────────────
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -1489,20 +1490,84 @@ export default function Home() {
   // My consults for home doctor section
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (!token) {
-      setMyConsults([]);
-      return;
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    let cancelled = false;
+
+    async function loadHomeConsults() {
+      const localBookings = readStoredConsultBookings();
+
+      try {
+        let serverBookings = [];
+        if (token) {
+          try {
+            const response = await axios.get(`${API}/api/consults/my`, { headers });
+            serverBookings = Array.isArray(response?.data?.consults) ? response.data.consults : [];
+          } catch {
+            serverBookings = [];
+          }
+        }
+
+        let publicSyncedBookings = [];
+        if (localBookings.length) {
+          try {
+            const syncResponse = await axios.post(
+              `${API}/api/consults/lookup/batch`,
+              {
+                items: localBookings.map((item) => ({
+                  bookingId: item.id || item.bookingId || "",
+                  paymentRef: item.paymentRef || "",
+                  doctorId: item.doctorId || "",
+                  date: item.date || "",
+                  slot: item.slot || "",
+                  mode: item.mode || "",
+                })),
+              },
+              headers ? { headers } : undefined
+            );
+            publicSyncedBookings = Array.isArray(syncResponse?.data?.consults) ? syncResponse.data.consults : [];
+          } catch {
+            publicSyncedBookings = [];
+          }
+        }
+
+        const syncedById = new Map(
+          publicSyncedBookings.map((item) => [String(item?.id || item?.bookingId || item?._id || ""), item])
+        );
+        const mergedServer = mergeConsultBookings(serverBookings, publicSyncedBookings);
+        const merged = sortConsultBookings(
+          mergeConsultBookings(mergedServer, localBookings).map((item) => {
+            const key = String(item?.id || item?.bookingId || item?._id || "");
+            const syncedItem = syncedById.get(key) || null;
+            return {
+              ...item,
+              doctorPrescription: item?.doctorPrescription || syncedItem?.doctorPrescription || null,
+              prescription: item?.prescription || syncedItem?.prescription || null,
+              updatedAt: item?.updatedAt || syncedItem?.updatedAt || item?.createdAt || "",
+            };
+          })
+        );
+
+        merged.forEach((item) => {
+          const bookingId = item?.id || item?.bookingId || item?._id;
+          if (bookingId) {
+            upsertStoredConsultBooking({
+              ...item,
+              id: bookingId,
+              bookingId: item?.bookingId || bookingId,
+            });
+          }
+        });
+
+        if (!cancelled) setMyConsults(merged);
+      } catch {
+        if (!cancelled) setMyConsults(localBookings);
+      }
     }
 
-    axios
-      .get(`${API}/api/consults/my`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      .then((r) => {
-        const list = Array.isArray(r?.data?.consults) ? r.data.consults : [];
-        setMyConsults(list);
-      })
-      .catch(() => setMyConsults([]));
+    loadHomeConsults();
+    return () => {
+      cancelled = true;
+    };
   }, [user?._id, user?.userId]);
 
   // Nearby pharmacies + top meds
