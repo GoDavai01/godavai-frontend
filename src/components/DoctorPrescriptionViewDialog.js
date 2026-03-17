@@ -45,6 +45,33 @@ function buildPrescriptionFileName(prescription = {}) {
   return `godavaii-prescription-${suffix}.pdf`;
 }
 
+function buildPrescriptionPdfUrl(prescription = {}) {
+  const id = String(prescription?._id || "").trim();
+  if (!id) return "";
+  const params = new URLSearchParams();
+  const exportToken = String(prescription?.exportToken || "").trim();
+  if (exportToken) params.set("exportToken", exportToken);
+  const query = params.toString();
+  return `${API}/api/prescriptions/detail/${id}/pdf${query ? `?${query}` : ""}`;
+}
+
+function parseContentDispositionFileName(value = "") {
+  const text = String(value || "");
+  if (!text) return "";
+
+  const utfMatch = text.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch?.[1]) {
+    try {
+      return decodeURIComponent(utfMatch[1]).trim();
+    } catch (_) {
+      return utfMatch[1].trim();
+    }
+  }
+
+  const asciiMatch = text.match(/filename="?([^"]+)"?/i);
+  return String(asciiMatch?.[1] || "").trim();
+}
+
 function downloadBlob(blob, fileName) {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -196,12 +223,19 @@ export default function DoctorPrescriptionViewDialog({ prescription, open, onOpe
   async function fetchPrescriptionPdf() {
     const token = getUserAuthToken();
     const headers = getUserAuthHeaders(token);
-    const res = await axios.get(`${API}/api/prescriptions/detail/${prescription._id}/pdf`, {
-      headers,
+    const url = buildPrescriptionPdfUrl(prescription);
+    if (!url) throw new Error("Missing prescription id");
+
+    const res = await axios.get(url, {
+      headers: headers.Authorization ? headers : undefined,
       responseType: "blob",
+      withCredentials: true,
     });
-    const blob = res?.data instanceof Blob ? res.data : new Blob([res.data], { type: "application/pdf" });
-    return { blob, fileName: buildPrescriptionFileName(prescription) };
+    const contentType = String(res?.headers?.["content-type"] || "application/pdf").trim() || "application/pdf";
+    const blob = res?.data instanceof Blob ? res.data : new Blob([res.data], { type: contentType });
+    const fileName =
+      parseContentDispositionFileName(res?.headers?.["content-disposition"]) || buildPrescriptionFileName(prescription);
+    return { blob, fileName };
   }
 
   async function handleDownload() {
@@ -219,9 +253,9 @@ export default function DoctorPrescriptionViewDialog({ prescription, open, onOpe
   async function handleShare() {
     if (!canExport) return;
     setActionState({ busy: true, type: "share", message: "" });
+    const shareText = buildShareText(prescription, medicines);
     try {
       const { blob, fileName } = await fetchPrescriptionPdf();
-      const shareText = buildShareText(prescription, medicines);
       if (typeof navigator !== "undefined" && typeof File !== "undefined") {
         const file = new File([blob], fileName, { type: "application/pdf" });
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -255,6 +289,27 @@ export default function DoctorPrescriptionViewDialog({ prescription, open, onOpe
         setActionState({ busy: false, type: "share", message: "" });
         return;
       }
+
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        try {
+          await navigator.share({
+            title: prescription?.branding || "GoDavaii Prescription",
+            text: shareText,
+          });
+          setActionState({
+            busy: false,
+            type: "share",
+            message: "PDF attach nahi ho paya, lekin prescription details share ho gayi.",
+          });
+          return;
+        } catch (fallbackError) {
+          if (fallbackError?.name === "AbortError") {
+            setActionState({ busy: false, type: "share", message: "" });
+            return;
+          }
+        }
+      }
+
       setActionState({ busy: false, type: "share", message: "Prescription share abhi nahi ho paya." });
     }
   }
