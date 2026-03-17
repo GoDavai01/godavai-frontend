@@ -19,6 +19,11 @@
 // ✅ FIX ONLY: TTS preference respected properly
 // ✅ FIX ONLY: transcriptMode added for voice transcription
 // ✅ FIX ONLY: TTS cache + prefetch + longer timeout for fast Listen UX
+// ✅ NEW FIX: added multilingual section labels for Bengali / Gujarati / Punjabi / Marathi / Tamil / Telugu / Kannada / Malayalam / Odia
+// ✅ NEW FIX: broader reply-language UI support for Indian languages
+// ✅ NEW FIX: display language detection improved for Marathi / Odia and broader script handling
+// ✅ NEW FIX: feedback payload now sends sessionId, aiSource, complexity, confidence, responsePreview, userQueryPreview
+// ✅ NEW FIX: assistant meta/sessionId preserved from backend chat + analyze-file responses
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -88,6 +93,15 @@ const LANG_OPTIONS = [
   { key: "hindi", label: "Hindi" },
   { key: "hinglish", label: "Hinglish" },
   { key: "english", label: "English" },
+  { key: "bengali", label: "Bengali" },
+  { key: "gujarati", label: "Gujarati" },
+  { key: "punjabi", label: "Punjabi" },
+  { key: "marathi", label: "Marathi" },
+  { key: "tamil", label: "Tamil" },
+  { key: "telugu", label: "Telugu" },
+  { key: "kannada", label: "Kannada" },
+  { key: "malayalam", label: "Malayalam" },
+  { key: "odia", label: "Odia" },
 ];
 
 /* ── Helpers ──────────────────────────────────────────────── */
@@ -103,7 +117,19 @@ function getDisplayReplyLanguage(preferred, text = "") {
   const pref = String(preferred || "auto").toLowerCase();
   if (pref && pref !== "auto") return pref;
 
-  if (/[\u0900-\u097F]/.test(text)) return "hindi";
+  if (/[\u0980-\u09FF]/.test(text)) return "bengali";
+  if (/[\u0B80-\u0BFF]/.test(text)) return "tamil";
+  if (/[\u0C00-\u0C7F]/.test(text)) return "telugu";
+  if (/[\u0C80-\u0CFF]/.test(text)) return "kannada";
+  if (/[\u0D00-\u0D7F]/.test(text)) return "malayalam";
+  if (/[\u0A80-\u0AFF]/.test(text)) return "gujarati";
+  if (/[\u0A00-\u0A7F]/.test(text)) return "punjabi";
+  if (/[\u0B00-\u0B7F]/.test(text)) return "odia";
+  if (/[\u0900-\u097F]/.test(text)) {
+    if (/\b(आहे|नाही|काय|कसे|माझे|तुमचे|बरं|बरंय)\b/.test(text)) return "marathi";
+    return "hindi";
+  }
+
   const detected = detectLanguageForTTS(text);
   return detected || "hinglish";
 }
@@ -138,6 +164,87 @@ function getSectionLabel(sectionKey, lang) {
       "When to see doctor": "When to get medical help",
       "Desi ilaaj": "Home support",
       "Home remedies": "Home remedies",
+    },
+    bengali: {
+      Assessment: "বিষয়টা কী বোঝা গেল",
+      "Next steps": "এখন কী করবেন",
+      "Warning signs": "কখন দ্রুত ব্যবস্থা নেবেন",
+      "Red flags": "কখন দ্রুত ব্যবস্থা নেবেন",
+      "When to see doctor": "কখন অতিরিক্ত সাহায্য নেবেন",
+      "Desi ilaaj": "ঘরোয়া সাহায্য",
+      "Home remedies": "ঘরোয়া উপায়",
+    },
+    gujarati: {
+      Assessment: "સમજાયેલ વાત",
+      "Next steps": "હવે શું કરવું",
+      "Warning signs": "ક્યારે તરત પગલું લેવું",
+      "Red flags": "ક્યારે તરત પગલું લેવું",
+      "When to see doctor": "ક્યારે વધુ મદદ લેવી",
+      "Desi ilaaj": "ઘરગથ્થુ મદદ",
+      "Home remedies": "ઘરેલુ ઉપાય",
+    },
+    punjabi: {
+      Assessment: "ਸਮਝ ਆਈ ਗੱਲ",
+      "Next steps": "ਹੁਣ ਕੀ ਕਰਨਾ ਹੈ",
+      "Warning signs": "ਕਦੋਂ ਤੁਰੰਤ ਕਦਮ ਲੈਣਾ ਹੈ",
+      "Red flags": "ਕਦੋਂ ਤੁਰੰਤ ਕਦਮ ਲੈਣਾ ਹੈ",
+      "When to see doctor": "ਕਦੋਂ ਹੋਰ ਮਦਦ ਲੈਣੀ ਹੈ",
+      "Desi ilaaj": "ਘਰੇਲੂ ਸਹਾਇਤਾ",
+      "Home remedies": "ਘਰੇਲੂ ਨੁਸਖੇ",
+    },
+    marathi: {
+      Assessment: "समजलेली गोष्ट",
+      "Next steps": "आता काय करावे",
+      "Warning signs": "कधी लगेच पाऊल उचलावे",
+      "Red flags": "कधी लगेच पाऊल उचलावे",
+      "When to see doctor": "कधी जास्त मदत घ्यावी",
+      "Desi ilaaj": "घरगुती मदत",
+      "Home remedies": "घरगुती उपाय",
+    },
+    tamil: {
+      Assessment: "புரிந்தது என்ன",
+      "Next steps": "இப்போது என்ன செய்ய வேண்டும்",
+      "Warning signs": "எப்போது உடனே நடவடிக்கை எடுக்க வேண்டும்",
+      "Red flags": "எப்போது உடனே நடவடிக்கை எடுக்க வேண்டும்",
+      "When to see doctor": "எப்போது கூடுதல் உதவி பெற வேண்டும்",
+      "Desi ilaaj": "வீட்டு உதவி",
+      "Home remedies": "வீட்டு வைத்தியம்",
+    },
+    telugu: {
+      Assessment: "అర్థమైన విషయం",
+      "Next steps": "ఇప్పుడు ఏమి చేయాలి",
+      "Warning signs": "ఎప్పుడు వెంటనే చర్య తీసుకోవాలి",
+      "Red flags": "ఎప్పుడు వెంటనే చర్య తీసుకోవాలి",
+      "When to see doctor": "ఎప్పుడు అదనపు సహాయం తీసుకోవాలి",
+      "Desi ilaaj": "ఇంటి సహాయం",
+      "Home remedies": "ఇంటివైద్యం",
+    },
+    kannada: {
+      Assessment: "ಅರ್ಥವಾದ ವಿಷಯ",
+      "Next steps": "ಈಗ ಏನು ಮಾಡಬೇಕು",
+      "Warning signs": "ಯಾವಾಗ ತಕ್ಷಣ ಕ್ರಮ ತೆಗೆದುಕೊಳ್ಳಬೇಕು",
+      "Red flags": "ಯಾವಾಗ ತಕ್ಷಣ ಕ್ರಮ ತೆಗೆದುಕೊಳ್ಳಬೇಕು",
+      "When to see doctor": "ಯಾವಾಗ ಹೆಚ್ಚುವರಿ ಸಹಾಯ ಪಡೆಯಬೇಕು",
+      "Desi ilaaj": "ಮನೆಯ ಸಹಾಯ",
+      "Home remedies": "ಮನೆಯ ಉಪಾಯಗಳು",
+    },
+    malayalam: {
+      Assessment: "മനസ്സിലായ കാര്യം",
+      "Next steps": "ഇപ്പോൾ എന്ത് ചെയ്യണം",
+      "Warning signs": "എപ്പോൾ ഉടൻ നടപടി എടുക്കണം",
+      "Red flags": "എപ്പോൾ ഉടൻ നടപടി എടുക്കണം",
+      "When to see doctor": "എപ്പോൾ കൂടുതൽ സഹായം തേടണം",
+      "Desi ilaaj": "വീട്ടുവൈദ്യ സഹായം",
+      "Home remedies": "വീട്ടുവൈദ്യങ്ങൾ",
+    },
+    odia: {
+      Assessment: "ବୁଝା ଯାଇଥିବା କଥା",
+      "Next steps": "ଏବେ କଣ କରିବେ",
+      "Warning signs": "କେବେ ତୁରନ୍ତ ପଦକ୍ଷେପ ନେବେ",
+      "Red flags": "କେବେ ତୁରନ୍ତ ପଦକ୍ଷେପ ନେବେ",
+      "When to see doctor": "କେବେ ଅଧିକ ସହାୟତା ନେବେ",
+      "Desi ilaaj": "ଘରୋଇ ସହାୟତା",
+      "Home remedies": "ଘରୋଇ ଉପାୟ",
     },
   };
 
@@ -180,10 +287,6 @@ function detectLanguageForTTS(text) {
   const src = String(text || "").trim();
   if (!src) return "hinglish";
 
-  if (/[\u0900-\u097F]/.test(src)) {
-    if (/\b(आहे|नाही|काय|कसे)\b/.test(src)) return "marathi";
-    return "hindi";
-  }
   if (/[\u0980-\u09FF]/.test(src)) return "bengali";
   if (/[\u0B80-\u0BFF]/.test(src)) return "tamil";
   if (/[\u0C00-\u0C7F]/.test(src)) return "telugu";
@@ -191,17 +294,65 @@ function detectLanguageForTTS(text) {
   if (/[\u0D00-\u0D7F]/.test(src)) return "malayalam";
   if (/[\u0A80-\u0AFF]/.test(src)) return "gujarati";
   if (/[\u0A00-\u0A7F]/.test(src)) return "punjabi";
+  if (/[\u0B00-\u0B7F]/.test(src)) return "odia";
+  if (/[\u0900-\u097F]/.test(src)) {
+    if (/\b(आहे|नाही|काय|कसे|माझे|तुमचे|बरं|बरंय|ताप|डोके|पोट)\b/.test(src)) return "marathi";
+    return "hindi";
+  }
 
   const lower = src.toLowerCase();
+
+  const bengaliWords = [
+    "ami", "amar", "tumi", "apni", "kemon", "acho", "achen", "bhalo", "jor", "byatha", "oshudh", "daktar",
+  ];
+  const gujaratiWords = [
+    "mane", "tamne", "chhe", "che", "nathi", "shu", "kem", "dava", "tabiyat", "taav",
+  ];
+  const punjabiWords = [
+    "mainu", "tusi", "kiven", "theek", "haal", "bukhar", "dard", "dawai",
+  ];
+  const marathiWords = [
+    "mala", "tumhi", "aahe", "ahe", "nahi", "kaay", "kay", "taap", "doka", "aushadh",
+  ];
+  const tamilWords = [
+    "enakku", "irukku", "illa", "enna", "kaichal", "vali", "marundhu",
+  ];
+  const teluguWords = [
+    "naaku", "undi", "ledu", "jvaram", "noppi", "mandhu",
+  ];
+  const kannadaWords = [
+    "nanage", "ide", "illa", "jwara", "novu", "aushadhi",
+  ];
+  const malayalamWords = [
+    "enikku", "undo", "vedana", "jwaram", "marunnu",
+  ];
+  const odiaWords = [
+    "mote", "achhi", "achi", "jwara", "byatha", "ousadha",
+  ];
   const hindiWords = [
     "hai", "kya", "kaise", "mujhe", "mera", "kar", "karo",
     "samjha", "batao", "nahi", "acha", "dard", "bukhar", "dawai", "ilaaj",
   ];
-  const hintCount = hindiWords.reduce(
-    (n, w) => (new RegExp(`\\b${w}\\b`, "i").test(lower) ? n + 1 : n),
-    0
-  );
-  if (hintCount >= 2) return "hinglish";
+
+  const countMatches = (words) =>
+    words.reduce((n, w) => (new RegExp(`\\b${w}\\b`, "i").test(lower) ? n + 1 : n), 0);
+
+  const scores = {
+    bengali: countMatches(bengaliWords),
+    gujarati: countMatches(gujaratiWords),
+    punjabi: countMatches(punjabiWords),
+    marathi: countMatches(marathiWords),
+    tamil: countMatches(tamilWords),
+    telugu: countMatches(teluguWords),
+    kannada: countMatches(kannadaWords),
+    malayalam: countMatches(malayalamWords),
+    odia: countMatches(odiaWords),
+    hinglish: countMatches(hindiWords),
+  };
+
+  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+  if (best && best[1] >= 2) return best[0];
+
   return "english";
 }
 
@@ -231,6 +382,12 @@ function getSpeechRecognitionLang(pref) {
       return "mr-IN";
     case "punjabi":
       return "pa-IN";
+    case "kannada":
+      return "kn-IN";
+    case "malayalam":
+      return "ml-IN";
+    case "odia":
+      return "or-IN";
     default:
       return "en-IN";
   }
@@ -273,7 +430,15 @@ function pickBestBrowserVoice(lang) {
                 ? ["te-IN", "te"]
                 : normalized === "gujarati"
                   ? ["gu-IN", "gu"]
-                  : ["en-IN", "en-GB", "en-US", "en"];
+                  : normalized === "punjabi"
+                    ? ["pa-IN", "pa"]
+                    : normalized === "kannada"
+                      ? ["kn-IN", "kn"]
+                      : normalized === "malayalam"
+                        ? ["ml-IN", "ml"]
+                        : normalized === "odia"
+                          ? ["or-IN", "or"]
+                          : ["en-IN", "en-GB", "en-US", "en"];
 
   for (const target of targets) {
     const v = voices.find((x) => String(x.lang || "").toLowerCase() === target.toLowerCase());
@@ -567,7 +732,7 @@ function ChatBubble({ m, onSpeak, onFeedback, speakingId, speakLoading, screen, 
 
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => onFeedback(m.id, "up")}
+              onClick={() => onFeedback(m, "up")}
               style={{
                 width: 30, height: 30, borderRadius: 999,
                 border: "1px solid #E5E7EB", background: "#FAFAFA",
@@ -580,7 +745,7 @@ function ChatBubble({ m, onSpeak, onFeedback, speakingId, speakLoading, screen, 
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.9 }}
-              onClick={() => onFeedback(m.id, "down")}
+              onClick={() => onFeedback(m, "down")}
               style={{
                 width: 30, height: 30, borderRadius: 999,
                 border: "1px solid #E5E7EB", background: "#FAFAFA",
@@ -704,6 +869,7 @@ export default function GoDavaiiAI() {
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [speakingId, setSpeakingId] = useState(null);
   const [speakLoading, setSpeakLoading] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
 
   const recognitionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -773,6 +939,7 @@ export default function GoDavaiiAI() {
       text:
         "Namaste! Main GoDavaii AI hoon — aapka personal health assistant.\n\n" +
         "Symptoms, reports, prescriptions, scans, ya voice se baat karein. Main simple language me samjhaunga.",
+      meta: {},
     },
   ]);
 
@@ -808,12 +975,26 @@ export default function GoDavaiiAI() {
           id: makeId(),
           role: "user",
           text: `${autoPrompt}\n📎 ${reportFile.name} (auto-attached)`,
+          meta: {},
         };
         const nextMessages = [...messages, userMsg];
         setMessages(nextMessages);
         setLoading(true);
-        const reply = await askBackendWithFile(autoPrompt, buildCompactHistory(nextMessages), reportFile);
-        setMessages((prev) => [...prev, { id: makeId(), role: "assistant", text: reply }]);
+
+        const out = await askBackendWithFile(autoPrompt, buildCompactHistory(nextMessages), reportFile);
+        setCurrentSessionId(out?.sessionId || null);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: makeId(),
+            role: "assistant",
+            text: out.reply,
+            meta: {
+              ...(out.meta || {}),
+              sessionId: out.sessionId || null,
+            },
+          },
+        ]);
       } catch (e) {
         setMessages((prev) => [
           ...prev,
@@ -824,6 +1005,7 @@ export default function GoDavaiiAI() {
               `Assessment:\n- Auto analysis failed: ${getApiErrorMessage(e)}\n\n` +
               `Next steps:\n- Manually attach the report and retry.\n\n` +
               `Warning signs:\n- For severe symptoms, visit ER immediately.`,
+            meta: {},
           },
         ]);
       } finally {
@@ -1043,15 +1225,26 @@ export default function GoDavaiiAI() {
     run();
   }, [messages, replyLanguage]);
 
-  async function submitFeedback(msgId, rating, reason = "") {
+  async function submitFeedback(messageObj, rating, reason = "") {
     try {
+      const assistantIndex = messages.findIndex((m) => m.id === messageObj?.id);
+      const previousUser = assistantIndex > 0
+        ? [...messages.slice(0, assistantIndex)].reverse().find((m) => m.role === "user")
+        : null;
+
       await axios.post(
         `${API}/api/ai/feedback`,
         {
+          sessionId: messageObj?.meta?.sessionId || currentSessionId || null,
           rating,
           reason,
           queryType: focus,
           language: replyLanguage,
+          aiSource: messageObj?.meta?.aiSource || "gpt-mini",
+          complexity: messageObj?.meta?.complexity || "GREEN",
+          confidence: Number(messageObj?.meta?.confidence || 0),
+          responsePreview: String(messageObj?.text || "").slice(0, 500),
+          userQueryPreview: String(previousUser?.text || "").slice(0, 300),
         },
         { timeout: 5000, headers: getAuthHeaders() }
       );
@@ -1293,13 +1486,25 @@ export default function GoDavaiiAI() {
       try {
         const r = await axios.post(url, payload, { timeout: 25000, headers });
         const t = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
-        if (String(t).trim()) return t;
+        if (String(t).trim()) {
+          return {
+            reply: t,
+            sessionId: r?.data?.sessionId || null,
+            context: r?.data?.context || {},
+            meta: r?.data?.meta || {},
+          };
+        }
       } catch (err) {
         console.error("Chat AI failed:", url, getApiErrorMessage(err));
       }
     }
 
-    return fallbackReply(messageText, focus, whoFor);
+    return {
+      reply: fallbackReply(messageText, focus, whoFor),
+      sessionId: null,
+      context: {},
+      meta: {},
+    };
   }
 
   async function askBackendWithFile(messageText, history, file) {
@@ -1319,7 +1524,14 @@ export default function GoDavaiiAI() {
       try {
         const r = await axios.post(url, fd, { timeout: FILE_ANALYZE_TIMEOUT_MS, headers });
         const t = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
-        if (String(t).trim()) return t;
+        if (String(t).trim()) {
+          return {
+            reply: t,
+            sessionId: r?.data?.sessionId || null,
+            parsed: r?.data?.parsed || {},
+            meta: r?.data?.meta || {},
+          };
+        }
         lastErr = new Error("Empty reply");
       } catch (err) {
         lastErr = err;
@@ -1332,7 +1544,12 @@ export default function GoDavaiiAI() {
       }
     }
 
-    return `File analysis issue: ${getApiErrorMessage(lastErr)}\n\nRetry once, or upload a cleaner report PDF/image.`;
+    return {
+      reply: `File analysis issue: ${getApiErrorMessage(lastErr)}\n\nRetry once, or upload a cleaner report PDF/image.`,
+      sessionId: null,
+      parsed: {},
+      meta: {},
+    };
   }
 
   async function fetchBookingReportAsFile(bookingId) {
@@ -1433,7 +1650,7 @@ export default function GoDavaiiAI() {
       ? `${msg || "(file uploaded)"}\n📎 ${activeFile.name}${!attachedFile ? " (auto-attached)" : ""}`
       : msg;
 
-    const nextMessages = [...messages, { id: makeId(), role: "user", text: userBubbleText }];
+    const nextMessages = [...messages, { id: makeId(), role: "user", text: userBubbleText, meta: {} }];
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
@@ -1441,11 +1658,25 @@ export default function GoDavaiiAI() {
     if (textareaRef.current) textareaRef.current.style.height = "24px";
 
     try {
-      const reply = activeFile
+      const out = activeFile
         ? await askBackendWithFile(msg, buildCompactHistory(nextMessages), activeFile)
         : await askBackend(msg, buildCompactHistory(nextMessages));
 
-      setMessages((prev) => [...prev, { id: makeId(), role: "assistant", text: reply }]);
+      if (out?.sessionId) setCurrentSessionId(out.sessionId);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: makeId(),
+          role: "assistant",
+          text: out.reply,
+          meta: {
+            ...(out.meta || {}),
+            sessionId: out.sessionId || currentSessionId || null,
+          },
+        },
+      ]);
+
       if (activeFile) setAttachedFile(null);
     } finally {
       setLoading(false);
@@ -1475,12 +1706,23 @@ export default function GoDavaiiAI() {
         headers: getAuthHeaders(),
       });
       if (data?.messages?.length) {
-        setMessages(data.messages.map((m, i) => ({
-          id: `hist-${i}`,
-          role: m.role,
-          text: m.text,
-        })));
+        setMessages(
+          data.messages.map((m, i) => ({
+            id: `hist-${i}`,
+            role: m.role,
+            text: m.text,
+            meta: m.role === "assistant"
+              ? {
+                  aiSource: m.aiSource || "",
+                  complexity: m.complexity || "",
+                  confidence: typeof m.confidence === "number" ? m.confidence : 0,
+                  sessionId: sessionId || null,
+                }
+              : {},
+          }))
+        );
       }
+      setCurrentSessionId(sessionId || null);
       setSidebarOpen(false);
     } catch {
       // ignore
@@ -1493,8 +1735,10 @@ export default function GoDavaiiAI() {
         id: makeId(),
         role: "assistant",
         text: "Namaste! Aap symptoms, reports, prescriptions, ya scan upload karke seedha puch sakte ho.",
+        meta: {},
       },
     ]);
+    setCurrentSessionId(null);
     setSidebarOpen(false);
   }
 
