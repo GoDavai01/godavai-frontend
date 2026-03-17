@@ -18,6 +18,7 @@
 // ✅ FIX ONLY: disclaimer text softened and made less doctor-centric
 // ✅ FIX ONLY: TTS preference respected properly
 // ✅ FIX ONLY: transcriptMode added for voice transcription
+// ✅ FIX ONLY: TTS cache + prefetch + longer timeout for fast Listen UX
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -715,6 +716,8 @@ export default function GoDavaiiAI() {
   const textareaRef = useRef(null);
   const msgIdCounter = useRef(1);
   const autoAnalyzeHandledRef = useRef("");
+  const ttsCacheRef = useRef(new Map());
+  const ttsPendingRef = useRef(new Map());
 
   const makeId = () => `msg-${msgIdCounter.current++}`;
 
@@ -878,27 +881,20 @@ export default function GoDavaiiAI() {
     setSpeakLoading(true);
 
     const text = cleanAssistantText(msg.text);
-
     const lang =
       replyLanguage && replyLanguage !== "auto"
         ? replyLanguage
         : detectLanguageForTTS(text);
 
-    try {
-      const { data } = await axios.post(
-        `${API}/api/ai/assistant/tts`,
-        {
-          text: text.slice(0, 2600),
-          language: lang,
-          replyLanguagePreference: replyLanguage || "auto",
-        },
-        { timeout: 30000, headers: getAuthHeaders() }
-      );
+    const cacheKey = `${lang}::${text}`;
+    const cached = ttsCacheRef.current.get(cacheKey);
 
-      if (data?.audioBase64) {
-        const mimeType = String(data?.mimeType || "audio/mpeg");
-        const audio = new Audio(`data:${mimeType};base64,${data.audioBase64}`);
+    try {
+      if (cached?.audioBase64) {
+        const mimeType = String(cached?.mimeType || "audio/mpeg");
+        const audio = new Audio(`data:${mimeType};base64,${cached.audioBase64}`);
         audioRef.current = audio;
+
         audio.onended = () => {
           setSpeakingId(null);
           setSpeakLoading(false);
@@ -909,17 +905,57 @@ export default function GoDavaiiAI() {
           setSpeakLoading(false);
           audioRef.current = null;
         };
+
         setSpeakLoading(false);
-        try {
-          await audio.play();
-        } catch {
+        await audio.play();
+        return;
+      }
+
+      let pending = ttsPendingRef.current.get(cacheKey);
+
+      if (!pending) {
+        pending = axios.post(
+          `${API}/api/ai/assistant/tts`,
+          {
+            text: text.slice(0, 3200),
+            language: lang,
+            replyLanguagePreference: replyLanguage || "auto",
+          },
+          { timeout: 65000, headers: getAuthHeaders() }
+        );
+        ttsPendingRef.current.set(cacheKey, pending);
+      }
+
+      const { data } = await pending;
+      ttsPendingRef.current.delete(cacheKey);
+
+      if (data?.audioBase64) {
+        ttsCacheRef.current.set(cacheKey, {
+          audioBase64: data.audioBase64,
+          mimeType: data.mimeType || "audio/mpeg",
+        });
+
+        const mimeType = String(data?.mimeType || "audio/mpeg");
+        const audio = new Audio(`data:${mimeType};base64,${data.audioBase64}`);
+        audioRef.current = audio;
+
+        audio.onended = () => {
           setSpeakingId(null);
           setSpeakLoading(false);
           audioRef.current = null;
-        }
+        };
+        audio.onerror = () => {
+          setSpeakingId(null);
+          setSpeakLoading(false);
+          audioRef.current = null;
+        };
+
+        setSpeakLoading(false);
+        await audio.play();
         return;
       }
     } catch (err) {
+      ttsPendingRef.current.delete(cacheKey);
       console.error(
         "TTS API failed:",
         err?.response?.status,
@@ -956,6 +992,56 @@ export default function GoDavaiiAI() {
       setSpeakingId(null);
     }
   }, [speakingId, replyLanguage]);
+
+  useEffect(() => {
+    const last = [...messages].reverse().find((m) => m.role === "assistant");
+    if (!last?.text) return;
+
+    const text = cleanAssistantText(last.text);
+    if (!text || text.length < 20) return;
+
+    const lang =
+      replyLanguage && replyLanguage !== "auto"
+        ? replyLanguage
+        : detectLanguageForTTS(text);
+
+    const cacheKey = `${lang}::${text}`;
+
+    if (ttsCacheRef.current.has(cacheKey) || ttsPendingRef.current.has(cacheKey)) {
+      return;
+    }
+
+    const run = async () => {
+      try {
+        const promise = axios.post(
+          `${API}/api/ai/assistant/tts`,
+          {
+            text: text.slice(0, 3200),
+            language: lang,
+            replyLanguagePreference: replyLanguage || "auto",
+          },
+          { timeout: 65000, headers: getAuthHeaders() }
+        );
+
+        ttsPendingRef.current.set(cacheKey, promise);
+
+        const { data } = await promise;
+        ttsPendingRef.current.delete(cacheKey);
+
+        if (data?.audioBase64) {
+          ttsCacheRef.current.set(cacheKey, {
+            audioBase64: data.audioBase64,
+            mimeType: data.mimeType || "audio/mpeg",
+          });
+        }
+      } catch (err) {
+        ttsPendingRef.current.delete(cacheKey);
+        console.error("TTS prefetch failed:", err?.message || err);
+      }
+    };
+
+    run();
+  }, [messages, replyLanguage]);
 
   async function submitFeedback(msgId, rating, reason = "") {
     try {
