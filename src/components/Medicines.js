@@ -40,6 +40,41 @@ const ACC = "#00D97E";
 const bottomDock = (hasCart) =>
   `calc(${hasCart ? 144 : 72}px + env(safe-area-inset-bottom,0px) + 12px)`;
 
+function getDoctorPrescriptionCacheKey(prescriptionId) {
+  return prescriptionId ? `doctorPrescription:${prescriptionId}` : "";
+}
+
+function normalizeDoctorPrescriptionPayload(prescription = null, cartDraft = null) {
+  if (!prescription) return null;
+  return {
+    ...prescription,
+    cartDraft: prescription.cartDraft || cartDraft || null,
+  };
+}
+
+function readCachedDoctorPrescription(prescriptionId) {
+  if (!prescriptionId || typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage?.getItem(getDoctorPrescriptionCacheKey(prescriptionId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return String(parsed?._id || "") === String(prescriptionId) ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function storeCachedDoctorPrescription(prescription) {
+  const prescriptionId = String(prescription?._id || "").trim();
+  if (!prescriptionId || typeof window === "undefined") return;
+  try {
+    window.sessionStorage?.setItem(
+      getDoctorPrescriptionCacheKey(prescriptionId),
+      JSON.stringify(normalizeDoctorPrescriptionPayload(prescription))
+    );
+  } catch (_) {}
+}
+
 /* ── MRP display helper ─────────────────────────── */
 function hasValidMrp(med) {
   const mrp = Number(med?.mrp);
@@ -372,6 +407,11 @@ export default function Medicines() {
     () => (new URLSearchParams(routerLocation.search).get("prescriptionId") || "").trim(),
     [routerLocation.search]
   );
+  const routedDoctorPrescription = useMemo(() => {
+    const candidate = routerLocation.state?.doctorPrescription || null;
+    if (!candidate) return null;
+    return String(candidate?._id || "") === String(prescriptionId) ? normalizeDoctorPrescriptionPayload(candidate) : null;
+  }, [prescriptionId, routerLocation.state]);
 
   // Customer default is marketplace (no pharmacyId)
   const isMarketplace = !pharmacyId;
@@ -401,12 +441,21 @@ export default function Medicines() {
   }, [initialQuery]);
 
   useEffect(() => {
+    if (!routedDoctorPrescription) return;
+    storeCachedDoctorPrescription(routedDoctorPrescription);
+    setDoctorPrescription((current) =>
+      String(current?._id || "") === String(routedDoctorPrescription?._id || "") ? current : routedDoctorPrescription
+    );
+  }, [routedDoctorPrescription]);
+
+  useEffect(() => {
     let mounted = true;
     const token = getUserAuthToken(authToken);
     const headers = token ? getUserAuthHeaders(token) : undefined;
+    const fallbackPrescription = routedDoctorPrescription || readCachedDoctorPrescription(prescriptionId) || null;
 
     setDoctorPrescriptionMessage("");
-    if (!prescriptionId || !token) {
+    if (!prescriptionId) {
       setDoctorPrescription(null);
       setDoctorPrescriptionLoading(false);
       return () => {
@@ -414,7 +463,22 @@ export default function Medicines() {
       };
     }
 
-    setDoctorPrescriptionLoading(true);
+    if (fallbackPrescription) {
+      setDoctorPrescription(fallbackPrescription);
+      storeCachedDoctorPrescription(fallbackPrescription);
+    }
+
+    if (!token) {
+      setDoctorPrescriptionLoading(false);
+      if (!fallbackPrescription) {
+        setDoctorPrescription(null);
+      }
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setDoctorPrescriptionLoading(!fallbackPrescription);
     (async () => {
       try {
         let res = null;
@@ -425,20 +489,26 @@ export default function Medicines() {
         }
 
         if (!mounted) return;
-        const prescription = res?.data?.prescription
-          ? {
-              ...res.data.prescription,
-              cartDraft: res.data.prescription.cartDraft || res.data.cartDraft || null,
-            }
-          : null;
+        const prescription = normalizeDoctorPrescriptionPayload(res?.data?.prescription, res?.data?.cartDraft);
         setDoctorPrescription(prescription);
         if (!prescription) {
-          setDoctorPrescriptionMessage("Doctor prescription details abhi sync nahi hui hain.");
+          if (fallbackPrescription) {
+            setDoctorPrescription(fallbackPrescription);
+          } else {
+            setDoctorPrescriptionMessage("Doctor prescription details abhi sync nahi hui hain.");
+          }
+        } else {
+          storeCachedDoctorPrescription(prescription);
         }
       } catch (_) {
         if (!mounted) return;
-        setDoctorPrescription(null);
-        setDoctorPrescriptionMessage("Doctor prescription load nahi ho paya. Aap homepage se dobara open karke try kar sakte hain.");
+        if (fallbackPrescription) {
+          setDoctorPrescription(fallbackPrescription);
+          setDoctorPrescriptionMessage("Live prescription sync nahi hui, cached prescription dikha rahe hain.");
+        } else {
+          setDoctorPrescription(null);
+          setDoctorPrescriptionMessage("Doctor prescription load nahi ho paya. Aap homepage se dobara open karke try kar sakte hain.");
+        }
       } finally {
         if (mounted) setDoctorPrescriptionLoading(false);
       }
@@ -447,7 +517,7 @@ export default function Medicines() {
     return () => {
       mounted = false;
     };
-  }, [authToken, prescriptionId]);
+  }, [authToken, prescriptionId, routedDoctorPrescription]);
 
   const doctorPrescriptionSummary = useMemo(
     () => getDoctorPrescriptionCartSummary(doctorPrescription),

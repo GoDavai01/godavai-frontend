@@ -15,6 +15,7 @@
 // ✅ FIX ONLY: owner/name row restored
 // ✅ FIX ONLY: bottom blank space issue fixed by removing body scroll lock
 // ✅ FIX ONLY: better section labels by reply language
+// ✅ FIX ONLY: disclaimer text softened and made less doctor-centric
 // ✅ FIX ONLY: TTS preference respected properly
 // ✅ FIX ONLY: transcriptMode added for voice transcription
 
@@ -113,27 +114,27 @@ function getSectionLabel(sectionKey, lang) {
     hinglish: {
       Assessment: "Samajhi hui baat",
       "Next steps": "Ab kya karein",
-      "Warning signs": "Kab turant doctor ko dikhana hai",
-      "Red flags": "Kab turant doctor ko dikhana hai",
-      "When to see doctor": "Kab doctor ko dikhana hai",
+      "Warning signs": "Kab turant action lena hai",
+      "Red flags": "Kab turant action lena hai",
+      "When to see doctor": "Kab extra help leni hai",
       "Desi ilaaj": "Desi ilaaj",
       "Home remedies": "Gharelu nuskhe",
     },
     hindi: {
       Assessment: "समझी हुई बात",
       "Next steps": "अब क्या करें",
-      "Warning signs": "कब तुरंत डॉक्टर को दिखाना है",
-      "Red flags": "कब तुरंत डॉक्टर को दिखाना है",
-      "When to see doctor": "कब डॉक्टर को दिखाना है",
+      "Warning signs": "कब तुरंत कदम उठाना है",
+      "Red flags": "कब तुरंत कदम उठाना है",
+      "When to see doctor": "कब अतिरिक्त मदद लेनी है",
       "Desi ilaaj": "देसी इलाज",
       "Home remedies": "घरेलू नुस्खे",
     },
     english: {
       Assessment: "Assessment",
-      "Next steps": "Next steps",
-      "Warning signs": "Warning signs",
-      "Red flags": "Warning signs",
-      "When to see doctor": "When to see doctor",
+      "Next steps": "What to do now",
+      "Warning signs": "When to act urgently",
+      "Red flags": "When to act urgently",
+      "When to see doctor": "When to get medical help",
       "Desi ilaaj": "Home support",
       "Home remedies": "Home remedies",
     },
@@ -154,7 +155,7 @@ function buildCompactHistory(messages) {
 }
 
 function fallbackReply(message, focus, whoFor) {
-  const caution = "Ye preliminary medical guidance hai. Emergency me turant hospital/ER jao.";
+  const caution = "Health AI reference ke liye hai. Emergency me turant medical help lo.";
   const identity = whoFor === "family" ? "family member" : whoFor === "new" ? "new profile" : "you";
   return `${caution}\n\nFor ${identity}: Age, symptoms, duration, fever, existing diseases, current medicines share karein.`;
 }
@@ -919,11 +920,11 @@ export default function GoDavaiiAI() {
       }
     } catch (err) {
       console.error(
-  "TTS API failed:",
-  err?.response?.status,
-  err?.response?.data,
-  err?.message || err
-);
+        "TTS API failed:",
+        err?.response?.status,
+        err?.response?.data,
+        err?.message || err
+      );
     }
 
     setSpeakLoading(false);
@@ -1586,7 +1587,7 @@ export default function GoDavaiiAI() {
         <div style={{ marginTop: 9, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <SummaryPill tone="danger">
             <AlertTriangle style={{ width: 12, height: 12 }} />
-            AI guide hai. Emergency me hospital/ambulance call karein.
+            Health AI reference ke liye hai. Emergency me turant medical help lo.
           </SummaryPill>
 
           <motion.button

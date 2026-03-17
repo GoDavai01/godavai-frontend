@@ -1711,6 +1711,22 @@ export default function Home() {
     setViewingDoctorPrescription(doctorPrescription);
   }, []);
 
+  const openDoctorPrescriptionMedicines = useCallback(
+    (doctorPrescription) => {
+      const summary = getDoctorPrescriptionCartSummary(doctorPrescription);
+      if (!summary.prescriptionId) return;
+      try {
+        if (typeof window !== "undefined") {
+          window.sessionStorage?.setItem(`doctorPrescription:${summary.prescriptionId}`, JSON.stringify(doctorPrescription));
+        }
+      } catch (_) {}
+      navigate(`/all-medicines?prescriptionId=${summary.prescriptionId}`, {
+        state: { doctorPrescription },
+      });
+    },
+    [navigate]
+  );
+
   const handleConflictSwitch = () => {
     const med = conflictSheet.pendingMed;
     if (clearCartAndPharmacy) clearCartAndPharmacy();
@@ -2095,7 +2111,7 @@ export default function Home() {
 
                 <motion.button
                   whileTap={{ scale: 0.96 }}
-                  onClick={() => navigate(`/all-medicines?prescriptionId=${featuredDoctorPrescriptionSummary.prescriptionId}`)}
+                  onClick={() => openDoctorPrescriptionMedicines(featuredDoctorPrescriptionConsult?.doctorPrescription)}
                   style={{
                     height: 38,
                     padding: "0 14px",
@@ -2442,7 +2458,7 @@ export default function Home() {
 
                           <motion.button
                             whileTap={{ scale: 0.95 }}
-                            onClick={() => navigate(`/all-medicines?prescriptionId=${doctorRxSummary.prescriptionId}`)}
+                            onClick={() => openDoctorPrescriptionMedicines(c.doctorPrescription)}
                             style={{
                               height: 34,
                               padding: "0 12px",
