@@ -888,7 +888,7 @@ export default function GoDavaiiAI() {
       const { data } = await axios.post(
         `${API}/api/ai/assistant/tts`,
         {
-          text: text.slice(0, 3000),
+          text: text.slice(0, 2600),
           language: lang,
           replyLanguagePreference: replyLanguage || "auto",
         },
@@ -896,7 +896,8 @@ export default function GoDavaiiAI() {
       );
 
       if (data?.audioBase64) {
-        const audio = new Audio(`data:audio/mp3;base64,${data.audioBase64}`);
+        const mimeType = String(data?.mimeType || "audio/mpeg");
+        const audio = new Audio(`data:${mimeType};base64,${data.audioBase64}`);
         audioRef.current = audio;
         audio.onended = () => {
           setSpeakingId(null);
