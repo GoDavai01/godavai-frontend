@@ -1439,10 +1439,31 @@ export default function GoDavaiiAI() {
       new Promise((resolve) => {
         if (gen !== speakGenRef.current) { resolve(); return; }
         const audio = new Audio(`data:${mime};base64,${base64}`);
+        audio.volume = 1;
         audioRef.current = audio;
-        audio.onended = () => { audioRef.current = null; resolve(); };
-        audio.onerror = () => { audioRef.current = null; resolve(); };
-        audio.play().catch(() => resolve());
+
+        let settled = false;
+        const done = () => { if (settled) return; settled = true; audioRef.current = null; resolve(); };
+
+        audio.onended = done;
+        audio.onerror = done;
+
+        // Safety: if audio gets stuck (no sound, no events), force-resolve after duration + 3s
+        audio.onloadedmetadata = () => {
+          const safetyMs = Math.max((audio.duration || 30) * 1000 + 3000, 5000);
+          setTimeout(() => {
+            if (!settled) {
+              console.warn("[TTS] Audio stuck — force-resolving chunk");
+              try { audio.pause(); } catch (_) {}
+              done();
+            }
+          }, safetyMs);
+        };
+
+        // Fallback if metadata never loads
+        setTimeout(() => { if (!settled) { console.warn("[TTS] Audio never loaded — skipping"); done(); } }, 35000);
+
+        audio.play().catch(() => done());
       });
 
     // Get audio for a chunk — from cache, pending prefetch, or fresh API call
