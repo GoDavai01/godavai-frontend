@@ -1163,7 +1163,7 @@ export default function GoDavaiiAI() {
 
     if (ttsCacheRef.current.has(cacheKey) || ttsPendingRef.current.has(cacheKey)) return;
 
-    console.log("[TTS eager-prefetch] Firing immediately for:", text.slice(0, 40), "...");
+    console.log("[TTS eager-prefetch] Firing for:", text.slice(0, 40), "... key:", cacheKey.slice(0, 50));
 
     const promise = axios.post(
       `${API}/api/ai/assistant/tts`,
@@ -1189,7 +1189,26 @@ export default function GoDavaiiAI() {
       })
       .catch((err) => {
         ttsPendingRef.current.delete(cacheKey);
-        console.error("[TTS eager-prefetch] Failed:", err?.message);
+        console.error("[TTS eager-prefetch] Failed:", err?.message, "— retrying in 2s");
+        // Retry once after 2s
+        setTimeout(() => {
+          if (ttsCacheRef.current.has(cacheKey) || ttsPendingRef.current.has(cacheKey)) return;
+          const retry = axios.post(
+            `${API}/api/ai/assistant/tts`,
+            { text: text.slice(0, 2000), language: lang, replyLanguagePreference: replyLanguage || "auto" },
+            { timeout: 45000, headers: getAuthHeaders() }
+          );
+          ttsPendingRef.current.set(cacheKey, retry);
+          retry
+            .then(({ data }) => {
+              ttsPendingRef.current.delete(cacheKey);
+              if (data?.audioBase64) {
+                console.log("[TTS eager-prefetch] Retry succeeded — cached");
+                ttsCacheRef.current.set(cacheKey, { audioBase64: data.audioBase64, mimeType: data.mimeType || "audio/mpeg" });
+              }
+            })
+            .catch(() => ttsPendingRef.current.delete(cacheKey));
+        }, 2000);
       });
   }, [replyLanguage]);
 
@@ -1411,43 +1430,29 @@ export default function GoDavaiiAI() {
     const cacheKey = `${lang}::${text}`;
     const cached = ttsCacheRef.current.get(cacheKey);
 
-    // Helper: create Audio from base64, using blob URL for speed on mobile
-    const makeAudio = (base64, mime) => {
-      try {
-        const bin = atob(base64);
-        const arr = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        return new Audio(URL.createObjectURL(new Blob([arr], { type: mime })));
-      } catch (_) {
-        return new Audio(`data:${mime};base64,${base64}`);
-      }
-    };
-
-    const playAudio = async (audio) => {
+    const playAudio = async (base64, mime) => {
       if (gen !== speakGenRef.current) return;
+      const audio = new Audio(`data:${mime};base64,${base64}`);
       audioRef.current = audio;
       audio.onended = () => {
         setSpeakingId(null);
         setSpeakLoading(false);
         audioRef.current = null;
       };
-      audio.onerror = () => {
+      audio.onerror = (e) => {
+        console.error("[TTS] Audio playback error:", e);
         setSpeakingId(null);
         setSpeakLoading(false);
         audioRef.current = null;
       };
       setSpeakLoading(false);
-      try { await audio.play(); } catch (_) { /* interrupted — ignore */ }
+      await audio.play();
     };
 
     try {
       if (cached?.audioBase64) {
-        console.log("[TTS] CACHE HIT — playing instantly");
-        // Use pre-warmed blob URL if prefetch prepared it (instant), else create fresh
-        const audio = cached.blobUrl
-          ? new Audio(cached.blobUrl)
-          : makeAudio(cached.audioBase64, String(cached?.mimeType || "audio/mpeg"));
-        await playAudio(audio);
+        console.log("[TTS] CACHE HIT — playing instantly, key:", cacheKey.slice(0, 50));
+        await playAudio(cached.audioBase64, String(cached?.mimeType || "audio/mpeg"));
         return;
       }
 
@@ -1456,7 +1461,7 @@ export default function GoDavaiiAI() {
       if (pending) {
         console.log("[TTS] Prefetch in progress — waiting for it...");
       } else {
-        console.log("[TTS] CACHE MISS — no prefetch found, making fresh API call");
+        console.log("[TTS] CACHE MISS — key:", cacheKey.slice(0, 50), "cache size:", ttsCacheRef.current.size, "pending:", ttsPendingRef.current.size);
         pending = axios.post(
           `${API}/api/ai/assistant/tts`,
           {
@@ -1480,8 +1485,7 @@ export default function GoDavaiiAI() {
 
         if (gen !== speakGenRef.current) return;
 
-        const audio = makeAudio(data.audioBase64, String(data?.mimeType || "audio/mpeg"));
-        await playAudio(audio);
+        await playAudio(data.audioBase64, String(data?.mimeType || "audio/mpeg"));
         return;
       }
     } catch (err) {
@@ -1567,23 +1571,6 @@ export default function GoDavaiiAI() {
             audioBase64: data.audioBase64,
             mimeType: data.mimeType || "audio/mpeg",
           });
-
-          // Pre-warm: create blob URL now so Listen tap is instant
-          try {
-            const bin = atob(data.audioBase64);
-            const arr = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-            const blob = new Blob([arr], { type: String(data.mimeType || "audio/mpeg") });
-            const warmAudio = new Audio(URL.createObjectURL(blob));
-            warmAudio.preload = "auto";
-            warmAudio.load();
-            // Store blob-ready audio for instant play
-            ttsCacheRef.current.set(cacheKey, {
-              audioBase64: data.audioBase64,
-              mimeType: data.mimeType || "audio/mpeg",
-              blobUrl: warmAudio.src,
-            });
-          } catch (_) { /* blob warm-up failed, base64 fallback is fine */ }
         }
       } catch (err) {
         ttsPendingRef.current.delete(cacheKey);
