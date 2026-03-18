@@ -122,6 +122,24 @@ function cleanAssistantText(text) {
     .replace(/```/g, "");
 }
 
+function splitTextForTTSChunks(text, maxLen = 900) {
+  if (!text || text.length <= maxLen) return [text];
+  const sentences = text.split(/(?<=[.!?।])\s+/);
+  const chunks = [];
+  let current = "";
+  for (const s of sentences) {
+    if (!current) { current = s; continue; }
+    if ((current + " " + s).length <= maxLen) {
+      current += " " + s;
+    } else {
+      if (current.trim()) chunks.push(current.trim());
+      current = s;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks.length ? chunks : [text];
+}
+
 function isStructuredMedicalReply(text) {
   return /\n\s*(Assessment|Next steps|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i.test(
     String(text || "")
@@ -1150,7 +1168,7 @@ export default function GoDavaiiAI() {
     throttledAutoScroll(true);
   }, [stopRevealForMessage, throttledAutoScroll]);
 
-  // Eagerly prefetch TTS audio the moment we have the full text — don't wait for useEffect
+  // Eagerly prefetch TTS audio in parallel chunks the moment full text arrives
   const prefetchTTSForText = useCallback((rawText) => {
     const text = cleanAssistantText(rawText);
     if (!text || text.length < 20) return;
@@ -1159,57 +1177,44 @@ export default function GoDavaiiAI() {
       replyLanguage && replyLanguage !== "auto"
         ? replyLanguage
         : detectLanguageForTTS(text);
-    const cacheKey = `${lang}::${text}`;
+    const masterKey = `${lang}::${text}`;
 
-    if (ttsCacheRef.current.has(cacheKey) || ttsPendingRef.current.has(cacheKey)) return;
+    if (ttsCacheRef.current.has(masterKey)) return;
 
-    console.log("[TTS eager-prefetch] Firing for:", text.slice(0, 40), "... key:", cacheKey.slice(0, 50));
+    const chunks = splitTextForTTSChunks(text, 900);
+    console.log(`[TTS prefetch] ${chunks.length} chunk(s) for:`, text.slice(0, 40), "...");
 
-    const promise = axios.post(
-      `${API}/api/ai/assistant/tts`,
-      {
-        text: text.slice(0, 1200),
-        language: lang,
-        replyLanguagePreference: replyLanguage || "auto",
-      },
-      { timeout: 120000, headers: getAuthHeaders() }
-    );
-    ttsPendingRef.current.set(cacheKey, promise);
+    // Store metadata so handleSpeak knows about chunks
+    ttsCacheRef.current.set(masterKey, { chunked: true, totalChunks: chunks.length });
 
-    promise
-      .then(({ data }) => {
-        ttsPendingRef.current.delete(cacheKey);
-        if (data?.audioBase64) {
-          console.log("[TTS eager-prefetch] DONE — cached for instant play");
-          ttsCacheRef.current.set(cacheKey, {
-            audioBase64: data.audioBase64,
-            mimeType: data.mimeType || "audio/mpeg",
-          });
-        }
-      })
-      .catch((err) => {
-        ttsPendingRef.current.delete(cacheKey);
-        console.error("[TTS eager-prefetch] Failed:", err?.message, "— retrying in 2s");
-        // Retry once after 2s
-        setTimeout(() => {
-          if (ttsCacheRef.current.has(cacheKey) || ttsPendingRef.current.has(cacheKey)) return;
-          const retry = axios.post(
-            `${API}/api/ai/assistant/tts`,
-            { text: text.slice(0, 1200), language: lang, replyLanguagePreference: replyLanguage || "auto" },
-            { timeout: 120000, headers: getAuthHeaders() }
-          );
-          ttsPendingRef.current.set(cacheKey, retry);
-          retry
-            .then(({ data }) => {
-              ttsPendingRef.current.delete(cacheKey);
-              if (data?.audioBase64) {
-                console.log("[TTS eager-prefetch] Retry succeeded — cached");
-                ttsCacheRef.current.set(cacheKey, { audioBase64: data.audioBase64, mimeType: data.mimeType || "audio/mpeg" });
-              }
-            })
-            .catch(() => ttsPendingRef.current.delete(cacheKey));
-        }, 2000);
-      });
+    // Fire ALL chunks in parallel
+    chunks.forEach((chunk, i) => {
+      const chunkKey = `${masterKey}::${i}`;
+      if (ttsCacheRef.current.has(chunkKey) || ttsPendingRef.current.has(chunkKey)) return;
+
+      const promise = axios.post(
+        `${API}/api/ai/assistant/tts`,
+        { text: chunk, language: lang, replyLanguagePreference: replyLanguage || "auto" },
+        { timeout: 120000, headers: getAuthHeaders() }
+      );
+      ttsPendingRef.current.set(chunkKey, promise);
+
+      promise
+        .then(({ data }) => {
+          ttsPendingRef.current.delete(chunkKey);
+          if (data?.audioBase64) {
+            console.log(`[TTS prefetch] Chunk ${i}/${chunks.length} DONE`);
+            ttsCacheRef.current.set(chunkKey, {
+              audioBase64: data.audioBase64,
+              mimeType: data.mimeType || "audio/mpeg",
+            });
+          }
+        })
+        .catch((err) => {
+          ttsPendingRef.current.delete(chunkKey);
+          console.error(`[TTS prefetch] Chunk ${i} failed:`, err?.message);
+        });
+    });
   }, [replyLanguage]);
 
   const appendAssistantMessageWithReveal = useCallback((fullText, meta = {}) => {
@@ -1430,156 +1435,118 @@ export default function GoDavaiiAI() {
     const cacheKey = `${lang}::${text}`;
     const cached = ttsCacheRef.current.get(cacheKey);
 
-    const playAudio = async (base64, mime) => {
-      if (gen !== speakGenRef.current) return;
-      const audio = new Audio(`data:${mime};base64,${base64}`);
-      audioRef.current = audio;
-      audio.onended = () => {
-        setSpeakingId(null);
-        setSpeakLoading(false);
-        audioRef.current = null;
-      };
-      audio.onerror = (e) => {
-        console.error("[TTS] Audio playback error:", e);
-        setSpeakingId(null);
-        setSpeakLoading(false);
-        audioRef.current = null;
-      };
-      setSpeakLoading(false);
-      await audio.play();
+    // Play a single base64 audio clip and return a promise that resolves when it ends
+    const playChunk = (base64, mime) =>
+      new Promise((resolve) => {
+        if (gen !== speakGenRef.current) { resolve(); return; }
+        const audio = new Audio(`data:${mime};base64,${base64}`);
+        audioRef.current = audio;
+        audio.onended = () => { audioRef.current = null; resolve(); };
+        audio.onerror = () => { audioRef.current = null; resolve(); };
+        audio.play().catch(() => resolve());
+      });
+
+    // Get audio for a chunk — from cache, pending prefetch, or fresh API call
+    const getChunkAudio = async (chunkKey, chunkText) => {
+      const c = ttsCacheRef.current.get(chunkKey);
+      if (c?.audioBase64) return c;
+
+      let pending = ttsPendingRef.current.get(chunkKey);
+      if (!pending) {
+        pending = axios.post(
+          `${API}/api/ai/assistant/tts`,
+          { text: chunkText, language: lang, replyLanguagePreference: replyLanguage || "auto" },
+          { timeout: 120000, headers: getAuthHeaders() }
+        );
+        ttsPendingRef.current.set(chunkKey, pending);
+      }
+
+      try {
+        const { data } = await pending;
+        ttsPendingRef.current.delete(chunkKey);
+        if (data?.audioBase64) {
+          const entry = { audioBase64: data.audioBase64, mimeType: data.mimeType || "audio/mpeg" };
+          ttsCacheRef.current.set(chunkKey, entry);
+          return entry;
+        }
+      } catch (err) {
+        ttsPendingRef.current.delete(chunkKey);
+        console.error("[TTS] Chunk fetch failed:", err?.message);
+      }
+      return null;
     };
 
     try {
-      if (cached?.audioBase64) {
-        console.log("[TTS] CACHE HIT — playing instantly, key:", cacheKey.slice(0, 50));
-        await playAudio(cached.audioBase64, String(cached?.mimeType || "audio/mpeg"));
-        return;
-      }
+      const meta = ttsCacheRef.current.get(cacheKey);
 
-      let pending = ttsPendingRef.current.get(cacheKey);
+      if (meta?.chunked) {
+        // Chunked audio — play chunks sequentially
+        const chunks = splitTextForTTSChunks(text, 900);
+        console.log(`[TTS] Playing ${meta.totalChunks} chunks`);
+        setSpeakLoading(false);
 
-      if (pending) {
-        console.log("[TTS] Prefetch in progress — waiting for it...");
-      } else {
-        console.log("[TTS] CACHE MISS — key:", cacheKey.slice(0, 50), "cache size:", ttsCacheRef.current.size, "pending:", ttsPendingRef.current.size);
-        pending = axios.post(
-          `${API}/api/ai/assistant/tts`,
-          {
-            text: text.slice(0, 1200),
-            language: lang,
-            replyLanguagePreference: replyLanguage || "auto",
-          },
-          { timeout: 120000, headers: getAuthHeaders() }
-        );
-        ttsPendingRef.current.set(cacheKey, pending);
-      }
+        for (let i = 0; i < meta.totalChunks; i++) {
+          if (gen !== speakGenRef.current) break;
+          const chunkKey = `${cacheKey}::${i}`;
+          const audio = await getChunkAudio(chunkKey, chunks[i] || "");
+          if (audio?.audioBase64) {
+            await playChunk(audio.audioBase64, String(audio.mimeType || "audio/mpeg"));
+          }
+        }
 
-      const { data } = await pending;
-      ttsPendingRef.current.delete(cacheKey);
-
-      if (data?.audioBase64) {
-        ttsCacheRef.current.set(cacheKey, {
-          audioBase64: data.audioBase64,
-          mimeType: data.mimeType || "audio/mpeg",
-        });
-
-        if (gen !== speakGenRef.current) return;
-
-        await playAudio(data.audioBase64, String(data?.mimeType || "audio/mpeg"));
-        return;
-      }
-    } catch (err) {
-      ttsPendingRef.current.delete(cacheKey);
-      if (gen !== speakGenRef.current) return;
-      console.error(
-        "TTS API failed:",
-        err?.response?.status,
-        err?.response?.data,
-        err?.message || err
-      );
-    }
-
-    setSpeakLoading(false);
-
-    if (lang !== "english") {
-      setSpeakingId(null);
-      return;
-    }
-
-    if (window.speechSynthesis) {
-      try {
-        const voice = pickBestBrowserVoice("english");
-        const u = new SpeechSynthesisUtterance(text);
-        u.rate = 0.94;
-        u.pitch = 1.0;
-        u.lang = "en-IN";
-        if (voice) u.voice = voice;
-
-        u.onend = () => setSpeakingId(null);
-        u.onerror = () => setSpeakingId(null);
-
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(u);
-      } catch {
         setSpeakingId(null);
+        setSpeakLoading(false);
+        audioRef.current = null;
+        return;
       }
-    } else {
+
+      // Legacy single-audio path (for non-chunked cache entries)
+      if (meta?.audioBase64) {
+        console.log("[TTS] CACHE HIT single");
+        setSpeakLoading(false);
+        await playChunk(meta.audioBase64, String(meta.mimeType || "audio/mpeg"));
+        setSpeakingId(null);
+        audioRef.current = null;
+        return;
+      }
+
+      // No prefetch at all — fire chunked prefetch now, then play
+      console.log("[TTS] No prefetch found — firing now");
+      const chunks = splitTextForTTSChunks(text, 900);
+      const masterMeta = { chunked: true, totalChunks: chunks.length };
+      ttsCacheRef.current.set(cacheKey, masterMeta);
+      setSpeakLoading(false);
+
+      for (let i = 0; i < chunks.length; i++) {
+        if (gen !== speakGenRef.current) break;
+        const chunkKey = `${cacheKey}::${i}`;
+        const audio = await getChunkAudio(chunkKey, chunks[i]);
+        if (audio?.audioBase64) {
+          await playChunk(audio.audioBase64, String(audio.mimeType || "audio/mpeg"));
+        }
+      }
+
       setSpeakingId(null);
+      setSpeakLoading(false);
+      audioRef.current = null;
+      return;
+    } catch (err) {
+      console.error("TTS failed:", err?.message || err);
     }
+
+    setSpeakingId(null);
+    setSpeakLoading(false);
   }, [speakingId, replyLanguage]);
 
+  // Backup prefetch via useEffect (in case eager prefetch didn't fire)
   useEffect(() => {
     const last = [...messages]
       .reverse()
       .find((m) => m.role === "assistant" && !(m?.meta?.errorBubble));
-    const text = cleanAssistantText(last?.fullText || last?.text);
-    if (!text || text.length < 20) return;
-
-    const lang =
-      replyLanguage && replyLanguage !== "auto"
-        ? replyLanguage
-        : detectLanguageForTTS(text);
-
-    const cacheKey = `${lang}::${text}`;
-
-    if (ttsCacheRef.current.has(cacheKey) || ttsPendingRef.current.has(cacheKey)) {
-      return;
+    if (last?.fullText || last?.text) {
+      prefetchTTSForText(last.fullText || last.text);
     }
-
-    console.log("[TTS prefetch] Starting for", text.slice(0, 40), "...", "lang:", lang);
-
-    const run = async () => {
-      try {
-        const promise = axios.post(
-          `${API}/api/ai/assistant/tts`,
-          {
-            text: text.slice(0, 1200),
-            language: lang,
-            replyLanguagePreference: replyLanguage || "auto",
-          },
-          { timeout: 120000, headers: getAuthHeaders() }
-        );
-
-        ttsPendingRef.current.set(cacheKey, promise);
-
-        const { data } = await promise;
-        ttsPendingRef.current.delete(cacheKey);
-
-        if (data?.audioBase64) {
-          console.log("[TTS prefetch] DONE — cached, ready for instant play");
-          ttsCacheRef.current.set(cacheKey, {
-            audioBase64: data.audioBase64,
-            mimeType: data.mimeType || "audio/mpeg",
-          });
-        }
-      } catch (err) {
-        ttsPendingRef.current.delete(cacheKey);
-        console.error("TTS prefetch failed:", err?.message || err);
-      }
-    };
-
-    run();
-  }, [messages, replyLanguage]);
+  }, [messages, replyLanguage, prefetchTTSForText]);
 
   async function submitFeedback(messageObj, rating, reason = "") {
     try {
