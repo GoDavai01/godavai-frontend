@@ -1364,8 +1364,10 @@ export default function GoDavaiiAI() {
 
     try {
       if (cached?.audioBase64) {
-        const mimeType = String(cached?.mimeType || "audio/mpeg");
-        const audio = new Audio(`data:${mimeType};base64,${cached.audioBase64}`);
+        // Use pre-decoded audio if available (instant playback), else create new
+        const audio = cached.preloadedAudio
+          ? (() => { cached.preloadedAudio.currentTime = 0; return cached.preloadedAudio; })()
+          : new Audio(`data:${String(cached?.mimeType || "audio/mpeg")};base64,${cached.audioBase64}`);
         audioRef.current = audio;
 
         audio.onended = () => {
@@ -1403,13 +1405,13 @@ export default function GoDavaiiAI() {
       ttsPendingRef.current.delete(cacheKey);
 
       if (data?.audioBase64) {
-        ttsCacheRef.current.set(cacheKey, {
-          audioBase64: data.audioBase64,
-          mimeType: data.mimeType || "audio/mpeg",
-        });
-
         const mimeType = String(data?.mimeType || "audio/mpeg");
         const audio = new Audio(`data:${mimeType};base64,${data.audioBase64}`);
+        ttsCacheRef.current.set(cacheKey, {
+          audioBase64: data.audioBase64,
+          mimeType,
+          preloadedAudio: audio,
+        });
         audioRef.current = audio;
 
         audio.onended = () => {
@@ -1502,9 +1504,16 @@ export default function GoDavaiiAI() {
         ttsPendingRef.current.delete(cacheKey);
 
         if (data?.audioBase64) {
+          const mimeType = String(data.mimeType || "audio/mpeg");
+          // Pre-decode audio so Listen tap is instant
+          const preloadedAudio = new Audio(`data:${mimeType};base64,${data.audioBase64}`);
+          preloadedAudio.preload = "auto";
+          preloadedAudio.load();
+
           ttsCacheRef.current.set(cacheKey, {
             audioBase64: data.audioBase64,
-            mimeType: data.mimeType || "audio/mpeg",
+            mimeType,
+            preloadedAudio,
           });
         }
       } catch (err) {
