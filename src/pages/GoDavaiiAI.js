@@ -24,6 +24,10 @@
 // ✅ NEW FIX: display language detection improved for Marathi / Odia and broader script handling
 // ✅ NEW FIX: feedback payload now sends sessionId, aiSource, complexity, confidence, responsePreview, userQueryPreview
 // ✅ NEW FIX: assistant meta/sessionId preserved from backend chat + analyze-file responses
+// ✅ NEW FIX: progressive premium reveal for assistant replies
+// ✅ NEW FIX: honest timeout/error bubbles + retry CTA
+// ✅ NEW FIX: "Show full" support during reveal
+// ✅ NEW FIX: TTS always uses final full assistant text
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -41,6 +45,7 @@ import {
   Paperclip,
   Pill,
   Plus,
+  RefreshCcw,
   ScanSearch,
   Send,
   Settings2,
@@ -111,6 +116,70 @@ function cleanAssistantText(text) {
     .replace(/__/g, "")
     .replace(/```[a-z]*\n?/gi, "")
     .replace(/```/g, "");
+}
+
+function isStructuredMedicalReply(text) {
+  return /\n\s*(Assessment|Next steps|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i.test(
+    String(text || "")
+  );
+}
+
+function chunkTextForReveal(text) {
+  const src = String(text || "");
+  if (!src.trim()) return [];
+
+  const structured = isStructuredMedicalReply(src);
+  const words = src.match(/\S+\s*/g) || [];
+
+  const chunks = [];
+  let current = "";
+
+  for (let i = 0; i < words.length; i += 1) {
+    const w = words[i];
+    current += w;
+
+    const trimmed = w.trim();
+    const endsPause = /[.!?]\)?$/.test(trimmed);
+    const endsSoftPause = /[,;:]$/.test(trimmed);
+    const nextRaw = words[i + 1]?.trim?.() || "";
+    const nextIsHeading =
+      /^(Assessment|Next steps|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):$/i.test(
+        nextRaw
+      );
+
+    const chunkSize = structured ? 3 : 5;
+    const shouldPush =
+      ((i + 1) % chunkSize === 0) ||
+      endsPause ||
+      endsSoftPause ||
+      nextIsHeading ||
+      i === words.length - 1;
+
+    if (shouldPush) {
+      let delay = 26;
+      if (structured && /(Assessment:|Next steps:|Warning signs:|Red flags:|When to see doctor:|Desi ilaaj:|Home remedies:)/i.test(current)) {
+        delay = 170;
+      } else if (endsPause) {
+        delay = 145;
+      } else if (endsSoftPause) {
+        delay = 85;
+      } else if (trimmed.length <= 2) {
+        delay = 18;
+      }
+
+      chunks.push({
+        text: current,
+        delay,
+      });
+      current = "";
+    }
+  }
+
+  if (current) {
+    chunks.push({ text: current, delay: 26 });
+  }
+
+  return chunks;
 }
 
 function getDisplayReplyLanguage(preferred, text = "") {
@@ -258,7 +327,7 @@ function getSectionLabel(sectionKey, lang) {
 function buildCompactHistory(messages) {
   return messages.slice(-14).map((m) => ({
     role: m.role,
-    text: m.text || "",
+    text: m.fullText || m.text || "",
   }));
 }
 
@@ -488,6 +557,19 @@ function getSafeBottomPadding() {
   return "calc(env(safe-area-inset-bottom, 0px) + 10px)";
 }
 
+function createAssistantMessage({ id, text, meta = {}, isStreaming = false }) {
+  const full = String(text || "");
+  return {
+    id,
+    role: "assistant",
+    text: isStreaming ? "" : full,
+    fullText: full,
+    isStreaming,
+    streamDone: !isStreaming,
+    meta,
+  };
+}
+
 function SummaryPill({ children, tone = "default" }) {
   const styleMap = {
     default: {
@@ -628,10 +710,25 @@ function FormatReply({ text, screen, uiLang }) {
 }
 
 /* ── Message bubbles ──────────────────────────────────────── */
-function ChatBubble({ m, onSpeak, onFeedback, speakingId, speakLoading, screen, uiLang }) {
+function ChatBubble({
+  m,
+  onSpeak,
+  onFeedback,
+  onShowFull,
+  onRetry,
+  speakingId,
+  speakLoading,
+  screen,
+  uiLang,
+}) {
   const isUser = m.role === "user";
   const isSpeaking = speakingId === m.id;
   const isDesktop = screen === "desktop";
+  const displayText = m.fullText && m.role === "assistant" ? m.text : m.text;
+  const assistantFullText = m.fullText || m.text || "";
+  const showStreamingControl = !isUser && m.isStreaming && !m.streamDone;
+  const isErrorBubble = Boolean(m?.meta?.errorBubble);
+  const canRetry = Boolean(m?.meta?.retryPayload);
 
   return (
     <motion.div
@@ -653,13 +750,21 @@ function ChatBubble({ m, onSpeak, onFeedback, speakingId, speakLoading, screen, 
             flexShrink: 0,
             marginRight: 9,
             marginTop: 4,
-            background: `linear-gradient(135deg, ${DEEP}, ${MID})`,
+            background: isErrorBubble
+              ? "linear-gradient(135deg,#B45309,#D97706)"
+              : `linear-gradient(135deg, ${DEEP}, ${MID})`,
             display: "grid",
             placeItems: "center",
-            boxShadow: "0 8px 20px rgba(10,90,59,0.18)",
+            boxShadow: isErrorBubble
+              ? "0 8px 20px rgba(180,83,9,0.18)"
+              : "0 8px 20px rgba(10,90,59,0.18)",
           }}
         >
-          <Sparkles style={{ width: 14, height: 14, color: ACC }} />
+          {isErrorBubble ? (
+            <AlertTriangle style={{ width: 14, height: 14, color: "#FDE68A" }} />
+          ) : (
+            <Sparkles style={{ width: 14, height: 14, color: ACC }} />
+          )}
         </div>
       )}
 
@@ -668,8 +773,8 @@ function ChatBubble({ m, onSpeak, onFeedback, speakingId, speakLoading, screen, 
           maxWidth: isDesktop ? "75%" : "86%",
           borderRadius: isUser ? "22px 22px 8px 22px" : "22px 22px 22px 8px",
           padding: isDesktop ? "16px 18px" : "14px 15px",
-          background: isUser ? USER_BUBBLE : GLASS_STRONG,
-          border: isUser ? "none" : `1px solid ${GLASS_BORDER}`,
+          background: isUser ? USER_BUBBLE : isErrorBubble ? "rgba(255,251,235,0.98)" : GLASS_STRONG,
+          border: isUser ? "none" : `1px solid ${isErrorBubble ? "#FDE68A" : GLASS_BORDER}`,
           boxShadow: isUser
             ? "0 12px 28px rgba(10,90,59,0.22)"
             : "0 10px 30px rgba(16,24,40,0.05)",
@@ -689,14 +794,14 @@ function ChatBubble({ m, onSpeak, onFeedback, speakingId, speakLoading, screen, 
             {m.text}
           </div>
         ) : (
-          <FormatReply text={m.text} screen={screen} uiLang={uiLang} />
+          <FormatReply text={displayText} screen={screen} uiLang={uiLang} />
         )}
 
         {!isUser && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 11 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 11, flexWrap: "wrap" }}>
             <motion.button
               whileTap={{ scale: 0.95 }}
-              onClick={() => onSpeak(m)}
+              onClick={() => onSpeak({ ...m, text: assistantFullText })}
               disabled={speakLoading}
               style={{
                 display: "inline-flex",
@@ -730,32 +835,81 @@ function ChatBubble({ m, onSpeak, onFeedback, speakingId, speakLoading, screen, 
               {speakLoading && isSpeaking ? "Loading..." : isSpeaking ? "Stop" : "Listen"}
             </motion.button>
 
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => onFeedback(m, "up")}
-              style={{
-                width: 30, height: 30, borderRadius: 999,
-                border: "1px solid #E5E7EB", background: "#FAFAFA",
-                display: "grid", placeItems: "center",
-                cursor: "pointer", fontSize: 13,
-              }}
-              title="Helpful"
-            >
-              👍
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => onFeedback(m, "down")}
-              style={{
-                width: 30, height: 30, borderRadius: 999,
-                border: "1px solid #E5E7EB", background: "#FAFAFA",
-                display: "grid", placeItems: "center",
-                cursor: "pointer", fontSize: 13,
-              }}
-              title="Not helpful"
-            >
-              👎
-            </motion.button>
+            {showStreamingControl && (
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => onShowFull(m.id)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  border: "1px solid #D1D5DB",
+                  borderRadius: 999,
+                  background: "#FFFFFF",
+                  padding: "6px 12px",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: "#374151",
+                  cursor: "pointer",
+                }}
+              >
+                Show full
+              </motion.button>
+            )}
+
+            {canRetry && (
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => onRetry(m)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  border: "1px solid #FCD34D",
+                  borderRadius: 999,
+                  background: "#FFF7ED",
+                  padding: "6px 12px",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: "#B45309",
+                  cursor: "pointer",
+                }}
+              >
+                <RefreshCcw style={{ width: 12, height: 12 }} />
+                Retry
+              </motion.button>
+            )}
+
+            {!isErrorBubble && (
+              <>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => onFeedback(m, "up")}
+                  style={{
+                    width: 30, height: 30, borderRadius: 999,
+                    border: "1px solid #E5E7EB", background: "#FAFAFA",
+                    display: "grid", placeItems: "center",
+                    cursor: "pointer", fontSize: 13,
+                  }}
+                  title="Helpful"
+                >
+                  👍
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => onFeedback(m, "down")}
+                  style={{
+                    width: 30, height: 30, borderRadius: 999,
+                    border: "1px solid #E5E7EB", background: "#FAFAFA",
+                    display: "grid", placeItems: "center",
+                    cursor: "pointer", fontSize: 13,
+                  }}
+                  title="Not helpful"
+                >
+                  👎
+                </motion.button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -884,8 +1038,28 @@ export default function GoDavaiiAI() {
   const autoAnalyzeHandledRef = useRef("");
   const ttsCacheRef = useRef(new Map());
   const ttsPendingRef = useRef(new Map());
+  const revealTimeoutsRef = useRef(new Map());
+  const latestMessagesRef = useRef([]);
+  const lastAutoScrollRef = useRef(0);
 
   const makeId = () => `msg-${msgIdCounter.current++}`;
+
+  const throttledAutoScroll = useCallback((force = false) => {
+    const now = Date.now();
+    if (!force && now - lastAutoScrollRef.current < 120) return;
+    lastAutoScrollRef.current = now;
+
+    requestAnimationFrame(() => {
+      chatEndRef.current?.scrollIntoView({
+        behavior: force ? "smooth" : "auto",
+        block: "end",
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    latestMessagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     localStorage.setItem("gd_ai_reply_lang", replyLanguage);
@@ -913,6 +1087,12 @@ export default function GoDavaiiAI() {
       try {
         window.speechSynthesis?.cancel?.();
       } catch (_) {}
+      try {
+        revealTimeoutsRef.current.forEach((timeouts) => {
+          (timeouts || []).forEach((t) => clearTimeout(t));
+        });
+        revealTimeoutsRef.current.clear();
+      } catch (_) {}
     };
   }, []);
 
@@ -933,19 +1113,142 @@ export default function GoDavaiiAI() {
   const composerOuterHeight = attachedFile ? 136 : 94;
 
   const [messages, setMessages] = useState([
-    {
+    createAssistantMessage({
       id: makeId(),
-      role: "assistant",
       text:
         "Namaste! Main GoDavaii AI hoon — aapka personal health assistant.\n\n" +
         "Symptoms, reports, prescriptions, scans, ya voice se baat karein. Main simple language me samjhaunga.",
       meta: {},
-    },
+      isStreaming: false,
+    }),
   ]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading, attachedFile]);
+    throttledAutoScroll(true);
+  }, [loading, attachedFile, throttledAutoScroll]);
+
+  const stopRevealForMessage = useCallback((messageId) => {
+    const timeouts = revealTimeoutsRef.current.get(messageId) || [];
+    timeouts.forEach((t) => clearTimeout(t));
+    revealTimeoutsRef.current.delete(messageId);
+  }, []);
+
+  const showAssistantMessageFully = useCallback((messageId) => {
+    stopRevealForMessage(messageId);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? {
+              ...m,
+              text: m.fullText || m.text,
+              isStreaming: false,
+              streamDone: true,
+            }
+          : m
+      )
+    );
+    throttledAutoScroll(true);
+  }, [stopRevealForMessage, throttledAutoScroll]);
+
+  const appendAssistantMessageWithReveal = useCallback((fullText, meta = {}) => {
+    const id = makeId();
+    const cleanFull = String(fullText || "");
+    const chunks = chunkTextForReveal(cleanFull);
+
+    if (!cleanFull.trim() || chunks.length <= 1 || cleanFull.length < 60) {
+      setMessages((prev) => [
+        ...prev,
+        createAssistantMessage({
+          id,
+          text: cleanFull,
+          meta,
+          isStreaming: false,
+        }),
+      ]);
+      throttledAutoScroll(true);
+      return id;
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      createAssistantMessage({
+        id,
+        text: cleanFull,
+        meta,
+        isStreaming: true,
+      }),
+    ]);
+
+    let built = "";
+    let cumulative = 0;
+    const scheduled = [];
+
+    chunks.forEach((chunk, idx) => {
+      cumulative += chunk.delay;
+      const timeout = setTimeout(() => {
+        built += chunk.text;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === id
+              ? {
+                  ...m,
+                  text: built,
+                  isStreaming: idx !== chunks.length - 1,
+                  streamDone: idx === chunks.length - 1,
+                }
+              : m
+          )
+        );
+
+        if (idx === chunks.length - 1) {
+          revealTimeoutsRef.current.delete(id);
+          throttledAutoScroll(true);
+        } else {
+          throttledAutoScroll(false);
+        }
+      }, cumulative);
+
+      scheduled.push(timeout);
+    });
+
+    revealTimeoutsRef.current.set(id, scheduled);
+    return id;
+  }, [throttledAutoScroll]);
+
+  const pushErrorBubble = useCallback((err, retryPayload = null) => {
+    const msg = String(getApiErrorMessage(err) || "Request failed.");
+    const lower = msg.toLowerCase();
+
+    const looksTimeout =
+      err?.code === "ECONNABORTED" ||
+      lower.includes("timeout") ||
+      lower.includes("timed out");
+
+    const fileMode = Boolean(retryPayload?.file);
+
+    const text = fileMode
+      ? looksTimeout
+        ? "Response me thoda delay ho gaya while report/file analyze ho rahi thi.\n\nAap retry karo ya thoda clearer file dubara bhejo."
+        : "File analysis me thoda issue aaya.\n\nAap retry karo ya file ko dubara upload karke bhejo."
+      : looksTimeout
+        ? "Response me thoda delay ho gaya.\n\nPlease retry once."
+        : "Response me thoda issue aaya.\n\nPlease retry once.";
+
+    setMessages((prev) => [
+      ...prev,
+      createAssistantMessage({
+        id: makeId(),
+        text,
+        meta: {
+          errorBubble: true,
+          retryPayload: retryPayload || null,
+          rawError: msg,
+        },
+        isStreaming: false,
+      }),
+    ]);
+    throttledAutoScroll(true);
+  }, [throttledAutoScroll]);
 
   useEffect(() => {
     const q = new URLSearchParams(location.search || "");
@@ -977,37 +1280,25 @@ export default function GoDavaiiAI() {
           text: `${autoPrompt}\n📎 ${reportFile.name} (auto-attached)`,
           meta: {},
         };
-        const nextMessages = [...messages, userMsg];
+        const nextMessages = [...latestMessagesRef.current, userMsg];
         setMessages(nextMessages);
         setLoading(true);
+        throttledAutoScroll(true);
 
         const out = await askBackendWithFile(autoPrompt, buildCompactHistory(nextMessages), reportFile);
         setCurrentSessionId(out?.sessionId || null);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: makeId(),
-            role: "assistant",
-            text: out.reply,
-            meta: {
-              ...(out.meta || {}),
-              sessionId: out.sessionId || null,
-            },
-          },
-        ]);
+
+        appendAssistantMessageWithReveal(out.reply, {
+          ...(out.meta || {}),
+          sessionId: out.sessionId || null,
+        });
       } catch (e) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: makeId(),
-            role: "assistant",
-            text:
-              `Assessment:\n- Auto analysis failed: ${getApiErrorMessage(e)}\n\n` +
-              `Next steps:\n- Manually attach the report and retry.\n\n` +
-              `Warning signs:\n- For severe symptoms, visit ER immediately.`,
-            meta: {},
-          },
-        ]);
+        pushErrorBubble(e, {
+          type: "auto-file",
+          messageText: "Please analyze this uploaded medical report/image in detail and explain findings in simple language.",
+          file: null,
+          preferLatestVault: false,
+        });
       } finally {
         setLoading(false);
       }
@@ -1062,7 +1353,7 @@ export default function GoDavaiiAI() {
     setSpeakingId(msg.id);
     setSpeakLoading(true);
 
-    const text = cleanAssistantText(msg.text);
+    const text = cleanAssistantText(msg.fullText || msg.text);
     const lang =
       replyLanguage && replyLanguage !== "auto"
         ? replyLanguage
@@ -1176,10 +1467,10 @@ export default function GoDavaiiAI() {
   }, [speakingId, replyLanguage]);
 
   useEffect(() => {
-    const last = [...messages].reverse().find((m) => m.role === "assistant");
-    if (!last?.text) return;
-
-    const text = cleanAssistantText(last.text);
+    const last = [...messages]
+      .reverse()
+      .find((m) => m.role === "assistant" && !(m?.meta?.errorBubble));
+    const text = cleanAssistantText(last?.fullText || last?.text);
     if (!text || text.length < 20) return;
 
     const lang =
@@ -1243,7 +1534,7 @@ export default function GoDavaiiAI() {
           aiSource: messageObj?.meta?.aiSource || "gpt-mini",
           complexity: messageObj?.meta?.complexity || "GREEN",
           confidence: Number(messageObj?.meta?.confidence || 0),
-          responsePreview: String(messageObj?.text || "").slice(0, 500),
+          responsePreview: String(messageObj?.fullText || messageObj?.text || "").slice(0, 500),
           userQueryPreview: String(previousUser?.text || "").slice(0, 300),
         },
         { timeout: 5000, headers: getAuthHeaders() }
@@ -1477,6 +1768,7 @@ export default function GoDavaiiAI() {
   async function askBackend(messageText, history) {
     const payload = { message: messageText, history, context: profileContext };
     const headers = getAuthHeaders();
+    let lastErr = null;
 
     for (const url of [
       `${API}/api/ai/assistant/chat`,
@@ -1494,26 +1786,17 @@ export default function GoDavaiiAI() {
             meta: r?.data?.meta || {},
           };
         }
+        lastErr = new Error("Empty reply");
       } catch (err) {
+        lastErr = err;
         console.error("Chat AI failed:", url, getApiErrorMessage(err));
       }
     }
 
-    return {
-      reply: fallbackReply(messageText, focus, whoFor),
-      sessionId: null,
-      context: {},
-      meta: {},
-    };
+    throw lastErr || new Error("AI chat failed.");
   }
 
   async function askBackendWithFile(messageText, history, file) {
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("message", messageText || "");
-    fd.append("history", JSON.stringify(history));
-    fd.append("context", JSON.stringify(profileContext));
-
     const headers = {
       ...getAuthHeaders(),
       "Content-Type": "multipart/form-data",
@@ -1521,6 +1804,12 @@ export default function GoDavaiiAI() {
 
     let lastErr = null;
     for (const url of [`${API}/api/ai/assistant/analyze-file`, `${API}/api/ai/analyze-file`]) {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("message", messageText || "");
+      fd.append("history", JSON.stringify(history));
+      fd.append("context", JSON.stringify(profileContext));
+
       try {
         const r = await axios.post(url, fd, { timeout: FILE_ANALYZE_TIMEOUT_MS, headers });
         const t = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
@@ -1544,12 +1833,7 @@ export default function GoDavaiiAI() {
       }
     }
 
-    return {
-      reply: `File analysis issue: ${getApiErrorMessage(lastErr)}\n\nRetry once, or upload a cleaner report PDF/image.`,
-      sessionId: null,
-      parsed: {},
-      meta: {},
-    };
+    throw lastErr || new Error("AI file analysis failed.");
   }
 
   async function fetchBookingReportAsFile(bookingId) {
@@ -1631,14 +1915,15 @@ export default function GoDavaiiAI() {
   }
 
   /* ── Send ────────────────────────────────────────────────── */
-  async function sendMessage() {
-    const msg = input.trim();
-    let activeFile = attachedFile;
+  async function sendMessage(customPayload = null) {
+    const msg = customPayload?.messageText != null ? String(customPayload.messageText || "") : input.trim();
+    let activeFile = customPayload?.file ?? attachedFile;
+    const preferLatestVault = Boolean(customPayload?.preferLatestVault);
 
     if (!msg && !activeFile) return;
     if (loading) return;
 
-    if (!activeFile && msg && wantsLatestVaultReportAnalysis(msg)) {
+    if (!activeFile && msg && (preferLatestVault || wantsLatestVaultReportAnalysis(msg))) {
       try {
         activeFile = await fetchLatestVaultReportAsFile();
       } catch {
@@ -1647,15 +1932,20 @@ export default function GoDavaiiAI() {
     }
 
     const userBubbleText = activeFile
-      ? `${msg || "(file uploaded)"}\n📎 ${activeFile.name}${!attachedFile ? " (auto-attached)" : ""}`
+      ? `${msg || "(file uploaded)"}\n📎 ${activeFile.name}${!attachedFile && !customPayload?.file ? " (auto-attached)" : ""}`
       : msg;
 
-    const nextMessages = [...messages, { id: makeId(), role: "user", text: userBubbleText, meta: {} }];
+    const userBubble = { id: makeId(), role: "user", text: userBubbleText, meta: {} };
+    const nextMessages = [...latestMessagesRef.current, userBubble];
     setMessages(nextMessages);
-    setInput("");
-    setLoading(true);
 
-    if (textareaRef.current) textareaRef.current.style.height = "24px";
+    if (!customPayload) {
+      setInput("");
+      if (textareaRef.current) textareaRef.current.style.height = "24px";
+    }
+
+    setLoading(true);
+    throttledAutoScroll(true);
 
     try {
       const out = activeFile
@@ -1664,23 +1954,33 @@ export default function GoDavaiiAI() {
 
       if (out?.sessionId) setCurrentSessionId(out.sessionId);
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: makeId(),
-          role: "assistant",
-          text: out.reply,
-          meta: {
-            ...(out.meta || {}),
-            sessionId: out.sessionId || currentSessionId || null,
-          },
-        },
-      ]);
+      appendAssistantMessageWithReveal(out.reply, {
+        ...(out.meta || {}),
+        sessionId: out.sessionId || currentSessionId || null,
+      });
 
-      if (activeFile) setAttachedFile(null);
+      if (!customPayload && activeFile) setAttachedFile(null);
+    } catch (err) {
+      pushErrorBubble(err, {
+        type: activeFile ? "file" : "chat",
+        messageText: msg,
+        file: activeFile || null,
+        preferLatestVault,
+      });
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleRetryBubble(messageObj) {
+    const retry = messageObj?.meta?.retryPayload;
+    if (!retry || loading) return;
+
+    await sendMessage({
+      messageText: retry.messageText || "",
+      file: retry.file || null,
+      preferLatestVault: Boolean(retry.preferLatestVault),
+    });
   }
 
   /* ── History ─────────────────────────────────────────────── */
@@ -1711,6 +2011,9 @@ export default function GoDavaiiAI() {
             id: `hist-${i}`,
             role: m.role,
             text: m.text,
+            fullText: m.role === "assistant" ? m.text : undefined,
+            isStreaming: false,
+            streamDone: true,
             meta: m.role === "assistant"
               ? {
                   aiSource: m.aiSource || "",
@@ -1730,13 +2033,19 @@ export default function GoDavaiiAI() {
   }
 
   function startNewChat() {
+    revealTimeoutsRef.current.forEach((timeouts) => {
+      (timeouts || []).forEach((t) => clearTimeout(t));
+    });
+    revealTimeoutsRef.current.clear();
+
     setMessages([
-      {
+      createAssistantMessage({
         id: makeId(),
         role: "assistant",
         text: "Namaste! Aap symptoms, reports, prescriptions, ya scan upload karke seedha puch sakte ho.",
         meta: {},
-      },
+        isStreaming: false,
+      }),
     ]);
     setCurrentSessionId(null);
     setSidebarOpen(false);
@@ -2003,6 +2312,8 @@ export default function GoDavaiiAI() {
               m={m}
               onSpeak={handleSpeak}
               onFeedback={submitFeedback}
+              onShowFull={showAssistantMessageFully}
+              onRetry={handleRetryBubble}
               speakingId={speakingId}
               speakLoading={speakLoading}
               screen={screen}
@@ -2198,7 +2509,7 @@ export default function GoDavaiiAI() {
 
               <motion.button
                 whileTap={{ scale: 0.9 }}
-                onClick={sendMessage}
+                onClick={() => sendMessage()}
                 disabled={loading || (!input.trim() && !attachedFile)}
                 style={{
                   width: btnSize,
