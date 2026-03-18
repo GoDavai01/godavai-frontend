@@ -1336,6 +1336,8 @@ export default function GoDavaiiAI() {
   );
 
   /* ── TTS ────────────────────────────────────────────────── */
+  const speakGenRef = useRef(0);
+
   const handleSpeak = useCallback(async (msg) => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -1350,6 +1352,7 @@ export default function GoDavaiiAI() {
       return;
     }
 
+    const gen = ++speakGenRef.current;
     setSpeakingId(msg.id);
     setSpeakLoading(true);
 
@@ -1362,25 +1365,42 @@ export default function GoDavaiiAI() {
     const cacheKey = `${lang}::${text}`;
     const cached = ttsCacheRef.current.get(cacheKey);
 
+    // Helper: create Audio from base64, using blob URL for speed on mobile
+    const makeAudio = (base64, mime) => {
+      try {
+        const bin = atob(base64);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return new Audio(URL.createObjectURL(new Blob([arr], { type: mime })));
+      } catch (_) {
+        return new Audio(`data:${mime};base64,${base64}`);
+      }
+    };
+
+    const playAudio = async (audio) => {
+      if (gen !== speakGenRef.current) return;
+      audioRef.current = audio;
+      audio.onended = () => {
+        setSpeakingId(null);
+        setSpeakLoading(false);
+        audioRef.current = null;
+      };
+      audio.onerror = () => {
+        setSpeakingId(null);
+        setSpeakLoading(false);
+        audioRef.current = null;
+      };
+      setSpeakLoading(false);
+      try { await audio.play(); } catch (_) { /* interrupted — ignore */ }
+    };
+
     try {
       if (cached?.audioBase64) {
-        const mimeType = String(cached?.mimeType || "audio/mpeg");
-        const audio = new Audio(`data:${mimeType};base64,${cached.audioBase64}`);
-        audioRef.current = audio;
-
-        audio.onended = () => {
-          setSpeakingId(null);
-          setSpeakLoading(false);
-          audioRef.current = null;
-        };
-        audio.onerror = () => {
-          setSpeakingId(null);
-          setSpeakLoading(false);
-          audioRef.current = null;
-        };
-
-        setSpeakLoading(false);
-        await audio.play();
+        // Use pre-warmed blob URL if prefetch prepared it (instant), else create fresh
+        const audio = cached.blobUrl
+          ? new Audio(cached.blobUrl)
+          : makeAudio(cached.audioBase64, String(cached?.mimeType || "audio/mpeg"));
+        await playAudio(audio);
         return;
       }
 
@@ -1408,27 +1428,15 @@ export default function GoDavaiiAI() {
           mimeType: data.mimeType || "audio/mpeg",
         });
 
-        const mimeType = String(data?.mimeType || "audio/mpeg");
-        const audio = new Audio(`data:${mimeType};base64,${data.audioBase64}`);
-        audioRef.current = audio;
+        if (gen !== speakGenRef.current) return;
 
-        audio.onended = () => {
-          setSpeakingId(null);
-          setSpeakLoading(false);
-          audioRef.current = null;
-        };
-        audio.onerror = () => {
-          setSpeakingId(null);
-          setSpeakLoading(false);
-          audioRef.current = null;
-        };
-
-        setSpeakLoading(false);
-        await audio.play();
+        const audio = makeAudio(data.audioBase64, String(data?.mimeType || "audio/mpeg"));
+        await playAudio(audio);
         return;
       }
     } catch (err) {
       ttsPendingRef.current.delete(cacheKey);
+      if (gen !== speakGenRef.current) return;
       console.error(
         "TTS API failed:",
         err?.response?.status,
@@ -1506,6 +1514,23 @@ export default function GoDavaiiAI() {
             audioBase64: data.audioBase64,
             mimeType: data.mimeType || "audio/mpeg",
           });
+
+          // Pre-warm: create blob URL now so Listen tap is instant
+          try {
+            const bin = atob(data.audioBase64);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            const blob = new Blob([arr], { type: String(data.mimeType || "audio/mpeg") });
+            const warmAudio = new Audio(URL.createObjectURL(blob));
+            warmAudio.preload = "auto";
+            warmAudio.load();
+            // Store blob-ready audio for instant play
+            ttsCacheRef.current.set(cacheKey, {
+              audioBase64: data.audioBase64,
+              mimeType: data.mimeType || "audio/mpeg",
+              blobUrl: warmAudio.src,
+            });
+          } catch (_) { /* blob warm-up failed, base64 fallback is fine */ }
         }
       } catch (err) {
         ttsPendingRef.current.delete(cacheKey);
