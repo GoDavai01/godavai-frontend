@@ -141,7 +141,7 @@ function splitTextForTTSChunks(text, maxLen = 900) {
 }
 
 function isStructuredMedicalReply(text) {
-  return /\n\s*(Assessment|Next steps|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i.test(
+  return /\n\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i.test(
     String(text || "")
   );
 }
@@ -165,7 +165,7 @@ function chunkTextForReveal(text) {
     const endsSoftPause = /[,;:]$/.test(trimmed);
     const nextRaw = words[i + 1]?.trim?.() || "";
     const nextIsHeading =
-      /^(Assessment|Next steps|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):$/i.test(
+      /^(Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):$/i.test(
         nextRaw
       );
 
@@ -179,7 +179,7 @@ function chunkTextForReveal(text) {
 
     if (shouldPush) {
       let delay = 26;
-      if (structured && /(Assessment:|Next steps:|Warning signs:|Red flags:|When to see doctor:|Desi ilaaj:|Home remedies:)/i.test(current)) {
+      if (structured && /(Assessment:|Next steps:|What to do now:|Medicine options:|Warning signs:|Red flags:|When to see doctor:|Desi ilaaj:|Home remedies:)/i.test(current)) {
         delay = 170;
       } else if (endsPause) {
         delay = 145;
@@ -232,6 +232,8 @@ function getSectionLabel(sectionKey, lang) {
     hinglish: {
       Assessment: "Samajhi hui baat",
       "Next steps": "Ab kya karein",
+      "What to do now": "Ab kya karein",
+      "Medicine options": "Dawai ke options",
       "Warning signs": "Kab turant action lena hai",
       "Red flags": "Kab turant action lena hai",
       "When to see doctor": "Kab extra help leni hai",
@@ -241,6 +243,8 @@ function getSectionLabel(sectionKey, lang) {
     hindi: {
       Assessment: "समझी हुई बात",
       "Next steps": "अब क्या करें",
+      "What to do now": "अब क्या करें",
+      "Medicine options": "दवाई के विकल्प",
       "Warning signs": "कब तुरंत कदम उठाना है",
       "Red flags": "कब तुरंत कदम उठाना है",
       "When to see doctor": "कब अतिरिक्त मदद लेनी है",
@@ -250,6 +254,8 @@ function getSectionLabel(sectionKey, lang) {
     english: {
       Assessment: "Assessment",
       "Next steps": "What to do now",
+      "What to do now": "What to do now",
+      "Medicine options": "Medicine options",
       "Warning signs": "When to act urgently",
       "Red flags": "When to act urgently",
       "When to see doctor": "When to get medical help",
@@ -259,6 +265,8 @@ function getSectionLabel(sectionKey, lang) {
     bengali: {
       Assessment: "বিষয়টা কী বোঝা গেল",
       "Next steps": "এখন কী করবেন",
+      "What to do now": "এখন কী করবেন",
+      "Medicine options": "ওষুধের বিকল্প",
       "Warning signs": "কখন দ্রুত ব্যবস্থা নেবেন",
       "Red flags": "কখন দ্রুত ব্যবস্থা নেবেন",
       "When to see doctor": "কখন অতিরিক্ত সাহায্য নেবেন",
@@ -268,6 +276,8 @@ function getSectionLabel(sectionKey, lang) {
     gujarati: {
       Assessment: "સમજાયેલ વાત",
       "Next steps": "હવે શું કરવું",
+      "What to do now": "હવે શું કરવું",
+      "Medicine options": "દવાના વિકલ્પો",
       "Warning signs": "ક્યારે તરત પગલું લેવું",
       "Red flags": "ક્યારે તરત પગલું લેવું",
       "When to see doctor": "ક્યારે વધુ મદદ લેવી",
@@ -277,6 +287,8 @@ function getSectionLabel(sectionKey, lang) {
     punjabi: {
       Assessment: "ਸਮਝ ਆਈ ਗੱਲ",
       "Next steps": "ਹੁਣ ਕੀ ਕਰਨਾ ਹੈ",
+      "What to do now": "ਹੁਣ ਕੀ ਕਰਨਾ ਹੈ",
+      "Medicine options": "ਦਵਾਈ ਦੇ ਵਿਕਲਪ",
       "Warning signs": "ਕਦੋਂ ਤੁਰੰਤ ਕਦਮ ਲੈਣਾ ਹੈ",
       "Red flags": "ਕਦੋਂ ਤੁਰੰਤ ਕਦਮ ਲੈਣਾ ਹੈ",
       "When to see doctor": "ਕਦੋਂ ਹੋਰ ਮਦਦ ਲੈਣੀ ਹੈ",
@@ -286,6 +298,8 @@ function getSectionLabel(sectionKey, lang) {
     marathi: {
       Assessment: "समजलेली गोष्ट",
       "Next steps": "आता काय करावे",
+      "What to do now": "आता काय करावे",
+      "Medicine options": "औषधाचे पर्याय",
       "Warning signs": "कधी लगेच पाऊल उचलावे",
       "Red flags": "कधी लगेच पाऊल उचलावे",
       "When to see doctor": "कधी जास्त मदत घ्यावी",
@@ -295,6 +309,8 @@ function getSectionLabel(sectionKey, lang) {
     tamil: {
       Assessment: "புரிந்தது என்ன",
       "Next steps": "இப்போது என்ன செய்ய வேண்டும்",
+      "What to do now": "இப்போது என்ன செய்ய வேண்டும்",
+      "Medicine options": "மருந்து தேர்வுகள்",
       "Warning signs": "எப்போது உடனே நடவடிக்கை எடுக்க வேண்டும்",
       "Red flags": "எப்போது உடனே நடவடிக்கை எடுக்க வேண்டும்",
       "When to see doctor": "எப்போது கூடுதல் உதவி பெற வேண்டும்",
@@ -304,6 +320,8 @@ function getSectionLabel(sectionKey, lang) {
     telugu: {
       Assessment: "అర్థమైన విషయం",
       "Next steps": "ఇప్పుడు ఏమి చేయాలి",
+      "What to do now": "ఇప్పుడు ఏమి చేయాలి",
+      "Medicine options": "మందు ఎంపికలు",
       "Warning signs": "ఎప్పుడు వెంటనే చర్య తీసుకోవాలి",
       "Red flags": "ఎప్పుడు వెంటనే చర్య తీసుకోవాలి",
       "When to see doctor": "ఎప్పుడు అదనపు సహాయం తీసుకోవాలి",
@@ -313,6 +331,8 @@ function getSectionLabel(sectionKey, lang) {
     kannada: {
       Assessment: "ಅರ್ಥವಾದ ವಿಷಯ",
       "Next steps": "ಈಗ ಏನು ಮಾಡಬೇಕು",
+      "What to do now": "ಈಗ ಏನು ಮಾಡಬೇಕು",
+      "Medicine options": "ಔಷಧ ಆಯ್ಕೆಗಳು",
       "Warning signs": "ಯಾವಾಗ ತಕ್ಷಣ ಕ್ರಮ ತೆಗೆದುಕೊಳ್ಳಬೇಕು",
       "Red flags": "ಯಾವಾಗ ತಕ್ಷಣ ಕ್ರಮ ತೆಗೆದುಕೊಳ್ಳಬೇಕು",
       "When to see doctor": "ಯಾವಾಗ ಹೆಚ್ಚುವರಿ ಸಹಾಯ ಪಡೆಯಬೇಕು",
@@ -322,6 +342,8 @@ function getSectionLabel(sectionKey, lang) {
     malayalam: {
       Assessment: "മനസ്സിലായ കാര്യം",
       "Next steps": "ഇപ്പോൾ എന്ത് ചെയ്യണം",
+      "What to do now": "ഇപ്പോൾ എന്ത് ചെയ്യണം",
+      "Medicine options": "മരുന്ന് ഓപ്ഷനുകൾ",
       "Warning signs": "എപ്പോൾ ഉടൻ നടപടി എടുക്കണം",
       "Red flags": "എപ്പോൾ ഉടൻ നടപടി എടുക്കണം",
       "When to see doctor": "എപ്പോൾ കൂടുതൽ സഹായം തേടണം",
@@ -331,6 +353,8 @@ function getSectionLabel(sectionKey, lang) {
     odia: {
       Assessment: "ବୁଝା ଯାଇଥିବା କଥା",
       "Next steps": "ଏବେ କଣ କରିବେ",
+      "What to do now": "ଏବେ କଣ କରିବେ",
+      "Medicine options": "ଔଷଧ ବିକଳ୍ପ",
       "Warning signs": "କେବେ ତୁରନ୍ତ ପଦକ୍ଷେପ ନେବେ",
       "Red flags": "କେବେ ତୁରନ୍ତ ପଦକ୍ଷେପ ନେବେ",
       "When to see doctor": "କେବେ ଅଧିକ ସହାୟତା ନେବେ",
