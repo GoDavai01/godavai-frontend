@@ -1364,10 +1364,12 @@ export default function GoDavaiiAI() {
 
     try {
       if (cached?.audioBase64) {
-        // Use pre-decoded audio if available (instant playback), else create new
-        const audio = cached.preloadedAudio
-          ? (() => { cached.preloadedAudio.currentTime = 0; return cached.preloadedAudio; })()
-          : new Audio(`data:${String(cached?.mimeType || "audio/mpeg")};base64,${cached.audioBase64}`);
+        // Create fresh Audio in user gesture context (mobile browsers require this)
+        // Use pre-cached blob URL (instant, no decode) or fallback to base64 data URL
+        const src = cached.blobUrl
+          ? cached.blobUrl
+          : `data:${String(cached?.mimeType || "audio/mpeg")};base64,${cached.audioBase64}`;
+        const audio = new Audio(src);
         audioRef.current = audio;
 
         audio.onended = () => {
@@ -1406,11 +1408,21 @@ export default function GoDavaiiAI() {
 
       if (data?.audioBase64) {
         const mimeType = String(data?.mimeType || "audio/mpeg");
-        const audio = new Audio(`data:${mimeType};base64,${data.audioBase64}`);
+        // Convert to blob URL for faster future playback
+        let blobUrl = null;
+        try {
+          const byteChars = atob(data.audioBase64);
+          const byteArray = new Uint8Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+          const blob = new Blob([byteArray], { type: mimeType });
+          blobUrl = URL.createObjectURL(blob);
+        } catch (_) { /* fallback */ }
+
+        const audio = new Audio(blobUrl || `data:${mimeType};base64,${data.audioBase64}`);
         ttsCacheRef.current.set(cacheKey, {
           audioBase64: data.audioBase64,
           mimeType,
-          preloadedAudio: audio,
+          blobUrl,
         });
         audioRef.current = audio;
 
@@ -1505,15 +1517,21 @@ export default function GoDavaiiAI() {
 
         if (data?.audioBase64) {
           const mimeType = String(data.mimeType || "audio/mpeg");
-          // Pre-decode audio so Listen tap is instant
-          const preloadedAudio = new Audio(`data:${mimeType};base64,${data.audioBase64}`);
-          preloadedAudio.preload = "auto";
-          preloadedAudio.load();
+          // Convert base64 → Blob URL for instant playback on Listen tap
+          // Blob URL is pre-cached in memory, no decode needed at play time
+          let blobUrl = null;
+          try {
+            const byteChars = atob(data.audioBase64);
+            const byteArray = new Uint8Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+            const blob = new Blob([byteArray], { type: mimeType });
+            blobUrl = URL.createObjectURL(blob);
+          } catch (_) { /* fallback to base64 data URL */ }
 
           ttsCacheRef.current.set(cacheKey, {
             audioBase64: data.audioBase64,
             mimeType,
-            preloadedAudio,
+            blobUrl,
           });
         }
       } catch (err) {
