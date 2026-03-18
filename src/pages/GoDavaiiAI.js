@@ -491,7 +491,7 @@ function pickSupportedAudioMimeType() {
   return "";
 }
 
-function pickBestBrowserVoice(lang) {
+function pickBestBrowserVoice(lang) { // eslint-disable-line no-unused-vars
   const synth = window.speechSynthesis;
   if (!synth) return null;
 
@@ -1433,7 +1433,6 @@ export default function GoDavaiiAI() {
         : detectLanguageForTTS(text);
 
     const cacheKey = `${lang}::${text}`;
-    const cached = ttsCacheRef.current.get(cacheKey);
 
     // Play a single base64 audio clip and return a promise that resolves when it ends
     const playChunk = (base64, mime) =>
