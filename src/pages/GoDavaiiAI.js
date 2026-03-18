@@ -1150,9 +1150,55 @@ export default function GoDavaiiAI() {
     throttledAutoScroll(true);
   }, [stopRevealForMessage, throttledAutoScroll]);
 
+  // Eagerly prefetch TTS audio the moment we have the full text — don't wait for useEffect
+  const prefetchTTSForText = useCallback((rawText) => {
+    const text = cleanAssistantText(rawText);
+    if (!text || text.length < 20) return;
+
+    const lang =
+      replyLanguage && replyLanguage !== "auto"
+        ? replyLanguage
+        : detectLanguageForTTS(text);
+    const cacheKey = `${lang}::${text}`;
+
+    if (ttsCacheRef.current.has(cacheKey) || ttsPendingRef.current.has(cacheKey)) return;
+
+    console.log("[TTS eager-prefetch] Firing immediately for:", text.slice(0, 40), "...");
+
+    const promise = axios.post(
+      `${API}/api/ai/assistant/tts`,
+      {
+        text: text.slice(0, 2000),
+        language: lang,
+        replyLanguagePreference: replyLanguage || "auto",
+      },
+      { timeout: 45000, headers: getAuthHeaders() }
+    );
+    ttsPendingRef.current.set(cacheKey, promise);
+
+    promise
+      .then(({ data }) => {
+        ttsPendingRef.current.delete(cacheKey);
+        if (data?.audioBase64) {
+          console.log("[TTS eager-prefetch] DONE — cached for instant play");
+          ttsCacheRef.current.set(cacheKey, {
+            audioBase64: data.audioBase64,
+            mimeType: data.mimeType || "audio/mpeg",
+          });
+        }
+      })
+      .catch((err) => {
+        ttsPendingRef.current.delete(cacheKey);
+        console.error("[TTS eager-prefetch] Failed:", err?.message);
+      });
+  }, [replyLanguage]);
+
   const appendAssistantMessageWithReveal = useCallback((fullText, meta = {}) => {
     const id = makeId();
     const cleanFull = String(fullText || "");
+
+    // Fire TTS prefetch IMMEDIATELY — don't wait for React render cycle
+    prefetchTTSForText(cleanFull);
     const chunks = chunkTextForReveal(cleanFull);
 
     if (!cleanFull.trim() || chunks.length <= 1 || cleanFull.length < 60) {
@@ -1213,7 +1259,7 @@ export default function GoDavaiiAI() {
 
     revealTimeoutsRef.current.set(id, scheduled);
     return id;
-  }, [throttledAutoScroll]);
+  }, [throttledAutoScroll, prefetchTTSForText]);
 
   const pushErrorBubble = useCallback((err, retryPayload = null) => {
     const msg = String(getApiErrorMessage(err) || "Request failed.");
@@ -1396,6 +1442,7 @@ export default function GoDavaiiAI() {
 
     try {
       if (cached?.audioBase64) {
+        console.log("[TTS] CACHE HIT — playing instantly");
         // Use pre-warmed blob URL if prefetch prepared it (instant), else create fresh
         const audio = cached.blobUrl
           ? new Audio(cached.blobUrl)
@@ -1406,11 +1453,14 @@ export default function GoDavaiiAI() {
 
       let pending = ttsPendingRef.current.get(cacheKey);
 
-      if (!pending) {
+      if (pending) {
+        console.log("[TTS] Prefetch in progress — waiting for it...");
+      } else {
+        console.log("[TTS] CACHE MISS — no prefetch found, making fresh API call");
         pending = axios.post(
           `${API}/api/ai/assistant/tts`,
           {
-            text: text.slice(0, 3200),
+            text: text.slice(0, 2000),
             language: lang,
             replyLanguagePreference: replyLanguage || "auto",
           },
@@ -1492,12 +1542,14 @@ export default function GoDavaiiAI() {
       return;
     }
 
+    console.log("[TTS prefetch] Starting for", text.slice(0, 40), "...", "lang:", lang);
+
     const run = async () => {
       try {
         const promise = axios.post(
           `${API}/api/ai/assistant/tts`,
           {
-            text: text.slice(0, 3200),
+            text: text.slice(0, 2000),
             language: lang,
             replyLanguagePreference: replyLanguage || "auto",
           },
@@ -1510,6 +1562,7 @@ export default function GoDavaiiAI() {
         ttsPendingRef.current.delete(cacheKey);
 
         if (data?.audioBase64) {
+          console.log("[TTS prefetch] DONE — cached, ready for instant play");
           ttsCacheRef.current.set(cacheKey, {
             audioBase64: data.audioBase64,
             mimeType: data.mimeType || "audio/mpeg",
