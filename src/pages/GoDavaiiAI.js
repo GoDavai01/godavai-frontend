@@ -28,6 +28,9 @@
 // ✅ NEW FIX: honest timeout/error bubbles + retry CTA
 // ✅ NEW FIX: "Show full" support during reveal
 // ✅ NEW FIX: TTS always uses final full assistant text
+// ✅ BUILD FIX: removed unused fallbackReply helper
+// ✅ BUILD FIX: messages state moved before effects that reference it
+// ✅ BUILD FIX: effect cleanup now snapshots revealTimeoutsRef.current to satisfy eslint
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -329,12 +332,6 @@ function buildCompactHistory(messages) {
     role: m.role,
     text: m.fullText || m.text || "",
   }));
-}
-
-function fallbackReply(message, focus, whoFor) {
-  const caution = "Health AI reference ke liye hai. Emergency me turant medical help lo.";
-  const identity = whoFor === "family" ? "family member" : whoFor === "new" ? "new profile" : "you";
-  return `${caution}\n\nFor ${identity}: Age, symptoms, duration, fever, existing diseases, current medicines share karein.`;
 }
 
 function getApiErrorMessage(err) {
@@ -1044,6 +1041,17 @@ export default function GoDavaiiAI() {
 
   const makeId = () => `msg-${msgIdCounter.current++}`;
 
+  const [messages, setMessages] = useState([
+    createAssistantMessage({
+      id: makeId(),
+      text:
+        "Namaste! Main GoDavaii AI hoon — aapka personal health assistant.\n\n" +
+        "Symptoms, reports, prescriptions, scans, ya voice se baat karein. Main simple language me samjhaunga.",
+      meta: {},
+      isStreaming: false,
+    }),
+  ]);
+
   const throttledAutoScroll = useCallback((force = false) => {
     const now = Date.now();
     if (!force && now - lastAutoScrollRef.current < 120) return;
@@ -1066,6 +1074,8 @@ export default function GoDavaiiAI() {
   }, [replyLanguage]);
 
   useEffect(() => {
+    const revealTimeoutsMap = revealTimeoutsRef.current;
+
     return () => {
       try {
         recognitionRef.current?.stop?.();
@@ -1088,10 +1098,10 @@ export default function GoDavaiiAI() {
         window.speechSynthesis?.cancel?.();
       } catch (_) {}
       try {
-        revealTimeoutsRef.current.forEach((timeouts) => {
+        revealTimeoutsMap.forEach((timeouts) => {
           (timeouts || []).forEach((t) => clearTimeout(t));
         });
-        revealTimeoutsRef.current.clear();
+        revealTimeoutsMap.clear();
       } catch (_) {}
     };
   }, []);
@@ -1111,17 +1121,6 @@ export default function GoDavaiiAI() {
   const btnSize = isDesktop ? 48 : 44;
   const composerPadBottom = getSafeBottomPadding();
   const composerOuterHeight = attachedFile ? 136 : 94;
-
-  const [messages, setMessages] = useState([
-    createAssistantMessage({
-      id: makeId(),
-      text:
-        "Namaste! Main GoDavaii AI hoon — aapka personal health assistant.\n\n" +
-        "Symptoms, reports, prescriptions, scans, ya voice se baat karein. Main simple language me samjhaunga.",
-      meta: {},
-      isStreaming: false,
-    }),
-  ]);
 
   useEffect(() => {
     throttledAutoScroll(true);
