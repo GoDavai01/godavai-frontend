@@ -64,6 +64,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
+const CHAT_TIMEOUT_MS = 70000;
 const FILE_ANALYZE_TIMEOUT_MS = 300000;
 
 /* ── Premium design tokens ───────────────────────────────── */
@@ -1765,35 +1766,58 @@ export default function GoDavaiiAI() {
 
   /* ── Backend ────────────────────────────────────────────── */
   async function askBackend(messageText, history) {
-    const payload = { message: messageText, history, context: profileContext };
-    const headers = getAuthHeaders();
-    let lastErr = null;
+  const payload = { message: messageText, history, context: profileContext };
+  const headers = getAuthHeaders();
 
-    for (const url of [
-      `${API}/api/ai/assistant/chat`,
-      `${API}/api/ai/chat`,
-      `${API}/api/ai/assistant`,
-    ]) {
-      try {
-        const r = await axios.post(url, payload, { timeout: 25000, headers });
-        const t = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
-        if (String(t).trim()) {
-          return {
-            reply: t,
-            sessionId: r?.data?.sessionId || null,
-            context: r?.data?.context || {},
-            meta: r?.data?.meta || {},
-          };
-        }
-        lastErr = new Error("Empty reply");
-      } catch (err) {
-        lastErr = err;
-        console.error("Chat AI failed:", url, getApiErrorMessage(err));
+  const endpoints = [
+    `${API}/api/ai/assistant/chat`,
+    `${API}/api/ai/chat`,
+    `${API}/api/ai/assistant`,
+  ];
+
+  let lastErr = null;
+
+  for (let i = 0; i < endpoints.length; i += 1) {
+    const url = endpoints[i];
+
+    try {
+      const r = await axios.post(url, payload, {
+        timeout: CHAT_TIMEOUT_MS,
+        headers,
+      });
+
+      const t = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
+      if (String(t).trim()) {
+        return {
+          reply: t,
+          sessionId: r?.data?.sessionId || null,
+          context: r?.data?.context || {},
+          meta: r?.data?.meta || {},
+        };
+      }
+
+      lastErr = new Error("Empty reply");
+    } catch (err) {
+      lastErr = err;
+
+      const status = err?.response?.status;
+
+      console.error("Chat AI failed:", url, getApiErrorMessage(err));
+
+      // compatibility fallback only for missing/unsupported route
+      // do NOT keep jumping endpoints after timeout
+      const shouldTryNext =
+        i < endpoints.length - 1 &&
+        (status === 404 || status === 405 || status === 501);
+
+      if (!shouldTryNext) {
+        throw err;
       }
     }
-
-    throw lastErr || new Error("AI chat failed.");
   }
+
+  throw lastErr || new Error("AI chat failed.");
+}
 
   async function askBackendWithFile(messageText, history, file) {
     const headers = {
