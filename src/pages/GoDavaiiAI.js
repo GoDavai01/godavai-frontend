@@ -1168,11 +1168,11 @@ export default function GoDavaiiAI() {
     const promise = axios.post(
       `${API}/api/ai/assistant/tts`,
       {
-        text: text.slice(0, 2000),
+        text: text.slice(0, 1200),
         language: lang,
         replyLanguagePreference: replyLanguage || "auto",
       },
-      { timeout: 45000, headers: getAuthHeaders() }
+      { timeout: 120000, headers: getAuthHeaders() }
     );
     ttsPendingRef.current.set(cacheKey, promise);
 
@@ -1195,8 +1195,8 @@ export default function GoDavaiiAI() {
           if (ttsCacheRef.current.has(cacheKey) || ttsPendingRef.current.has(cacheKey)) return;
           const retry = axios.post(
             `${API}/api/ai/assistant/tts`,
-            { text: text.slice(0, 2000), language: lang, replyLanguagePreference: replyLanguage || "auto" },
-            { timeout: 45000, headers: getAuthHeaders() }
+            { text: text.slice(0, 1200), language: lang, replyLanguagePreference: replyLanguage || "auto" },
+            { timeout: 120000, headers: getAuthHeaders() }
           );
           ttsPendingRef.current.set(cacheKey, retry);
           retry
@@ -1465,11 +1465,11 @@ export default function GoDavaiiAI() {
         pending = axios.post(
           `${API}/api/ai/assistant/tts`,
           {
-            text: text.slice(0, 2000),
+            text: text.slice(0, 1200),
             language: lang,
             replyLanguagePreference: replyLanguage || "auto",
           },
-          { timeout: 65000, headers: getAuthHeaders() }
+          { timeout: 120000, headers: getAuthHeaders() }
         );
         ttsPendingRef.current.set(cacheKey, pending);
       }
@@ -1553,11 +1553,11 @@ export default function GoDavaiiAI() {
         const promise = axios.post(
           `${API}/api/ai/assistant/tts`,
           {
-            text: text.slice(0, 2000),
+            text: text.slice(0, 1200),
             language: lang,
             replyLanguagePreference: replyLanguage || "auto",
           },
-          { timeout: 65000, headers: getAuthHeaders() }
+          { timeout: 120000, headers: getAuthHeaders() }
         );
 
         ttsPendingRef.current.set(cacheKey, promise);
