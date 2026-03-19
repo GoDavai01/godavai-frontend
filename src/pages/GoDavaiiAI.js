@@ -761,6 +761,8 @@ function ChatBubble({
   speakLoading,
   screen,
   uiLang,
+  ttsSpeed,
+  onCycleSpeed,
 }) {
   const isUser = m.role === "user";
   const isSpeaking = speakingId === m.id;
@@ -876,6 +878,35 @@ function ChatBubble({
               {speakLoading && isSpeaking ? "Loading..." : isSpeaking ? "Stop" : "Listen"}
             </motion.button>
 
+            {/* Speed control chip — always visible next to Listen */}
+            {!isUser && (
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  if (navigator.vibrate) navigator.vibrate(30);
+                  onCycleSpeed();
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 36,
+                  height: 26,
+                  borderRadius: 999,
+                  border: `1px solid ${ttsSpeed !== 1 ? "rgba(24,226,161,0.35)" : "#E5E7EB"}`,
+                  background: ttsSpeed !== 1 ? "#ECFDF5" : "#FAFAFA",
+                  padding: "0 8px",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: ttsSpeed !== 1 ? "#059669" : "#6B7280",
+                  cursor: "pointer",
+                }}
+                title="Change playback speed"
+              >
+                {ttsSpeed}x
+              </motion.button>
+            )}
+
             {showStreamingControl && (
               <motion.button
                 whileTap={{ scale: 0.95 }}
@@ -925,7 +956,7 @@ function ChatBubble({
               <>
                 <motion.button
                   whileTap={{ scale: 0.9 }}
-                  onClick={() => onFeedback(m, "up")}
+                  onClick={() => { if (navigator.vibrate) navigator.vibrate(40); onFeedback(m, "up"); }}
                   style={{
                     width: 30, height: 30, borderRadius: 999,
                     border: "1px solid #E5E7EB", background: "#FAFAFA",
@@ -938,7 +969,7 @@ function ChatBubble({
                 </motion.button>
                 <motion.button
                   whileTap={{ scale: 0.9 }}
-                  onClick={() => onFeedback(m, "down")}
+                  onClick={() => { if (navigator.vibrate) navigator.vibrate(40); onFeedback(m, "down"); }}
                   style={{
                     width: 30, height: 30, borderRadius: 999,
                     border: "1px solid #E5E7EB", background: "#FAFAFA",
@@ -1064,6 +1095,13 @@ export default function GoDavaiiAI() {
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [speakingId, setSpeakingId] = useState(null);
   const [speakLoading, setSpeakLoading] = useState(false);
+  const [ttsSpeed, setTtsSpeed] = useState(() => {
+    const saved = localStorage.getItem("gd_tts_speed");
+    return saved ? parseFloat(saved) : 1;
+  });
+  const ttsSpeedRef = useRef(ttsSpeed);
+  useEffect(() => { ttsSpeedRef.current = ttsSpeed; }, [ttsSpeed]);
+  const TTS_SPEEDS = [1, 1.25, 1.5, 2, 0.75];
   const [currentSessionId, setCurrentSessionId] = useState(null);
 
   const recognitionRef = useRef(null);
@@ -1472,6 +1510,7 @@ export default function GoDavaiiAI() {
       new Promise((resolve) => {
         if (gen !== speakGenRef.current) { resolve(); return; }
         const audio = new Audio(`data:${mime};base64,${base64}`);
+        audio.playbackRate = ttsSpeedRef.current;
         audioRef.current = audio;
         audio.onended = () => { audioRef.current = null; resolve(); };
         audio.onerror = () => { audioRef.current = null; resolve(); };
@@ -2402,6 +2441,17 @@ export default function GoDavaiiAI() {
               speakLoading={speakLoading}
               screen={screen}
               uiLang={replyLanguage}
+              ttsSpeed={ttsSpeed}
+              onCycleSpeed={() => {
+                setTtsSpeed((prev) => {
+                  const idx = TTS_SPEEDS.indexOf(prev);
+                  const next = TTS_SPEEDS[(idx + 1) % TTS_SPEEDS.length];
+                  localStorage.setItem("gd_tts_speed", String(next));
+                  // Apply to currently playing audio immediately
+                  if (audioRef.current) audioRef.current.playbackRate = next;
+                  return next;
+                });
+              }}
             />
           ))}
         </AnimatePresence>
