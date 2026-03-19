@@ -1434,9 +1434,9 @@ export default function GoDavaiiAI() {
   const speakGenRef = useRef(0);
 
   const handleSpeak = useCallback(async (msg) => {
-    // ── Stop any playing audio ──
     if (audioRef.current) {
-      try { audioRef.current.pause(); audioRef.current.src = ""; } catch (_) {}
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
       audioRef.current = null;
     }
     window.speechSynthesis?.cancel();
@@ -1459,140 +1459,104 @@ export default function GoDavaiiAI() {
 
     const cacheKey = `${lang}::${text}`;
 
-    // ── Create ONE Audio element at tap-time (iOS requires this) ──
-    // Reuse this SAME object for all chunks — iOS blocks new Audio() outside user gesture
-    const sharedAudio = new Audio();
-    sharedAudio.volume = 1;
-    audioRef.current = sharedAudio;
-
-    // Play a single base64 clip on the shared audio element
+    // Play a single base64 audio clip and return a promise that resolves when it ends
     const playChunk = (base64, mime) =>
       new Promise((resolve) => {
         if (gen !== speakGenRef.current) { resolve(); return; }
-
-        let settled = false;
-        const done = () => {
-          if (settled) return;
-          settled = true;
-          resolve();
-        };
-
-        sharedAudio.onended = done;
-        sharedAudio.onerror = () => {
-          console.warn("[TTS] Chunk play error — skipping");
-          done();
-        };
-
-        // Change src on the SAME element — keeps iOS autoplay chain alive
-        sharedAudio.src = `data:${mime};base64,${base64}`;
-        sharedAudio.play().catch((e) => {
-          console.warn("[TTS] play() blocked:", e?.message);
-          done();
-        });
+        const audio = new Audio(`data:${mime};base64,${base64}`);
+        audioRef.current = audio;
+        audio.onended = () => { audioRef.current = null; resolve(); };
+        audio.onerror = () => { audioRef.current = null; resolve(); };
+        audio.play().catch(() => resolve());
       });
 
-    // Get audio for a chunk — from cache, pending prefetch, or fresh API call (with retry)
+    // Get audio for a chunk — from cache, pending prefetch, or fresh API call
     const getChunkAudio = async (chunkKey, chunkText) => {
-      if (!chunkText || !chunkText.trim()) return null;
       const c = ttsCacheRef.current.get(chunkKey);
       if (c?.audioBase64) return c;
 
-      // Helper: fire a TTS API call and return the entry or null
-      const fireTTSCall = async () => {
-        try {
-          const { data } = await axios.post(
-            `${API}/api/ai/assistant/tts`,
-            { text: chunkText, language: lang, replyLanguagePreference: replyLanguage || "auto" },
-            { timeout: 120000, headers: getAuthHeaders() }
-          );
-          if (data?.audioBase64) {
-            const entry = { audioBase64: data.audioBase64, mimeType: data.mimeType || "audio/mpeg" };
-            ttsCacheRef.current.set(chunkKey, entry);
-            return entry;
-          }
-          console.warn("[TTS] API returned no audioBase64:", Object.keys(data || {}));
-        } catch (err) {
-          console.error("[TTS] Chunk fetch failed:", err?.message);
-        }
-        return null;
-      };
-
-      // Try 1: Use pending prefetch promise if available
-      const pending = ttsPendingRef.current.get(chunkKey);
-      if (pending) {
-        try {
-          const { data } = await pending;
-          ttsPendingRef.current.delete(chunkKey);
-          if (data?.audioBase64) {
-            const entry = { audioBase64: data.audioBase64, mimeType: data.mimeType || "audio/mpeg" };
-            ttsCacheRef.current.set(chunkKey, entry);
-            return entry;
-          }
-          console.warn("[TTS] Prefetch returned no audio — retrying fresh");
-        } catch (err) {
-          ttsPendingRef.current.delete(chunkKey);
-          console.warn("[TTS] Prefetch promise failed — retrying fresh:", err?.message);
-        }
+      let pending = ttsPendingRef.current.get(chunkKey);
+      if (!pending) {
+        pending = axios.post(
+          `${API}/api/ai/assistant/tts`,
+          { text: chunkText, language: lang, replyLanguagePreference: replyLanguage || "auto" },
+          { timeout: 120000, headers: getAuthHeaders() }
+        );
+        ttsPendingRef.current.set(chunkKey, pending);
       }
 
-      // Try 2: Direct fresh API call (not from prefetch cache)
-      const result = await fireTTSCall();
-      if (result) return result;
-
-      // Try 3: One final retry after short delay
-      await new Promise((r) => setTimeout(r, 1000));
-      return await fireTTSCall();
+      try {
+        const { data } = await pending;
+        ttsPendingRef.current.delete(chunkKey);
+        if (data?.audioBase64) {
+          const entry = { audioBase64: data.audioBase64, mimeType: data.mimeType || "audio/mpeg" };
+          ttsCacheRef.current.set(chunkKey, entry);
+          return entry;
+        }
+      } catch (err) {
+        ttsPendingRef.current.delete(chunkKey);
+        console.error("[TTS] Chunk fetch failed:", err?.message);
+      }
+      return null;
     };
 
-    // ── Sequential chunk playback (always start from chunk 0 = top) ──
-    const playAllChunks = async (chunks) => {
-      console.log(`[TTS] Playing ${chunks.length} chunk(s) sequentially from top`);
-      setSpeakLoading(false);
+    try {
+      const meta = ttsCacheRef.current.get(cacheKey);
+      if (meta?.chunked) {
+        // Chunked audio — play chunks sequentially
+        const chunks = splitTextForTTSChunks(text, 900);
+        console.log(`[TTS] Playing ${meta.totalChunks} chunks`);
+        setSpeakLoading(false);
 
+        for (let i = 0; i < meta.totalChunks; i++) {
+          if (gen !== speakGenRef.current) break;
+          const chunkKey = `${cacheKey}::${i}`;
+          const audio = await getChunkAudio(chunkKey, chunks[i] || "");
+          if (audio?.audioBase64) {
+            await playChunk(audio.audioBase64, String(audio.mimeType || "audio/mpeg"));
+          }
+        }
+        setSpeakingId(null);
+        setSpeakLoading(false);
+        audioRef.current = null;
+        return;
+      }
+
+      // Legacy single-audio path (for non-chunked cache entries)
+      if (meta?.audioBase64) {
+        console.log("[TTS] CACHE HIT single");
+        setSpeakLoading(false);
+        await playChunk(meta.audioBase64, String(meta.mimeType || "audio/mpeg"));
+        setSpeakingId(null);
+        audioRef.current = null;
+        return;
+      }
+
+      // No prefetch at all — fire chunked prefetch now, then play
+      console.log("[TTS] No prefetch found — firing now");
+      const chunks = splitTextForTTSChunks(text, 900);
+      const masterMeta = { chunked: true, totalChunks: chunks.length };
+      ttsCacheRef.current.set(cacheKey, masterMeta);
+
+      setSpeakLoading(false);
       for (let i = 0; i < chunks.length; i++) {
         if (gen !== speakGenRef.current) break;
         const chunkKey = `${cacheKey}::${i}`;
         const audio = await getChunkAudio(chunkKey, chunks[i]);
         if (audio?.audioBase64) {
           await playChunk(audio.audioBase64, String(audio.mimeType || "audio/mpeg"));
-        } else {
-          console.warn(`[TTS] Chunk ${i}/${chunks.length} unavailable — skipping`);
         }
       }
-    };
-
-    try {
-      const meta = ttsCacheRef.current.get(cacheKey);
-      const chunks = splitTextForTTSChunks(text, 900);
-
-      if (!meta) {
-        // No prefetch — store metadata and fire prefetch now
-        console.log("[TTS] No prefetch found — firing now");
-        ttsCacheRef.current.set(cacheKey, { chunked: true, totalChunks: chunks.length });
-      }
-
-      // Legacy single-audio cache entry
-      if (meta?.audioBase64) {
-        console.log("[TTS] CACHE HIT single");
-        setSpeakLoading(false);
-        await playChunk(meta.audioBase64, String(meta.mimeType || "audio/mpeg"));
-      } else {
-        // Chunked path — always play from chunk 0 to end
-        await playAllChunks(chunks);
-      }
+      setSpeakingId(null);
+      setSpeakLoading(false);
+      audioRef.current = null;
+      return;
     } catch (err) {
       console.error("TTS failed:", err?.message || err);
     }
 
-    // ── Cleanup ──
-    if (gen === speakGenRef.current) {
-      setSpeakingId(null);
-      setSpeakLoading(false);
-    }
-    if (audioRef.current === sharedAudio) {
-      try { sharedAudio.src = ""; } catch (_) {}
-      audioRef.current = null;
-    }
+    setSpeakingId(null);
+    setSpeakLoading(false);
   }, [speakingId, replyLanguage]);
 
   // Backup prefetch via useEffect (in case eager prefetch didn't fire)
