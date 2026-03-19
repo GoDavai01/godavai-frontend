@@ -86,6 +86,20 @@ function money(v) {
   return `₹${Number(v || 0).toLocaleString("en-IN")}`;
 }
 
+function humanFrequency(freq) {
+  const f = String(freq || "").trim().toUpperCase();
+  const map = { OD: "Once a day", BD: "Twice a day", TDS: "Thrice a day", TID: "Thrice a day", QID: "4 times/day", QDS: "4 times/day", SOS: "When required", HS: "At bedtime", STAT: "Immediately", PRN: "As needed" };
+  return map[f] || String(freq || "").trim();
+}
+
+function humanDuration(dur) {
+  const d = String(dur || "").trim();
+  if (!d) return "";
+  if (/day|week|month/i.test(d)) return d;
+  if (/^\d+$/.test(d)) return `${d} days`;
+  return d;
+}
+
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
@@ -1951,10 +1965,12 @@ export default function DoctorDashboard() {
                           <div className="min-w-0">
                             <div className="font-black text-slate-900">{item.prescribed}</div>
                             <div className="mt-1 text-sm text-slate-600">{item.salt}</div>
-                            <div className="mt-2 text-sm text-slate-700">
-                              {item.dosage} • {item.frequency} • {item.duration}
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                              {item.dosage ? <span className="rounded-lg bg-slate-100 px-2 py-1 font-bold text-slate-700">Dosage: {item.dosage}</span> : null}
+                              {item.frequency ? <span className="rounded-lg bg-green-50 px-2 py-1 font-bold text-green-800">{humanFrequency(item.frequency)}</span> : null}
+                              {item.duration ? <span className="rounded-lg bg-slate-100 px-2 py-1 font-bold text-slate-700">{humanDuration(item.duration)}</span> : null}
                             </div>
-                            <div className="text-sm text-slate-700">{item.howToTake}</div>
+                            {item.howToTake ? <div className="mt-1 text-xs font-semibold text-orange-700">🍽️ {item.howToTake}</div> : null}
                           </div>
                           <div className="self-start rounded-2xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-900">
                             {money(selectedPrice)}
@@ -2593,8 +2609,11 @@ export default function DoctorDashboard() {
                         </div>
 
                         <div className="mt-2 text-sm text-slate-600">{item.salt}</div>
-                        <div className="mt-2 text-sm text-slate-700">
-                          {item.dosage} • {item.frequency} • {item.duration} • {item.howToTake}
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                          {item.dosage ? <span className="rounded-lg bg-slate-100 px-2 py-1 font-bold text-slate-700">Dosage: {item.dosage}</span> : null}
+                          {item.frequency ? <span className="rounded-lg bg-green-50 px-2 py-1 font-bold text-green-800">{humanFrequency(item.frequency)}</span> : null}
+                          {item.duration ? <span className="rounded-lg bg-slate-100 px-2 py-1 font-bold text-slate-700">{humanDuration(item.duration)}</span> : null}
+                          {item.howToTake ? <span className="rounded-lg bg-orange-50 px-2 py-1 font-bold text-orange-800">🍽️ {item.howToTake}</span> : null}
                         </div>
 
                         <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">

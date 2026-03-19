@@ -36,8 +36,33 @@ function toModeLabel(value) {
   return String(value || "").trim();
 }
 
-function buildMedicineInstruction(medicine = {}) {
-  return [medicine.dosage, medicine.frequency, medicine.duration].map((value) => String(value || "").trim()).filter(Boolean).join(" | ");
+function humanFrequency(freq) {
+  const f = String(freq || "").trim().toUpperCase();
+  const map = {
+    OD: "Once a day",
+    BD: "Twice a day",
+    TDS: "Three times a day",
+    TID: "Three times a day",
+    QID: "Four times a day",
+    QDS: "Four times a day",
+    SOS: "When required (SOS)",
+    HS: "At bedtime",
+    STAT: "Immediately",
+    PRN: "As needed",
+    ONCE: "Once only",
+    "ONCE A DAY": "Once a day",
+    "TWICE A DAY": "Twice a day",
+    "THRICE A DAY": "Three times a day",
+  };
+  return map[f] || String(freq || "").trim();
+}
+
+function humanDuration(dur) {
+  const d = String(dur || "").trim();
+  if (!d) return "";
+  if (/day|week|month/i.test(d)) return d;
+  if (/^\d+$/.test(d)) return `${d} days`;
+  return d;
 }
 
 function buildPrescriptionFileName(prescription = {}) {
@@ -470,7 +495,6 @@ export default function DoctorPrescriptionViewDialog({ prescription, open, onOpe
                 <SectionLabel icon={Pill} label="Medicines" />
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
                   {medicines.map((medicine, index) => {
-                    const instruction = buildMedicineInstruction(medicine);
                     return (
                       <div
                         key={`${medicine?.prescribed || "medicine"}-${index}`}
@@ -506,16 +530,45 @@ export default function DoctorPrescriptionViewDialog({ prescription, open, onOpe
                           </div>
                         </div>
 
-                        {instruction ? (
-                          <div style={{ marginTop: 10, fontSize: 12, color: "#166534", fontWeight: 800 }}>{instruction}</div>
-                        ) : null}
+                        {/* Medicine details grid */}
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginTop: 12 }}>
+                          {medicine?.dosage ? (
+                            <div style={{ background: "#F8FAFC", borderRadius: 12, padding: "8px 10px" }}>
+                              <div style={{ fontSize: 9, fontWeight: 900, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.06em" }}>Dosage</div>
+                              <div style={{ marginTop: 2, fontSize: 13, fontWeight: 800, color: "#0F172A" }}>{String(medicine.dosage).trim()}</div>
+                            </div>
+                          ) : null}
+                          {medicine?.frequency ? (
+                            <div style={{ background: "#ECFDF5", borderRadius: 12, padding: "8px 10px" }}>
+                              <div style={{ fontSize: 9, fontWeight: 900, color: "#166534", textTransform: "uppercase", letterSpacing: "0.06em" }}>Frequency</div>
+                              <div style={{ marginTop: 2, fontSize: 13, fontWeight: 800, color: "#166534" }}>{humanFrequency(medicine.frequency)}</div>
+                            </div>
+                          ) : null}
+                          {medicine?.duration ? (
+                            <div style={{ background: "#F8FAFC", borderRadius: 12, padding: "8px 10px" }}>
+                              <div style={{ fontSize: 9, fontWeight: 900, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.06em" }}>Duration</div>
+                              <div style={{ marginTop: 2, fontSize: 13, fontWeight: 800, color: "#0F172A" }}>{humanDuration(medicine.duration)}</div>
+                            </div>
+                          ) : null}
+                        </div>
                         {medicine?.howToTake ? (
-                          <div style={{ marginTop: 8, fontSize: 12, color: "#334155", fontWeight: 700 }}>
-                            How to take: {medicine.howToTake}
+                          <div style={{
+                            marginTop: 8,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            background: "#FFF7ED",
+                            borderRadius: 999,
+                            padding: "5px 10px",
+                            fontSize: 11,
+                            fontWeight: 800,
+                            color: "#9A3412",
+                          }}>
+                            🍽️ {medicine.howToTake}
                           </div>
                         ) : null}
                         {medicine?.notes ? (
-                          <div style={{ marginTop: 7, fontSize: 12, color: "#475569", fontWeight: 600 }}>Notes: {medicine.notes}</div>
+                          <div style={{ marginTop: 7, fontSize: 12, color: "#475569", fontWeight: 600, fontStyle: "italic" }}>📝 {medicine.notes}</div>
                         ) : null}
                       </div>
                     );
