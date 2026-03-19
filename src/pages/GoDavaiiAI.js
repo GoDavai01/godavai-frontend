@@ -1491,35 +1491,57 @@ export default function GoDavaiiAI() {
         });
       });
 
-    // Get audio for a chunk — from cache, pending prefetch, or fresh API call
+    // Get audio for a chunk — from cache, pending prefetch, or fresh API call (with retry)
     const getChunkAudio = async (chunkKey, chunkText) => {
-      if (!chunkText) return null;
+      if (!chunkText || !chunkText.trim()) return null;
       const c = ttsCacheRef.current.get(chunkKey);
       if (c?.audioBase64) return c;
 
-      let pending = ttsPendingRef.current.get(chunkKey);
-      if (!pending) {
-        pending = axios.post(
-          `${API}/api/ai/assistant/tts`,
-          { text: chunkText, language: lang, replyLanguagePreference: replyLanguage || "auto" },
-          { timeout: 120000, headers: getAuthHeaders() }
-        );
-        ttsPendingRef.current.set(chunkKey, pending);
+      // Helper: fire a TTS API call and return the entry or null
+      const fireTTSCall = async () => {
+        try {
+          const { data } = await axios.post(
+            `${API}/api/ai/assistant/tts`,
+            { text: chunkText, language: lang, replyLanguagePreference: replyLanguage || "auto" },
+            { timeout: 120000, headers: getAuthHeaders() }
+          );
+          if (data?.audioBase64) {
+            const entry = { audioBase64: data.audioBase64, mimeType: data.mimeType || "audio/mpeg" };
+            ttsCacheRef.current.set(chunkKey, entry);
+            return entry;
+          }
+          console.warn("[TTS] API returned no audioBase64:", Object.keys(data || {}));
+        } catch (err) {
+          console.error("[TTS] Chunk fetch failed:", err?.message);
+        }
+        return null;
+      };
+
+      // Try 1: Use pending prefetch promise if available
+      const pending = ttsPendingRef.current.get(chunkKey);
+      if (pending) {
+        try {
+          const { data } = await pending;
+          ttsPendingRef.current.delete(chunkKey);
+          if (data?.audioBase64) {
+            const entry = { audioBase64: data.audioBase64, mimeType: data.mimeType || "audio/mpeg" };
+            ttsCacheRef.current.set(chunkKey, entry);
+            return entry;
+          }
+          console.warn("[TTS] Prefetch returned no audio — retrying fresh");
+        } catch (err) {
+          ttsPendingRef.current.delete(chunkKey);
+          console.warn("[TTS] Prefetch promise failed — retrying fresh:", err?.message);
+        }
       }
 
-      try {
-        const { data } = await pending;
-        ttsPendingRef.current.delete(chunkKey);
-        if (data?.audioBase64) {
-          const entry = { audioBase64: data.audioBase64, mimeType: data.mimeType || "audio/mpeg" };
-          ttsCacheRef.current.set(chunkKey, entry);
-          return entry;
-        }
-      } catch (err) {
-        ttsPendingRef.current.delete(chunkKey);
-        console.error("[TTS] Chunk fetch failed:", err?.message);
-      }
-      return null;
+      // Try 2: Direct fresh API call (not from prefetch cache)
+      const result = await fireTTSCall();
+      if (result) return result;
+
+      // Try 3: One final retry after short delay
+      await new Promise((r) => setTimeout(r, 1000));
+      return await fireTTSCall();
     };
 
     // ── Sequential chunk playback (always start from chunk 0 = top) ──
