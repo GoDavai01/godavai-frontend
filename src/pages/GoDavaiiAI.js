@@ -2582,8 +2582,37 @@ export default function GoDavaiiAI() {
                   cursor: micBusy ? "wait" : "pointer",
                   boxShadow: micOn ? "0 10px 24px rgba(220,38,38,0.26)" : "none",
                   opacity: micBusy ? 0.72 : 1,
+                  position: "relative",
+                  zIndex: 2,
                 }}
               >
+                {/* WhatsApp-style pulsing ring when mic is ON */}
+                {micOn && (
+                  <>
+                    <span style={{
+                      position: "absolute",
+                      inset: -4,
+                      borderRadius: 20,
+                      border: "2.5px solid rgba(220,38,38,0.5)",
+                      animation: "micPulse 1.4s ease-out infinite",
+                      pointerEvents: "none",
+                    }} />
+                    <span style={{
+                      position: "absolute",
+                      inset: -8,
+                      borderRadius: 24,
+                      border: "2px solid rgba(220,38,38,0.25)",
+                      animation: "micPulse 1.4s ease-out infinite 0.3s",
+                      pointerEvents: "none",
+                    }} />
+                    <style>{`
+                      @keyframes micPulse {
+                        0% { transform: scale(0.85); opacity: 1; }
+                        100% { transform: scale(1.25); opacity: 0; }
+                      }
+                    `}</style>
+                  </>
+                )}
                 {micOn ? (
                   <MicOff style={{ width: 18, height: 18, color: "#fff" }} />
                 ) : (
