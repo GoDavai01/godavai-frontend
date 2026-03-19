@@ -179,7 +179,7 @@ function chunkTextForReveal(text) {
 
     if (shouldPush) {
       let delay = 26;
-      if (structured && /(Assessment:|Next steps:|What to do now:|Medicine options:|Warning signs:|Red flags:|When to see doctor:|Desi ilaaj:|Home remedies:)/i.test(current)) {
+      if (structured && /(Assessment:|Next steps:|What to do now:|Medicine options:|Suggested tests:|Warning signs:|Red flags:|When to see doctor:|Desi ilaaj:|Home remedies:)/i.test(current)) {
         delay = 170;
       } else if (endsPause) {
         delay = 145;
@@ -234,6 +234,7 @@ function getSectionLabel(sectionKey, lang) {
       "Next steps": "Ab kya karein",
       "What to do now": "Ab kya karein",
       "Medicine options": "Dawai ke options",
+      "Suggested tests": "Kaun se tests karwayein",
       "Warning signs": "Kab turant action lena hai",
       "Red flags": "Kab turant action lena hai",
       "When to see doctor": "Kab extra help leni hai",
@@ -245,6 +246,7 @@ function getSectionLabel(sectionKey, lang) {
       "Next steps": "अब क्या करें",
       "What to do now": "अब क्या करें",
       "Medicine options": "दवाई के विकल्प",
+      "Suggested tests": "कौन से टेस्ट करवाएं",
       "Warning signs": "कब तुरंत कदम उठाना है",
       "Red flags": "कब तुरंत कदम उठाना है",
       "When to see doctor": "कब अतिरिक्त मदद लेनी है",
@@ -256,6 +258,7 @@ function getSectionLabel(sectionKey, lang) {
       "Next steps": "What to do now",
       "What to do now": "What to do now",
       "Medicine options": "Medicine options",
+      "Suggested tests": "Suggested tests",
       "Warning signs": "When to act urgently",
       "Red flags": "When to act urgently",
       "When to see doctor": "When to get medical help",
@@ -267,6 +270,7 @@ function getSectionLabel(sectionKey, lang) {
       "Next steps": "এখন কী করবেন",
       "What to do now": "এখন কী করবেন",
       "Medicine options": "ওষুধের বিকল্প",
+      "Suggested tests": "কোন পরীক্ষা করাবেন",
       "Warning signs": "কখন দ্রুত ব্যবস্থা নেবেন",
       "Red flags": "কখন দ্রুত ব্যবস্থা নেবেন",
       "When to see doctor": "কখন অতিরিক্ত সাহায্য নেবেন",
@@ -278,6 +282,7 @@ function getSectionLabel(sectionKey, lang) {
       "Next steps": "હવે શું કરવું",
       "What to do now": "હવે શું કરવું",
       "Medicine options": "દવાના વિકલ્પો",
+      "Suggested tests": "કયા ટેસ્ટ કરાવવા",
       "Warning signs": "ક્યારે તરત પગલું લેવું",
       "Red flags": "ક્યારે તરત પગલું લેવું",
       "When to see doctor": "ક્યારે વધુ મદદ લેવી",
@@ -289,6 +294,7 @@ function getSectionLabel(sectionKey, lang) {
       "Next steps": "ਹੁਣ ਕੀ ਕਰਨਾ ਹੈ",
       "What to do now": "ਹੁਣ ਕੀ ਕਰਨਾ ਹੈ",
       "Medicine options": "ਦਵਾਈ ਦੇ ਵਿਕਲਪ",
+      "Suggested tests": "ਕਿਹੜੇ ਟੈਸਟ ਕਰਵਾਉਣੇ ਹਨ",
       "Warning signs": "ਕਦੋਂ ਤੁਰੰਤ ਕਦਮ ਲੈਣਾ ਹੈ",
       "Red flags": "ਕਦੋਂ ਤੁਰੰਤ ਕਦਮ ਲੈਣਾ ਹੈ",
       "When to see doctor": "ਕਦੋਂ ਹੋਰ ਮਦਦ ਲੈਣੀ ਹੈ",
@@ -300,6 +306,7 @@ function getSectionLabel(sectionKey, lang) {
       "Next steps": "आता काय करावे",
       "What to do now": "आता काय करावे",
       "Medicine options": "औषधाचे पर्याय",
+      "Suggested tests": "कोणत्या चाचण्या करायच्या",
       "Warning signs": "कधी लगेच पाऊल उचलावे",
       "Red flags": "कधी लगेच पाऊल उचलावे",
       "When to see doctor": "कधी जास्त मदत घ्यावी",
@@ -311,6 +318,7 @@ function getSectionLabel(sectionKey, lang) {
       "Next steps": "இப்போது என்ன செய்ய வேண்டும்",
       "What to do now": "இப்போது என்ன செய்ய வேண்டும்",
       "Medicine options": "மருந்து தேர்வுகள்",
+      "Suggested tests": "என்ன பரிசோதனைகள் செய்ய வேண்டும்",
       "Warning signs": "எப்போது உடனே நடவடிக்கை எடுக்க வேண்டும்",
       "Red flags": "எப்போது உடனே நடவடிக்கை எடுக்க வேண்டும்",
       "When to see doctor": "எப்போது கூடுதல் உதவி பெற வேண்டும்",
@@ -322,6 +330,7 @@ function getSectionLabel(sectionKey, lang) {
       "Next steps": "ఇప్పుడు ఏమి చేయాలి",
       "What to do now": "ఇప్పుడు ఏమి చేయాలి",
       "Medicine options": "మందు ఎంపికలు",
+      "Suggested tests": "ఏ పరీక్షలు చేయించాలి",
       "Warning signs": "ఎప్పుడు వెంటనే చర్య తీసుకోవాలి",
       "Red flags": "ఎప్పుడు వెంటనే చర్య తీసుకోవాలి",
       "When to see doctor": "ఎప్పుడు అదనపు సహాయం తీసుకోవాలి",
@@ -333,6 +342,7 @@ function getSectionLabel(sectionKey, lang) {
       "Next steps": "ಈಗ ಏನು ಮಾಡಬೇಕು",
       "What to do now": "ಈಗ ಏನು ಮಾಡಬೇಕು",
       "Medicine options": "ಔಷಧ ಆಯ್ಕೆಗಳು",
+      "Suggested tests": "ಯಾವ ಪರೀಕ್ಷೆಗಳನ್ನು ಮಾಡಿಸಬೇಕು",
       "Warning signs": "ಯಾವಾಗ ತಕ್ಷಣ ಕ್ರಮ ತೆಗೆದುಕೊಳ್ಳಬೇಕು",
       "Red flags": "ಯಾವಾಗ ತಕ್ಷಣ ಕ್ರಮ ತೆಗೆದುಕೊಳ್ಳಬೇಕು",
       "When to see doctor": "ಯಾವಾಗ ಹೆಚ್ಚುವರಿ ಸಹಾಯ ಪಡೆಯಬೇಕು",
@@ -344,6 +354,7 @@ function getSectionLabel(sectionKey, lang) {
       "Next steps": "ഇപ്പോൾ എന്ത് ചെയ്യണം",
       "What to do now": "ഇപ്പോൾ എന്ത് ചെയ്യണം",
       "Medicine options": "മരുന്ന് ഓപ്ഷനുകൾ",
+      "Suggested tests": "ഏത് പരിശോധനകൾ ചെയ്യണം",
       "Warning signs": "എപ്പോൾ ഉടൻ നടപടി എടുക്കണം",
       "Red flags": "എപ്പോൾ ഉടൻ നടപടി എടുക്കണം",
       "When to see doctor": "എപ്പോൾ കൂടുതൽ സഹായം തേടണം",
@@ -355,6 +366,7 @@ function getSectionLabel(sectionKey, lang) {
       "Next steps": "ଏବେ କଣ କରିବେ",
       "What to do now": "ଏବେ କଣ କରିବେ",
       "Medicine options": "ଔଷଧ ବିକଳ୍ପ",
+      "Suggested tests": "କେଉଁ ପରୀକ୍ଷା କରାଇବେ",
       "Warning signs": "କେବେ ତୁରନ୍ତ ପଦକ୍ଷେପ ନେବେ",
       "Red flags": "କେବେ ତୁରନ୍ତ ପଦକ୍ଷେପ ନେବେ",
       "When to see doctor": "କେବେ ଅଧିକ ସହାୟତା ନେବେ",
@@ -677,14 +689,14 @@ function FormatReply({ text, screen, uiLang }) {
   }
 
   const sections = clean.split(
-    /\n(?=[-–—*•]?\s*(?:Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies)[^:\n]*:)/i
+    /\n(?=[-–—*•]?\s*(?:Assessment|Next steps|What to do now|Medicine options|Suggested tests|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies)[^:\n]*:)/i
   );
 
   return (
     <div>
       {sections.map((section, i) => {
         const headerMatch = section.match(
-          /^[-–—*•]?\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies)[^:\n]*:/i
+          /^[-–—*•]?\s*(Assessment|Next steps|What to do now|Medicine options|Suggested tests|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies)[^:\n]*:/i
         );
         if (!headerMatch) {
           return (
@@ -710,6 +722,7 @@ function FormatReply({ text, screen, uiLang }) {
         const isDesi = /desi|home remed/i.test(rawHeader);
         const isAssessment = /assessment/i.test(rawHeader);
         const isMedicine = /medicine options/i.test(rawHeader);
+        const isTests = /suggested tests/i.test(rawHeader);
 
         return (
           <div key={i} style={{ marginBottom: 16 }}>
@@ -721,13 +734,13 @@ function FormatReply({ text, screen, uiLang }) {
                 fontSize: isDesktop ? 12.5 : 11.5,
                 fontWeight: 900,
                 letterSpacing: "0.25px",
-                color: isRed ? "#DC2626" : isDesi ? "#059669" : isAssessment ? "#0369A1" : isMedicine ? "#7C3AED" : DEEP,
-                background: isRed ? "#FEF2F2" : isDesi ? "#ECFDF5" : isAssessment ? "#F0F9FF" : isMedicine ? "#F5F3FF" : "#EFFAF4",
+                color: isRed ? "#DC2626" : isDesi ? "#059669" : isAssessment ? "#0369A1" : isMedicine ? "#7C3AED" : isTests ? "#B45309" : DEEP,
+                background: isRed ? "#FEF2F2" : isDesi ? "#ECFDF5" : isAssessment ? "#F0F9FF" : isMedicine ? "#F5F3FF" : isTests ? "#FFFBEB" : "#EFFAF4",
                 padding: "6px 11px",
                 borderRadius: 999,
                 marginBottom: 9,
                 fontFamily: "'Sora','Plus Jakarta Sans',sans-serif",
-                border: `1px solid ${isRed ? "#FECACA" : isDesi ? "#A7F3D0" : isAssessment ? "#BAE6FD" : "rgba(12,90,62,0.08)"}`,
+                border: `1px solid ${isRed ? "#FECACA" : isDesi ? "#A7F3D0" : isAssessment ? "#BAE6FD" : isTests ? "#FDE68A" : "rgba(12,90,62,0.08)"}`,
               }}
             >
               {header}
