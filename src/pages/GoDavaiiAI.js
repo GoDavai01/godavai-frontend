@@ -1212,43 +1212,42 @@ export default function GoDavaiiAI() {
     // Store metadata so handleSpeak knows about chunks
     ttsCacheRef.current.set(masterKey, { chunked: true, totalChunks: chunks.length });
 
-    // Fire chunks with stagger to avoid TTS API rate limits
-    // Chunk 0 fires immediately, rest stagger by 1.5s each
-    const fireChunkPrefetch = (chunk, i) => {
-      const chunkKey = `${masterKey}::${i}`;
-      if (ttsCacheRef.current.has(chunkKey) || ttsPendingRef.current.has(chunkKey)) return;
+    // Fire chunks SEQUENTIALLY — one at a time to avoid backend rate-limits
+    // Each promise is stored in ttsPendingRef so handleSpeak won't fire duplicates
+    const prefetchSequential = async () => {
+      for (let i = 0; i < chunks.length; i++) {
+        const chunkKey = `${masterKey}::${i}`;
+        if (ttsCacheRef.current.has(chunkKey)) continue;
 
-      const promise = axios.post(
-        `${API}/api/ai/assistant/tts`,
-        { text: chunk, language: lang, replyLanguagePreference: replyLanguage || "auto" },
-        { timeout: 120000, headers: getAuthHeaders() }
-      );
-      ttsPendingRef.current.set(chunkKey, promise);
+        // Create the promise and store it in ttsPendingRef BEFORE awaiting
+        // so that handleSpeak's getChunkAudio can find it and await the same promise
+        const promise = axios.post(
+          `${API}/api/ai/assistant/tts`,
+          { text: chunks[i], language: lang, replyLanguagePreference: replyLanguage || "auto" },
+          { timeout: 120000, headers: getAuthHeaders() }
+        );
+        ttsPendingRef.current.set(chunkKey, promise);
 
-      promise
-        .then(({ data }) => {
+        try {
+          const { data } = await promise;
           ttsPendingRef.current.delete(chunkKey);
           if (data?.audioBase64) {
-            console.log(`[TTS prefetch] Chunk ${i}/${chunks.length} DONE`);
+            console.log(`[TTS prefetch] Chunk ${i+1}/${chunks.length} DONE`);
             ttsCacheRef.current.set(chunkKey, {
               audioBase64: data.audioBase64,
               mimeType: data.mimeType || "audio/mpeg",
             });
+          } else {
+            console.warn(`[TTS prefetch] Chunk ${i+1} empty — engine: ${data?.engine}`);
           }
-        })
-        .catch((err) => {
+        } catch (err) {
           ttsPendingRef.current.delete(chunkKey);
-          console.error(`[TTS prefetch] Chunk ${i} failed:`, err?.message);
-        });
+          console.error(`[TTS prefetch] Chunk ${i+1} failed:`, err?.message);
+        }
+      }
     };
 
-    chunks.forEach((chunk, i) => {
-      if (i === 0) {
-        fireChunkPrefetch(chunk, i); // First chunk fires immediately
-      } else {
-        setTimeout(() => fireChunkPrefetch(chunk, i), i * 1500); // Rest stagger by 1.5s
-      }
-    });
+    prefetchSequential();
   }, [replyLanguage]);
 
   const appendAssistantMessageWithReveal = useCallback((fullText, meta = {}) => {
