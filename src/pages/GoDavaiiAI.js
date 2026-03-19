@@ -1212,8 +1212,9 @@ export default function GoDavaiiAI() {
     // Store metadata so handleSpeak knows about chunks
     ttsCacheRef.current.set(masterKey, { chunked: true, totalChunks: chunks.length });
 
-    // Fire ALL chunks in parallel
-    chunks.forEach((chunk, i) => {
+    // Fire chunks with stagger to avoid TTS API rate limits
+    // Chunk 0 fires immediately, rest stagger by 1.5s each
+    const fireChunkPrefetch = (chunk, i) => {
       const chunkKey = `${masterKey}::${i}`;
       if (ttsCacheRef.current.has(chunkKey) || ttsPendingRef.current.has(chunkKey)) return;
 
@@ -1233,14 +1234,20 @@ export default function GoDavaiiAI() {
               audioBase64: data.audioBase64,
               mimeType: data.mimeType || "audio/mpeg",
             });
-          } else {
-            console.warn(`[TTS prefetch] Chunk ${i} returned EMPTY audio — engine: ${data?.engine}, will retry on play`);
           }
         })
         .catch((err) => {
           ttsPendingRef.current.delete(chunkKey);
           console.error(`[TTS prefetch] Chunk ${i} failed:`, err?.message);
         });
+    };
+
+    chunks.forEach((chunk, i) => {
+      if (i === 0) {
+        fireChunkPrefetch(chunk, i); // First chunk fires immediately
+      } else {
+        setTimeout(() => fireChunkPrefetch(chunk, i), i * 1500); // Rest stagger by 1.5s
+      }
     });
   }, [replyLanguage]);
 
