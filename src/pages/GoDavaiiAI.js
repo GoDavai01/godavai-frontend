@@ -1238,7 +1238,7 @@ export default function GoDavaiiAI() {
               mimeType: data.mimeType || "audio/mpeg",
             });
           } else {
-            console.warn(`[TTS prefetch] Chunk ${i+1} empty — engine: ${data?.engine}`);
+            console.warn(`[TTS prefetch] Chunk ${i+1} empty — engine: ${data?.engine} — reason: ${data?.failReason || "unknown"}`);
           }
         } catch (err) {
           ttsPendingRef.current.delete(chunkKey);
