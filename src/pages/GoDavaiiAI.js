@@ -1477,52 +1477,29 @@ export default function GoDavaiiAI() {
       const c = ttsCacheRef.current.get(chunkKey);
       if (c?.audioBase64) return c;
 
-      // Helper to fire a single TTS call and return entry or null
-      const tryTTS = async () => {
-        try {
-          const { data } = await axios.post(
-            `${API}/api/ai/assistant/tts`,
-            { text: chunkText, language: lang, replyLanguagePreference: replyLanguage || "auto" },
-            { timeout: 120000, headers: getAuthHeaders() }
-          );
-          if (data?.audioBase64) {
-            const entry = { audioBase64: data.audioBase64, mimeType: data.mimeType || "audio/mpeg" };
-            ttsCacheRef.current.set(chunkKey, entry);
-            return entry;
-          }
-          console.warn("[TTS] API returned empty audioBase64, engine:", data?.engine);
-        } catch (err) {
-          console.error("[TTS] Chunk fetch failed:", err?.message);
-        }
-        return null;
-      };
-
-      // Try 1: Use pending prefetch if available
-      const pending = ttsPendingRef.current.get(chunkKey);
-      if (pending) {
-        try {
-          const { data } = await pending;
-          ttsPendingRef.current.delete(chunkKey);
-          if (data?.audioBase64) {
-            const entry = { audioBase64: data.audioBase64, mimeType: data.mimeType || "audio/mpeg" };
-            ttsCacheRef.current.set(chunkKey, entry);
-            return entry;
-          }
-          console.warn("[TTS] Prefetch returned empty — retrying fresh");
-        } catch (err) {
-          ttsPendingRef.current.delete(chunkKey);
-          console.warn("[TTS] Prefetch failed — retrying fresh:", err?.message);
-        }
+      let pending = ttsPendingRef.current.get(chunkKey);
+      if (!pending) {
+        pending = axios.post(
+          `${API}/api/ai/assistant/tts`,
+          { text: chunkText, language: lang, replyLanguagePreference: replyLanguage || "auto" },
+          { timeout: 120000, headers: getAuthHeaders() }
+        );
+        ttsPendingRef.current.set(chunkKey, pending);
       }
 
-      // Try 2: Fresh API call
-      const result = await tryTTS();
-      if (result) return result;
-
-      // Try 3: One final retry after 1s delay
-      await new Promise((r) => setTimeout(r, 1000));
-      console.log("[TTS] Final retry for chunk...");
-      return await tryTTS();
+      try {
+        const { data } = await pending;
+        ttsPendingRef.current.delete(chunkKey);
+        if (data?.audioBase64) {
+          const entry = { audioBase64: data.audioBase64, mimeType: data.mimeType || "audio/mpeg" };
+          ttsCacheRef.current.set(chunkKey, entry);
+          return entry;
+        }
+      } catch (err) {
+        ttsPendingRef.current.delete(chunkKey);
+        console.error("[TTS] Chunk fetch failed:", err?.message);
+      }
+      return null;
     };
 
     try {
