@@ -141,7 +141,7 @@ function splitTextForTTSChunks(text, maxLen = 900) {
 }
 
 function isStructuredMedicalReply(text) {
-  return /\n\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i.test(
+  return /\n[-–—*•]?\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i.test(
     String(text || "")
   );
 }
@@ -659,7 +659,7 @@ function FormatReply({ text, screen, uiLang }) {
   const baseFontSize = isDesktop ? 14.5 : 14;
   const lang = getDisplayReplyLanguage(uiLang, clean);
 
-  const hasSections = /\n\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Desi ilaaj):/i.test(clean);
+  const hasSections = /\n[-–—*•]?\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Desi ilaaj):/i.test(clean);
   if (!hasSections) {
     return (
       <div
@@ -677,14 +677,14 @@ function FormatReply({ text, screen, uiLang }) {
   }
 
   const sections = clean.split(
-    /\n(?=(?:Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):)/i
+    /\n(?=[-–—*•]?\s*(?:Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):)/i
   );
 
   return (
     <div>
       {sections.map((section, i) => {
         const headerMatch = section.match(
-          /^(Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i
+          /^[-–—*•]?\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i
         );
         if (!headerMatch) {
           return (
