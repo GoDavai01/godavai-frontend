@@ -765,9 +765,10 @@ export default function DoctorDashboard() {
   }
 
   async function applyMedicineSuggestion(index, kind, suggestion) {
+    const currentMed = prescriptionForm.medicines?.[index] || {};
     const nextPatch =
       kind === "brand"
-        ? { prescribed: suggestion?.name || "", salt: prescriptionForm.medicines?.[index]?.salt || "" }
+        ? { prescribed: suggestion?.name || "" }
         : { salt: suggestion?.name || "" };
     mergeMedicineRow(index, nextPatch);
     setMedicineSuggestions((prev) => ({ ...prev, [`${index}:${kind}`]: [] }));
@@ -775,17 +776,31 @@ export default function DoctorDashboard() {
       const params =
         kind === "brand" ? { brandId: suggestion?.id } : { compositionId: suggestion?.id };
       const { data } = await axios.get(`${API_BASE_URL}/api/suggest/prefill`, { params });
-      mergeMedicineRow(index, {
-        prescribed:
-          kind === "brand"
-            ? suggestion?.name || prescriptionForm.medicines?.[index]?.prescribed || ""
-            : prescriptionForm.medicines?.[index]?.prescribed || "",
-        salt:
-          kind === "composition"
-            ? suggestion?.name || prescriptionForm.medicines?.[index]?.salt || ""
-            : prescriptionForm.medicines?.[index]?.salt || "",
-        dosage: prescriptionForm.medicines?.[index]?.dosage || data?.strength || "",
-      });
+
+      // Build auto-fill patch - only fill empty fields
+      const autoFill = {};
+      if (kind === "brand") {
+        autoFill.prescribed = suggestion?.name || currentMed.prescribed || "";
+        // Auto-fill salt from suggestion data (type + strength as composition hint)
+        if (!currentMed.salt && data?.composition) autoFill.salt = data.composition;
+        // Auto-fill dosage from strength
+        if (!currentMed.dosage) {
+          const strength = data?.strength || suggestion?.strength || "";
+          if (strength) {
+            // Try to infer dosage from type (e.g., "Tablet" → "1 tablet")
+            const type = (data?.type || suggestion?.type || "").toLowerCase();
+            if (type === "tablet" || type === "capsule") autoFill.dosage = `1 ${type}`;
+            else if (type === "syrup" || type === "suspension") autoFill.dosage = "5 ml";
+            else if (type === "drops") autoFill.dosage = "2 drops";
+            else autoFill.dosage = strength;
+          }
+        }
+      } else {
+        autoFill.salt = suggestion?.name || currentMed.salt || "";
+        autoFill.prescribed = currentMed.prescribed || "";
+        if (!currentMed.dosage && data?.strength) autoFill.dosage = data.strength;
+      }
+      mergeMedicineRow(index, autoFill);
     } catch (_) {}
   }
 
@@ -2498,55 +2513,106 @@ export default function DoctorDashboard() {
                         ) : null}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label>Dosage</Label>
-                          <Input
-                            className="mt-2"
-                            value={med.dosage}
-                            onChange={(e) => updateMedicineRow(idx, "dosage", e.target.value)}
-                            placeholder="1 tablet"
-                          />
-                        </div>
-                        <div>
-                          <Label>Frequency</Label>
-                          <Input
-                            className="mt-2"
-                            value={med.frequency}
-                            onChange={(e) => updateMedicineRow(idx, "frequency", e.target.value)}
-                            placeholder="BD / OD / SOS"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label>Duration</Label>
-                          <Input
-                            className="mt-2"
-                            value={med.duration}
-                            onChange={(e) => updateMedicineRow(idx, "duration", e.target.value)}
-                            placeholder="5 days"
-                          />
-                        </div>
-                        <div>
-                          <Label>How to take</Label>
-                          <Input
-                            className="mt-2"
-                            value={med.howToTake}
-                            onChange={(e) => updateMedicineRow(idx, "howToTake", e.target.value)}
-                            placeholder="After food / before breakfast"
-                          />
-                        </div>
-                      </div>
-
+                      {/* Dosage */}
                       <div>
-                        <Label>Notes</Label>
+                        <Label className="text-xs font-bold text-slate-500">Dosage</Label>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {["1 tablet", "2 tablets", "½ tablet", "1 capsule", "5 ml", "10 ml"].map((opt) => (
+                            <button key={opt} type="button"
+                              onClick={() => updateMedicineRow(idx, "dosage", med.dosage === opt ? "" : opt)}
+                              className={cx(
+                                "rounded-full border px-3 py-1 text-xs font-bold transition-all",
+                                med.dosage === opt
+                                  ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+                                  : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:bg-emerald-50"
+                              )}
+                            >{opt}</button>
+                          ))}
+                          <Input
+                            className="h-7 w-24 rounded-full border-slate-200 px-3 text-xs"
+                            value={["1 tablet", "2 tablets", "½ tablet", "1 capsule", "5 ml", "10 ml"].includes(med.dosage) ? "" : med.dosage}
+                            onChange={(e) => updateMedicineRow(idx, "dosage", e.target.value)}
+                            placeholder="Custom..."
+                          />
+                        </div>
+                      </div>
+
+                      {/* Frequency */}
+                      <div>
+                        <Label className="text-xs font-bold text-slate-500">Frequency</Label>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {[
+                            { val: "OD", label: "OD (Once/day)" },
+                            { val: "BD", label: "BD (Twice/day)" },
+                            { val: "TDS", label: "TDS (Thrice/day)" },
+                            { val: "QID", label: "QID (4x/day)" },
+                            { val: "SOS", label: "SOS (As needed)" },
+                            { val: "HS", label: "HS (Bedtime)" },
+                            { val: "STAT", label: "STAT (Once)" },
+                          ].map((opt) => (
+                            <button key={opt.val} type="button"
+                              onClick={() => updateMedicineRow(idx, "frequency", med.frequency === opt.val ? "" : opt.val)}
+                              className={cx(
+                                "rounded-full border px-3 py-1 text-xs font-bold transition-all",
+                                med.frequency === opt.val
+                                  ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+                                  : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:bg-emerald-50"
+                              )}
+                            >{opt.label}</button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Duration + How to Take */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-xs font-bold text-slate-500">Duration</Label>
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {["3", "5", "7", "10", "14", "30"].map((opt) => (
+                              <button key={opt} type="button"
+                                onClick={() => updateMedicineRow(idx, "duration", med.duration === opt ? "" : opt)}
+                                className={cx(
+                                  "rounded-full border px-2.5 py-1 text-xs font-bold transition-all",
+                                  med.duration === opt
+                                    ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+                                    : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:bg-emerald-50"
+                                )}
+                              >{opt}d</button>
+                            ))}
+                            <Input
+                              className="h-7 w-16 rounded-full border-slate-200 px-2.5 text-xs"
+                              value={["3", "5", "7", "10", "14", "30"].includes(med.duration) ? "" : med.duration}
+                              onChange={(e) => updateMedicineRow(idx, "duration", e.target.value)}
+                              placeholder="Custom"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-xs font-bold text-slate-500">How to take</Label>
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {["After Food", "Before Food", "With Food", "Empty Stomach", "At Bedtime"].map((opt) => (
+                              <button key={opt} type="button"
+                                onClick={() => updateMedicineRow(idx, "howToTake", med.howToTake === opt ? "" : opt)}
+                                className={cx(
+                                  "rounded-full border px-2.5 py-1 text-xs font-bold transition-all",
+                                  med.howToTake === opt
+                                    ? "border-amber-500 bg-amber-500 text-white shadow-sm"
+                                    : "border-slate-200 bg-white text-slate-600 hover:border-amber-300 hover:bg-amber-50"
+                                )}
+                              >{opt}</button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Notes */}
+                      <div>
+                        <Label className="text-xs font-bold text-slate-500">Notes <span className="font-normal text-slate-400">(optional)</span></Label>
                         <Input
-                          className="mt-2"
+                          className="mt-1.5"
                           value={med.notes}
                           onChange={(e) => updateMedicineRow(idx, "notes", e.target.value)}
-                          placeholder="Any special note..."
+                          placeholder="Any special instructions..."
                         />
                       </div>
                     </div>
