@@ -659,7 +659,7 @@ function FormatReply({ text, screen, uiLang }) {
   const baseFontSize = isDesktop ? 14.5 : 14;
   const lang = getDisplayReplyLanguage(uiLang, clean);
 
-  const hasSections = /\n\s*(Assessment|Next steps|Warning signs|Desi ilaaj):/i.test(clean);
+  const hasSections = /\n\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Desi ilaaj):/i.test(clean);
   if (!hasSections) {
     return (
       <div
@@ -677,14 +677,14 @@ function FormatReply({ text, screen, uiLang }) {
   }
 
   const sections = clean.split(
-    /\n(?=(?:Assessment|Next steps|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):)/i
+    /\n(?=(?:Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):)/i
   );
 
   return (
     <div>
       {sections.map((section, i) => {
         const headerMatch = section.match(
-          /^(Assessment|Next steps|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i
+          /^(Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i
         );
         if (!headerMatch) {
           return (
@@ -709,6 +709,7 @@ function FormatReply({ text, screen, uiLang }) {
         const isRed = /red flag|warning sign|when to see doctor/i.test(rawHeader);
         const isDesi = /desi|home remed/i.test(rawHeader);
         const isAssessment = /assessment/i.test(rawHeader);
+        const isMedicine = /medicine options/i.test(rawHeader);
 
         return (
           <div key={i} style={{ marginBottom: 16 }}>
@@ -720,8 +721,8 @@ function FormatReply({ text, screen, uiLang }) {
                 fontSize: isDesktop ? 12.5 : 11.5,
                 fontWeight: 900,
                 letterSpacing: "0.25px",
-                color: isRed ? "#DC2626" : isDesi ? "#059669" : isAssessment ? "#0369A1" : DEEP,
-                background: isRed ? "#FEF2F2" : isDesi ? "#ECFDF5" : isAssessment ? "#F0F9FF" : "#EFFAF4",
+                color: isRed ? "#DC2626" : isDesi ? "#059669" : isAssessment ? "#0369A1" : isMedicine ? "#7C3AED" : DEEP,
+                background: isRed ? "#FEF2F2" : isDesi ? "#ECFDF5" : isAssessment ? "#F0F9FF" : isMedicine ? "#F5F3FF" : "#EFFAF4",
                 padding: "6px 11px",
                 borderRadius: 999,
                 marginBottom: 9,
