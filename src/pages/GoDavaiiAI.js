@@ -141,7 +141,7 @@ function splitTextForTTSChunks(text, maxLen = 900) {
 }
 
 function isStructuredMedicalReply(text) {
-  return /\n[-–—*•]?\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i.test(
+  return /\n[-–—*•]?\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies)[^:\n]*:/i.test(
     String(text || "")
   );
 }
@@ -659,7 +659,7 @@ function FormatReply({ text, screen, uiLang }) {
   const baseFontSize = isDesktop ? 14.5 : 14;
   const lang = getDisplayReplyLanguage(uiLang, clean);
 
-  const hasSections = /\n[-–—*•]?\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Desi ilaaj):/i.test(clean);
+  const hasSections = /\n[-–—*•]?\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Desi ilaaj)[^:\n]*:/i.test(clean);
   if (!hasSections) {
     return (
       <div
@@ -677,14 +677,14 @@ function FormatReply({ text, screen, uiLang }) {
   }
 
   const sections = clean.split(
-    /\n(?=[-–—*•]?\s*(?:Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):)/i
+    /\n(?=[-–—*•]?\s*(?:Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies)[^:\n]*:)/i
   );
 
   return (
     <div>
       {sections.map((section, i) => {
         const headerMatch = section.match(
-          /^[-–—*•]?\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies):/i
+          /^[-–—*•]?\s*(Assessment|Next steps|What to do now|Medicine options|Warning signs|Red flags|When to see doctor|Desi ilaaj|Home remedies)[^:\n]*:/i
         );
         if (!headerMatch) {
           return (
@@ -1434,9 +1434,9 @@ export default function GoDavaiiAI() {
   const speakGenRef = useRef(0);
 
   const handleSpeak = useCallback(async (msg) => {
+    // ── Stop any playing audio ──
     if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+      try { audioRef.current.pause(); audioRef.current.src = ""; } catch (_) {}
       audioRef.current = null;
     }
     window.speechSynthesis?.cancel();
@@ -1459,35 +1459,41 @@ export default function GoDavaiiAI() {
 
     const cacheKey = `${lang}::${text}`;
 
-    // Play a single base64 audio clip and return a promise that resolves when it ends
+    // ── Create ONE Audio element at tap-time (iOS requires this) ──
+    // Reuse this SAME object for all chunks — iOS blocks new Audio() outside user gesture
+    const sharedAudio = new Audio();
+    sharedAudio.volume = 1;
+    audioRef.current = sharedAudio;
+
+    // Play a single base64 clip on the shared audio element
     const playChunk = (base64, mime) =>
       new Promise((resolve) => {
         if (gen !== speakGenRef.current) { resolve(); return; }
-
-        // Stop any previous audio before starting new chunk
-        if (audioRef.current) {
-          try { audioRef.current.pause(); audioRef.current.src = ""; } catch (_) {}
-        }
-
-        const audio = new Audio(`data:${mime};base64,${base64}`);
-        audio.volume = 1;
-        audioRef.current = audio;
 
         let settled = false;
         const done = () => {
           if (settled) return;
           settled = true;
-          // Don't null audioRef here — let next chunk handle cleanup
           resolve();
         };
 
-        audio.onended = done;
-        audio.onerror = done;
-        audio.play().catch(() => done());
+        sharedAudio.onended = done;
+        sharedAudio.onerror = () => {
+          console.warn("[TTS] Chunk play error — skipping");
+          done();
+        };
+
+        // Change src on the SAME element — keeps iOS autoplay chain alive
+        sharedAudio.src = `data:${mime};base64,${base64}`;
+        sharedAudio.play().catch((e) => {
+          console.warn("[TTS] play() blocked:", e?.message);
+          done();
+        });
       });
 
     // Get audio for a chunk — from cache, pending prefetch, or fresh API call
     const getChunkAudio = async (chunkKey, chunkText) => {
+      if (!chunkText) return null;
       const c = ttsCacheRef.current.get(chunkKey);
       if (c?.audioBase64) return c;
 
@@ -1516,45 +1522,9 @@ export default function GoDavaiiAI() {
       return null;
     };
 
-    try {
-      const meta = ttsCacheRef.current.get(cacheKey);
-
-      if (meta?.chunked) {
-        // Chunked audio — play chunks sequentially
-        const chunks = splitTextForTTSChunks(text, 900);
-        console.log(`[TTS] Playing ${meta.totalChunks} chunks`);
-        setSpeakLoading(false);
-
-        for (let i = 0; i < meta.totalChunks; i++) {
-          if (gen !== speakGenRef.current) break;
-          const chunkKey = `${cacheKey}::${i}`;
-          const audio = await getChunkAudio(chunkKey, chunks[i] || "");
-          if (audio?.audioBase64) {
-            await playChunk(audio.audioBase64, String(audio.mimeType || "audio/mpeg"));
-          }
-        }
-
-        setSpeakingId(null);
-        setSpeakLoading(false);
-        audioRef.current = null;
-        return;
-      }
-
-      // Legacy single-audio path (for non-chunked cache entries)
-      if (meta?.audioBase64) {
-        console.log("[TTS] CACHE HIT single");
-        setSpeakLoading(false);
-        await playChunk(meta.audioBase64, String(meta.mimeType || "audio/mpeg"));
-        setSpeakingId(null);
-        audioRef.current = null;
-        return;
-      }
-
-      // No prefetch at all — fire chunked prefetch now, then play
-      console.log("[TTS] No prefetch found — firing now");
-      const chunks = splitTextForTTSChunks(text, 900);
-      const masterMeta = { chunked: true, totalChunks: chunks.length };
-      ttsCacheRef.current.set(cacheKey, masterMeta);
+    // ── Sequential chunk playback (always start from chunk 0 = top) ──
+    const playAllChunks = async (chunks) => {
+      console.log(`[TTS] Playing ${chunks.length} chunk(s) sequentially from top`);
       setSpeakLoading(false);
 
       for (let i = 0; i < chunks.length; i++) {
@@ -1563,19 +1533,44 @@ export default function GoDavaiiAI() {
         const audio = await getChunkAudio(chunkKey, chunks[i]);
         if (audio?.audioBase64) {
           await playChunk(audio.audioBase64, String(audio.mimeType || "audio/mpeg"));
+        } else {
+          console.warn(`[TTS] Chunk ${i}/${chunks.length} unavailable — skipping`);
         }
       }
+    };
 
-      setSpeakingId(null);
-      setSpeakLoading(false);
-      audioRef.current = null;
-      return;
+    try {
+      const meta = ttsCacheRef.current.get(cacheKey);
+      const chunks = splitTextForTTSChunks(text, 900);
+
+      if (!meta) {
+        // No prefetch — store metadata and fire prefetch now
+        console.log("[TTS] No prefetch found — firing now");
+        ttsCacheRef.current.set(cacheKey, { chunked: true, totalChunks: chunks.length });
+      }
+
+      // Legacy single-audio cache entry
+      if (meta?.audioBase64) {
+        console.log("[TTS] CACHE HIT single");
+        setSpeakLoading(false);
+        await playChunk(meta.audioBase64, String(meta.mimeType || "audio/mpeg"));
+      } else {
+        // Chunked path — always play from chunk 0 to end
+        await playAllChunks(chunks);
+      }
     } catch (err) {
       console.error("TTS failed:", err?.message || err);
     }
 
-    setSpeakingId(null);
-    setSpeakLoading(false);
+    // ── Cleanup ──
+    if (gen === speakGenRef.current) {
+      setSpeakingId(null);
+      setSpeakLoading(false);
+    }
+    if (audioRef.current === sharedAudio) {
+      try { sharedAudio.src = ""; } catch (_) {}
+      audioRef.current = null;
+    }
   }, [speakingId, replyLanguage]);
 
   // Backup prefetch via useEffect (in case eager prefetch didn't fire)
