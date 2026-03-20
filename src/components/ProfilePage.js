@@ -90,6 +90,11 @@ export default function ProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar || "");
   const [saving, setSaving] = useState(false);
   const [dialogError, setDialogError] = useState("");
+
+  // --- Account Merge flow ---
+  const [mergeState, setMergeState] = useState(null);
+  // mergeState shape: { step: "confirm"|"otp"|"merging", conflictField, conflictValue, masked, otpValue }
+
   const fileInputRef = useRef();
   const [dobInput, setDobInput] = useState(() =>
     formatDobForDisplay(user?.dob || "")
@@ -131,6 +136,7 @@ export default function ProfilePage() {
     setAvatarPreview(user?.avatar || "");
     setDobInput(formatDobForDisplay(user?.dob || ""));
     setDialogError("");
+    setMergeState(null);
     setEditDialog(true);
   };
 
@@ -146,35 +152,18 @@ export default function ProfilePage() {
   };
 
   const handleProfileSave = async () => {
-  if (saving) return; // prevent double-clicks
-  setDialogError(""); // clear previous error
+  if (saving) return;
+  setDialogError("");
 
-  // basic validation first so browser / device differences don’t break silently
   const trimmedName = (editData.name || "").trim();
   const trimmedEmail = (editData.email || "").trim();
 
-  if (!trimmedName) {
-    setDialogError("Please enter your name.");
-    return;
-  }
+  if (!trimmedName) { setDialogError("Please enter your name."); return; }
+  if (!trimmedEmail) { setDialogError("Please enter your email."); return; }
 
-  if (!trimmedEmail) {
-    setDialogError("Please enter your email.");
-    return;
-  }
-
-  // 🔴 always compute DOB from the text field (dd-mm-yyyy) at time of save
   let dobIso = parseDobInputToIso(dobInput);
-
-  // Agar text box khali hai lekin calendar se value aayi hui hai, toh woh use karo
-  if (!dobIso && editData.dob) {
-    dobIso = editData.dob; // <input type="date"> se already ISO aata hai
-  }
-
-  if (!dobIso) {
-    setDialogError("Please enter a valid DOB in dd-mm-yyyy format.");
-    return;
-  }
+  if (!dobIso && editData.dob) dobIso = editData.dob;
+  if (!dobIso) { setDialogError("Please enter a valid DOB in dd-mm-yyyy format."); return; }
 
   setSaving(true);
 
@@ -182,7 +171,7 @@ export default function ProfilePage() {
     ...editData,
     name: trimmedName,
     email: trimmedEmail,
-    dob: dobIso, // ✅ backend ko hamesha YYYY-MM-DD milega
+    dob: dobIso,
     profileCompleted: true,
   };
 
@@ -190,49 +179,96 @@ export default function ProfilePage() {
     await axios.put(
       `${API_BASE_URL}/api/users/${user._id}`,
       payload,
-      {
-        headers: { Authorization: "Bearer " + token },
-        timeout: 15000,
-      }
+      { headers: { Authorization: "Bearer " + token }, timeout: 15000 }
     );
 
     setDialogError("");
+    setSnackbar({ open: true, message: "Profile updated!", severity: "success" });
 
-    setSnackbar({
-      open: true,
-      message: "Profile updated!",
-      severity: "success",
-    });
-
-    // Refresh profile from server so AuthContext + localStorage in sync rahe
     const updatedProfile = await axios.get(`${API_BASE_URL}/api/profile`, {
-      headers: { Authorization: "Bearer " + token },
-      timeout: 10000,
+      headers: { Authorization: "Bearer " + token }, timeout: 10000,
     });
-
     setUser(updatedProfile.data);
-
-    // dobInput ko bhi latest ISO se dob-display me convert karke set karo
-    setDobInput(
-      formatDobForDisplay(updatedProfile.data.dob || dobIso)
-    );
-
-    // Local fallback so first-run dialog dobara na khul jaaye
+    setDobInput(formatDobForDisplay(updatedProfile.data.dob || dobIso));
     localStorage.setItem("profileCompleted", "1");
-
     setEditDialog(false);
+    setMergeState(null);
     navigate("/", { replace: true });
   } catch (e) {
     console.error("Profile update failed:", e);
-    const serverMsg = e.response?.data?.error;
-    const errMsg = serverMsg
-      || (e.code === "ECONNABORTED" ? "Request timed out. Please check your connection."
-        : "Failed to update! Please try again.");
-    setDialogError(errMsg);
+    const data = e.response?.data;
+
+    // If backend says this conflict is mergeable — show merge flow
+    if (e.response?.status === 409 && data?.mergeable) {
+      setMergeState({
+        step: "confirm",
+        conflictField: data.conflictField,
+        conflictValue: data.conflictValue || (data.conflictField === "email" ? trimmedEmail : editData.mobile),
+        masked: "",
+        otpValue: "",
+      });
+      setDialogError("");
+    } else {
+      const errMsg = data?.error
+        || (e.code === "ECONNABORTED" ? "Request timed out. Please check your connection."
+          : "Failed to update! Please try again.");
+      setDialogError(errMsg);
+    }
   } finally {
     setSaving(false);
   }
 };
+
+  // --- Account Merge: Send OTP ---
+  const handleMergeSendOtp = async () => {
+    if (!mergeState) return;
+    setSaving(true);
+    setDialogError("");
+    try {
+      const res = await axios.post(
+        `${API_BASE_URL}/api/users/merge/send-otp`,
+        { conflictField: mergeState.conflictField, conflictValue: mergeState.conflictValue },
+        { headers: { Authorization: "Bearer " + token }, timeout: 15000 }
+      );
+      setMergeState((s) => ({ ...s, step: "otp", masked: res.data.masked || "", otpValue: "" }));
+    } catch (e) {
+      setDialogError(e.response?.data?.error || "Failed to send OTP. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // --- Account Merge: Verify OTP & Merge ---
+  const handleMergeVerify = async () => {
+    if (!mergeState?.otpValue) { setDialogError("Please enter the OTP."); return; }
+    setSaving(true);
+    setDialogError("");
+    try {
+      const res = await axios.post(
+        `${API_BASE_URL}/api/users/merge/verify`,
+        { otp: mergeState.otpValue },
+        { headers: { Authorization: "Bearer " + token }, timeout: 30000 }
+      );
+
+      // Merge succeeded — update user context with merged data
+      if (res.data.user) {
+        setUser(res.data.user);
+      }
+
+      setMergeState(null);
+      setDialogError("");
+      setSnackbar({ open: true, message: "Accounts linked successfully!", severity: "success" });
+
+      // Now retry save with merged account
+      localStorage.setItem("profileCompleted", "1");
+      setEditDialog(false);
+      navigate("/", { replace: true });
+    } catch (e) {
+      setDialogError(e.response?.data?.error || "Verification failed. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // --- Settings modals (unchanged) ---
   const [changePassOpen, setChangePassOpen] = useState(false); // eslint-disable-line no-unused-vars
@@ -1415,24 +1451,121 @@ export default function ProfilePage() {
 
           </div>
 
-          {dialogError && (
+          {/* --- Error message --- */}
+          {dialogError && !mergeState && (
             <div className="mt-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
               {dialogError}
             </div>
           )}
 
-          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
-            {!isFirstRun && (
-              <Button variant="ghost" className="btn-ghost-soft !font-bold w-full sm:w-auto" onClick={() => setEditDialog(false)}>
-                Cancel
+          {/* --- Account Merge Flow --- */}
+          {mergeState && (
+            <div className="mt-3 rounded-xl bg-amber-50 border border-amber-200 px-4 py-4 space-y-3">
+
+              {/* Step 1: Confirm merge */}
+              {mergeState.step === "confirm" && (
+                <>
+                  <div className="flex items-start gap-2">
+                    <Shield className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-800">
+                        This {mergeState.conflictField} is linked to another account
+                      </p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        It looks like you may have signed up before with this {mergeState.conflictField}.
+                        We can verify it's you and link everything (orders, prescriptions, health data) to this account.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      className="btn-primary-emerald !font-bold flex-1"
+                      onClick={handleMergeSendOtp}
+                      disabled={saving}
+                    >
+                      {saving ? "Sending OTP..." : "Verify & Link Account"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="btn-ghost-soft !font-bold"
+                      onClick={() => { setMergeState(null); setDialogError(""); }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {/* Step 2: Enter OTP */}
+              {mergeState.step === "otp" && (
+                <>
+                  <div className="flex items-start gap-2">
+                    <Lock className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-800">Enter verification OTP</p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        We sent a 6-digit OTP to <b>{mergeState.masked}</b>.
+                        Enter it below to confirm you own this {mergeState.conflictField}.
+                      </p>
+                    </div>
+                  </div>
+                  {dialogError && (
+                    <p className="text-xs text-red-600 font-medium">{dialogError}</p>
+                  )}
+                  <Input
+                    className="gd-input text-center text-lg tracking-[0.3em] font-bold"
+                    placeholder="Enter 6-digit OTP"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={mergeState.otpValue}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+                      setMergeState((s) => ({ ...s, otpValue: v }));
+                      setDialogError("");
+                    }}
+                    autoFocus
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      className="btn-primary-emerald !font-bold flex-1"
+                      onClick={handleMergeVerify}
+                      disabled={saving || mergeState.otpValue.length < 6}
+                    >
+                      {saving ? "Verifying & Merging..." : "Verify & Merge"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="btn-ghost-soft !font-bold text-xs"
+                      onClick={handleMergeSendOtp}
+                      disabled={saving}
+                    >
+                      Resend
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-amber-600 text-center">
+                    This will merge your previous account data into this one.
+                    No data will be lost.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* --- Footer: Save / Cancel buttons (hide during merge flow) --- */}
+          {!mergeState && (
+            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
+              {!isFirstRun && (
+                <Button variant="ghost" className="btn-ghost-soft !font-bold w-full sm:w-auto" onClick={() => setEditDialog(false)}>
+                  Cancel
+                </Button>
+              )}
+              <Button className="btn-primary-emerald !font-bold w-full sm:w-auto"
+                onClick={handleProfileSave}
+                disabled={saving || !editData.name || !editData.email || (!editData.dob && !parseDobInputToIso(dobInput))}>
+                {saving ? "Saving..." : "Save"}
               </Button>
-            )}
-            <Button className="btn-primary-emerald !font-bold w-full sm:w-auto"
-              onClick={handleProfileSave}
-              disabled={saving || !editData.name || !editData.email || (!editData.dob && !parseDobInputToIso(dobInput))}>
-              {saving ? "Saving..." : "Save"}
-            </Button>
-          </DialogFooter>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
