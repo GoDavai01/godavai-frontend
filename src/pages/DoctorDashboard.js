@@ -316,6 +316,7 @@ function normalizePrescriptionSummary(row = {}) {
     diagnosis: row.diagnosis || "",
     meds: Number(row.meds || 0),
     sentToPatient: !!row.sentToPatient,
+    exportToken: row.exportToken || "",
   };
 }
 
@@ -1607,8 +1608,22 @@ export default function DoctorDashboard() {
                             Sent
                           </Badge>
                         </div>
-                        <div className="mt-2 text-xs text-slate-500">
-                          {dayjs(rx.createdAt).format("DD MMM ? hh:mm A")} ? {rx.meds} medicines
+                        <div className="mt-2 flex items-center justify-between">
+                          <div className="text-xs text-slate-500">
+                            {dayjs(rx.createdAt).format("DD MMM ? hh:mm A")} ? {rx.meds} medicines
+                          </div>
+                          <div className="flex gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 rounded-full border-emerald-200 px-3 text-[10px] font-bold text-emerald-700 hover:bg-emerald-50"
+                              onClick={() => {
+                                window.open(`${API_BASE_URL}/api/prescriptions/detail/${rx._id}/pdf?exportToken=${rx.exportToken || ""}`, "_blank");
+                              }}
+                            >
+                              View PDF
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ))}

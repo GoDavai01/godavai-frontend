@@ -224,15 +224,15 @@ export default function HealthVault() {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!cancelled) setDoctorPrescriptions(Array.isArray(data?.prescriptions) ? data.prescriptions : []);
-      } catch {
-        // silent
+      } catch (err) {
+        console.error("Health Vault: Failed to load prescriptions", err?.response?.status, err?.message);
       } finally {
         if (!cancelled) setRxLoading(false);
       }
     }
     fetchRx();
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user?._id, user?.userId]);
 
   // Auto-scroll to prescriptions section if navigated from homepage
   useEffect(() => {
@@ -568,7 +568,8 @@ export default function HealthVault() {
                         <motion.button
                           whileTap={{ scale: 0.95 }}
                           onClick={() => {
-                            const pdfUrl = `${API}/api/prescriptions/detail/${rx._id}/pdf`;
+                            const token = rx.exportToken || "";
+                            const pdfUrl = `${API}/api/prescriptions/detail/${rx._id}/pdf${token ? `?exportToken=${token}` : ""}`;
                             window.open(pdfUrl, "_blank");
                           }}
                           style={{ height: 30, padding: "0 12px", borderRadius: 999, border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#334155", fontSize: 10.5, fontWeight: 900, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}

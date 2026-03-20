@@ -1795,8 +1795,14 @@ export default function Home() {
         return b.sortTime - a.sortTime;
       })
       .slice(0, 3)
-      .map((entry, idx) => ({ ...entry.consult, _showPrescription: idx === 0 && entry.hasDoctorPrescription }));
-  }, [myConsults]);
+      .map((entry) => {
+        // Don't show prescription card inside consultation if it's already the featured prescription at the top
+        const featuredRxId = featuredDoctorPrescription?.summary?.prescriptionId || "";
+        const thisRxId = getDoctorPrescriptionCartSummary(entry.consult?.doctorPrescription)?.prescriptionId || "";
+        const isAlreadyFeatured = featuredRxId && thisRxId && featuredRxId === thisRxId;
+        return { ...entry.consult, _showPrescription: entry.hasDoctorPrescription && !isAlreadyFeatured };
+      });
+  }, [myConsults, featuredDoctorPrescription]);
 
   const featuredDoctorPrescriptionConsult = featuredDoctorPrescription?.consult || null;
   const featuredDoctorPrescriptionSummary = featuredDoctorPrescription?.summary || null;
