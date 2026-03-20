@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { motion } from "framer-motion";
-import { AlertTriangle, ChevronRight, ClipboardList, Download, FileText, HeartPulse, Phone, Pill, Plus, Save, Shield, Stethoscope, UserRound, Users, X } from "lucide-react";
+import { AlertTriangle, ClipboardList, Download, FileText, HeartPulse, Phone, Pill, Plus, Save, Shield, Stethoscope, UserRound, Users, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import DoctorPrescriptionViewDialog from "../components/DoctorPrescriptionViewDialog";
-import { getUserAuthHeaders, getUserAuthToken } from "../lib/userAuth";
+import { getUserAuthToken } from "../lib/userAuth";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const VAULT_KEY = "gd_health_vault_v2";
