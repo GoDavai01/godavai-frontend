@@ -107,7 +107,7 @@ function GenderSelector({ value, onChange }) {
           whileTap={{ scale: 0.95 }}
           onClick={() => onChange(opt.value)}
           style={{
-            flex: 1, height: 52, borderRadius: 16, border: "none",
+            flex: 1, height: 52, borderRadius: 16,
             background: value === opt.value
               ? `linear-gradient(135deg, ${ACC}25, ${CYAN}15)`
               : "rgba(255,255,255,0.06)",
