@@ -1364,6 +1364,10 @@ export default function ProfilePage() {
         }
 
         setDobInput(v);
+
+        // real-time mein editData.dob update karo taaki Save button enable ho jaaye
+        const iso = parseDobInputToIso(v);
+        if (iso) setEditData((d) => ({ ...d, dob: iso }));
       }}
       onBlur={() => {
         const iso = parseDobInputToIso(dobInput);
@@ -1415,7 +1419,7 @@ export default function ProfilePage() {
             )}
             <Button className="btn-primary-emerald !font-bold w-full sm:w-auto"
               onClick={handleProfileSave}
-              disabled={!editData.name || !editData.email || !editData.dob}>
+              disabled={!editData.name || !editData.email || (!editData.dob && !parseDobInputToIso(dobInput))}>
               Save
             </Button>
           </DialogFooter>
