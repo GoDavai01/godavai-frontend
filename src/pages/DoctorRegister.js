@@ -78,7 +78,7 @@ function Uploader({ label, required = false, file, onChange, hint = "", accept }
         onChange={(e) => onChange(e.target.files?.[0] || null)}
       />
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <FileUp style={{ width: 14, height: 14, color: "#6366F1" }} />
+        <FileUp style={{ width: 14, height: 14, color: "#13C0A2" }} />
         <div style={{ fontSize: 12, fontWeight: 800, color: "#0F172A" }}>
           {label} {required ? <span style={{ color: "#EF4444" }}>*</span> : ""}
         </div>
@@ -96,7 +96,7 @@ function SectionTitle({ icon: Icon, text }) {
   return (
     <div style={S.sectionTitle}>
       <div style={S.sectionIconWrap}>
-        <Icon style={{ width: 14, height: 14, color: "#6366F1" }} />
+        <Icon style={{ width: 14, height: 14, color: "#13C0A2" }} />
       </div>
       {text}
     </div>
@@ -137,12 +137,14 @@ export default function DoctorRegister() {
   const [locationNote, setLocationNote] = useState("");
   const [showPw, setShowPw] = useState(false);
 
+
   const [form, setForm] = useState({
     fullName: "",
     phone: "",
     otp: "",
     email: "",
     password: "",
+    confirmPassword: "",
     dateOfBirth: "",
     gender: "",
     specialty: "General Physician",
@@ -201,6 +203,15 @@ export default function DoctorRegister() {
     clinicProof: null,
     signature: null,
   });
+
+  // ── Auto-skip OTP if logged-in user's phone matches ──
+  const loggedInPhone = (() => {
+    try {
+      const u = JSON.parse(localStorage.getItem("user") || "{}");
+      return (u?.phone || u?.mobile || "").replace(/\D/g, "").slice(-10);
+    } catch { return ""; }
+  })();
+  const isPhoneAutoVerified = loggedInPhone.length === 10 && form.phone.replace(/\D/g, "") === loggedInPhone;
 
   // Primary fee for band calculation
   const primaryFee = Math.max(asNum(form.feeAudio), asNum(form.feeVideo), asNum(form.feeInPerson));
@@ -286,9 +297,10 @@ export default function DoctorRegister() {
   function validateStep1() {
     if (!form.fullName.trim()) return "Full name is required.";
     if (form.phone.trim().length < 10) return "Enter valid 10-digit phone number.";
-    if (!otpVerified) return "Please verify mobile OTP.";
+    if (!otpVerified && !isPhoneAutoVerified) return "Please verify mobile OTP.";
     if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return "Enter a valid email address.";
     if (!form.password || form.password.length < 6) return "Password must be at least 6 characters.";
+    if (form.password !== form.confirmPassword) return "Passwords do not match.";
     if (!form.dateOfBirth) return "Date of birth is required.";
     if (!form.gender) return "Please select gender.";
     if (!form.specialty) return "Specialty is required.";
@@ -352,7 +364,7 @@ export default function DoctorRegister() {
       const fd = new FormData();
       // Append all form fields
       Object.entries(form).forEach(([k, v]) => {
-        if (k === "otp") return; // don't send otp
+        if (k === "otp" || k === "confirmPassword") return; // don't send these
         fd.append(k, typeof v === "boolean" ? String(v) : v);
       });
       fd.set("availableTimings", availableTimings);
@@ -431,7 +443,7 @@ export default function DoctorRegister() {
               >
                 <div style={{
                   ...S.stepNum,
-                  ...(isActive ? { background: "#6366F1", color: "#fff" } : {}),
+                  ...(isActive ? { background: "#13C0A2", color: "#fff" } : {}),
                   ...(isDone ? { background: "#10B981", color: "#fff" } : {}),
                 }}>
                   {isDone ? "✓" : num}
@@ -486,12 +498,22 @@ export default function DoctorRegister() {
 
                 <div style={S.row2}>
                   <Input icon={Phone} placeholder="Mobile Number *" value={form.phone} onChange={(e) => patch("phone", e.target.value.replace(/\D/g, "").slice(0, 10))} />
-                  <button style={S.otpBtn} onClick={sendOtp} type="button" disabled={otpSending || form.phone.trim().length < 10}>
-                    {otpSending ? <Loader2 style={S.spin} /> : otpSent ? "Resend" : "Send OTP"}
-                  </button>
+                  {!isPhoneAutoVerified && !otpVerified && (
+                    <button style={S.otpBtn} onClick={sendOtp} type="button" disabled={otpSending || form.phone.trim().length < 10}>
+                      {otpSending ? <Loader2 style={S.spin} /> : otpSent ? "Resend" : "Send OTP"}
+                    </button>
+                  )}
                 </div>
 
-                {otpSent && !otpVerified && (
+                {/* Auto-verified — same phone as logged-in user */}
+                {isPhoneAutoVerified && (
+                  <div style={S.verifiedBadge}>
+                    <CheckCircle2 style={{ width: 14, height: 14 }} /> Auto-verified (logged-in number)
+                  </div>
+                )}
+
+                {/* OTP flow — only if different phone number */}
+                {!isPhoneAutoVerified && otpSent && !otpVerified && (
                   <div style={S.row2}>
                     <Input placeholder="Enter OTP *" value={form.otp} onChange={(e) => patch("otp", e.target.value)} />
                     <button style={{ ...S.otpBtn, ...(otpVerified ? { background: "#10B981" } : {}) }} onClick={verifyOtp} type="button" disabled={otpVerifying || otpVerified || !form.otp.trim()}>
@@ -500,27 +522,48 @@ export default function DoctorRegister() {
                   </div>
                 )}
 
-                {otpVerified && (
+                {!isPhoneAutoVerified && otpVerified && (
                   <div style={S.verifiedBadge}>
-                    <CheckCircle2 style={{ width: 14, height: 14 }} /> Phone verified
+                    <CheckCircle2 style={{ width: 14, height: 14 }} /> Phone verified via OTP
                   </div>
                 )}
 
                 <Input icon={Mail} placeholder="Email Address *" type="email" value={form.email} onChange={(e) => patch("email", e.target.value)} />
 
-                <div style={S.inputWrap}>
-                  <Lock style={S.inputIcon} />
-                  <input
-                    style={{ ...S.input, paddingLeft: 34, paddingRight: 38 }}
-                    placeholder="Create Password * (min 6 chars)"
-                    type={showPw ? "text" : "password"}
-                    value={form.password}
-                    onChange={(e) => patch("password", e.target.value)}
-                  />
-                  <button type="button" onClick={() => setShowPw(!showPw)} style={S.eyeBtn}>
-                    {showPw ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
-                  </button>
+                <div style={S.row2equal}>
+                  <div style={S.inputWrap}>
+                    <Lock style={S.inputIcon} />
+                    <input
+                      style={{ ...S.input, paddingLeft: 34, paddingRight: 38 }}
+                      placeholder="Create Password *"
+                      type={showPw ? "text" : "password"}
+                      value={form.password}
+                      onChange={(e) => patch("password", e.target.value)}
+                    />
+                    <button type="button" onClick={() => setShowPw(!showPw)} style={S.eyeBtn}>
+                      {showPw ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
+                    </button>
+                  </div>
+                  <div style={S.inputWrap}>
+                    <Lock style={S.inputIcon} />
+                    <input
+                      style={{ ...S.input, paddingLeft: 34 }}
+                      placeholder="Confirm Password *"
+                      type="password"
+                      value={form.confirmPassword}
+                      onChange={(e) => patch("confirmPassword", e.target.value)}
+                    />
+                    {form.confirmPassword && form.password === form.confirmPassword && (
+                      <CheckCircle2 style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", width: 16, height: 16, color: "#10B981" }} />
+                    )}
+                    {form.confirmPassword && form.password !== form.confirmPassword && (
+                      <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: "#EF4444" }}>✕</span>
+                    )}
+                  </div>
                 </div>
+                {form.password && form.password.length < 6 && (
+                  <div style={{ fontSize: 11, color: "#F59E0B", fontWeight: 700 }}>Password must be at least 6 characters</div>
+                )}
 
                 <div style={S.row2equal}>
                   <div style={S.fieldGroup}>
@@ -866,12 +909,12 @@ function SummaryRow({ label, value }) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   STYLES — Modern 2035 Design System
+   STYLES — GoDavaii 2035 Design System (Green Theme)
    ═══════════════════════════════════════════════════════ */
 const S = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(160deg, #0F0F1A 0%, #1A1033 30%, #0D1B2A 70%, #0A0F1A 100%)",
+    background: "linear-gradient(160deg, #061A14 0%, #0A2A1F 30%, #0D1F1A 70%, #071510 100%)",
     padding: "16px 12px",
     fontFamily: "'Plus Jakarta Sans', -apple-system, sans-serif",
   },
@@ -881,9 +924,9 @@ const S = {
   hero: {
     borderRadius: 20,
     padding: "16px 18px",
-    background: "linear-gradient(135deg, rgba(99,102,241,.15), rgba(139,92,246,.1))",
+    background: "linear-gradient(135deg, rgba(12,90,62,.25), rgba(19,192,162,.1))",
     backdropFilter: "blur(20px)",
-    border: "1px solid rgba(99,102,241,.25)",
+    border: "1px solid rgba(13,192,162,.25)",
     color: "#fff",
     display: "flex",
     gap: 12,
@@ -893,7 +936,7 @@ const S = {
     width: 48,
     height: 48,
     borderRadius: 16,
-    background: "linear-gradient(135deg, #6366F1, #8B5CF6)",
+    background: "linear-gradient(135deg, #0C5A3E, #13C0A2)",
     display: "grid",
     placeItems: "center",
     flexShrink: 0,
@@ -920,9 +963,9 @@ const S = {
     transition: "all .2s",
   },
   stepActive: {
-    borderColor: "rgba(99,102,241,.5)",
-    background: "rgba(99,102,241,.12)",
-    color: "#C7D2FE",
+    borderColor: "rgba(13,192,162,.5)",
+    background: "rgba(13,192,162,.12)",
+    color: "#A7F3D0",
   },
   stepDone: {
     borderColor: "rgba(16,185,129,.3)",
@@ -968,7 +1011,7 @@ const S = {
     width: 28,
     height: 28,
     borderRadius: 9,
-    background: "rgba(99,102,241,.15)",
+    background: "rgba(13,192,162,.15)",
     display: "grid",
     placeItems: "center",
     flexShrink: 0,
@@ -997,7 +1040,7 @@ const S = {
     transform: "translateY(-50%)",
     width: 16,
     height: 16,
-    color: "#6366F1",
+    color: "#13C0A2",
     opacity: 0.7,
   },
   eyeBtn: {
@@ -1040,8 +1083,8 @@ const S = {
     width: 56,
     height: 56,
     borderRadius: 16,
-    border: "2px dashed rgba(99,102,241,.4)",
-    background: "rgba(99,102,241,.08)",
+    border: "2px dashed rgba(13,192,162,.4)",
+    background: "rgba(13,192,162,.08)",
     display: "grid",
     placeItems: "center",
     cursor: "pointer",
@@ -1054,9 +1097,9 @@ const S = {
   otpBtn: {
     height: 40,
     borderRadius: 12,
-    border: "1px solid rgba(99,102,241,.4)",
-    background: "rgba(99,102,241,.12)",
-    color: "#A5B4FC",
+    border: "1px solid rgba(13,192,162,.4)",
+    background: "rgba(13,192,162,.12)",
+    color: "#6EE7B7",
     fontSize: 12,
     fontWeight: 800,
     padding: "0 14px",
@@ -1098,25 +1141,25 @@ const S = {
     transition: "all .2s",
   },
   modePillActive: {
-    borderColor: "rgba(99,102,241,.5)",
-    background: "linear-gradient(135deg, rgba(99,102,241,.2), rgba(139,92,246,.15))",
-    color: "#C7D2FE",
-    boxShadow: "0 0 20px rgba(99,102,241,.15)",
+    borderColor: "rgba(13,192,162,.5)",
+    background: "linear-gradient(135deg, rgba(12,90,62,.3), rgba(13,192,162,.15))",
+    color: "#A7F3D0",
+    boxShadow: "0 0 20px rgba(13,192,162,.15)",
   },
 
   // Fee Cards
   feeGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 },
   feeCard: {
     borderRadius: 14,
-    border: "1px solid rgba(99,102,241,.2)",
-    background: "rgba(99,102,241,.06)",
+    border: "1px solid rgba(13,192,162,.2)",
+    background: "rgba(13,192,162,.06)",
     padding: "10px 12px",
     display: "grid",
     gap: 6,
   },
-  feeLabel: { fontSize: 11, fontWeight: 800, color: "#A5B4FC" },
+  feeLabel: { fontSize: 11, fontWeight: 800, color: "#6EE7B7" },
   feeInputWrap: { display: "flex", alignItems: "center", gap: 4 },
-  feeCurrency: { fontSize: 14, fontWeight: 900, color: "#6366F1" },
+  feeCurrency: { fontSize: 14, fontWeight: 900, color: "#13C0A2" },
   feeInput: {
     flex: 1,
     height: 34,
@@ -1133,9 +1176,9 @@ const S = {
   bandChip: {
     fontSize: 11,
     fontWeight: 800,
-    color: "#A5B4FC",
-    background: "rgba(99,102,241,.1)",
-    border: "1px solid rgba(99,102,241,.2)",
+    color: "#6EE7B7",
+    background: "rgba(13,192,162,.1)",
+    border: "1px solid rgba(13,192,162,.2)",
     borderRadius: 8,
     padding: "6px 10px",
     width: "fit-content",
@@ -1168,9 +1211,9 @@ const S = {
   detectBtn: {
     height: 36,
     borderRadius: 10,
-    border: "1px solid rgba(99,102,241,.3)",
-    background: "rgba(99,102,241,.1)",
-    color: "#A5B4FC",
+    border: "1px solid rgba(13,192,162,.3)",
+    background: "rgba(13,192,162,.1)",
+    color: "#6EE7B7",
     fontSize: 12,
     fontWeight: 800,
     padding: "0 12px",
@@ -1190,7 +1233,7 @@ const S = {
     display: "grid",
     gap: 6,
   },
-  summaryTitle: { fontSize: 13, fontWeight: 900, color: "#C7D2FE", fontFamily: "'Sora',sans-serif", marginBottom: 4 },
+  summaryTitle: { fontSize: 13, fontWeight: 900, color: "#A7F3D0", fontFamily: "'Sora',sans-serif", marginBottom: 4 },
   summaryRow: {
     display: "flex",
     justifyContent: "space-between",
@@ -1275,7 +1318,7 @@ const S = {
     height: 42,
     borderRadius: 12,
     border: "none",
-    background: "linear-gradient(135deg, #6366F1, #8B5CF6)",
+    background: "linear-gradient(135deg, #0C5A3E, #13C0A2)",
     color: "#fff",
     fontSize: 13,
     fontWeight: 900,
@@ -1284,11 +1327,11 @@ const S = {
     display: "inline-flex",
     alignItems: "center",
     gap: 6,
-    boxShadow: "0 4px 20px rgba(99,102,241,.3)",
+    boxShadow: "0 4px 20px rgba(13,192,162,.3)",
     transition: "transform .1s",
   },
   bottomLine: { fontSize: 12, color: "#64748B", fontWeight: 700, textAlign: "center", padding: "8px 0" },
-  linkBtn: { border: "none", background: "transparent", color: "#A5B4FC", fontWeight: 900, cursor: "pointer", textDecoration: "underline" },
+  linkBtn: { border: "none", background: "transparent", color: "#6EE7B7", fontWeight: 900, cursor: "pointer", textDecoration: "underline" },
 
   // Success
   successCard: {
