@@ -522,16 +522,6 @@ export default function OnboardingWizard() {
     if (e.key === "Enter" && canProceed()) handleNext();
   };
 
-  // Skip for email only
-  const handleSkipEmail = async () => {
-    setEmailValue("");
-    setDirection(1);
-    setError("");
-    setMergeState(null);
-    await saveProfile(false);
-    setStepIdx((i) => Math.min(i + 1, TOTAL - 1));
-  };
-
   // ─── Completion state ───
   const [showConfetti, setShowConfetti] = useState(false);
   const [doneTriggered, setDoneTriggered] = useState(false);
