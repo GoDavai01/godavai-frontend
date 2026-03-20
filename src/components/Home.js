@@ -1795,7 +1795,7 @@ export default function Home() {
         return b.sortTime - a.sortTime;
       })
       .slice(0, 3)
-      .map((entry) => entry.consult);
+      .map((entry, idx) => ({ ...entry.consult, _showPrescription: idx === 0 && entry.hasDoctorPrescription }));
   }, [myConsults]);
 
   const featuredDoctorPrescriptionConsult = featuredDoctorPrescription?.consult || null;
@@ -2242,7 +2242,7 @@ export default function Home() {
                   c.mode !== "inperson";
                 const hasPrescription = !!c?.prescription?.fileUrl;
                 const doctorRxSummary = getDoctorPrescriptionCartSummary(c?.doctorPrescription);
-                const hasDoctorPrescription = !!doctorRxSummary.prescriptionId;
+                const hasDoctorPrescription = !!c._showPrescription && !!doctorRxSummary.prescriptionId;
                 const dateLabel = getConsultDateLabel(c);
 
                 return (
@@ -2627,6 +2627,35 @@ export default function Home() {
                   </Glass>
                 );
               })}
+
+              {/* View All Prescriptions link */}
+              {myConsults.some((c) => !!getDoctorPrescriptionCartSummary(c?.doctorPrescription)?.prescriptionId) && (
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => navigate("/health-vault", { state: { openTab: "prescriptions" } })}
+                  style={{
+                    width: "100%",
+                    marginTop: 6,
+                    padding: "10px 16px",
+                    borderRadius: 14,
+                    border: "1px solid #BBF7D0",
+                    background: "linear-gradient(135deg,#F0FDF4,#ECFDF5)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    fontSize: 12,
+                    fontWeight: 900,
+                    fontFamily: "'Sora',sans-serif",
+                    color: "#166534",
+                  }}
+                >
+                  <FolderHeart style={{ width: 14, height: 14 }} />
+                  View All Prescriptions in Health Vault
+                  <ChevronRight style={{ width: 14, height: 14 }} />
+                </motion.button>
+              )}
             </div>
           </div>
         )}

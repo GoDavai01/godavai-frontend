@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { motion } from "framer-motion";
-import { AlertTriangle, ClipboardList, FileText, HeartPulse, Phone, Plus, Save, Shield, UserRound, Users, X } from "lucide-react";
+import { AlertTriangle, ChevronRight, ClipboardList, Download, FileText, HeartPulse, Phone, Pill, Plus, Save, Shield, Stethoscope, UserRound, Users, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import DoctorPrescriptionViewDialog from "../components/DoctorPrescriptionViewDialog";
+import { getUserAuthHeaders, getUserAuthToken } from "../lib/userAuth";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const VAULT_KEY = "gd_health_vault_v2";
@@ -163,6 +165,11 @@ export default function HealthVault() {
   const [medInput, setMedInput] = useState({ name: "", dose: "", timing: "" });
   const [reportInput, setReportInput] = useState({ title: "", type: "", date: "", category: "Lab Report" });
   const [reportFile, setReportFile] = useState(null);
+  const [doctorPrescriptions, setDoctorPrescriptions] = useState([]);
+  const [rxLoading, setRxLoading] = useState(false);
+  const [viewingRx, setViewingRx] = useState(null);
+  const rxSectionRef = useRef(null);
+  const location = useLocation();
 
   const activeMember = useMemo(
     () => vault.members.find((m) => m.id === vault.activeMemberId) || vault.members[0],
@@ -204,6 +211,35 @@ export default function HealthVault() {
   useEffect(() => {
     localStorage.setItem(VAULT_KEY, JSON.stringify(vault));
   }, [vault]);
+
+  // Fetch doctor prescriptions for current user
+  useEffect(() => {
+    const token = getUserAuthToken();
+    if (!token) return;
+    let cancelled = false;
+    async function fetchRx() {
+      setRxLoading(true);
+      try {
+        const { data } = await axios.get(`${API}/api/prescriptions/patient/mine`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!cancelled) setDoctorPrescriptions(Array.isArray(data?.prescriptions) ? data.prescriptions : []);
+      } catch {
+        // silent
+      } finally {
+        if (!cancelled) setRxLoading(false);
+      }
+    }
+    fetchRx();
+    return () => { cancelled = true; };
+  }, [user]);
+
+  // Auto-scroll to prescriptions section if navigated from homepage
+  useEffect(() => {
+    if (location?.state?.openTab === "prescriptions" && rxSectionRef.current) {
+      setTimeout(() => rxSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 400);
+    }
+  }, [location?.state, rxLoading]);
 
   function patchActiveMember(patch) {
     setVault((prev) => ({
@@ -456,6 +492,107 @@ export default function HealthVault() {
             <button onClick={addMedication} style={miniBtnStyle()}><Plus style={{ width: 14, height: 14 }} /></button>
           </div>
         </Card>
+
+        {/* Doctor Prescriptions */}
+        <div ref={rxSectionRef}>
+          <Card title="Doctor Prescriptions" icon={<Stethoscope style={{ width: 15, height: 15 }} />}>
+            {rxLoading ? (
+              <div style={{ padding: 20, textAlign: "center", fontSize: 12, fontWeight: 700, color: "#64748B" }}>
+                Loading prescriptions...
+              </div>
+            ) : doctorPrescriptions.length === 0 ? (
+              <div style={{ padding: 20, textAlign: "center", fontSize: 12, fontWeight: 700, color: "#94A3B8" }}>
+                No prescriptions yet. Doctor prescriptions will appear here after consultations.
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {doctorPrescriptions.map((rx) => {
+                  const issuedDate = rx.issuedDateLabel || (rx.issuedAt ? new Date(rx.issuedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "");
+                  const medCount = Array.isArray(rx.medicines) ? rx.medicines.length : 0;
+                  return (
+                    <div key={rx._id} style={{ border: "1px solid #BBF7D0", borderRadius: 16, padding: 14, background: "linear-gradient(135deg,#F0FDF4,#FFFFFF)", position: "relative" }}>
+                      {/* Header row */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 12, background: "#DCFCE7", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                          <span style={{ fontSize: 14, fontWeight: 900, color: "#15803D" }}>Rx</span>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 900, color: "#0B1F16" }}>
+                            Dr. {rx.doctorName || "Doctor"}
+                          </div>
+                          <div style={{ fontSize: 10.5, color: "#64748B", fontWeight: 700 }}>
+                            {rx.doctorSpecialty || ""} {issuedDate ? `· ${issuedDate}` : ""}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Diagnosis + Medicines count */}
+                      {(rx.diagnosis || medCount > 0) && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                          {rx.diagnosis && (
+                            <span style={{ fontSize: 10, fontWeight: 800, color: "#166534", background: "#DCFCE7", padding: "3px 10px", borderRadius: 999 }}>
+                              {rx.diagnosis}
+                            </span>
+                          )}
+                          <span style={{ fontSize: 10, fontWeight: 800, color: "#0E7A4F", background: "#E6F5EF", padding: "3px 10px", borderRadius: 999 }}>
+                            {medCount} medicine{medCount !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Medicine list preview */}
+                      {medCount > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+                          {rx.medicines.slice(0, 4).map((med, i) => (
+                            <span key={i} style={{ fontSize: 10, fontWeight: 700, color: "#475569", background: "#F1F5F9", padding: "2px 8px", borderRadius: 8, border: "1px solid #E2E8F0" }}>
+                              <Pill style={{ width: 9, height: 9, display: "inline", marginRight: 3, verticalAlign: "middle" }} />
+                              {med.prescribed}
+                            </span>
+                          ))}
+                          {medCount > 4 && (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8" }}>+{medCount - 4} more</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <motion.button
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => setViewingRx(rx)}
+                          style={{ height: 30, padding: "0 12px", borderRadius: 999, border: "1px solid #BBF7D0", background: "#fff", color: "#166534", fontSize: 10.5, fontWeight: 900, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}
+                        >
+                          <FileText style={{ width: 12, height: 12 }} />
+                          View Prescription
+                        </motion.button>
+                        <motion.button
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => {
+                            const pdfUrl = `${API}/api/prescriptions/detail/${rx._id}/pdf`;
+                            window.open(pdfUrl, "_blank");
+                          }}
+                          style={{ height: 30, padding: "0 12px", borderRadius: 999, border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#334155", fontSize: 10.5, fontWeight: 900, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}
+                        >
+                          <Download style={{ width: 12, height: 12 }} />
+                          Download PDF
+                        </motion.button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* Prescription View Dialog */}
+        {viewingRx && (
+          <DoctorPrescriptionViewDialog
+            open={!!viewingRx}
+            onOpenChange={(isOpen) => { if (!isOpen) setViewingRx(null); }}
+            prescription={viewingRx}
+          />
+        )}
 
         <Card title="Reports & Documents" icon={<FileText style={{ width: 15, height: 15 }} />}>
           <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
