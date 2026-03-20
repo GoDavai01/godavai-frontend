@@ -88,6 +88,8 @@ export default function ProfilePage() {
     dob: user?.dob || "", avatar: user?.avatar || "",
   });
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar || "");
+  const [saving, setSaving] = useState(false);
+  const [dialogError, setDialogError] = useState("");
   const fileInputRef = useRef();
   const [dobInput, setDobInput] = useState(() =>
     formatDobForDisplay(user?.dob || "")
@@ -128,6 +130,7 @@ export default function ProfilePage() {
     });
     setAvatarPreview(user?.avatar || "");
     setDobInput(formatDobForDisplay(user?.dob || ""));
+    setDialogError("");
     setEditDialog(true);
   };
 
@@ -143,25 +146,20 @@ export default function ProfilePage() {
   };
 
   const handleProfileSave = async () => {
+  if (saving) return; // prevent double-clicks
+  setDialogError(""); // clear previous error
+
   // basic validation first so browser / device differences don’t break silently
   const trimmedName = (editData.name || "").trim();
   const trimmedEmail = (editData.email || "").trim();
 
   if (!trimmedName) {
-    setSnackbar({
-      open: true,
-      message: "Please enter your name.",
-      severity: "error",
-    });
+    setDialogError("Please enter your name.");
     return;
   }
 
   if (!trimmedEmail) {
-    setSnackbar({
-      open: true,
-      message: "Please enter your email.",
-      severity: "error",
-    });
+    setDialogError("Please enter your email.");
     return;
   }
 
@@ -174,13 +172,11 @@ export default function ProfilePage() {
   }
 
   if (!dobIso) {
-    setSnackbar({
-      open: true,
-      message: "Please enter a valid DOB in dd-mm-yyyy format.",
-      severity: "error",
-    });
+    setDialogError("Please enter a valid DOB in dd-mm-yyyy format.");
     return;
   }
+
+  setSaving(true);
 
   const payload = {
     ...editData,
@@ -194,8 +190,13 @@ export default function ProfilePage() {
     await axios.put(
       `${API_BASE_URL}/api/users/${user._id}`,
       payload,
-      { headers: { Authorization: "Bearer " + token } }
+      {
+        headers: { Authorization: "Bearer " + token },
+        timeout: 15000,
+      }
     );
+
+    setDialogError("");
 
     setSnackbar({
       open: true,
@@ -206,6 +207,7 @@ export default function ProfilePage() {
     // Refresh profile from server so AuthContext + localStorage in sync rahe
     const updatedProfile = await axios.get(`${API_BASE_URL}/api/profile`, {
       headers: { Authorization: "Bearer " + token },
+      timeout: 10000,
     });
 
     setUser(updatedProfile.data);
@@ -222,11 +224,13 @@ export default function ProfilePage() {
     navigate("/", { replace: true });
   } catch (e) {
     console.error("Profile update failed:", e);
-    setSnackbar({
-      open: true,
-      message: "Failed to update!",
-      severity: "error",
-    });
+    const serverMsg = e.response?.data?.error;
+    const errMsg = serverMsg
+      || (e.code === "ECONNABORTED" ? "Request timed out. Please check your connection."
+        : "Failed to update! Please try again.");
+    setDialogError(errMsg);
+  } finally {
+    setSaving(false);
   }
 };
 
@@ -1291,7 +1295,7 @@ export default function ProfilePage() {
             className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-[2000] rounded-full px-4 py-2 shadow-lg
             ${snackbar.severity === "error" ? "bg-red-600" :
               snackbar.severity === "info" ? "bg-slate-800" : "bg-emerald-600"} text-white`}
-            onAnimationComplete={() => setTimeout(() => setSnackbar((s) => ({ ...s, open: false })), 2200)}
+            onAnimationComplete={() => setTimeout(() => setSnackbar((s) => ({ ...s, open: false })), snackbar.severity === "error" ? 4500 : 2200)}
           >
             {snackbar.message}
           </motion.div>
@@ -1411,6 +1415,12 @@ export default function ProfilePage() {
 
           </div>
 
+          {dialogError && (
+            <div className="mt-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              {dialogError}
+            </div>
+          )}
+
           <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
             {!isFirstRun && (
               <Button variant="ghost" className="btn-ghost-soft !font-bold w-full sm:w-auto" onClick={() => setEditDialog(false)}>
@@ -1419,8 +1429,8 @@ export default function ProfilePage() {
             )}
             <Button className="btn-primary-emerald !font-bold w-full sm:w-auto"
               onClick={handleProfileSave}
-              disabled={!editData.name || !editData.email || (!editData.dob && !parseDobInputToIso(dobInput))}>
-              Save
+              disabled={saving || !editData.name || !editData.email || (!editData.dob && !parseDobInputToIso(dobInput))}>
+              {saving ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
