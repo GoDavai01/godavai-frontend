@@ -34,6 +34,7 @@ import PharmacyRegistrationStepper from "./components/PharmacyRegistrationSteppe
 import StepperStandalone from "./components/StepperStandalone";
 import AdminRegistration from "./components/AdminRegistration";
 import ProfilePage from "./components/ProfilePage";
+import OnboardingWizard from "./components/OnboardingWizard";
 // ❌ REMOVED: import PharmaciesNearYou from "./pages/PharmaciesNearYou";
 import CheckoutPage from "./components/CheckoutPage";
 import PaymentPage from "./components/PaymentPage";
@@ -129,6 +130,7 @@ function AppContent() {
       <Routes>
         <Route path="/" element={<WelcomePage />} />
         <Route path="/otp-login" element={<OtpLogin />} />
+        <Route path="/onboarding" element={<OnboardingWizard />} />
         <Route path="/pharmacy/login" element={<PharmacyLogin />} />
         <Route path="/order/:orderId" element={<OrderTracking />} />
         <Route path="/order-tracking/:orderId" element={<OrderTracking />} />

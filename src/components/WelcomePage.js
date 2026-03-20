@@ -13,10 +13,17 @@ export default function WelcomePage() {
     document.documentElement.classList.add("gd-welcome");
     document.body.classList.add("welcome-solid-bg");
 
-    // Auto-redirect: if logged in -> /home, else -> /otp-login
+    // Auto-redirect: if logged in -> /home (or /onboarding if needed), else -> /otp-login
     const token = localStorage.getItem("token");
-    // Use replace so the welcome route isn't kept in history
-    navigate(token ? "/home" : "/otp-login", { replace: true });
+    const profileDone = localStorage.getItem("profileCompleted") === "1";
+
+    if (!token) {
+      navigate("/otp-login", { replace: true });
+    } else if (!profileDone) {
+      navigate("/onboarding", { replace: true });
+    } else {
+      navigate("/home", { replace: true });
+    }
 
     return () => {
       document.documentElement.classList.remove("gd-welcome");

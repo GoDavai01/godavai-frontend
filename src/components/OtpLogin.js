@@ -203,13 +203,12 @@ export default function OtpLogin({ onLogin }) {
         { headers: { Authorization: "Bearer " + token } }
       );
 
-      const needsProfile =
-        profile?.profileCompleted === false ||
+      const needsOnboarding =
+        !profile?.profileCompleted ||
         !profile?.name ||
-        !profile?.email ||
         !profile?.dob;
 
-      window.location.href = needsProfile ? "/profile?setup=1" : "/";
+      window.location.href = needsOnboarding ? "/onboarding" : "/";
     } catch (err) {
       setSnack({
         open: true,

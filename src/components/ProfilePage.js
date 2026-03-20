@@ -101,25 +101,19 @@ export default function ProfilePage() {
   );
   const dobPickerRef = useRef(null);
 
-  // First-run detection with localStorage fallback (in case backend doesn’t return the flag yet)
+  // First-run detection — redirect to onboarding wizard if profile incomplete
   const search = new URLSearchParams(location.search);
   const forceSetup = search.get("setup") === "1";
   const localDone = localStorage.getItem("profileCompleted") === "1";
-  const missingRequired = !user?.name || !user?.email || !user?.dob;
+  const missingRequired = !user?.name || !user?.dob;
   const isFirstRun = forceSetup || (!localDone && (!user?.profileCompleted || missingRequired));
 
   useEffect(() => {
     if (!user) return;
+    // If profile is incomplete, redirect to the onboarding wizard
     if (isFirstRun) {
-      setEditDialog(true);
-      setEditData({
-        name: user.name || "",
-        email: user.email || "",
-        mobile: user.mobile || "",
-        dob: user.dob || "",
-        avatar: user.avatar || "",
-      });
-      setAvatarPreview(user.avatar || "");
+      navigate("/onboarding", { replace: true });
+      return;
     }
     setDobInput(formatDobForDisplay(user.dob || ""));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -490,7 +484,7 @@ export default function ProfilePage() {
               <Avatar className="h-full w-full">
                 <AvatarImage src={user?.avatar || (user?.name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=0C5A3E&color=00D97E&bold=true` : "")} />
                 <AvatarFallback style={{ background: "linear-gradient(135deg, #0C5A3E, #0E7A4F)", color: "#00D97E", fontWeight: 800, fontSize: 20, fontFamily: "'Sora', sans-serif" }}>
-                  {(user?.name || "NU").slice(0, 2).toUpperCase()}
+                  {(user?.name || "").slice(0, 2).toUpperCase() || "?"}
                 </AvatarFallback>
               </Avatar>
             </div>
