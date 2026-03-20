@@ -300,6 +300,8 @@ function createPrescriptionForm(booking = null) {
     diagnosis: "",
     complaint: booking?.reason || booking?.symptoms || "",
     precautions: "",
+    allergies: "",
+    generalAdvice: "",
     testsAdvised: "",
     followUpDate: "",
     medicines: [createEmptyMedicineRow()],
@@ -665,6 +667,7 @@ export default function DoctorDashboard() {
       diagnosis: "Draft a short clinical diagnosis / impression based on the available complaint and notes.",
       precautions: "Draft brief precautions and advice for the patient in clear professional language.",
       testsAdvised: "Suggest likely tests advised in a concise comma-separated clinical format.",
+      generalAdvice: "Based on the diagnosis, medicines, and patient condition, generate 6-10 personalized lifestyle, diet, and health tips as numbered points. Include: what to eat, what to avoid, exercise tips, hydration, rest, and any condition-specific advice. Write in simple, patient-friendly language. Return ONLY the numbered list, no intro text.",
     };
     const currentValue = prescriptionForm[field] || "";
     setAiFieldLoading((prev) => ({ ...prev, [field]: true }));
@@ -1108,6 +1111,8 @@ export default function DoctorDashboard() {
         diagnosis: prescriptionForm.diagnosis,
         complaint: prescriptionForm.complaint,
         precautions: prescriptionForm.precautions,
+        allergies: prescriptionForm.allergies,
+        generalAdvice: prescriptionForm.generalAdvice,
         testsAdvised: prescriptionForm.testsAdvised,
         followUpDate: prescriptionForm.followUpDate || null,
         medicines: prescriptionForm.medicines,
@@ -2333,6 +2338,71 @@ export default function DoctorDashboard() {
                   />
                 </div>
 
+                {/* Allergies */}
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label>Allergies</Label>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {["No Known Allergies", "Drug Allergy", "Food Allergy", "Dust/Pollen Allergy"].map((opt) => {
+                      const isActive = (prescriptionForm.allergies || "").includes(opt);
+                      return (
+                        <button key={opt} type="button"
+                          onClick={() => {
+                            const current = prescriptionForm.allergies || "";
+                            if (opt === "No Known Allergies") {
+                              updatePrescriptionField("allergies", isActive ? "" : opt);
+                            } else {
+                              const cleaned = current.replace("No Known Allergies", "").trim();
+                              const parts = cleaned ? cleaned.split(", ").filter(Boolean) : [];
+                              const newParts = isActive ? parts.filter((p) => p !== opt) : [...parts, opt];
+                              updatePrescriptionField("allergies", newParts.join(", "));
+                            }
+                          }}
+                          className={cx(
+                            "rounded-full border px-3 py-1.5 text-xs font-bold transition-all",
+                            isActive
+                              ? opt === "No Known Allergies"
+                                ? "border-emerald-600 bg-emerald-600 text-white"
+                                : "border-red-500 bg-red-500 text-white"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                          )}
+                        >{opt}</button>
+                      );
+                    })}
+                    <Input
+                      className="h-8 w-48 rounded-full border-slate-200 px-3 text-xs"
+                      value={["No Known Allergies", "Drug Allergy", "Food Allergy", "Dust/Pollen Allergy"].some((o) => prescriptionForm.allergies === o) ? "" : (prescriptionForm.allergies && !["Drug Allergy", "Food Allergy", "Dust/Pollen Allergy"].some((o) => prescriptionForm.allergies?.includes(o)) && prescriptionForm.allergies !== "No Known Allergies" ? prescriptionForm.allergies : "")}
+                      onChange={(e) => updatePrescriptionField("allergies", e.target.value)}
+                      placeholder="Specify allergy..."
+                    />
+                  </div>
+                </div>
+
+                {/* AI General Advice */}
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label>General Advice <span className="text-xs font-normal text-slate-400">(AI-powered)</span></Label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => requestAiAssist("generalAdvice")}
+                      className="rounded-full border-emerald-200 bg-emerald-50 px-4 text-xs font-black text-emerald-700 hover:bg-emerald-100"
+                    >
+                      <Sparkles className="mr-1 h-3.5 w-3.5" />
+                      {aiFieldLoading.generalAdvice ? "AI is thinking..." : "Generate AI Advice"}
+                    </Button>
+                  </div>
+                  <TextArea
+                    rows={4}
+                    className="mt-2"
+                    value={prescriptionForm.generalAdvice}
+                    onChange={(e) => updatePrescriptionField("generalAdvice", e.target.value)}
+                    placeholder="Click 'Generate AI Advice' after filling diagnosis & medicines — AI will generate personalized diet, lifestyle, and health tips for the patient..."
+                  />
+                </div>
+
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2537,29 +2607,79 @@ export default function DoctorDashboard() {
                         </div>
                       </div>
 
-                      {/* Frequency */}
+                      {/* Frequency — M-A-N checkboxes + special options */}
                       <div>
                         <Label className="text-xs font-bold text-slate-500">Frequency</Label>
-                        <div className="mt-1.5 flex flex-wrap gap-1.5">
-                          {[
-                            { val: "OD", label: "OD (Once/day)" },
-                            { val: "BD", label: "BD (Twice/day)" },
-                            { val: "TDS", label: "TDS (Thrice/day)" },
-                            { val: "QID", label: "QID (4x/day)" },
-                            { val: "SOS", label: "SOS (As needed)" },
-                            { val: "HS", label: "HS (Bedtime)" },
-                            { val: "STAT", label: "STAT (Once)" },
-                          ].map((opt) => (
-                            <button key={opt.val} type="button"
-                              onClick={() => updateMedicineRow(idx, "frequency", med.frequency === opt.val ? "" : opt.val)}
-                              className={cx(
-                                "rounded-full border px-3 py-1 text-xs font-bold transition-all",
-                                med.frequency === opt.val
-                                  ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
-                                  : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:bg-emerald-50"
-                              )}
-                            >{opt.label}</button>
-                          ))}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-3">
+                          {/* M-A-N toggle buttons */}
+                          <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5">
+                            {[
+                              { key: "M", label: "Morning", emoji: "\u2600\uFE0F" },
+                              { key: "A", label: "Afternoon", emoji: "\uD83C\uDF24\uFE0F" },
+                              { key: "N", label: "Night", emoji: "\uD83C\uDF19" },
+                            ].map((slot) => {
+                              const freqStr = med.frequency || "";
+                              const parts = freqStr.split("-");
+                              const isManFormat = parts.length === 3 && parts.every((p) => p === "0" || p === "1");
+                              const slotIdx = slot.key === "M" ? 0 : slot.key === "A" ? 1 : 2;
+                              const isActive = isManFormat && parts[slotIdx] === "1";
+
+                              return (
+                                <button key={slot.key} type="button" title={slot.label}
+                                  onClick={() => {
+                                    const currentParts = isManFormat ? [...parts] : ["0", "0", "0"];
+                                    currentParts[slotIdx] = currentParts[slotIdx] === "1" ? "0" : "1";
+                                    const newFreq = currentParts.join("-");
+                                    updateMedicineRow(idx, "frequency", newFreq === "0-0-0" ? "" : newFreq);
+                                  }}
+                                  className={cx(
+                                    "flex h-8 w-16 flex-col items-center justify-center rounded-lg border text-xs font-bold transition-all",
+                                    isActive
+                                      ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+                                      : "border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:bg-emerald-50"
+                                  )}
+                                >
+                                  <span className="text-[10px] leading-none">{slot.emoji}</span>
+                                  <span className="mt-0.5 text-[9px] leading-none">{slot.key === "M" ? "Morn" : slot.key === "A" ? "Aftn" : "Night"}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {/* Quick frequency labels */}
+                          <div className="flex flex-wrap gap-1">
+                            {[
+                              { val: "SOS", label: "SOS" },
+                              { val: "STAT", label: "STAT" },
+                              { val: "HS", label: "Bedtime" },
+                            ].map((opt) => (
+                              <button key={opt.val} type="button"
+                                onClick={() => updateMedicineRow(idx, "frequency", med.frequency === opt.val ? "" : opt.val)}
+                                className={cx(
+                                  "rounded-full border px-2.5 py-1 text-[10px] font-bold transition-all",
+                                  med.frequency === opt.val
+                                    ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+                                    : "border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:bg-emerald-50"
+                                )}
+                              >{opt.label}</button>
+                            ))}
+                          </div>
+                          {/* Display current selection */}
+                          {med.frequency && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5">
+                              {(() => {
+                                const f = med.frequency;
+                                const parts = f.split("-");
+                                if (parts.length === 3 && parts.every((p) => p === "0" || p === "1")) {
+                                  const labels = [];
+                                  if (parts[0] === "1") labels.push("Morning");
+                                  if (parts[1] === "1") labels.push("Afternoon");
+                                  if (parts[2] === "1") labels.push("Night");
+                                  return labels.join(", ") || f;
+                                }
+                                return f;
+                              })()}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -2568,22 +2688,31 @@ export default function DoctorDashboard() {
                         <div>
                           <Label className="text-xs font-bold text-slate-500">Duration</Label>
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
-                            {["3", "5", "7", "10", "14", "30"].map((opt) => (
-                              <button key={opt} type="button"
-                                onClick={() => updateMedicineRow(idx, "duration", med.duration === opt ? "" : opt)}
+                            {[
+                              { val: "3 days", label: "3d" },
+                              { val: "5 days", label: "5d" },
+                              { val: "7 days", label: "7d" },
+                              { val: "10 days", label: "10d" },
+                              { val: "14 days", label: "14d" },
+                              { val: "1 month", label: "1m" },
+                              { val: "2 months", label: "2m" },
+                              { val: "3 months", label: "3m" },
+                            ].map((opt) => (
+                              <button key={opt.val} type="button"
+                                onClick={() => updateMedicineRow(idx, "duration", med.duration === opt.val ? "" : opt.val)}
                                 className={cx(
                                   "rounded-full border px-2.5 py-1 text-xs font-bold transition-all",
-                                  med.duration === opt
+                                  med.duration === opt.val
                                     ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
                                     : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:bg-emerald-50"
                                 )}
-                              >{opt}d</button>
+                              >{opt.label}</button>
                             ))}
                             <Input
-                              className="h-7 w-16 rounded-full border-slate-200 px-2.5 text-xs"
-                              value={["3", "5", "7", "10", "14", "30"].includes(med.duration) ? "" : med.duration}
+                              className="h-7 w-20 rounded-full border-slate-200 px-2.5 text-xs"
+                              value={["3 days", "5 days", "7 days", "10 days", "14 days", "1 month", "2 months", "3 months"].includes(med.duration) ? "" : med.duration}
                               onChange={(e) => updateMedicineRow(idx, "duration", e.target.value)}
-                              placeholder="Custom"
+                              placeholder="Custom..."
                             />
                           </div>
                         </div>

@@ -8,6 +8,7 @@ import {
   Pill,
   Share2,
   ShieldAlert,
+  Sparkles,
   Stethoscope,
   TestTube2,
   UserRound,
@@ -38,6 +39,15 @@ function toModeLabel(value) {
 
 function humanFrequency(freq) {
   const f = String(freq || "").trim().toUpperCase();
+  // Handle M-A-N format (e.g., "1-0-1")
+  const parts = f.split("-");
+  if (parts.length === 3 && parts.every((p) => p === "0" || p === "1")) {
+    const labels = [];
+    if (parts[0] === "1") labels.push("Morning");
+    if (parts[1] === "1") labels.push("Afternoon");
+    if (parts[2] === "1") labels.push("Night");
+    return labels.length ? labels.join(" & ") : f;
+  }
   const map = {
     OD: "Once a day",
     BD: "Twice a day",
@@ -541,7 +551,23 @@ export default function DoctorPrescriptionViewDialog({ prescription, open, onOpe
                           {medicine?.frequency ? (
                             <div style={{ background: "#ECFDF5", borderRadius: 12, padding: "8px 10px" }}>
                               <div style={{ fontSize: 9, fontWeight: 900, color: "#166534", textTransform: "uppercase", letterSpacing: "0.06em" }}>Frequency</div>
-                              <div style={{ marginTop: 2, fontSize: 13, fontWeight: 800, color: "#166534" }}>{humanFrequency(medicine.frequency)}</div>
+                              {(() => {
+                                const fp = String(medicine.frequency).split("-");
+                                const isMan = fp.length === 3 && fp.every((p) => p === "0" || p === "1");
+                                if (isMan) {
+                                  return (
+                                    <>
+                                      <div style={{ marginTop: 4, display: "flex", gap: 4, alignItems: "center" }}>
+                                        {[{ k: "M", e: "\u2600\uFE0F" }, { k: "A", e: "\uD83C\uDF24\uFE0F" }, { k: "N", e: "\uD83C\uDF19" }].map((s, i) => (
+                                          <span key={s.k} style={{ width: 28, height: 28, borderRadius: 8, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900, background: fp[i] === "1" ? "#166534" : "#E2E8F0", color: fp[i] === "1" ? "#fff" : "#94A3B8" }}>{fp[i]}</span>
+                                        ))}
+                                      </div>
+                                      <div style={{ marginTop: 3, fontSize: 10, fontWeight: 700, color: "#166534" }}>{humanFrequency(medicine.frequency)}</div>
+                                    </>
+                                  );
+                                }
+                                return <div style={{ marginTop: 2, fontSize: 13, fontWeight: 800, color: "#166534" }}>{humanFrequency(medicine.frequency)}</div>;
+                              })()}
                             </div>
                           ) : null}
                           {medicine?.duration ? (
@@ -601,11 +627,29 @@ export default function DoctorPrescriptionViewDialog({ prescription, open, onOpe
               </div>
             ) : null}
 
+            {prescription?.allergies ? (
+              <div style={{ marginTop: 22 }}>
+                <SectionLabel icon={ShieldAlert} label="Allergies" />
+                <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 12, background: "#FEF2F2", border: "1px solid #FECACA", fontSize: 13, lineHeight: 1.6, color: "#991B1B", fontWeight: 600 }}>
+                  {prescription.allergies}
+                </div>
+              </div>
+            ) : null}
+
             {prescription?.precautions ? (
               <div style={{ marginTop: 22 }}>
                 <SectionLabel icon={ShieldAlert} label="Precautions" />
                 <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.6, color: "#334155", fontWeight: 600 }}>
                   {prescription.precautions}
+                </div>
+              </div>
+            ) : null}
+
+            {prescription?.generalAdvice ? (
+              <div style={{ marginTop: 22 }}>
+                <SectionLabel icon={Sparkles} label="General Advice" />
+                <div style={{ marginTop: 8, padding: "10px 14px", borderRadius: 14, background: "#F0FDF4", border: "1px solid #BBF7D0", fontSize: 13, lineHeight: 1.8, color: "#166534", fontWeight: 500, whiteSpace: "pre-line" }}>
+                  {prescription.generalAdvice}
                 </div>
               </div>
             ) : null}
