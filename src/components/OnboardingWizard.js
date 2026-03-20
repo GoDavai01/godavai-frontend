@@ -1,5 +1,6 @@
 // src/components/OnboardingWizard.js — GoDavaii 2035 HealthOS Onboarding
-// Step-by-step wizard after first login — collects name, DOB, gender, email/mobile
+// Step-by-step wizard after first login — collects name, DOB, gender, mobile (mandatory), email (optional)
+// Handles account merge INLINE (OTP verification right here, no redirect to Profile)
 // Same dark glassmorphic theme as OtpLogin for consistency
 
 import React, { useState, useRef, useEffect } from "react";
@@ -7,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
   User, Calendar, Heart, Mail, Phone, ChevronRight,
-  Loader2, Sparkles, Check, ArrowLeft,
+  Loader2, Sparkles, Check, ArrowLeft, ShieldCheck, Lock,
 } from "lucide-react";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
@@ -51,7 +52,7 @@ function BgOrbs() {
 
 /* ─── Progress Bar ─── */
 function ProgressBar({ current, total }) {
-  const pct = ((current) / total) * 100;
+  const pct = (current / total) * 100;
   return (
     <div style={{
       width: "100%", height: 4, borderRadius: 4,
@@ -82,9 +83,7 @@ function StepDots({ current, total }) {
             background: i <= current ? ACC : "rgba(255,255,255,0.15)",
           }}
           transition={{ duration: 0.3 }}
-          style={{
-            height: 8, borderRadius: 4,
-          }}
+          style={{ height: 8, borderRadius: 4 }}
         />
       ))}
     </div>
@@ -139,22 +138,23 @@ function GenderSelector({ value, onChange }) {
 }
 
 /* ─── Styled Input ─── */
-function WizardInput({ icon: Icon, placeholder, value, onChange, type = "text", inputMode, maxLength, autoFocus, onKeyDown }) {
+function WizardInput({ icon: Icon, placeholder, value, onChange, type = "text", inputMode, maxLength, autoFocus, onKeyDown, disabled }) {
   const ref = useRef(null);
 
   useEffect(() => {
-    if (autoFocus) setTimeout(() => ref.current?.focus(), 350);
-  }, [autoFocus]);
+    if (autoFocus && !disabled) setTimeout(() => ref.current?.focus(), 350);
+  }, [autoFocus, disabled]);
 
   return (
     <div style={{
       display: "flex", alignItems: "center", height: 56, borderRadius: 16,
-      background: "rgba(255,255,255,0.06)",
+      background: disabled ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.06)",
       border: value
         ? `2px solid ${ACC}60`
         : "2px solid rgba(255,255,255,0.12)",
       padding: "0 16px", gap: 12,
       transition: "border 0.2s",
+      opacity: disabled ? 0.5 : 1,
     }}>
       {Icon && <Icon style={{ width: 20, height: 20, color: ACC, flexShrink: 0, opacity: 0.7 }} />}
       <input
@@ -166,13 +166,14 @@ function WizardInput({ icon: Icon, placeholder, value, onChange, type = "text", 
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
+        disabled={disabled}
         style={{
           flex: 1, background: "none", border: "none", outline: "none",
           color: "#fff", fontSize: 16, fontWeight: 700,
           fontFamily: "'Plus Jakarta Sans', sans-serif",
         }}
       />
-      {value && (
+      {value && !disabled && (
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -185,6 +186,68 @@ function WizardInput({ icon: Icon, placeholder, value, onChange, type = "text", 
           <Check style={{ width: 12, height: 12, color: ACC }} />
         </motion.div>
       )}
+    </div>
+  );
+}
+
+/* ─── OTP Boxes for merge verification ─── */
+function OtpBoxes({ value, onChange, length = 6 }) {
+  const refs = useRef([]);
+  const digits = value.padEnd(length, " ").split("").slice(0, length);
+
+  const handleKey = (e, idx) => {
+    if (e.key === "Backspace") {
+      e.preventDefault();
+      const arr = value.split("");
+      if (arr[idx]) { arr[idx] = ""; onChange(arr.join("")); }
+      else if (idx > 0) { arr[idx - 1] = ""; onChange(arr.join("")); refs.current[idx - 1]?.focus(); }
+    }
+    if (e.key === "ArrowLeft" && idx > 0) refs.current[idx - 1]?.focus();
+    if (e.key === "ArrowRight" && idx < length - 1) refs.current[idx + 1]?.focus();
+  };
+
+  const handleInput = (e, idx) => {
+    const val = e.target.value.replace(/\D/g, "");
+    if (!val) return;
+    const arr = value.split("");
+    if (val.length > 1) {
+      const pasted = val.slice(0, length);
+      onChange(pasted);
+      refs.current[Math.min(pasted.length, length - 1)]?.focus();
+      return;
+    }
+    arr[idx] = val[0];
+    onChange(arr.join("").replace(/ /g, ""));
+    if (idx < length - 1) refs.current[idx + 1]?.focus();
+  };
+
+  return (
+    <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+      {digits.map((d, i) => (
+        <motion.input
+          key={i}
+          ref={(el) => (refs.current[i] = el)}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 * i }}
+          type="text"
+          inputMode="numeric"
+          maxLength={length}
+          value={d === " " ? "" : d}
+          onKeyDown={(e) => handleKey(e, i)}
+          onInput={(e) => handleInput(e, i)}
+          onFocus={(e) => e.target.select()}
+          style={{
+            width: 44, height: 52, borderRadius: 14,
+            border: d !== " " ? `2px solid ${ACC}` : "2px solid rgba(255,255,255,0.15)",
+            background: d !== " " ? "rgba(0,217,126,0.08)" : "rgba(255,255,255,0.06)",
+            color: "#fff", fontSize: 20, fontWeight: 900,
+            fontFamily: "'Sora', sans-serif",
+            textAlign: "center", outline: "none",
+            caretColor: ACC, transition: "border 0.2s, background 0.2s",
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -210,18 +273,11 @@ function ConfettiBurst() {
         <motion.div
           key={p.id}
           initial={{ x: 0, y: 0, opacity: 1, scale: 0, rotate: 0 }}
-          animate={{
-            x: p.x, y: p.y, opacity: 0,
-            scale: p.scale, rotate: p.rotation,
-          }}
-          transition={{
-            duration: 1.5, delay: p.delay,
-            ease: "easeOut",
-          }}
+          animate={{ x: p.x, y: p.y, opacity: 0, scale: p.scale, rotate: p.rotation }}
+          transition={{ duration: 1.5, delay: p.delay, ease: "easeOut" }}
           style={{
             position: "absolute", left: "50%", top: "45%",
-            width: 8, height: 8, borderRadius: 2,
-            background: p.color,
+            width: 8, height: 8, borderRadius: 2, background: p.color,
           }}
         />
       ))}
@@ -248,43 +304,45 @@ export default function OnboardingWizard() {
   const hasMobile = Boolean(user?.mobile);
 
   // Steps config — dynamically built
+  // Both mobile AND email are MANDATORY — health app needs both
   const STEPS = [];
-  STEPS.push("name");     // Always: name is mandatory
-  STEPS.push("about");    // Always: DOB + Gender
-  if (!hasEmail) STEPS.push("email");
-  else if (!hasMobile) STEPS.push("mobile");
-  STEPS.push("done");     // Always: completion
+  STEPS.push("name");      // Always: name is mandatory
+  STEPS.push("about");     // Always: DOB + Gender
+  if (!hasMobile) STEPS.push("mobile");  // Mobile is MANDATORY
+  if (!hasEmail) STEPS.push("email");    // Email is MANDATORY
+  STEPS.push("done");      // Always: completion
 
   const TOTAL = STEPS.length;
 
   const [stepIdx, setStepIdx] = useState(0);
-  const [direction, setDirection] = useState(1); // 1 = forward, -1 = back
+  const [direction, setDirection] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   // Form data
-  const [name, setName] = useState(user?.name && user.name !== "New User" ? user.name : "");
+  const [name, setName] = useState(user?.name && user.name !== "New User" && user.name !== "" ? user.name : "");
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState("");
-  const [contactValue, setContactValue] = useState("");
+  const [mobileValue, setMobileValue] = useState("");
+  const [emailValue, setEmailValue] = useState("");
+
+  // ── Merge flow state ──
+  // When a 409 conflict happens, we show OTP verification RIGHT HERE
+  const [mergeState, setMergeState] = useState(null);
+  // mergeState: { field: "email"|"mobile", value: string, masked: string, otp: string, sending: bool }
 
   const currentStep = STEPS[stepIdx];
 
   // Auto-format DOB input (dd-mm-yyyy)
   const handleDobChange = (val) => {
-    // Remove non-numeric except dashes
     let cleaned = val.replace(/[^\d-]/g, "");
-
-    // Auto-insert dashes
     const digits = cleaned.replace(/-/g, "");
     if (digits.length <= 2) cleaned = digits;
     else if (digits.length <= 4) cleaned = digits.slice(0, 2) + "-" + digits.slice(2);
     else cleaned = digits.slice(0, 2) + "-" + digits.slice(2, 4) + "-" + digits.slice(4, 8);
-
     setDob(cleaned);
   };
 
-  // Parse dd-mm-yyyy to ISO
   const parseDobToIso = (val) => {
     if (!val) return "";
     const parts = val.split("-");
@@ -298,17 +356,18 @@ export default function OnboardingWizard() {
 
   // Validate current step
   const canProceed = () => {
+    if (mergeState) return false; // can't proceed while merge is active
     switch (currentStep) {
       case "name": return name.trim().length >= 2;
       case "about": return dob.length >= 10 && parseDobToIso(dob) && gender;
-      case "email": return /\S+@\S+\.\S+/.test(contactValue.trim());
-      case "mobile": return /^\d{10}$/.test(contactValue.trim());
+      case "mobile": return /^\d{10}$/.test(mobileValue.trim());
+      case "email": return /\S+@\S+\.\S+/.test(emailValue.trim());
       case "done": return true;
       default: return false;
     }
   };
 
-  // Save profile to backend
+  // ── Save profile to backend ──
   const saveProfile = async (final = false) => {
     setSaving(true);
     setError("");
@@ -319,17 +378,9 @@ export default function OnboardingWizard() {
         gender,
       };
 
-      // Add email or mobile if collected
-      const contactStep = STEPS.find(s => s === "email" || s === "mobile");
-      if (contactStep === "email" && contactValue.trim()) {
-        payload.email = contactValue.trim().toLowerCase();
-      } else if (contactStep === "mobile" && contactValue.trim()) {
-        payload.mobile = contactValue.trim();
-      }
-
-      if (final) {
-        payload.profileCompleted = true;
-      }
+      if (mobileValue.trim()) payload.mobile = mobileValue.trim();
+      if (emailValue.trim()) payload.email = emailValue.trim().toLowerCase();
+      if (final) payload.profileCompleted = true;
 
       const res = await axios.put(
         `${API}/api/users/${user._id}`,
@@ -337,86 +388,146 @@ export default function OnboardingWizard() {
         { headers: { Authorization: "Bearer " + token }, timeout: 15000 }
       );
 
-      // Update user context
-      if (res.data) {
-        setUser(res.data);
-      }
+      if (res.data) setUser(res.data);
+      if (final) localStorage.setItem("profileCompleted", "1");
 
-      if (final) {
-        localStorage.setItem("profileCompleted", "1");
-      }
-
-      return true;
+      return { ok: true };
     } catch (e) {
       const data = e.response?.data;
       if (e.response?.status === 409 && data?.mergeable) {
-        setError(
-          data.conflictField === "email"
-            ? "This email is linked to another account. You can link it from your Profile settings later."
-            : "This mobile is linked to another account. You can link it from your Profile settings later."
-        );
-      } else {
-        setError(data?.error || "Something went wrong. Please try again.");
+        // Return merge info — caller will handle it
+        return { ok: false, merge: true, conflictField: data.conflictField, conflictValue: data.conflictValue };
       }
-      return false;
+      setError(data?.error || "Something went wrong. Please try again.");
+      return { ok: false };
     } finally {
       setSaving(false);
     }
   };
 
-  // Handle next step
+  // ── Merge: Send OTP ──
+  const handleMergeSendOtp = async (field, value) => {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await axios.post(
+        `${API}/api/users/merge/send-otp`,
+        { conflictField: field, conflictValue: value },
+        { headers: { Authorization: "Bearer " + token }, timeout: 15000 }
+      );
+      setMergeState({
+        field, value,
+        masked: res.data.masked || value,
+        otp: "",
+      });
+    } catch (e) {
+      setError(e.response?.data?.error || "Failed to send OTP. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Merge: Verify OTP & complete ──
+  const handleMergeVerify = async () => {
+    if (!mergeState?.otp || mergeState.otp.length < 4) {
+      setError("Please enter the OTP.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const res = await axios.post(
+        `${API}/api/users/merge/verify`,
+        { otp: mergeState.otp },
+        { headers: { Authorization: "Bearer " + token }, timeout: 30000 }
+      );
+
+      // Merge succeeded — update context
+      if (res.data.user) setUser(res.data.user);
+
+      setMergeState(null);
+      setError("");
+
+      // Now proceed to next step (the conflicting field is resolved)
+      setDirection(1);
+      setStepIdx((i) => Math.min(i + 1, TOTAL - 1));
+    } catch (e) {
+      setError(e.response?.data?.error || "OTP verification failed. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Merge: Resend OTP ──
+  const handleMergeResend = async () => {
+    if (!mergeState) return;
+    await handleMergeSendOtp(mergeState.field, mergeState.value);
+  };
+
+  // ── Handle next step ──
   const handleNext = async () => {
     if (!canProceed() || saving) return;
 
-    // If we're on "about" step, save name + DOB + gender to backend
+    // Save name + DOB + gender after "about" step
     if (currentStep === "about") {
-      const ok = await saveProfile(false);
-      if (!ok) return;
+      const result = await saveProfile(false);
+      if (!result.ok) return;
     }
 
-    // If we're on email/mobile step, save with that info
-    if (currentStep === "email" || currentStep === "mobile") {
-      const ok = await saveProfile(false);
-      if (!ok) return;
+    // Save mobile — if conflict, start merge flow
+    if (currentStep === "mobile") {
+      const result = await saveProfile(false);
+      if (!result.ok) {
+        if (result.merge) {
+          // Start merge flow right here
+          await handleMergeSendOtp(result.conflictField, result.conflictValue || mobileValue.trim());
+          return; // Don't advance — show merge UI
+        }
+        return;
+      }
     }
 
-    // If we're on "done" step, finalize
-    if (currentStep === "done") {
-      const ok = await saveProfile(true);
-      if (ok) {
-        // Small delay for confetti effect
-        setTimeout(() => {
-          navigate("/home", { replace: true });
-        }, 1800);
+    // Save email — if conflict, start merge flow
+    if (currentStep === "email") {
+      const result = await saveProfile(false);
+      if (!result.ok) {
+        if (result.merge) {
+          await handleMergeSendOtp(result.conflictField, result.conflictValue || emailValue.trim().toLowerCase());
+          return;
+        }
         return;
       }
     }
 
     setDirection(1);
     setError("");
+    setMergeState(null);
     setStepIdx((i) => Math.min(i + 1, TOTAL - 1));
   };
 
   // Handle back
   const handleBack = () => {
+    if (mergeState) {
+      setMergeState(null);
+      setError("");
+      return;
+    }
     if (stepIdx === 0) return;
     setDirection(-1);
     setError("");
     setStepIdx((i) => i - 1);
   };
 
-  // Handle Enter key
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && canProceed()) handleNext();
   };
 
-  // Handle skip (for optional contact step)
-  const handleSkip = async () => {
-    setContactValue("");
+  // Skip for email only
+  const handleSkipEmail = async () => {
+    setEmailValue("");
     setDirection(1);
     setError("");
-
-    // Save what we have so far
+    setMergeState(null);
     await saveProfile(false);
     setStepIdx((i) => Math.min(i + 1, TOTAL - 1));
   };
@@ -430,10 +541,9 @@ export default function OnboardingWizard() {
       setDoneTriggered(true);
       setShowConfetti(true);
 
-      // Auto-save and redirect after showing completion
       const timer = setTimeout(async () => {
-        const ok = await saveProfile(true);
-        if (ok) {
+        const result = await saveProfile(true);
+        if (result.ok) {
           setTimeout(() => navigate("/home", { replace: true }), 1200);
         }
       }, 600);
@@ -443,8 +553,127 @@ export default function OnboardingWizard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep]);
 
+  /* ─── MERGE OTP UI (shown inline when conflict detected) ─── */
+  const renderMergeFlow = () => {
+    if (!mergeState) return null;
+
+    const fieldLabel = mergeState.field === "email" ? "email" : "mobile number";
+
+    return (
+      <motion.div
+        key="merge-otp"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        transition={{ duration: 0.3 }}
+      >
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 400 }}
+            style={{
+              width: 56, height: 56, borderRadius: 18, margin: "0 auto 16px",
+              background: "rgba(251,191,36,0.12)",
+              border: "2px solid rgba(251,191,36,0.3)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <Lock style={{ width: 26, height: 26, color: "#FBBF24" }} />
+          </motion.div>
+
+          <h2 style={{
+            fontFamily: "'Sora', sans-serif", fontSize: 20, fontWeight: 900,
+            color: "#fff", margin: "0 0 8px", letterSpacing: "-0.3px",
+          }}>
+            Verify your {fieldLabel}
+          </h2>
+          <p style={{
+            fontSize: 13, color: "rgba(255,255,255,0.5)", fontWeight: 600,
+            margin: 0, lineHeight: 1.5,
+          }}>
+            This {fieldLabel} is linked to another account.
+            <br />We sent a 6-digit OTP to <span style={{ color: ACC, fontWeight: 800 }}>{mergeState.masked}</span>
+            <br />Verify to link both accounts.
+          </p>
+        </div>
+
+        {/* OTP Input */}
+        <div style={{ marginBottom: 20 }}>
+          <OtpBoxes
+            value={mergeState.otp}
+            onChange={(val) => setMergeState((s) => ({ ...s, otp: val }))}
+            length={6}
+          />
+        </div>
+
+        {/* Verify button */}
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={handleMergeVerify}
+          disabled={saving || mergeState.otp.length < 4}
+          style={{
+            width: "100%", height: 54, borderRadius: 16, border: "none",
+            background: saving || mergeState.otp.length < 4
+              ? "rgba(255,255,255,0.08)"
+              : `linear-gradient(135deg, #FBBF24, #F59E0B)`,
+            color: saving || mergeState.otp.length < 4 ? "rgba(255,255,255,0.3)" : DARK,
+            fontSize: 15, fontWeight: 900,
+            fontFamily: "'Sora', sans-serif",
+            cursor: saving || mergeState.otp.length < 4 ? "not-allowed" : "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            boxShadow: saving || mergeState.otp.length < 4
+              ? "none" : "0 8px 28px rgba(251,191,36,0.3)",
+            transition: "all 0.25s",
+          }}
+        >
+          {saving ? (
+            <Loader2 style={{ width: 20, height: 20, animation: "spin 0.8s linear infinite" }} />
+          ) : (
+            <>
+              <ShieldCheck style={{ width: 18, height: 18 }} />
+              Verify & Link Account
+            </>
+          )}
+        </motion.button>
+
+        {/* Resend + info */}
+        <div style={{ textAlign: "center", marginTop: 14 }}>
+          <button
+            onClick={handleMergeResend}
+            disabled={saving}
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: ACC, fontSize: 12, fontWeight: 700,
+              textDecoration: "underline", textUnderlineOffset: 3,
+            }}
+          >
+            Resend OTP
+          </button>
+        </div>
+
+        <div style={{
+          marginTop: 14, padding: "10px 14px", borderRadius: 12,
+          background: "rgba(0,217,126,0.06)",
+          border: "1px solid rgba(0,217,126,0.15)",
+        }}>
+          <p style={{
+            fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 600,
+            margin: 0, lineHeight: 1.5, textAlign: "center",
+          }}>
+            This will merge your previous account data into this one.
+            <br />No data will be lost — orders, addresses, everything stays safe.
+          </p>
+        </div>
+      </motion.div>
+    );
+  };
+
   /* ─── Step content renderer ─── */
   const renderStep = () => {
+    // If merge flow is active, show that instead
+    if (mergeState) return renderMergeFlow();
+
     const variants = {
       enter: (dir) => ({ x: dir > 0 ? 60 : -60, opacity: 0 }),
       center: { x: 0, opacity: 1 },
@@ -539,7 +768,6 @@ export default function OnboardingWizard() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {/* DOB */}
               <div>
                 <label style={{
                   fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.4)",
@@ -560,7 +788,6 @@ export default function OnboardingWizard() {
                 />
               </div>
 
-              {/* Gender */}
               <div>
                 <label style={{
                   fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.4)",
@@ -571,69 +798,6 @@ export default function OnboardingWizard() {
                 </label>
                 <GenderSelector value={gender} onChange={setGender} />
               </div>
-            </div>
-          </motion.div>
-        );
-
-      case "email":
-        return (
-          <motion.div
-            key="email"
-            custom={direction}
-            variants={variants}
-            initial="enter" animate="center" exit="exit"
-            transition={{ duration: 0.3 }}
-          >
-            <div style={{ textAlign: "center", marginBottom: 28 }}>
-              <motion.div
-                initial={{ scale: 0, rotate: -20 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ type: "spring", stiffness: 400, delay: 0.1 }}
-                style={{
-                  width: 56, height: 56, borderRadius: 18, margin: "0 auto 16px",
-                  background: `linear-gradient(135deg, ${ACC}20, ${CYAN}10)`,
-                  border: `2px solid ${ACC}30`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}
-              >
-                <Mail style={{ width: 26, height: 26, color: ACC }} />
-              </motion.div>
-              <h2 style={{
-                fontFamily: "'Sora', sans-serif", fontSize: 24, fontWeight: 900,
-                color: "#fff", margin: "0 0 6px", letterSpacing: "-0.5px",
-              }}>
-                Stay connected
-              </h2>
-              <p style={{
-                fontSize: 13, color: "rgba(255,255,255,0.45)", fontWeight: 600,
-                margin: 0,
-              }}>
-                Get reports, prescriptions & offers on email
-              </p>
-            </div>
-
-            <WizardInput
-              icon={Mail}
-              placeholder="your.email@example.com"
-              value={contactValue}
-              onChange={setContactValue}
-              type="email"
-              autoFocus
-              onKeyDown={handleKeyDown}
-            />
-
-            {/* Skip option */}
-            <div style={{ textAlign: "center", marginTop: 12 }}>
-              <button
-                onClick={handleSkip}
-                style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  color: "rgba(255,255,255,0.35)", fontSize: 12, fontWeight: 700,
-                  textDecoration: "underline", textUnderlineOffset: 3,
-                }}
-              >
-                I'll do this later
-              </button>
             </div>
           </motion.div>
         );
@@ -665,40 +829,79 @@ export default function OnboardingWizard() {
                 fontFamily: "'Sora', sans-serif", fontSize: 24, fontWeight: 900,
                 color: "#fff", margin: "0 0 6px", letterSpacing: "-0.5px",
               }}>
-                Add your mobile
+                Your mobile number
               </h2>
               <p style={{
                 fontSize: 13, color: "rgba(255,255,255,0.45)", fontWeight: 600,
                 margin: 0,
               }}>
-                For delivery updates & account recovery
+                Required for delivery updates, prescriptions & OTP verification
               </p>
             </div>
 
             <WizardInput
               icon={Phone}
               placeholder="10-digit mobile number"
-              value={contactValue}
-              onChange={(v) => setContactValue(v.replace(/\D/g, "").slice(0, 10))}
+              value={mobileValue}
+              onChange={(v) => setMobileValue(v.replace(/\D/g, "").slice(0, 10))}
               inputMode="numeric"
               maxLength={10}
               autoFocus
               onKeyDown={handleKeyDown}
             />
 
-            {/* Skip option */}
-            <div style={{ textAlign: "center", marginTop: 12 }}>
-              <button
-                onClick={handleSkip}
+            {/* No skip for mobile — it's mandatory */}
+          </motion.div>
+        );
+
+      case "email":
+        return (
+          <motion.div
+            key="email"
+            custom={direction}
+            variants={variants}
+            initial="enter" animate="center" exit="exit"
+            transition={{ duration: 0.3 }}
+          >
+            <div style={{ textAlign: "center", marginBottom: 28 }}>
+              <motion.div
+                initial={{ scale: 0, rotate: -20 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: "spring", stiffness: 400, delay: 0.1 }}
                 style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  color: "rgba(255,255,255,0.35)", fontSize: 12, fontWeight: 700,
-                  textDecoration: "underline", textUnderlineOffset: 3,
+                  width: 56, height: 56, borderRadius: 18, margin: "0 auto 16px",
+                  background: `linear-gradient(135deg, ${ACC}20, ${CYAN}10)`,
+                  border: `2px solid ${ACC}30`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
                 }}
               >
-                I'll do this later
-              </button>
+                <Mail style={{ width: 26, height: 26, color: ACC }} />
+              </motion.div>
+              <h2 style={{
+                fontFamily: "'Sora', sans-serif", fontSize: 24, fontWeight: 900,
+                color: "#fff", margin: "0 0 6px", letterSpacing: "-0.5px",
+              }}>
+                Your email address
+              </h2>
+              <p style={{
+                fontSize: 13, color: "rgba(255,255,255,0.45)", fontWeight: 600,
+                margin: 0,
+              }}>
+                Required for reports, prescriptions & invoices
+              </p>
             </div>
+
+            <WizardInput
+              icon={Mail}
+              placeholder="your.email@example.com"
+              value={emailValue}
+              onChange={setEmailValue}
+              type="email"
+              autoFocus
+              onKeyDown={handleKeyDown}
+            />
+
+            {/* No skip — email is mandatory */}
           </motion.div>
         );
 
@@ -769,20 +972,18 @@ export default function OnboardingWizard() {
                 { label: "Name", value: name },
                 { label: "DOB", value: dob },
                 { label: "Gender", value: gender ? gender.charAt(0).toUpperCase() + gender.slice(1) : "—" },
-                ...(contactValue ? [{
-                  label: STEPS.includes("email") ? "Email" : "Mobile",
-                  value: contactValue,
-                }] : []),
-              ].map((item, i) => (
+                { label: "Mobile", value: mobileValue || user?.mobile || "—" },
+                ...(emailValue ? [{ label: "Email", value: emailValue }] : []),
+              ].map((item, i, arr) => (
                 <div key={i} style={{
                   display: "flex", justifyContent: "space-between",
                   padding: "8px 0",
-                  borderBottom: i < 3 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                  borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
                 }}>
                   <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", fontWeight: 700 }}>
                     {item.label}
                   </span>
-                  <span style={{ fontSize: 13, color: "#fff", fontWeight: 800 }}>
+                  <span style={{ fontSize: 13, color: "#fff", fontWeight: 800, textAlign: "right", maxWidth: "65%", wordBreak: "break-all" }}>
                     {item.value}
                   </span>
                 </div>
@@ -809,7 +1010,6 @@ export default function OnboardingWizard() {
     }}>
       <BgOrbs />
 
-      {/* Grid overlay */}
       <div style={{
         position: "absolute", inset: 0, opacity: 0.03,
         backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)",
@@ -817,7 +1017,6 @@ export default function OnboardingWizard() {
         pointerEvents: "none",
       }} />
 
-      {/* Content */}
       <div style={{
         position: "relative", zIndex: 2, width: "100%", maxWidth: 420,
         padding: "0 24px", display: "flex", flexDirection: "column", alignItems: "center",
@@ -829,7 +1028,6 @@ export default function OnboardingWizard() {
           animate={{ opacity: 1, y: 0 }}
           style={{ width: "100%", marginBottom: 20 }}
         >
-          {/* Logo */}
           <div style={{ textAlign: "center", marginBottom: 20 }}>
             <h1 style={{
               fontFamily: "'Sora', sans-serif", fontSize: 22, fontWeight: 900,
@@ -839,27 +1037,19 @@ export default function OnboardingWizard() {
             </h1>
           </div>
 
-          {/* Progress bar */}
           <ProgressBar current={stepIdx + 1} total={TOTAL} />
           <div style={{
             display: "flex", justifyContent: "space-between",
             marginTop: 8, marginBottom: 4,
           }}>
-            <span style={{
-              fontSize: 11, fontWeight: 700,
-              color: "rgba(255,255,255,0.3)",
-            }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>
               Step {stepIdx + 1} of {TOTAL}
             </span>
-            <span style={{
-              fontSize: 11, fontWeight: 700,
-              color: ACC,
-            }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: ACC }}>
               {Math.round(((stepIdx + 1) / TOTAL) * 100)}%
             </span>
           </div>
 
-          {/* Step dots */}
           <StepDots current={stepIdx} total={TOTAL} />
         </motion.div>
 
@@ -880,7 +1070,7 @@ export default function OnboardingWizard() {
           }}
         >
           {/* Back button */}
-          {stepIdx > 0 && currentStep !== "done" && (
+          {(stepIdx > 0 || mergeState) && currentStep !== "done" && (
             <motion.button
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -893,11 +1083,11 @@ export default function OnboardingWizard() {
               }}
             >
               <ArrowLeft style={{ width: 14, height: 14 }} />
-              Back
+              {mergeState ? "Cancel verification" : "Back"}
             </motion.button>
           )}
 
-          {/* Step content with AnimatePresence */}
+          {/* Step content */}
           <AnimatePresence mode="wait" custom={direction}>
             {renderStep()}
           </AnimatePresence>
@@ -923,8 +1113,8 @@ export default function OnboardingWizard() {
             )}
           </AnimatePresence>
 
-          {/* CTA Button */}
-          {!isLast && (
+          {/* CTA Button — only when NOT in merge flow and NOT done */}
+          {!isLast && !mergeState && (
             <motion.button
               whileTap={{ scale: active ? 0.97 : 1 }}
               onClick={handleNext}
