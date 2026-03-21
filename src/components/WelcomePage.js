@@ -15,9 +15,10 @@ export default function WelcomePage() {
 
     // Auto-redirect: if logged in -> /home (or /onboarding if needed), else -> /otp-login
     const token = localStorage.getItem("token");
+    const refreshToken = localStorage.getItem("refreshToken");
     const profileDone = localStorage.getItem("profileCompleted") === "1";
 
-    if (!token) {
+    if (!token && !refreshToken) {
       navigate("/otp-login", { replace: true });
     } else if (!profileDone) {
       navigate("/onboarding", { replace: true });

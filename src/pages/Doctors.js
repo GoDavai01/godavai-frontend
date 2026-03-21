@@ -724,7 +724,7 @@ function DoctorCard({ doctor, mode, onBook }) {
 
 export default function Doctors() {
   const navigate = useNavigate();
-  const { token: authToken, user } = useAuth();
+  const { token: authToken, user, refreshSession } = useAuth();
   const [query, setQuery] = useState("");
   const [specialty, setSpecialty] = useState("All");
   const [mode, setMode] = useState("video");
@@ -939,7 +939,15 @@ export default function Doctors() {
 
   async function bookNow() {
     if (!bookingDoctor || !bookingDate || !bookingSlot || !paymentMethod) return;
-    if (!activeToken) {
+    let bookingToken = activeToken;
+    if (!bookingToken && typeof refreshSession === "function") {
+      try {
+        bookingToken = await refreshSession();
+      } catch (_) {
+        bookingToken = "";
+      }
+    }
+    if (!bookingToken) {
       setError("Session expired. Please login once to continue booking.");
       navigate("/otp-login");
       return;
@@ -970,7 +978,7 @@ export default function Doctors() {
         })(),
         {
           headers: {
-            ...userHeaders(activeToken),
+            ...userHeaders(bookingToken),
             "Content-Type": "multipart/form-data",
           },
         }
@@ -1016,7 +1024,7 @@ export default function Doctors() {
                   razorpaySignature: response?.razorpay_signature || "",
                 },
                 {
-                  headers: userHeaders(activeToken),
+                  headers: userHeaders(bookingToken),
                 }
               );
 
