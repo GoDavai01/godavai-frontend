@@ -4,7 +4,7 @@
 // ✅ Generic suggestions via GLOBAL alternatives endpoint
 // ✅ Removed cart pharmacy conflict sheet usage
 
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { Dialog, DialogContent } from "../components/ui/dialog";
 import {
   UploadCloud,
@@ -36,6 +36,8 @@ const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0C5A3E";
 const MID = "#0E7A4F";
 const ACC = "#00D97E";
+const MARKETPLACE_PAGE_SIZE = 80;
+const MARKETPLACE_OBSERVER_MARGIN = "320px";
 
 const bottomDock = (hasCart) =>
   `calc(${hasCart ? 144 : 72}px + env(safe-area-inset-bottom,0px) + 12px)`;
@@ -112,6 +114,9 @@ function MedCardImage({ src, alt }) {
     <img
       src={src}
       alt={alt}
+      loading="lazy"
+      decoding="async"
+      fetchPriority="low"
       style={{ height: "100%", width: "100%", objectFit: "contain", padding: 8 }}
       onError={() => setFail(true)}
     />
@@ -152,6 +157,12 @@ const packLabel = (count, unit) => {
       : `${u}s`;
   return `${c} ${printable}`.trim();
 };
+
+function medicineListingKey(m = {}) {
+  return `${(m.brand || m.name || "").toLowerCase()}|${(m.composition || m.compositionKey || "").toLowerCase()}|${String(
+    m.packCount || ""
+  )}|${String(m.packUnit || "")}|${String(m.productKind || "")}`;
+}
 
 const useMedTypeChips = (medicines) =>
   useMemo(() => {
@@ -197,16 +208,13 @@ function Chip({ label, active, onClick, icon }) {
   );
 }
 
-function MedCard({ med, canDeliver, onTap, onAdd }) {
+const MedCard = React.memo(function MedCard({ med, canDeliver, onTap, onAdd }) {
   const showMrp = hasValidMrp(med);
   const discountPct = showMrp ? Math.round(((med.mrp - med.price) / med.mrp) * 100) : null;
   const isGeneric = !med.brand || String(med.brand).trim() === "";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileTap={{ scale: 0.97 }}
+    <div
       style={{
         background: "#fff",
         borderRadius: 20,
@@ -387,9 +395,9 @@ function MedCard({ med, canDeliver, onTap, onAdd }) {
           </motion.button>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
-}
+});
 
 export default function Medicines() {
   const { pharmacyId } = useParams();
@@ -419,6 +427,10 @@ export default function Medicines() {
   const [pharmacy, setPharmacy] = useState(null);
   const [medicines, setMedicines] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [marketplacePage, setMarketplacePage] = useState(0);
+  const [marketplaceHasMore, setMarketplaceHasMore] = useState(false);
+  const [marketplaceTotal, setMarketplaceTotal] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedType, setSelectedType] = useState("All");
   const BRAND_KINDS = ["All", "Branded", "Generic"];
@@ -434,6 +446,9 @@ export default function Medicines() {
   const [doctorPrescriptionLoading, setDoctorPrescriptionLoading] = useState(false);
   const [doctorPrescriptionMessage, setDoctorPrescriptionMessage] = useState("");
   const [doctorPrescriptionDialogOpen, setDoctorPrescriptionDialogOpen] = useState(false);
+  const marketplaceRequestSeqRef = useRef(0);
+  const marketplaceInFlightRef = useRef(false);
+  const loadMoreAnchorRef = useRef(null);
 
   useEffect(() => {
     setSearchQ(initialQuery);
@@ -607,6 +622,73 @@ export default function Medicines() {
 
   const medTypes = useMedTypeChips(medicines);
 
+  const mergeMarketplaceMedicines = useCallback((baseList, incomingList) => {
+    const seen = new Map();
+    const put = (m) => {
+      if (!m) return;
+      const key = medicineListingKey(m);
+      const existing = seen.get(key);
+      if (!existing || (Number(m.price) || 0) < (Number(existing.price) || 0)) {
+        seen.set(key, m);
+      }
+    };
+    (baseList || []).forEach(put);
+    (incomingList || []).forEach(put);
+    return Array.from(seen.values());
+  }, []);
+
+  const fetchMarketplacePage = useCallback(
+    async (pageToLoad, { reset = false } = {}) => {
+      if (!reset && marketplaceInFlightRef.current) return;
+      const requestSeq = marketplaceRequestSeqRef.current + 1;
+      marketplaceRequestSeqRef.current = requestSeq;
+      marketplaceInFlightRef.current = true;
+      if (reset) setLoading(true);
+      else setLoadingMore(true);
+
+      try {
+        const city = currentAddress?.city || localStorage.getItem("city") || "";
+        const params = new URLSearchParams();
+        if (city) params.append("city", city);
+        params.append("paged", "1");
+        params.append("page", String(pageToLoad));
+        params.append("limit", String(MARKETPLACE_PAGE_SIZE));
+        params.append("catalogFallback", "1");
+        params.append("catalogSource", "blinkit");
+
+        const res = await axios.get(`${API}/api/medicines/all?${params.toString()}`, { timeout: 20000 });
+        const payload = res?.data;
+        const items = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.items)
+          ? payload.items
+          : [];
+        const total = Array.isArray(payload) ? items.length : Number(payload?.total || items.length);
+        const hasMore = Array.isArray(payload) ? false : !!payload?.hasMore;
+
+        if (requestSeq !== marketplaceRequestSeqRef.current) return;
+        setMedicines((prev) => mergeMarketplaceMedicines(reset ? [] : prev, items));
+        setMarketplacePage(pageToLoad);
+        setMarketplaceTotal(Number.isFinite(total) ? total : items.length);
+        setMarketplaceHasMore(hasMore);
+      } catch {
+        if (requestSeq !== marketplaceRequestSeqRef.current) return;
+        if (reset) {
+          setMedicines([]);
+          setMarketplacePage(0);
+          setMarketplaceTotal(0);
+          setMarketplaceHasMore(false);
+        }
+      } finally {
+        if (requestSeq !== marketplaceRequestSeqRef.current) return;
+        if (reset) setLoading(false);
+        setLoadingMore(false);
+        marketplaceInFlightRef.current = false;
+      }
+    },
+    [currentAddress?.city, mergeMarketplaceMedicines]
+  );
+
   useEffect(() => {
     const lat = Number(currentAddress?.lat);
     const lng = Number(currentAddress?.lng);
@@ -633,39 +715,46 @@ export default function Medicines() {
   }, [pharmacyId, isMarketplace]);
 
   useEffect(() => {
-    setLoading(true);
-
     if (isMarketplace) {
-      const city = currentAddress?.city || localStorage.getItem("city") || "";
-      const params = new URLSearchParams();
-      if (city) params.append("city", city);
-
-      axios
-        .get(`${API}/api/medicines/all?${params.toString()}`)
-        .then((res) => {
-          const meds = res.data || [];
-          const seen = new Map();
-          for (const m of meds) {
-            const key = `${(m.brand || m.name || "").toLowerCase()}|${(m.composition || m.compositionKey || "").toLowerCase()}|${String(
-              m.packCount || ""
-            )}|${String(m.packUnit || "")}|${String(m.productKind || "")}`;
-            const existing = seen.get(key);
-            if (!existing || (Number(m.price) || 0) < (Number(existing.price) || 0)) {
-              seen.set(key, m);
-            }
-          }
-          setMedicines(Array.from(seen.values()));
-        })
-        .catch(() => setMedicines([]))
-        .finally(() => setLoading(false));
-    } else {
-      axios
-        .get(`${API}/api/medicines?pharmacyId=${pharmacyId}&onlyAvailable=1`)
-        .then((res) => setMedicines(res.data || []))
-        .catch(() => setMedicines([]))
-        .finally(() => setLoading(false));
+      setMedicines([]);
+      setMarketplacePage(0);
+      setMarketplaceHasMore(false);
+      setMarketplaceTotal(0);
+      setLoadingMore(false);
+      fetchMarketplacePage(1, { reset: true });
+      return;
     }
-  }, [pharmacyId, isMarketplace, currentAddress?.city]);
+
+    setLoading(true);
+    axios
+      .get(`${API}/api/medicines?pharmacyId=${pharmacyId}&onlyAvailable=1`, { timeout: 20000 })
+      .then((res) => setMedicines(res.data || []))
+      .catch(() => setMedicines([]))
+      .finally(() => setLoading(false));
+  }, [pharmacyId, isMarketplace, fetchMarketplacePage]);
+
+  const loadNextMarketplacePage = useCallback(() => {
+    if (!isMarketplace || loading || loadingMore || !marketplaceHasMore) return;
+    fetchMarketplacePage(marketplacePage + 1, { reset: false });
+  }, [isMarketplace, loading, loadingMore, marketplaceHasMore, marketplacePage, fetchMarketplacePage]);
+
+  useEffect(() => {
+    if (!isMarketplace || loading || !marketplaceHasMore) return;
+    const root = scrollRef.current;
+    const target = loadMoreAnchorRef.current;
+    if (!root || !target) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadNextMarketplacePage();
+        }
+      },
+      { root, rootMargin: MARKETPLACE_OBSERVER_MARGIN, threshold: 0.01 }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [isMarketplace, loading, marketplaceHasMore, loadNextMarketplacePage, medicines.length]);
 
   const matchCategory = (med, selected) => {
     if (selected === "All") return true;
@@ -764,6 +853,17 @@ export default function Medicines() {
   };
 
   const totalCount = filteredMeds.length;
+  const isDefaultCatalogView =
+    selectedCategory === "All" &&
+    selectedType === "All" &&
+    selectedKind === "All" &&
+    !searchQ.trim();
+  const countPillText =
+    isMarketplace && isDefaultCatalogView && marketplaceTotal > 0
+      ? marketplaceHasMore
+        ? `${totalCount}/${marketplaceTotal}`
+        : `${marketplaceTotal}`
+      : `${totalCount}`;
 
   return (
     <div
@@ -934,7 +1034,7 @@ export default function Medicines() {
                   fontFamily: "'Sora',sans-serif",
                 }}
               >
-                {totalCount}
+                {countPillText}
               </span>
             )}
           </div>
@@ -1343,20 +1443,79 @@ export default function Medicines() {
             >
               Clear all filters
             </motion.button>
+            {isMarketplace && marketplaceHasMore && (
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={loadNextMarketplacePage}
+                style={{
+                  marginTop: 10,
+                  height: 38,
+                  padding: "0 18px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(12,90,62,0.16)",
+                  background: "#fff",
+                  color: DEEP,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  fontFamily: "'Sora',sans-serif",
+                  cursor: "pointer",
+                }}
+              >
+                Search in more medicines
+              </motion.button>
+            )}
           </motion.div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {filteredMeds.map((med, idx) => (
-              <motion.div
-                key={med._id}
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(idx * 0.02, 0.3), duration: 0.25 }}
-              >
-                <MedCard med={med} canDeliver={canDeliver} onTap={() => openMed(med)} onAdd={(m) => addWithGenericCheck(m)} />
-              </motion.div>
-            ))}
-          </div>
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {filteredMeds.map((med, idx) => (
+                <div key={med._id || med.sourceProductId || `${med.name || "med"}-${idx}`}>
+                  <MedCard med={med} canDeliver={canDeliver} onTap={() => openMed(med)} onAdd={(m) => addWithGenericCheck(m)} />
+                </div>
+              ))}
+            </div>
+
+            {isMarketplace && (
+              <>
+                <div ref={loadMoreAnchorRef} style={{ height: 1 }} />
+                {loadingMore && (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      textAlign: "center",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "#4B7A62",
+                    }}
+                  >
+                    Loading more medicines...
+                  </div>
+                )}
+                {!loadingMore && marketplaceHasMore && (
+                  <div style={{ marginTop: 14, textAlign: "center" }}>
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={loadNextMarketplacePage}
+                      style={{
+                        height: 38,
+                        padding: "0 18px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(12,90,62,0.16)",
+                        background: "#fff",
+                        color: DEEP,
+                        fontSize: 12,
+                        fontWeight: 800,
+                        fontFamily: "'Sora',sans-serif",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Load more medicines
+                    </motion.button>
+                  </div>
+                )}
+              </>
+            )}
+          </>
         )}
       </div>
 
