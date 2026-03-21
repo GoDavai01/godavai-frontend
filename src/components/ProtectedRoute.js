@@ -4,10 +4,10 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function ProtectedRoute({ children }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
 
   // If user is not logged in, redirect to OTP login page
-  if (!user) {
+  if (!user && !token) {
     return <Navigate to="/otp-login" replace />;
   }
 

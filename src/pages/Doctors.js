@@ -940,7 +940,7 @@ export default function Doctors() {
   async function bookNow() {
     if (!bookingDoctor || !bookingDate || !bookingSlot || !paymentMethod) return;
     if (!activeToken) {
-      setError("Session missing. Please login again before booking a consult.");
+      setError("Session expired. Please login once to continue booking.");
       navigate("/otp-login");
       return;
     }

@@ -185,8 +185,12 @@ export default function OtpLogin({ onLogin }) {
       });
       setSnack({ open: true, msg: "Login Successful!", severity: "success" });
 
-      const token = res.data.token;
-      const decoded = jwtDecode(token);
+      const accessToken = res?.data?.accessToken || res?.data?.token;
+      const refreshToken = res?.data?.refreshToken || "";
+      if (!accessToken) {
+        throw new Error("Access token missing in login response.");
+      }
+      const decoded = jwtDecode(accessToken);
       const userObj = {
         _id: decoded.userId,
         mobile: decoded.mobile,
@@ -195,12 +199,20 @@ export default function OtpLogin({ onLogin }) {
         profileCompleted: decoded.profileCompleted,
         dob: decoded.dob,
       };
-      login(userObj, token);
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("token", accessToken);
+        if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+        localStorage.setItem("user", JSON.stringify(userObj));
+      }
+      axios.defaults.headers.common["Authorization"] = "Bearer " + accessToken;
+
+      login(userObj, accessToken, refreshToken);
       if (onLogin) onLogin(userObj);
 
       const { data: profile } = await axios.get(
         `${API_BASE_URL}/api/profile`,
-        { headers: { Authorization: "Bearer " + token } }
+        { headers: { Authorization: "Bearer " + accessToken } }
       );
 
       const needsOnboarding =
