@@ -168,7 +168,9 @@ export default function HealthVault() {
   const [doctorPrescriptions, setDoctorPrescriptions] = useState([]);
   const [rxLoading, setRxLoading] = useState(false);
   const [viewingRx, setViewingRx] = useState(null);
+  const [activeVaultTab, setActiveVaultTab] = useState("overview");
   const rxSectionRef = useRef(null);
+  const reportsSectionRef = useRef(null);
   const location = useLocation();
 
   const activeMember = useMemo(
@@ -188,6 +190,34 @@ export default function HealthVault() {
     if (activeMember.reports?.length) score += 15;
     return Math.min(score, 100);
   }, [activeMember]);
+
+  const sortedDoctorPrescriptions = useMemo(() => {
+    const rows = Array.isArray(doctorPrescriptions) ? [...doctorPrescriptions] : [];
+    return rows.sort((a, b) => {
+      const tsA = new Date(a?.issuedAt || a?.createdAt || 0).getTime();
+      const tsB = new Date(b?.issuedAt || b?.createdAt || 0).getTime();
+      return tsB - tsA;
+    });
+  }, [doctorPrescriptions]);
+
+  const prescriptionsToShow = useMemo(() => {
+    if (activeVaultTab === "prescriptions") return sortedDoctorPrescriptions;
+    return sortedDoctorPrescriptions.length ? [sortedDoctorPrescriptions[0]] : [];
+  }, [activeVaultTab, sortedDoctorPrescriptions]);
+
+  const sortedReports = useMemo(() => {
+    const rows = Array.isArray(activeMember?.reports) ? [...activeMember.reports] : [];
+    return rows.sort((a, b) => {
+      const tsA = new Date(a?.date || 0).getTime() || Number(a?.id || 0);
+      const tsB = new Date(b?.date || 0).getTime() || Number(b?.id || 0);
+      return tsB - tsA;
+    });
+  }, [activeMember?.reports]);
+
+  const reportsToShow = useMemo(() => {
+    if (activeVaultTab === "reports") return sortedReports;
+    return sortedReports.length ? [sortedReports[0]] : [];
+  }, [activeVaultTab, sortedReports]);
 
   useEffect(() => {
     let mounted = true;
@@ -234,12 +264,22 @@ export default function HealthVault() {
     return () => { cancelled = true; };
   }, [user?._id, user?.userId]);
 
-  // Auto-scroll to prescriptions section if navigated from homepage
   useEffect(() => {
-    if (location?.state?.openTab === "prescriptions" && rxSectionRef.current) {
-      setTimeout(() => rxSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 400);
+    const requestedTab = String(location?.state?.openTab || "").toLowerCase();
+    if (requestedTab === "prescriptions" || requestedTab === "reports") {
+      setActiveVaultTab(requestedTab);
     }
-  }, [location?.state, rxLoading]);
+  }, [location?.state?.openTab]);
+
+  useEffect(() => {
+    if (activeVaultTab === "prescriptions" && rxSectionRef.current) {
+      setTimeout(() => rxSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 220);
+      return;
+    }
+    if (activeVaultTab === "reports" && reportsSectionRef.current) {
+      setTimeout(() => reportsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 220);
+    }
+  }, [activeVaultTab, rxLoading, activeMember?.id]);
 
   function patchActiveMember(patch) {
     setVault((prev) => ({
@@ -342,6 +382,45 @@ export default function HealthVault() {
       </div>
 
       <div style={{ padding: 14, display: "grid", gap: 12 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 8,
+            padding: 8,
+            borderRadius: 16,
+            background: "rgba(255,255,255,0.88)",
+            border: "1px solid rgba(12,90,62,0.12)",
+          }}
+        >
+          {[
+            { key: "overview", label: "Overview" },
+            { key: "prescriptions", label: "Prescriptions" },
+            { key: "reports", label: "Reports" },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveVaultTab(tab.key)}
+              style={{
+                height: 34,
+                borderRadius: 10,
+                border: "none",
+                background:
+                  activeVaultTab === tab.key
+                    ? `linear-gradient(135deg,${DEEP},${MID})`
+                    : "#F8FAFC",
+                color: activeVaultTab === tab.key ? "#fff" : "#334155",
+                fontSize: 11.5,
+                fontWeight: 900,
+                fontFamily: "'Sora',sans-serif",
+                cursor: "pointer",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         <Card
           title="Family Profiles"
           icon={<Users style={{ width: 15, height: 15 }} />}
@@ -495,18 +574,21 @@ export default function HealthVault() {
 
         {/* Doctor Prescriptions */}
         <div ref={rxSectionRef}>
-          <Card title="Doctor Prescriptions" icon={<Stethoscope style={{ width: 15, height: 15 }} />}>
+          <Card
+            title={activeVaultTab === "prescriptions" ? "Doctor Prescriptions" : "Latest Doctor Prescription"}
+            icon={<Stethoscope style={{ width: 15, height: 15 }} />}
+          >
             {rxLoading ? (
               <div style={{ padding: 20, textAlign: "center", fontSize: 12, fontWeight: 700, color: "#64748B" }}>
                 Loading prescriptions...
               </div>
-            ) : doctorPrescriptions.length === 0 ? (
+            ) : prescriptionsToShow.length === 0 ? (
               <div style={{ padding: 20, textAlign: "center", fontSize: 12, fontWeight: 700, color: "#94A3B8" }}>
                 No prescriptions yet. Doctor prescriptions will appear here after consultations.
               </div>
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
-                {doctorPrescriptions.map((rx) => {
+                {prescriptionsToShow.map((rx) => {
                   const issuedDate = rx.issuedDateLabel || (rx.issuedAt ? new Date(rx.issuedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "");
                   const medCount = Array.isArray(rx.medicines) ? rx.medicines.length : 0;
                   return (
@@ -581,6 +663,25 @@ export default function HealthVault() {
                     </div>
                   );
                 })}
+                {activeVaultTab !== "prescriptions" && sortedDoctorPrescriptions.length > 1 && (
+                  <motion.button
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => setActiveVaultTab("prescriptions")}
+                    style={{
+                      width: "100%",
+                      height: 34,
+                      borderRadius: 999,
+                      border: "1px solid #BBF7D0",
+                      background: "#F0FDF4",
+                      color: "#166534",
+                      fontSize: 11.5,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    View all {sortedDoctorPrescriptions.length} prescriptions
+                  </motion.button>
+                )}
               </div>
             )}
           </Card>
@@ -595,9 +696,17 @@ export default function HealthVault() {
           />
         )}
 
-        <Card title="Reports & Documents" icon={<FileText style={{ width: 15, height: 15 }} />}>
+        <div ref={reportsSectionRef}>
+        <Card
+          title={activeVaultTab === "reports" ? "Reports & Documents" : "Latest Report"}
+          icon={<FileText style={{ width: 15, height: 15 }} />}
+        >
           <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
-            {(activeMember.reports || []).map((r) => (
+            {reportsToShow.length === 0 ? (
+              <div style={{ padding: 16, textAlign: "center", fontSize: 12, fontWeight: 700, color: "#94A3B8" }}>
+                No reports added yet.
+              </div>
+            ) : reportsToShow.map((r) => (
               <div key={r.id} style={{ border: "1px solid #E2E8F0", borderRadius: 12, padding: 10, background: "#fff", display: "flex", justifyContent: "space-between", gap: 8 }}>
                 <div>
                   <div style={{ fontSize: 12.5, fontWeight: 900, color: "#0B1F16" }}>{r.title}</div>
@@ -636,7 +745,28 @@ export default function HealthVault() {
                 </button>
               </div>
             ))}
+            {activeVaultTab !== "reports" && sortedReports.length > 1 && (
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setActiveVaultTab("reports")}
+                style={{
+                  width: "100%",
+                  height: 34,
+                  borderRadius: 999,
+                  border: "1px solid #BBF7D0",
+                  background: "#F0FDF4",
+                  color: "#166534",
+                  fontSize: 11.5,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                }}
+              >
+                View all {sortedReports.length} reports
+              </motion.button>
+            )}
           </div>
+          {activeVaultTab === "reports" ? (
+          <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8 }}>
             <input value={reportInput.title} onChange={(e) => setReportInput((p) => ({ ...p, title: e.target.value }))} placeholder="Report title" style={textInputStyle()} />
             <input value={reportInput.type} onChange={(e) => setReportInput((p) => ({ ...p, type: e.target.value }))} placeholder="Type" style={textInputStyle()} />
@@ -665,7 +795,14 @@ export default function HealthVault() {
           <div style={{ marginTop: 6, fontSize: 11, color: "#64748B", fontWeight: 700 }}>
             You can add old lab reports, prescriptions, and medical documents for future AI analysis.
           </div>
+          </>
+          ) : (
+            <div style={{ marginTop: 6, fontSize: 11, color: "#64748B", fontWeight: 700 }}>
+              Switch to <b>Reports</b> tab to manage all reports and upload new files.
+            </div>
+          )}
         </Card>
+        </div>
 
         <Card title="Clinical Notes" icon={<FileText style={{ width: 15, height: 15 }} />}>
           <textarea value={activeMember.notes || ""} onChange={(e) => patchActiveMember({ notes: e.target.value })} placeholder="Doctor advice, surgery history, lifestyle notes..." rows={4} style={{ ...textInputStyle(), width: "100%", resize: "vertical", minHeight: 88, paddingTop: 10 }} />
