@@ -2638,7 +2638,7 @@ export default function Home() {
               {myConsults.some((c) => !!getDoctorPrescriptionCartSummary(c?.doctorPrescription)?.prescriptionId) && (
                 <motion.button
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => navigate("/health-vault", { state: { openTab: "prescriptions" } })}
+                  onClick={() => navigate("/health", { state: { openTab: "prescriptions" } })}
                   style={{
                     width: "100%",
                     marginTop: 6,
