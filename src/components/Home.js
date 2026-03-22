@@ -85,6 +85,12 @@ const ACTIVE_STATUSES = new Set([
   "pending",
   "placed",
   "quoted",
+  "substitute_confirmation_pending",
+  "price_confirmation_pending",
+  "partial_confirmation",
+  "pharmacy_confirmation_requested",
+  "chemist_confirmed",
+  "admin_review_required",
   "processing",
   "assigned",
   "accepted",
@@ -120,6 +126,12 @@ function statusLabel(s) {
     pending: "Pending",
     placed: "Order Placed",
     quoted: "Quoted",
+    substitute_confirmation_pending: "Substitute Approval Needed",
+    price_confirmation_pending: "Reviewing availability",
+    partial_confirmation: "Reviewing availability",
+    pharmacy_confirmation_requested: "Reviewing availability",
+    chemist_confirmed: "Pharmacy confirmed",
+    admin_review_required: "Reviewing availability",
     processing: "Processing",
     assigned: "Assigned",
     accepted: "Accepted",
@@ -703,118 +715,7 @@ function DailyCareCard({ icon, title, value, helper, accent, onClick }) {
 }
 
 // ─── Cart Conflict Bottom Sheet ──────────────────────────────
-function CartConflictSheet({ open, onSwitch, onCancel }) {
-  return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onCancel}
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.45)",
-              zIndex: 99998,
-              backdropFilter: "blur(4px)",
-            }}
-          />
-
-          <motion.div
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 28, stiffness: 300 }}
-            style={{
-              position: "fixed",
-              bottom: 0,
-              left: 0,
-              right: 0,
-              zIndex: 99999,
-              maxWidth: 480,
-              margin: "0 auto",
-              background: "#fff",
-              borderTopLeftRadius: 28,
-              borderTopRightRadius: 28,
-              boxShadow: "0 -20px 60px rgba(0,0,0,0.18)",
-              padding: "24px 20px 32px",
-            }}
-          >
-            <div style={{ width: 40, height: 4, borderRadius: 2, background: "#E2E8F0", margin: "0 auto 18px" }} />
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-              <div
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 18,
-                  background: "#FFF7ED",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <RefreshCw style={{ width: 20, height: 20, color: "#C2410C" }} />
-              </div>
-              <div>
-                <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 1000, color: TEXT }}>
-                  Different pharmacy
-                </div>
-                <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 700, marginTop: 2 }}>
-                  This medicine is from another nearby pharmacy. Switch to continue.
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: 10 }}>
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                onClick={onCancel}
-                style={{
-                  flex: 1,
-                  height: 48,
-                  borderRadius: 14,
-                  background: "#F8FAFC",
-                  color: "#64748B",
-                  border: "1.5px solid #E2E8F0",
-                  fontFamily: "'Sora',sans-serif",
-                  fontSize: 14,
-                  fontWeight: 800,
-                  cursor: "pointer",
-                }}
-              >
-                Cancel
-              </motion.button>
-
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                onClick={onSwitch}
-                style={{
-                  flex: 2,
-                  height: 48,
-                  borderRadius: 14,
-                  border: "none",
-                  background: `linear-gradient(135deg,${DEEP},${MID})`,
-                  color: "#fff",
-                  fontFamily: "'Sora',sans-serif",
-                  fontSize: 14,
-                  fontWeight: 1000,
-                  cursor: "pointer",
-                  boxShadow: "0 6px 18px rgba(10,90,59,0.22)",
-                }}
-              >
-                Switch & Add
-              </motion.button>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
-  );
-}
-
-// ─── Med Detail Dialog ───────────────────────────────────────
+// --- Med Detail Dialog ───────────────────────────────────────
 function MedDetailDialog({ med, open, onClose, onAddToCart, canDeliver }) {
   const [activeImg, setActiveImg] = useState(0);
 
@@ -1386,7 +1287,6 @@ export default function Home() {
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [selectedMed, setSelectedMed] = useState(null);
   const [userCoords, setUserCoords] = useState(null);
-  const [conflictSheet, setConflictSheet] = useState({ open: false, pendingMed: null });
   const [myConsults, setMyConsults] = useState([]);
   const [prescriptionFeedback, setPrescriptionFeedback] = useState({ prescriptionId: "", message: "" });
   const [viewingDoctorPrescription, setViewingDoctorPrescription] = useState(null);
@@ -1397,18 +1297,7 @@ export default function Home() {
 
   const { user, token: authToken } = useAuth();
   const cartCtx = useCart();
-  const { cart, addToCart, clearCartAndPharmacy: clearCartAndPharmacyFromContext, clearCart, removeFromCart } = cartCtx;
-
-  const fallbackClearCartAndPharmacy = useCallback(() => {
-    if (removeFromCart && Array.isArray(cart)) {
-      cart.forEach((item) => removeFromCart(item));
-    }
-  }, [cart, removeFromCart]);
-
-  const clearCartAndPharmacy = useMemo(
-    () => clearCartAndPharmacyFromContext || clearCart || fallbackClearCartAndPharmacy,
-    [clearCartAndPharmacyFromContext, clearCart, fallbackClearCartAndPharmacy]
-  );
+  const { cart, addToCart } = cartCtx;
 
   const navigate = useNavigate();
   const { currentAddress, setCurrentAddress } = useLocation();
@@ -1445,21 +1334,31 @@ export default function Home() {
   // Last order
   useEffect(() => {
     if (!user?._id && !user?.userId) return;
-    fetch(`${API}/api/allorders/myorders-userid/${user._id || user.userId}`)
+    const token = getUserAuthToken(authToken);
+    const headers = token ? getUserAuthHeaders(token) : undefined;
+    fetch(
+      `${API}/api/allorders/myorders-userid/${user._id || user.userId}`,
+      headers ? { headers } : undefined
+    )
       .then((r) => r.json())
       .then((orders) => {
         if (Array.isArray(orders) && orders.length) setLastOrder(orders[0]);
       })
       .catch(() => {});
-  }, [user]);
+  }, [user, authToken]);
 
   // Active order
   useEffect(() => {
     async function getActive() {
+      const token = getUserAuthToken(authToken);
+      const headers = token ? getUserAuthHeaders(token) : undefined;
       const idFromLS = localStorage.getItem("activeOrderId");
       try {
         if (idFromLS) {
-          const r = await fetch(`${API}/api/orders/${idFromLS}`);
+          const r = await fetch(
+            `${API}/api/orders/${idFromLS}`,
+            headers ? { headers } : undefined
+          );
           if (r.ok) {
             const o = await r.json();
             if (ACTIVE_STATUSES.has(o.status)) {
@@ -1473,7 +1372,10 @@ export default function Home() {
 
       if (!user?._id && !user?.userId) return;
       try {
-        const r = await fetch(`${API}/api/allorders/myorders-userid/${user._id || user.userId}`);
+        const r = await fetch(
+          `${API}/api/allorders/myorders-userid/${user._id || user.userId}`,
+          headers ? { headers } : undefined
+        );
         const orders = await r.json();
         if (Array.isArray(orders)) {
           const active = orders
@@ -1489,7 +1391,7 @@ export default function Home() {
       } catch {}
     }
     getActive();
-  }, [user]);
+  }, [user, authToken]);
 
   // My consults for home doctor section
   useEffect(() => {
@@ -1574,55 +1476,21 @@ export default function Home() {
     };
   }, [authToken, user?._id, user?.userId]);
 
-  // Nearby pharmacies + top meds
+  // Storefront-first medicine feed (customer should not pick a pharmacy first).
   useEffect(() => {
     if (!userCoords) return;
-    fetch(`${API}/api/pharmacies/nearby?lat=${userCoords.lat}&lng=${userCoords.lng}&maxDistance=8000`)
+    fetch(`${API}/api/medicines?onlyAvailable=1`)
       .then((r) => r.json())
-      .then((pharmacies) => {
-        const active = pharmacies.filter((ph) => ph.active !== false).slice(0, 10);
-        setPharmaciesNearby(active);
-        Promise.all(
-          active.slice(0, 6).map((ph) =>
-            fetch(`${API}/api/medicines?pharmacyId=${ph._id}`)
-              .then((r) => r.json())
-              .then((meds) => ({ pharmacyId: ph._id, medicines: meds.slice(0, 10) }))
-              .catch(() => ({ pharmacyId: ph._id, medicines: [] }))
-          )
-        ).then((results) => {
-          const map = {};
-          results.forEach((r) => {
-            map[r.pharmacyId] = r.medicines;
-          });
-          setMostOrderedByPharmacy(map);
-        });
+      .then((meds) => {
+        const list = Array.isArray(meds) ? meds : [];
+        const storefrontId = "storefront_catalog";
+        const storefrontBucket = [{ _id: storefrontId, active: true, name: "GoDavaii Storefront" }];
+        setPharmaciesNearby(storefrontBucket);
+        setMostOrderedByPharmacy({ [storefrontId]: list.slice(0, 60) });
+        setAllMedsByPharmacy({ [storefrontId]: list.slice(0, 220) });
       })
       .catch(() => {});
   }, [userCoords]);
-
-  // Category fetch
-  useEffect(() => {
-    if (!selectedCategory || pharmaciesNearby.length === 0) return;
-    const toFetch = pharmaciesNearby.slice(0, 6).filter((ph) => !allMedsByPharmacy[ph._id]);
-    if (!toFetch.length) return;
-    Promise.all(
-      toFetch.map((ph) =>
-        fetch(`${API}/api/medicines?pharmacyId=${ph._id}`)
-          .then((r) => r.json())
-          .then((meds) => ({ pharmacyId: ph._id, medicines: meds }))
-          .catch(() => ({ pharmacyId: ph._id, medicines: [] }))
-      )
-    ).then((results) => {
-      setAllMedsByPharmacy((prev) => {
-        const m = { ...prev };
-        results.forEach((r) => {
-          m[r.pharmacyId] = r.medicines;
-        });
-        return m;
-      });
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory, pharmaciesNearby]);
 
   // Fallback
   useEffect(() => {
@@ -1660,14 +1528,6 @@ export default function Home() {
       alert("Sorry, delivery isn't available at your location right now.");
       return;
     }
-    if (cartCount > 0) {
-      const cartPharmacyId = cart[0]?.pharmacyId || cart[0]?.pharmacy?._id || cart[0]?.pharmacy;
-      const medPharmacyId = med.pharmacyId || med.pharmacy?._id || med.pharmacy;
-      if (medPharmacyId && cartPharmacyId && medPharmacyId !== cartPharmacyId) {
-        setConflictSheet({ open: true, pendingMed: med });
-        return;
-      }
-    }
     addToCart(med);
   };
 
@@ -1686,24 +1546,13 @@ export default function Home() {
         showPrescriptionFeedback(summary.prescriptionId, "Mapped medicines abhi medicine page par available nahi hain.");
         return;
       }
-      const nextPharmacyId = summary.addableProducts[0]?.pharmacyId || "";
-      const cartPharmacyId = cart[0]?.pharmacyId || cart[0]?.pharmacy?._id || cart[0]?.pharmacy || "";
-      const replacedCart =
-        cartCount > 0 &&
-        nextPharmacyId &&
-        cartPharmacyId &&
-        String(nextPharmacyId) !== String(cartPharmacyId);
-
-      if (replacedCart && clearCartAndPharmacy) clearCartAndPharmacy();
       summary.addableProducts.forEach((product) => addToCart(product));
       showPrescriptionFeedback(
         summary.prescriptionId,
-        replacedCart
-          ? `Purana cart replace karke ${summary.addableProducts.length} doctor-suggested medicines add kar di gayi.`
-          : `${summary.addableProducts.length} doctor-suggested medicines cart me add ho gayi.`
+        `${summary.addableProducts.length} doctor-suggested medicines cart me add ho gayi.`
       );
     },
-    [addToCart, cart, cartCount, clearCartAndPharmacy, showPrescriptionFeedback]
+    [addToCart, showPrescriptionFeedback]
   );
 
   const openDoctorPrescriptionView = useCallback((doctorPrescription) => {
@@ -1726,13 +1575,6 @@ export default function Home() {
     },
     [navigate]
   );
-
-  const handleConflictSwitch = () => {
-    const med = conflictSheet.pendingMed;
-    if (clearCartAndPharmacy) clearCartAndPharmacy();
-    if (med) addToCart(med);
-    setConflictSheet({ open: false, pendingMed: null });
-  };
 
   const topMedsNearYou = useMemo(() => {
     const phs = pharmaciesNearby.slice(0, 6);
@@ -2952,8 +2794,6 @@ export default function Home() {
           </span>
         </motion.button>
       </motion.div>
-
-      <CartConflictSheet open={conflictSheet.open} onSwitch={handleConflictSwitch} onCancel={() => setConflictSheet({ open: false, pendingMed: null })} />
 
       <LocationModal
         open={locationModalOpen}

@@ -898,6 +898,10 @@ export default function AdminDashboard() {
   const [medicineModal, setMedicineModal] = useState({ open: false, list: [], pharmacy: null });
   const [showStats, setShowStats] = useState({ open: false, type: "" });
   const [activeTab, setActiveTab] = useState(0);
+  const [rxReviewQueue, setRxReviewQueue] = useState([]);
+  const [rxAnalytics, setRxAnalytics] = useState(null);
+  const [rxQueueBusy, setRxQueueBusy] = useState("");
+  const [rxAssignByOrder, setRxAssignByOrder] = useState({});
   // --- ONLY CHANGE: Expanded Order Dialog ---
   const [expandedOrder, setExpandedOrder] = useState(null);
 
@@ -913,7 +917,10 @@ export default function AdminDashboard() {
         .then(res => setOrderList(res.data)).catch(() => { });
       axios.get(`${API_BASE_URL}/api/users`, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => setUserList(res.data)).catch(() => { });
-      axios.get(`${API_BASE_URL}/api/admin/pharmacies`).then(res => setPharmacyList(res.data)).catch(() => { });
+      axios
+        .get(`${API_BASE_URL}/api/admin/pharmacies`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(res => setPharmacyList(res.data))
+        .catch(() => { });
       axios.get(`${API_BASE_URL}/api/pharmacies?all=1`).then((res) => {
         setPharmacies(res.data);
         const cities = Array.from(new Set(res.data.map(p => p.city).filter(Boolean)));
@@ -929,6 +936,67 @@ export default function AdminDashboard() {
     }, 3000);
     return () => clearInterval(interval);
   }, [token, city]);
+
+  useEffect(() => {
+    if (!token) return;
+    const headers = { Authorization: `Bearer ${token}` };
+    const loadRxOps = async () => {
+      try {
+        const [queueRes, analyticsRes] = await Promise.all([
+          axios.get(`${API_BASE_URL}/api/prescriptions/admin/review-queue`, { headers }),
+          axios.get(`${API_BASE_URL}/api/prescriptions/admin/analytics`, { headers }),
+        ]);
+        setRxReviewQueue(Array.isArray(queueRes?.data?.queue) ? queueRes.data.queue : []);
+        setRxAnalytics(analyticsRes?.data || null);
+      } catch {
+        setRxReviewQueue([]);
+      }
+    };
+    loadRxOps();
+    const interval = setInterval(loadRxOps, 8000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  const handleRxRouteNow = async (order) => {
+    if (!order?._id) return;
+    setRxQueueBusy(order._id);
+    try {
+      const payload = {
+        items: Array.isArray(order.parsedBasket) ? order.parsedBasket : [],
+        routeNow: true,
+        mode: order?.modeDecision?.mode || "mode2_partial_exception",
+        note: "Admin routed from review queue",
+      };
+      await axios.put(
+        `${API_BASE_URL}/api/prescriptions/admin/review/${order._id}`,
+        payload,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setMsg("Prescription routed to pharmacy.");
+    } catch {
+      setMsg("Failed to route prescription.");
+    } finally {
+      setRxQueueBusy("");
+    }
+  };
+
+  const handleRxAssign = async (orderId) => {
+    const pharmacyId = rxAssignByOrder[orderId];
+    if (!orderId || !pharmacyId) return;
+    setRxQueueBusy(orderId);
+    try {
+      await axios.put(
+        `${API_BASE_URL}/api/prescriptions/admin/assign/${orderId}`,
+        { pharmacyId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setMsg("Prescription manually assigned.");
+    } catch {
+      setMsg("Failed to assign prescription.");
+    } finally {
+      setRxQueueBusy("");
+    }
+  };
 
   const handleLogin = async () => {
     try {
@@ -1135,6 +1203,7 @@ export default function AdminDashboard() {
 <Tab label="Payments & Payouts" />
 <Tab label="Lab Partners" />
 <Tab label="Doctors Verification" />
+<Tab label={`Rx Review (${rxReviewQueue.length})`} />
           </Tabs>
         </Box>
 
@@ -1489,6 +1558,87 @@ export default function AdminDashboard() {
 )}
 {activeTab === 9 && (
   <DoctorsVerificationPanel token={token} onNotify={setMsg} />
+)}
+{activeTab === 10 && (
+  <Box>
+    <Typography variant="h6" mb={1}>Prescription Review Queue</Typography>
+    <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2 }}>
+      <Chip
+        label={`Queue: ${rxAnalytics?.totals?.reviewQueue ?? rxReviewQueue.length}`}
+        color="warning"
+      />
+      <Chip
+        label={`Fill rate: ${rxAnalytics?.totals?.fillRatePercent ?? 0}%`}
+        color="success"
+      />
+      <Chip
+        label={`Total Rx Orders: ${rxAnalytics?.totals?.orders ?? 0}`}
+        color="primary"
+      />
+    </Stack>
+
+    {rxReviewQueue.length === 0 ? (
+      <Typography sx={{ color: "#aaa" }}>No prescriptions in review queue.</Typography>
+    ) : (
+      <Stack spacing={2}>
+        {rxReviewQueue.map((rx) => (
+          <Card key={rx._id} sx={{ p: 2, bgcolor: "#23272a", borderRadius: 2 }}>
+            <Typography fontWeight={700}>Rx #{rx._id?.slice(-6)}</Typography>
+            <Typography variant="body2" sx={{ color: "#aaf", mt: 0.5 }}>
+              User: {rx.user?.name || "NA"} | Status: {rx.status || "pending"}
+            </Typography>
+            <Typography variant="body2" sx={{ color: "#FFD43B", mt: 0.5 }}>
+              Mode: {rx?.modeDecision?.mode || "mode3_admin_review"}
+            </Typography>
+            <Typography variant="body2" sx={{ color: "#bbb", mt: 0.5 }}>
+              Basket items: {Array.isArray(rx.parsedBasket) ? rx.parsedBasket.length : 0}
+            </Typography>
+            <Typography variant="body2" sx={{ color: "#bbb", mt: 0.5 }}>
+              Estimated: Rs.{rx?.estimatedPricing?.minTotal || 0} - Rs.{rx?.estimatedPricing?.maxTotal || 0}
+            </Typography>
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mt: 1.5 }}>
+              <Button
+                variant="contained"
+                size="small"
+                disabled={rxQueueBusy === rx._id}
+                onClick={() => handleRxRouteNow(rx)}
+              >
+                Route Now
+              </Button>
+              <FormControl size="small" sx={{ minWidth: 210 }}>
+                <InputLabel>Assign pharmacy</InputLabel>
+                <Select
+                  label="Assign pharmacy"
+                  value={rxAssignByOrder[rx._id] || ""}
+                  onChange={(e) =>
+                    setRxAssignByOrder((prev) => ({
+                      ...prev,
+                      [rx._id]: e.target.value,
+                    }))
+                  }
+                >
+                  {filteredPharmacies.map((ph) => (
+                    <MenuItem key={ph._id} value={ph._id}>
+                      {ph.name} ({ph.city || "-"})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={!rxAssignByOrder[rx._id] || rxQueueBusy === rx._id}
+                onClick={() => handleRxAssign(rx._id)}
+              >
+                Assign
+              </Button>
+            </Stack>
+          </Card>
+        ))}
+      </Stack>
+    )}
+  </Box>
 )}
 
         </Box>

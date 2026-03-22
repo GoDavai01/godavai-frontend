@@ -409,6 +409,13 @@ export default function PharmacyDashboard() {
   const [loading, setLoading] = useState(false);
   const [pharmacy, setPharmacy] = useState({});
   const [active, setActive] = useState(false);
+  const [liveConfig, setLiveConfig] = useState({
+    rxEnabled: true,
+    otcOnly: false,
+    busy: false,
+    serviceRadiusMeters: 5000,
+  });
+  const [savingLiveConfig, setSavingLiveConfig] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
   // eslint-disable-next-line no-unused-vars
@@ -567,6 +574,39 @@ export default function PharmacyDashboard() {
     setEditInvOpen(false);
   };
 
+  const saveLiveConfig = async (patch = {}) => {
+    const next = {
+      ...liveConfig,
+      ...patch,
+      serviceRadiusMeters: Number(
+        patch.serviceRadiusMeters ?? liveConfig.serviceRadiusMeters ?? 5000
+      ),
+    };
+    setLiveConfig(next);
+    setSavingLiveConfig(true);
+    try {
+      const res = await axios.patch(
+        `${API_BASE_URL}/api/pharmacies/live-config`,
+        next,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res?.data?.pharmacy) {
+        const ph = res.data.pharmacy;
+        setLiveConfig({
+          rxEnabled: !!ph.rxEnabled,
+          otcOnly: !!ph.otcOnly,
+          busy: !!ph.busy,
+          serviceRadiusMeters: Number(ph.serviceRadiusMeters || 5000),
+        });
+      }
+      setMsg("Live settings updated.");
+    } catch {
+      setMsg("Failed to update live settings.");
+    } finally {
+      setSavingLiveConfig(false);
+    }
+  };
+
   // ====== END MEDICINES TAB BLOCK ======
 
   useEffect(() => {
@@ -580,6 +620,12 @@ export default function PharmacyDashboard() {
         .then(async (res) => {
           setActive(res.data.active);
           setPharmacy(res.data);
+          setLiveConfig({
+            rxEnabled: res.data?.rxEnabled !== false,
+            otcOnly: !!res.data?.otcOnly,
+            busy: !!res.data?.busy,
+            serviceRadiusMeters: Number(res.data?.serviceRadiusMeters || 5000),
+          });
 
           if (res.data?._id) {
             const payRes = await axios.get(
@@ -729,6 +775,25 @@ export default function PharmacyDashboard() {
       setMsg("Update failed!");
     }
     setLoading(false);
+  };
+
+  const handleCatalogDecision = async (order, decision) => {
+    if (!order?._id && !order?.id) return;
+    setLoading(true);
+    try {
+      await axios.post(
+        `${API_BASE_URL}/api/orders/${order._id || order.id}/pharmacy-confirm`,
+        { decision },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (decision === "full") setMsg("Order confirmed.");
+      if (decision === "partial") setMsg("Partial availability sent.");
+      if (decision === "unavailable") setMsg("Order marked unavailable.");
+    } catch (e) {
+      setMsg(e?.response?.data?.error || "Failed to update order decision.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // --------------------- (a) EXTEND FORM STATE (two places) ---------------------
@@ -1182,17 +1247,84 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
               <Switch
                 checked={active}
                 onChange={async (e) => {
-                  setActive(e.target.checked);
-                  await axios.patch(
-                    `${API_BASE_URL}/api/pharmacies/active`,
-                    { active: e.target.checked },
-                    { headers: { Authorization: `Bearer ${token}` } }
-                  );
+                  const next = e.target.checked;
+                  setActive(next);
+                  try {
+                    await axios.patch(
+                      `${API_BASE_URL}/api/pharmacies/active`,
+                      { active: next },
+                      { headers: { Authorization: `Bearer ${token}` } }
+                    );
+                  } catch {
+                    setActive(!next);
+                    setMsg("Failed to update active status.");
+                  }
                 }}
                 inputProps={{ 'aria-label': 'Active Status' }}
                 color="success"
               />
             </Stack>
+
+            <Card className="bg-white border border-emerald-200 rounded-2xl shadow-sm" sx={{ mb: 2 }}>
+              <CardContent>
+                <Typography variant="subtitle1" className="font-extrabold" sx={{ color: "#0f172a", mb: 1 }}>
+                  Live fulfillment controls
+                </Typography>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2 }}>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>Rx enabled</Typography>
+                    <Switch
+                      checked={!!liveConfig.rxEnabled}
+                      disabled={savingLiveConfig}
+                      onChange={(e) => saveLiveConfig({ rxEnabled: e.target.checked })}
+                      color="success"
+                    />
+                  </Stack>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>OTC only</Typography>
+                    <Switch
+                      checked={!!liveConfig.otcOnly}
+                      disabled={savingLiveConfig}
+                      onChange={(e) => saveLiveConfig({ otcOnly: e.target.checked })}
+                      color="success"
+                    />
+                  </Stack>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Typography sx={{ fontWeight: 700, color: "#0f172a" }}>Busy</Typography>
+                    <Switch
+                      checked={!!liveConfig.busy}
+                      disabled={savingLiveConfig}
+                      onChange={(e) => saveLiveConfig({ busy: e.target.checked })}
+                      color="warning"
+                    />
+                  </Stack>
+                </Stack>
+
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ xs: "stretch", sm: "center" }}>
+                  <TextField
+                    label="Service radius (meters)"
+                    type="number"
+                    size="small"
+                    value={liveConfig.serviceRadiusMeters}
+                    onChange={(e) =>
+                      setLiveConfig((prev) => ({
+                        ...prev,
+                        serviceRadiusMeters: Number(e.target.value || 0),
+                      }))
+                    }
+                    sx={{ maxWidth: 240 }}
+                  />
+                  <Button
+                    variant="outlined"
+                    disabled={savingLiveConfig}
+                    onClick={() => saveLiveConfig({ serviceRadiusMeters: Number(liveConfig.serviceRadiusMeters || 0) })}
+                    sx={{ fontWeight: 700 }}
+                  >
+                    Save live settings
+                  </Button>
+                </Stack>
+              </CardContent>
+            </Card>
 
             {/* Location button */}
             <Button
@@ -1342,9 +1474,39 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
                       {/* Status Actions */}
                       <Box sx={{ mt: 2 }}>
                         {(order.status === "placed" || order.status === 0 || order.status === "pending") && (
-                          // ========== (E) SWAPPED + RESTYLED BUTTONS ==========
                           <Stack direction="row" spacing={2}>
-                            {/* LEFT: REJECT (red, filled) */}
+                            <Button
+                              size="small"
+                              variant="contained"
+                              className="rounded-xl"
+                              sx={{
+                                bgcolor: "#065f46",
+                                color: "white",
+                                fontWeight: 800,
+                                "&:hover": { bgcolor: "#064e3b" }
+                              }}
+                              onClick={() => handleCatalogDecision(order, "full")}
+                              disabled={loading}
+                            >
+                              FULL CONFIRM
+                            </Button>
+
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              className="rounded-xl"
+                              sx={{
+                                borderColor: "#065f46",
+                                color: "#065f46",
+                                fontWeight: 800,
+                                "&:hover": { borderColor: "#064e3b", color: "#064e3b" }
+                              }}
+                              onClick={() => handleCatalogDecision(order, "partial")}
+                              disabled={loading}
+                            >
+                              PARTIAL
+                            </Button>
+
                             <Button
                               size="small"
                               variant="contained"
@@ -1355,56 +1517,12 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
                                 fontWeight: 800,
                                 "&:hover": { bgcolor: "#b91c1c" }
                               }}
-                              onClick={async () => {
-                                setLoading(true);
-                                try {
-                                  await axios.patch(
-                                    `${API_BASE_URL}/api/pharmacy/orders/${order.id || order._id}`,
-                                    { status: "rejected", pharmacyAccepted: false },
-                                    { headers: { Authorization: `Bearer ${token}` } }
-                                  );
-                                  setMsg("Order rejected!");
-                                } catch {
-                                  setMsg("Failed to reject order!");
-                                }
-                                setLoading(false);
-                              }}
+                              onClick={() => handleCatalogDecision(order, "unavailable")}
                               disabled={loading}
                             >
-                              REJECT ORDER
-                            </Button>
-
-                            {/* RIGHT: ACCEPT (deep green, filled) */}
-                            <Button
-                              size="small"
-                              variant="contained"
-                              className="rounded-xl"
-                              sx={{
-                                bgcolor: "#065f46",        // deep emerald-800
-                                color: "white",
-                                fontWeight: 800,
-                                "&:hover": { bgcolor: "#064e3b" }
-                              }}
-                              onClick={async () => {
-                                setLoading(true);
-                                try {
-                                  await axios.patch(
-                                    `${API_BASE_URL}/api/pharmacy/orders/${order.id || order._id}`,
-                                    { status: "processing", pharmacyAccepted: true },
-                                    { headers: { Authorization: `Bearer ${token}` } }
-                                  );
-                                  setMsg("Order accepted!");
-                                } catch {
-                                  setMsg("Failed to accept order!");
-                                }
-                                setLoading(false);
-                              }}
-                              disabled={loading}
-                            >
-                              ACCEPT ORDER
+                              UNAVAILABLE
                             </Button>
                           </Stack>
-                          // =====================================================
                         )}
                         {(order.status === 1 || order.status === "processing") && (
                           <Chip label="Processing" color="primary" className="mt-2 font-bold" sx={{ pointerEvents: "none" }} />
@@ -1463,14 +1581,7 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
                   sx={{ bgcolor: "#dc2626", color: "#fff", fontWeight: 800, "&:hover": { bgcolor: "#b91c1c" } }}
                   onClick={async () => {
                     if (!incomingOrder) return setIncomingOpen(false);
-                    try {
-                      await axios.patch(
-                        `${API_BASE_URL}/api/pharmacy/orders/${incomingOrder._id || incomingOrder.id}`,
-                        { status: "rejected", pharmacyAccepted: false },
-                        { headers: { Authorization: `Bearer ${token}` } }
-                      );
-                      setMsg("Order rejected!");
-                    } catch { setMsg("Failed to reject order!"); }
+                    await handleCatalogDecision(incomingOrder, "unavailable");
                     setIncomingOpen(false);
                   }}
                 >
@@ -1483,14 +1594,7 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
                   sx={{ bgcolor: "#065f46", color: "#fff", fontWeight: 800, "&:hover": { bgcolor: "#064e3b" } }}
                   onClick={async () => {
                     if (!incomingOrder) return setIncomingOpen(false);
-                    try {
-                      await axios.patch(
-                        `${API_BASE_URL}/api/pharmacy/orders/${incomingOrder._id || incomingOrder.id}`,
-                        { status: "processing", pharmacyAccepted: true },
-                        { headers: { Authorization: `Bearer ${token}` } }
-                      );
-                      setMsg("Order accepted!");
-                    } catch { setMsg("Failed to accept order!"); }
+                    await handleCatalogDecision(incomingOrder, "full");
                     setIncomingOpen(false);
                   }}
                 >

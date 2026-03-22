@@ -68,6 +68,18 @@ function normalizeMedicine(med) {
   };
 }
 
+function derivePharmacyFromCart(cartItems = []) {
+  const first = (Array.isArray(cartItems) ? cartItems : [])[0];
+  if (!first) return null;
+
+  if (first?.pharmacy && typeof first.pharmacy === "object" && first.pharmacy?._id) {
+    return first.pharmacy;
+  }
+
+  const pharmacyId = first?.pharmacyId || first?.pharmacy;
+  return pharmacyId ? { _id: pharmacyId } : null;
+}
+
 function getCoordsFromPharmacy(pharmacy) {
   if (!pharmacy) return null;
   const lat =
@@ -161,7 +173,8 @@ async function handlePlaceOrder(
     const normalizedItems = cart.map(normalizeMedicine);
     const payload = {
       items: normalizedItems,
-      pharmacyId: normalizedItems[0]?.pharmacyId,
+      // Runtime routing: backend picks best eligible chemist after checkout.
+      routingPreference: "runtime_best",
       address: allAddresses.find((a) => a.id === selectedAddressId),
       dosage: wantChemistInstruction ? "Let chemist suggest" : dosage,
       paymentMethod,
@@ -206,6 +219,10 @@ export default function CheckoutPage() {
     removeOneFromCart,
     removeFromCart,
   } = useCart();
+  const effectivePharmacy = useMemo(
+    () => derivePharmacyFromCart(cart) || selectedPharmacy,
+    [cart, selectedPharmacy]
+  );
   const removeItemCompletely = (med) => {
     if (typeof removeFromCart === "function") return removeFromCart(med);
     for (let i = 0; i < (med.quantity || 1); i++) removeOneFromCart(med);
@@ -355,7 +372,7 @@ export default function CheckoutPage() {
         ? lockedAddress
         : allAddresses.find((a) => a.id === selectedAddressId);
 
-    const pharmacyCoords = getCoordsFromPharmacy(selectedPharmacy);
+    const pharmacyCoords = getCoordsFromPharmacy(effectivePharmacy);
     const addrCoords = getCoordsFromAddress(addr);
 
     const d = haversineKm(pharmacyCoords, addrCoords);
@@ -365,7 +382,7 @@ export default function CheckoutPage() {
       setDistanceKm(null); // treat as within base radius
     }
   }, [
-    selectedPharmacy,
+    effectivePharmacy,
     allAddresses,
     selectedAddressId,
     isPrescriptionFlow,
@@ -376,7 +393,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (
       isPrescriptionFlow ||
-      !selectedPharmacy?._id ||
+      !effectivePharmacy?._id ||
       suggestionsDisabledRef.current
     ) {
       setRawSuggestions([]);
@@ -390,7 +407,7 @@ export default function CheckoutPage() {
       .filter(Boolean)
       .join(",");
 
-    const params = { pharmacyId: selectedPharmacy._id, limit: 20, exclude };
+    const params = { pharmacyId: effectivePharmacy._id, limit: 20, exclude };
     console.log("Fetching suggestions with", params);
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
@@ -441,7 +458,7 @@ export default function CheckoutPage() {
         setSuggestionsLoading(false);
       }
     })();
-  }, [selectedPharmacy?._id, isPrescriptionFlow, cart, token]);
+  }, [effectivePharmacy?._id, isPrescriptionFlow, cart, token]);
 
   const suggestions = useMemo(() => {
     const excludeIds = new Set(
@@ -601,8 +618,9 @@ export default function CheckoutPage() {
     }
     if (!cart.length)
       return setToast({ type: "error", message: "Your cart is empty." });
-    if (!selectedPharmacy?._id)
-      return setToast({ type: "error", message: "Please select a pharmacy." });
+    if (!effectivePharmacy?._id && !isPrescriptionFlow) {
+      // Catalog routing is backend-driven; no hard stop required.
+    }
 
     const address =
       isPrescriptionFlow && lockedAddress
@@ -624,7 +642,7 @@ export default function CheckoutPage() {
           wantChemistInstruction,
           dosage,
           paymentMethod,
-          selectedPharmacy,
+          selectedPharmacy: effectivePharmacy,
           total: fullTotal,
           prescription,
           prescriptionPreview,
@@ -696,7 +714,7 @@ export default function CheckoutPage() {
             wantChemistInstruction,
             dosage,
             paymentMethod,
-            selectedPharmacy,
+            selectedPharmacy: effectivePharmacy,
             total: fullTotal,
             prescription,
             prescriptionPreview,
@@ -941,8 +959,8 @@ export default function CheckoutPage() {
                     onClick={() =>
                       addToCart({
                         ...sug,
-                        pharmacy: selectedPharmacy._id,
-                        pharmacyId: selectedPharmacy._id,
+                        pharmacy: effectivePharmacy?._id,
+                        pharmacyId: effectivePharmacy?._id,
                         quantity: 1,
                       })
                     }

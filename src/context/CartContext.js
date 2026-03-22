@@ -25,6 +25,13 @@ const toNum = (v, d = 0) => {
 function normalizeMedicine(m) {
   const id = m?.medId || m?.medicineId || m?._id || m?.id;
   if (!id) return null;
+  const pharmacyId = m?.pharmacy?._id || m?.pharmacyId || m?.pharmacy || "";
+  const pharmacyObj =
+    m?.pharmacy && typeof m.pharmacy === "object"
+      ? m.pharmacy
+      : pharmacyId
+      ? { _id: pharmacyId }
+      : null;
 
   return {
     _id: id,
@@ -52,10 +59,19 @@ function normalizeMedicine(m) {
     productKind: m?.productKind || "",
 
     quantity: toNum(m?.quantity ?? m?.qty, 1),
+    pharmacyId: pharmacyId || "",
+    pharmacy: pharmacyObj,
 
     // stable cart line id
     lineId: m?.lineId || `${id}`,
   };
+}
+
+function normalizePharmacySelection(pharmacy) {
+  if (!pharmacy) return null;
+  if (typeof pharmacy === "string") return pharmacy ? { _id: pharmacy } : null;
+  if (typeof pharmacy === "object" && pharmacy._id) return pharmacy;
+  return null;
 }
 
 export const CartProvider = ({ children }) => {
@@ -76,6 +92,12 @@ export const CartProvider = ({ children }) => {
     return localStorage.getItem("selectedArea") || "";
   });
 
+  const [selectedPharmacy, setSelectedPharmacy] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const saved = localStorage.getItem("selectedPharmacy");
+    return normalizePharmacySelection(saved ? safeParse(saved, null) : null);
+  });
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     localStorage.setItem("cart", JSON.stringify(cart));
@@ -90,6 +112,15 @@ export const CartProvider = ({ children }) => {
     if (typeof window === "undefined") return;
     localStorage.setItem("selectedArea", selectedArea || "");
   }, [selectedArea]);
+
+  // Keep selectedPharmacy only for backward compatibility screens.
+  // Customer storefront flow should not auto-lock or infer a pharmacy from cart items.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const normalized = normalizePharmacySelection(selectedPharmacy);
+    if (normalized?._id) localStorage.setItem("selectedPharmacy", JSON.stringify(normalized));
+    else localStorage.removeItem("selectedPharmacy");
+  }, [selectedPharmacy]);
 
   const addToCart = useCallback((medicine) => {
     const nm = normalizeMedicine(medicine);
@@ -134,12 +165,24 @@ export const CartProvider = ({ children }) => {
 
   const clearCart = useCallback(() => {
     setCart([]);
+    setSelectedPharmacy(null);
   }, []);
 
   const clearCartAndStorage = useCallback(() => {
     setCart([]);
+    setSelectedPharmacy(null);
     if (typeof window !== "undefined") {
       localStorage.removeItem("cart");
+      localStorage.removeItem("selectedPharmacy");
+    }
+  }, []);
+
+  const clearCartAndPharmacy = useCallback(() => {
+    setCart([]);
+    setSelectedPharmacy(null);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("cart");
+      localStorage.removeItem("selectedPharmacy");
     }
   }, []);
 
@@ -155,11 +198,14 @@ export const CartProvider = ({ children }) => {
         changeQuantity,
         clearCart,
         clearCartAndStorage,
+        clearCartAndPharmacy,
 
         selectedCity,
         setSelectedCity,
         selectedArea,
         setSelectedArea,
+        selectedPharmacy,
+        setSelectedPharmacy,
       }}
     >
       {children}

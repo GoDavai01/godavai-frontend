@@ -357,7 +357,10 @@ export default function ProfilePage() {
         setOrders(sorted);
       } catch {
         try {
-          const res2 = await axios.get(`${API_BASE_URL}/api/allorders/myorders-userid/${user._id}`, { signal: ac.signal });
+          const res2 = await axios.get(`${API_BASE_URL}/api/allorders/myorders-userid/${user._id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: ac.signal,
+          });
           const sorted2 = [...res2.data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
           setOrders(sorted2);
         } catch { setOrders([]); }

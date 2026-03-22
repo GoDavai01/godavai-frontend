@@ -33,6 +33,36 @@ function getSecondsLeft(expiry) {
   return t > 0 ? t : 0;
 }
 
+const QUOTE_OPEN_STATUSES = new Set([
+  "waiting_for_quotes",
+  "chemist_notified",
+  "chemist_accepted",
+  "pharmacy_confirmation_requested",
+  "chemist_routing_pending",
+]);
+
+const ACCEPT_OPEN_STATUSES = new Set([
+  "waiting_for_quotes",
+  "chemist_notified",
+  "pharmacy_confirmation_requested",
+  "chemist_routing_pending",
+]);
+
+const STATUS_LABELS = {
+  waiting_for_quotes: "Chemist notified",
+  chemist_notified: "Chemist notified",
+  chemist_accepted: "Checking stock",
+  price_confirmation_pending: "Awaiting customer confirmation",
+  partial_confirmation: "Partial confirmation",
+  order_confirmed: "Order confirmed",
+  admin_review_required: "Admin review required",
+  cancelled: "Cancelled",
+};
+
+const isQuoteWindowOpenStatus = (status) => QUOTE_OPEN_STATUSES.has(String(status || ""));
+const isAcceptWindowOpenStatus = (status) => ACCEPT_OPEN_STATUSES.has(String(status || ""));
+const getStatusText = (status) => STATUS_LABELS[String(status || "")] || String(status || "pending");
+
 /* ============================
    Validation (updated)
    Allow (Composition OR Brand) for available items
@@ -124,7 +154,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
         // Detect brand-new orders assigned to this pharmacy & still open for quotes
         const fresh = list.find(
           o =>
-            o?.status === "waiting_for_quotes" &&
+            isQuoteWindowOpenStatus(o?.status) &&
             !seenRef.current.has(o._id)
         );
         if (fresh) {
@@ -187,7 +217,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
     if (
       showQuoteDialog &&
       selectedOrder &&
-      (timers[selectedOrder._id] <= 0 || selectedOrder.status !== "waiting_for_quotes")
+      (timers[selectedOrder._id] <= 0 || !isQuoteWindowOpenStatus(selectedOrder.status))
     ) {
       setShowQuoteDialog(false);
       setMsg("Quote window expired. You cannot submit a quote now.");
@@ -211,7 +241,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
       if (evt?.type !== "OPEN_RX_QUOTE" || !evt.orderId) return;
       await fetchOrders();
       const target = (orders || []).find(o => String(o._id) === String(evt.orderId));
-      if (target && target.status === "waiting_for_quotes") {
+      if (target && isQuoteWindowOpenStatus(target.status)) {
         handlePartialFulfill(target);
       } else if (target) {
         setPreviewOrder(target);
@@ -223,11 +253,25 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
   /* ---------------- QUOTE ACTIONS ---------------- */
 
   // For Accept: all medicines must be available
-  const handleAcceptOrder = (order) => {
+  const handleAcceptOrder = async (order) => {
+    if (!isAcceptWindowOpenStatus(order?.status) || getSecondsLeft(order?.acceptExpiry) <= 0) {
+      setMsg("Accept window expired. Please use partial/quote directly if still open.");
+      return;
+    }
+
+    try {
+      await axios.post(
+        `${API_BASE_URL}/api/prescriptions/accept/${order._id}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (e) {
+      setMsg(e?.response?.data?.error || "Could not mark order as checked.");
+    }
+
     setSelectedOrder(order);
     setQuoteMode("accept");
     const base = (order.ai?.items?.length ? order.ai.items : (order.medicinesRequested || []));
-    // Prefer composition if present
     setAcceptDialogData(base.map(med => ({
       medicineName: med.composition || med.name || med.medicineName,
       quantity: med.quantity || 1,
@@ -284,7 +328,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
     if (
       !selectedOrder ||
       timers[selectedOrder._id] <= 0 ||
-      selectedOrder.status !== "waiting_for_quotes"
+      !isQuoteWindowOpenStatus(selectedOrder.status)
     ) {
       setMsg("Quote window expired. You cannot submit a quote now.");
       setShowQuoteDialog(false);
@@ -341,9 +385,13 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
   return (
     <Box sx={{ mb: 4 }}>
       {orders.map((order) => {
-        const timer = timers[order._id] ?? 0;
+        const quoteTimer = timers[order._id] ?? 0;
+        const acceptTimer = getSecondsLeft(order.acceptExpiry);
         const isRejected = order.status === "cancelled" || order.userResponse === "rejected";
-        const showActions = order.status === "waiting_for_quotes" && timer > 0 && !isRejected;
+        const showActions = isQuoteWindowOpenStatus(order.status) && quoteTimer > 0 && !isRejected;
+        const noCallPolicyActive =
+          !!order?.contactPolicy?.noCallUnlessImportant || !!order?.budgetGuard?.noCallUnlessImportant;
+        const importantContactRequired = !!order?.contactPolicy?.importantContactRequired;
 
         return (
           <Card
@@ -360,7 +408,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
               <Typography variant="subtitle1" sx={{ color: TEXT_PRIMARY, fontWeight: 800 }}>
                 Order #{order._id.slice(-5)} —{" "}
                 <Box component="span" sx={{ color: BRAND_GREEN, fontWeight: 800, textTransform: "capitalize" }}>
-                  {order.status || "pending"}
+                  {getStatusText(order.status)}
                 </Box>
               </Typography>
 
@@ -488,6 +536,13 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                   Unavailable: {order.unavailableItems.join(", ")}
                 </Typography>
               )}
+              {noCallPolicyActive && (
+                <Typography sx={{ mt: 0.75, color: TEXT_SECONDARY, fontWeight: 700, fontSize: 12.5 }}>
+                  {importantContactRequired
+                    ? "Important clarification allowed. Keep calls only for critical exceptions."
+                    : "No direct call policy active. Use in-app updates unless critical."}
+                </Typography>
+              )}
 
               <Typography variant="body2" sx={{ mt: 0.5, color: TEXT_SECONDARY, fontWeight: 600 }}>
                 Created: {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}
@@ -507,7 +562,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                       sx={{ fontWeight: 800, letterSpacing: 0.5, bgcolor: BRAND_GREEN, "&:hover": { bgcolor: BRAND_GREEN_DARK } }}
                       onClick={() => handleAcceptOrder(order)}
                     >
-                      ACCEPT (ALL AVAILABLE)
+                      CHECK NOW + FULL CONFIRM
                     </Button>
                     <Button
                       variant="outlined"
@@ -516,7 +571,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                       sx={{ fontWeight: 800, letterSpacing: 0.5, borderColor: BRAND_GREEN, color: BRAND_GREEN, "&:hover": { borderColor: BRAND_GREEN_DARK, color: BRAND_GREEN_DARK } }}
                       onClick={() => handlePartialFulfill(order)}
                     >
-                      PARTIAL FULFILL
+                      PARTIAL / EXCEPTION
                     </Button>
                     <Button
                       variant="contained"
@@ -531,7 +586,10 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
                   </Stack>
                   <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 2 }}>
                     <Typography sx={{ color: TEXT_SECONDARY, fontWeight: 800 }}>
-                      ⏳ {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")} left
+                      Accept: {Math.floor(acceptTimer / 60)}:{(acceptTimer % 60).toString().padStart(2, "0")}
+                    </Typography>
+                    <Typography sx={{ color: TEXT_SECONDARY, fontWeight: 800 }}>
+                      Confirm: {Math.floor(quoteTimer / 60)}:{(quoteTimer % 60).toString().padStart(2, "0")}
                     </Typography>
                   </Stack>
                 </Box>
@@ -540,14 +598,14 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
               {/* After actions or other statuses */}
               {!showActions && !isRejected && (
                 <>
-                  {order.status === "quoted" ? (
+                  {["quoted", "price_confirmation_pending", "partial_confirmation", "chemist_confirmed", "order_confirmed"].includes(String(order.status || "")) ? (
                     <Typography color="success.main" sx={{ fontWeight: 800, mt: 2 }}>
-                      Quote submitted
+                      Confirmation sent
                     </Typography>
-                  ) : timer > 0 ? (
+                  ) : quoteTimer > 0 && isQuoteWindowOpenStatus(order.status) ? (
                     <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 2 }}>
                       <Typography sx={{ color: TEXT_SECONDARY, fontWeight: 800 }}>
-                        ⏳ {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")} left to quote
+                        Confirm window: {Math.floor(quoteTimer / 60)}:{(quoteTimer % 60).toString().padStart(2, "0")}
                       </Typography>
                       <Button
                         variant="outlined"
@@ -825,7 +883,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
               acceptDialogData.some(row => (!row.brand && !row.medicineName) || !row.quantity || !row.price) ||
               !selectedOrder ||
               timers[selectedOrder._id] <= 0 ||
-              selectedOrder.status !== "waiting_for_quotes"
+              !isQuoteWindowOpenStatus(selectedOrder.status)
             }
             sx={{ fontWeight: 900, bgcolor: BRAND_GREEN, "&:hover": { bgcolor: BRAND_GREEN_DARK } }}
           >
@@ -988,7 +1046,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
             disabled={
               !selectedOrder ||
               timers[selectedOrder._id] <= 0 ||
-              selectedOrder.status !== "waiting_for_quotes" ||
+              !isQuoteWindowOpenStatus(selectedOrder.status) ||
               (quoteMode === "partial" && !isPartialQuoteValid(quote))
             }
             sx={{ fontWeight: 900, bgcolor: BRAND_GREEN, "&:hover": { bgcolor: BRAND_GREEN_DARK } }}

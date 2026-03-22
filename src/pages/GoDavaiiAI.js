@@ -1102,6 +1102,7 @@ export default function GoDavaiiAI() {
   const [micOn, setMicOn] = useState(false);
   const [micBusy, setMicBusy] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
+  const [attachedFiles, setAttachedFiles] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatSessions, setChatSessions] = useState([]);
@@ -1932,16 +1933,24 @@ export default function GoDavaiiAI() {
   throw lastErr || new Error("AI chat failed.");
 }
 
-  async function askBackendWithFile(messageText, history, file) {
+  async function askBackendWithFile(messageText, history, fileOrFiles) {
     const headers = {
       ...getAuthHeaders(),
       "Content-Type": "multipart/form-data",
     };
 
+    const filesArray = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
+
     let lastErr = null;
     for (const url of [`${API}/api/ai/assistant/analyze-file`, `${API}/api/ai/analyze-file`]) {
       const fd = new FormData();
-      fd.append("file", file);
+
+      if (filesArray.length === 1) {
+        fd.append("file", filesArray[0]);
+      } else {
+        filesArray.forEach((f) => fd.append("files", f));
+      }
+
       fd.append("message", messageText || "");
       fd.append("history", JSON.stringify(history));
       fd.append("context", JSON.stringify(profileContext));
@@ -2054,12 +2063,13 @@ export default function GoDavaiiAI() {
   async function sendMessage(customPayload = null) {
     const msg = customPayload?.messageText != null ? String(customPayload.messageText || "") : input.trim();
     let activeFile = customPayload?.file ?? attachedFile;
+    let activeFiles = customPayload?.files ?? (attachedFiles.length > 1 ? attachedFiles : null);
     const preferLatestVault = Boolean(customPayload?.preferLatestVault);
 
-    if (!msg && !activeFile) return;
+    if (!msg && !activeFile && !activeFiles?.length) return;
     if (loading) return;
 
-    if (!activeFile && msg && (preferLatestVault || wantsLatestVaultReportAnalysis(msg))) {
+    if (!activeFile && !activeFiles?.length && msg && (preferLatestVault || wantsLatestVaultReportAnalysis(msg))) {
       try {
         activeFile = await fetchLatestVaultReportAsFile();
       } catch {
@@ -2067,8 +2077,13 @@ export default function GoDavaiiAI() {
       }
     }
 
-    const userBubbleText = activeFile
-      ? `${msg || "(file uploaded)"}\n📎 ${activeFile.name}${!attachedFile && !customPayload?.file ? " (auto-attached)" : ""}`
+    const hasFiles = activeFiles?.length > 1 || activeFile;
+    const fileLabel = activeFiles?.length > 1
+      ? activeFiles.map(f => `📎 ${f.name}`).join("\n")
+      : activeFile ? `📎 ${activeFile.name}${!attachedFile && !customPayload?.file ? " (auto-attached)" : ""}` : "";
+
+    const userBubbleText = hasFiles
+      ? `${msg || "(file uploaded)"}\n${fileLabel}`
       : msg;
 
     const userBubble = { id: makeId(), role: "user", text: userBubbleText, meta: {} };
@@ -2084,8 +2099,9 @@ export default function GoDavaiiAI() {
     throttledAutoScroll(true);
 
     try {
-      const out = activeFile
-        ? await askBackendWithFile(msg, buildCompactHistory(nextMessages), activeFile)
+      const filesToSend = activeFiles?.length > 1 ? activeFiles : activeFile;
+      const out = filesToSend
+        ? await askBackendWithFile(msg, buildCompactHistory(nextMessages), filesToSend)
         : await askBackend(msg, buildCompactHistory(nextMessages));
 
       if (out?.sessionId) setCurrentSessionId(out.sessionId);
@@ -2095,12 +2111,16 @@ export default function GoDavaiiAI() {
         sessionId: out.sessionId || currentSessionId || null,
       });
 
-      if (!customPayload && activeFile) setAttachedFile(null);
+      if (!customPayload && (activeFile || activeFiles?.length)) {
+        setAttachedFile(null);
+        setAttachedFiles([]);
+      }
     } catch (err) {
       pushErrorBubble(err, {
-        type: activeFile ? "file" : "chat",
+        type: (activeFile || activeFiles?.length) ? "file" : "chat",
         messageText: msg,
         file: activeFile || null,
+        files: activeFiles || null,
         preferLatestVault,
       });
     } finally {
@@ -2490,7 +2510,7 @@ export default function GoDavaiiAI() {
       >
         <div style={{ pointerEvents: "auto" }}>
           <AnimatePresence>
-            {attachedFile && (
+            {(attachedFile || attachedFiles.length > 0) && (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -2498,57 +2518,93 @@ export default function GoDavaiiAI() {
                 style={{
                   marginBottom: 10,
                   display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "10px 12px",
-                  borderRadius: 18,
-                  background: "rgba(236,253,245,0.95)",
-                  border: "1px solid #A7F3D0",
-                  boxShadow: "0 12px 28px rgba(16,24,40,0.04)",
+                  flexDirection: "column",
+                  gap: 6,
                 }}
               >
-                <FileText style={{ width: 15, height: 15, color: "#065F46", flexShrink: 0 }} />
-                <span
-                  style={{
-                    fontSize: 12.5,
-                    fontWeight: 800,
-                    color: "#065F46",
-                    flex: 1,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {attachedFile.name}
-                </span>
-                {attachedFile.name?.toLowerCase().endsWith(".pdf") && (
-                  <span
+                {(attachedFiles.length > 1 ? attachedFiles : [attachedFile].filter(Boolean)).map((file, idx) => (
+                  <div
+                    key={idx}
                     style={{
-                      fontSize: 9.5,
-                      fontWeight: 900,
-                      color: "#059669",
-                      background: "#D1FAE5",
-                      padding: "3px 7px",
-                      borderRadius: 999,
-                      flexShrink: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "10px 12px",
+                      borderRadius: 18,
+                      background: "rgba(236,253,245,0.95)",
+                      border: "1px solid #A7F3D0",
+                      boxShadow: "0 12px 28px rgba(16,24,40,0.04)",
                     }}
                   >
-                    All pages
-                  </span>
-                )}
-                <button
-                  onClick={() => setAttachedFile(null)}
-                  style={{
-                    border: "none",
-                    background: "none",
-                    cursor: "pointer",
-                    padding: 0,
-                    display: "grid",
-                    placeItems: "center",
-                  }}
-                >
-                  <X style={{ width: 14, height: 14, color: "#065F46" }} />
-                </button>
+                    <FileText style={{ width: 15, height: 15, color: "#065F46", flexShrink: 0 }} />
+                    <span
+                      style={{
+                        fontSize: 12.5,
+                        fontWeight: 800,
+                        color: "#065F46",
+                        flex: 1,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {file.name}
+                    </span>
+                    {file.name?.toLowerCase().endsWith(".pdf") && (
+                      <span
+                        style={{
+                          fontSize: 9.5,
+                          fontWeight: 900,
+                          color: "#059669",
+                          background: "#D1FAE5",
+                          padding: "3px 7px",
+                          borderRadius: 999,
+                          flexShrink: 0,
+                        }}
+                      >
+                        All pages
+                      </span>
+                    )}
+                    {attachedFiles.length > 1 && (
+                      <span
+                        style={{
+                          fontSize: 9.5,
+                          fontWeight: 900,
+                          color: "#065F46",
+                          background: "#A7F3D0",
+                          padding: "3px 7px",
+                          borderRadius: 999,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {idx + 1}/{attachedFiles.length}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => {
+                        if (attachedFiles.length > 1) {
+                          const newFiles = attachedFiles.filter((_, i) => i !== idx);
+                          setAttachedFiles(newFiles);
+                          setAttachedFile(newFiles[0] || null);
+                          if (newFiles.length <= 1) setAttachedFiles([]);
+                        } else {
+                          setAttachedFile(null);
+                          setAttachedFiles([]);
+                        }
+                      }}
+                      style={{
+                        border: "none",
+                        background: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        display: "grid",
+                        placeItems: "center",
+                      }}
+                    >
+                      <X style={{ width: 14, height: 14, color: "#065F46" }} />
+                    </button>
+                  </div>
+                ))}
               </motion.div>
             )}
           </AnimatePresence>
@@ -2557,8 +2613,20 @@ export default function GoDavaiiAI() {
             ref={fileRef}
             type="file"
             accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,.webp"
+            multiple
             style={{ display: "none" }}
-            onChange={(e) => setAttachedFile(e.target.files?.[0] || null)}
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              if (files.length === 0) return;
+              if (files.length === 1) {
+                setAttachedFile(files[0]);
+                setAttachedFiles([]);
+              } else {
+                setAttachedFile(files[0]);
+                setAttachedFiles(files);
+              }
+              e.target.value = "";
+            }}
           />
 
           <div

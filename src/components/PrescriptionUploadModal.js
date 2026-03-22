@@ -1,43 +1,110 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import {
-  AlertCircle, Home, Edit, Trash2, Plus, UploadCloud, Loader2, CheckCircle, Camera, FileText, X
+  AlertCircle,
+  Home,
+  Edit,
+  Trash2,
+  Plus,
+  UploadCloud,
+  Loader2,
+  CheckCircle,
+  Camera,
+  FileText,
+  X,
 } from "lucide-react";
 import AddressForm from "./AddressForm";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0f6e51";
 
+const MAX_FILES = 10;
+const MAX_SIZE_MB = 20;
+
+const asNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const normalizeBasketItem = (item = {}) => {
+  const medicineName = String(item?.medicineName || item?.name || "").trim();
+  if (!medicineName) return null;
+  return {
+    medicineName,
+    composition: String(item?.composition || ""),
+    strength: String(item?.strength || ""),
+    form: String(item?.form || ""),
+    quantity: Math.max(1, Math.round(asNumber(item?.quantity, 1))),
+    confidence: Math.max(0, Math.min(1, asNumber(item?.confidence, 0.5))),
+    source: item?.source || "prescription",
+    matchType: item?.matchType || "unclear",
+    medicineMasterId: item?.medicineMasterId || null,
+    medicineId: item?.medicineId || null,
+    available: item?.available !== false,
+    estimatedPrice: asNumber(item?.estimatedPrice, 0),
+  };
+};
+
+const statusNeedsReview = (status = "") =>
+  [
+    "review_required",
+    "admin_review_required",
+    "user_reviewed",
+    "chemist_routing_pending",
+    "chemist_notified",
+  ].includes(String(status));
+
 export default function PrescriptionUploadModal({
-  open, onClose, userCity = "Delhi", userArea = "", afterOrder,
-  initialMode, initialNotes, initialFileUrl, initialAddress
+  open,
+  onClose,
+  userCity = "Delhi",
+  userArea = "",
+  afterOrder,
+  initialMode,
+  initialNotes,
+  initialFileUrl,
+  initialAddress,
 }) {
   const fileInputRef = useRef();
   const cameraInputRef = useRef();
+  const pollRef = useRef(null);
 
   const { addresses, updateAddresses } = useAuth();
+  const { cart = [] } = useCart();
 
   const [selectedAddressId, setSelectedAddressId] = useState(addresses[0]?.id || null);
   const [addressFormOpen, setAddressFormOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState(null);
 
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState("form"); // form -> parsing -> review -> final
 
-  // MULTI-FILE: keep an array of files + previews
-  const [files, setFiles] = useState([]); // Array<File>
-  const [previews, setPreviews] = useState([]); // [{url, isPdf, name, size}]
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
   const [error, setError] = useState("");
   const [order, setOrder] = useState(null);
-  const [quoteReady, setQuoteReady] = useState(false);
-  // eslint-disable-next-line no-unused-vars
-  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+
+  const [reviewItems, setReviewItems] = useState([]);
+  const [reviewNote, setReviewNote] = useState("");
+  const [budgetGuard, setBudgetGuard] = useState({
+    enabled: false,
+    autoApproveBelow: "",
+    askAbove: "",
+    noCallUnlessImportant: true,
+  });
+
+  const [finalSubmitting, setFinalSubmitting] = useState(false);
+  const [finalResult, setFinalResult] = useState({
+    routed: false,
+    queuedForAdmin: false,
+  });
 
   const [uploadType, setUploadType] = useState("auto");
   const [notes, setNotes] = useState("");
@@ -46,17 +113,36 @@ export default function PrescriptionUploadModal({
   const [selectedPharmacy, setSelectedPharmacy] = useState("");
   const [phOpen, setPhOpen] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      if (initialMode) setUploadType(initialMode);
-      if (initialNotes !== undefined) setNotes(initialNotes);
-      if (initialAddress && initialAddress.id) setSelectedAddressId(initialAddress.id);
+  const groupedReview = useMemo(() => {
+    const exact = [];
+    const probable = [];
+    const unclear = [];
+    for (const item of reviewItems) {
+      const row = normalizeBasketItem(item);
+      if (!row) continue;
+      if (row.matchType === "exact") exact.push(row);
+      else if (row.matchType === "probable") probable.push(row);
+      else unclear.push(row);
+    }
+    return { exact, probable, unclear };
+  }, [reviewItems]);
 
-      // Support legacy initial single URL as a pre-attached item
-      if (initialFileUrl) {
-        setPreviews([{ url: initialFileUrl, isPdf: /\.pdf(\?|$)/i.test(initialFileUrl), name: "existing", size: 0 }]);
-        setFiles([]); // not an actual File, but still shows in preview
-      }
+  const estimatedRange = useMemo(() => {
+    const min = asNumber(order?.estimatedPricing?.minTotal, 0);
+    const max = asNumber(order?.estimatedPricing?.maxTotal, 0);
+    if (!min && !max) return "";
+    if (min && max && max >= min) return `Estimated total: Rs.${min} - Rs.${max}`;
+    return `Estimated total: Rs.${min || max}`;
+  }, [order]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (initialMode) setUploadType(initialMode);
+    if (initialNotes !== undefined) setNotes(initialNotes);
+    if (initialAddress?.id) setSelectedAddressId(initialAddress.id);
+    if (initialFileUrl) {
+      setPreviews([{ url: initialFileUrl, isPdf: /\.pdf(\?|$)/i.test(initialFileUrl), name: "existing", size: 0 }]);
+      setFiles([]);
     }
   }, [open, initialMode, initialNotes, initialFileUrl, initialAddress]);
 
@@ -67,7 +153,7 @@ export default function PrescriptionUploadModal({
   useEffect(() => {
     if (!phOpen) return;
     const onDown = (e) => {
-      if (!e.target.closest?.('[data-pharmacy-dropdown]')) setPhOpen(false);
+      if (!e.target.closest?.('[data-pharmacy-dropdown="true"]')) setPhOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("touchstart", onDown);
@@ -78,35 +164,62 @@ export default function PrescriptionUploadModal({
   }, [phOpen]);
 
   useEffect(() => {
-    let interval;
-    if (step === 2 && order?._id && !quoteReady) {
-      interval = setInterval(async () => {
-        try {
-          const token = localStorage.getItem("token");
-          const res = await axios.get(
-            `${API_BASE_URL}/api/prescriptions/order/${order._id}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          if (res.data.status === "quoted" || (res.data.quotes && res.data.quotes.length)) {
-            setQuoteReady(true);
-            clearInterval(interval);
-            setTimeout(() => handleClose(), 1600);
-          }
-        } catch {}
-      }, 3500);
-    }
-    return () => interval && clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, order, quoteReady]);
+    if (step !== "parsing" || !order?._id) return undefined;
+    const token = localStorage.getItem("token");
 
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/api/prescriptions/order/${order._id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const fresh = res.data;
+        setOrder(fresh);
+
+        if (String(fresh?.status || "") === "failed") {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          setError("Could not parse this prescription. Please try again.");
+          setStep("form");
+          return;
+        }
+
+        if (statusNeedsReview(fresh?.status)) {
+          const basket = Array.isArray(fresh?.parsedBasket) ? fresh.parsedBasket : [];
+          setReviewItems(basket.map((item) => normalizeBasketItem(item)).filter(Boolean));
+          if (fresh?.budgetGuard) {
+            setBudgetGuard({
+              enabled: !!fresh.budgetGuard.enabled,
+              autoApproveBelow: fresh.budgetGuard.autoApproveBelow || "",
+              askAbove: fresh.budgetGuard.askAbove || "",
+              noCallUnlessImportant: !!fresh.budgetGuard.noCallUnlessImportant,
+            });
+          }
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          setStep("review");
+        }
+      } catch {
+        // Ignore transient poll errors.
+      }
+    }, 2500);
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [step, order?._id]);
   useEffect(() => {
     if (open && uploadType === "manual") {
       setPharmacyLoading(true);
-      const addr = addresses.find(a => a.id === selectedAddressId);
+      const addr = addresses.find((a) => a.id === selectedAddressId);
       if (addr && addr.lat && addr.lng) {
         axios
-          .get(`${API_BASE_URL}/api/pharmacies/nearby?lat=${addr.lat}&lng=${addr.lng}&maxDistance=15000`)
-          .then(res => setPharmacyList(res.data))
+          .get(
+            `${API_BASE_URL}/api/pharmacies/nearby?lat=${addr.lat}&lng=${addr.lng}&maxDistance=15000&rxOnly=1&excludeBusy=1`
+          )
+          .then((res) => setPharmacyList(Array.isArray(res.data) ? res.data : []))
           .catch(() => setPharmacyList([]))
           .finally(() => setPharmacyLoading(false));
       } else {
@@ -114,77 +227,70 @@ export default function PrescriptionUploadModal({
         setPharmacyLoading(false);
       }
     }
+
     if (!open || uploadType !== "manual") {
       setPharmacyList([]);
       setSelectedPharmacy("");
     }
   }, [open, uploadType, addresses, selectedAddressId]);
 
-  // --------- Multi-file helpers ----------
-  const MAX_FILES = 10;
-  const MAX_SIZE_MB = 20; // per-file
-
   const addFiles = (fileList) => {
     if (!fileList || fileList.length === 0) return;
 
     const incoming = Array.from(fileList);
-    const currentCount = files.length + previews.filter(p => p.name === "existing").length;
+    const currentCount = files.length + previews.filter((p) => p.name === "existing").length;
     const spaceLeft = MAX_FILES - currentCount;
-
     const toAdd = incoming.slice(0, Math.max(0, spaceLeft));
 
-    const oversized = toAdd.find(f => f.size > MAX_SIZE_MB * 1024 * 1024);
+    const oversized = toAdd.find((f) => f.size > MAX_SIZE_MB * 1024 * 1024);
     if (oversized) {
-      setError(`Each file must be ≤ ${MAX_SIZE_MB}MB.`);
+      setError(`Each file must be <= ${MAX_SIZE_MB}MB.`);
       return;
     }
 
-    const newPreviews = toAdd.map(f => ({
+    const newPreviews = toAdd.map((f) => ({
       url: f.type?.startsWith("image/") ? URL.createObjectURL(f) : undefined,
       isPdf: f.type === "application/pdf" || /\.pdf$/i.test(f.name),
       name: f.name,
-      size: f.size
+      size: f.size,
     }));
 
-    setFiles(prev => [...prev, ...toAdd]);
-    setPreviews(prev => [...prev, ...newPreviews]);
+    setFiles((prev) => [...prev, ...toAdd]);
+    setPreviews((prev) => [...prev, ...newPreviews]);
   };
 
-  const handleFilePicker = (e) => addFiles(e.target.files);
-  const handleCameraCapture = (e) => addFiles(e.target.files);
-
   const removeAttachment = (idx) => {
-    // If it was the “existing” preview (initialFileUrl), just remove from previews
-    const isExisting = previews[idx]?.name === "existing";
-    if (isExisting) {
-      setPreviews(prev => prev.filter((_, i) => i !== idx));
+    const current = previews[idx];
+    if (current?.url && current.name !== "existing") {
+      URL.revokeObjectURL(current.url);
+    }
+
+    if (current?.name === "existing") {
+      setPreviews((prev) => prev.filter((_, i) => i !== idx));
       return;
     }
-    // Otherwise remove both preview + matching file at same index among non-existing items
+
     const nonExistingIndices = previews
       .map((p, i) => ({ i, existing: p.name === "existing" }))
-      .filter(x => !x.existing)
-      .map(x => x.i);
+      .filter((x) => !x.existing)
+      .map((x) => x.i);
 
     const nonExistingIdx = nonExistingIndices.indexOf(idx);
     if (nonExistingIdx >= 0) {
-      setFiles(prev => prev.filter((_, i) => i !== nonExistingIdx));
+      setFiles((prev) => prev.filter((_, i) => i !== nonExistingIdx));
     }
-    setPreviews(prev => prev.filter((_, i) => i !== idx));
+    setPreviews((prev) => prev.filter((_, i) => i !== idx));
   };
-  // --------------------------------------
 
   const handleUploadClick = () => fileInputRef.current?.click();
   const handleCameraClick = () => cameraInputRef.current?.click();
 
-  function sanitizeNotes(str) {
-    return str.replace(/\d{10,}/g, "[blocked]");
-  }
+  const sanitizeNotes = (str = "") => str.replace(/\d{10,}/g, "[blocked]");
 
   const handleSaveAddress = async (addr) => {
     let updated;
-    if (addr.id && addresses.some(a => a.id === addr.id)) {
-      updated = addresses.map(a => (a.id === addr.id ? addr : a));
+    if (addr.id && addresses.some((a) => a.id === addr.id)) {
+      updated = addresses.map((a) => (a.id === addr.id ? addr : a));
     } else {
       addr.id = Date.now().toString();
       updated = [...addresses, addr];
@@ -197,7 +303,7 @@ export default function PrescriptionUploadModal({
 
   const handleDeleteAddress = async (addr) => {
     if (!window.confirm("Are you sure you want to delete this address?")) return;
-    const updated = addresses.filter(a => a.id !== addr.id);
+    const updated = addresses.filter((a) => a.id !== addr.id);
     await updateAddresses(updated);
     if (selectedAddressId === addr.id && updated.length) {
       setSelectedAddressId(updated[0].id);
@@ -208,78 +314,158 @@ export default function PrescriptionUploadModal({
 
   const handleSubmit = async () => {
     if (!selectedAddressId) return setError("Please select or add a delivery address.");
-    if (files.length === 0 && previews.filter(p => p.name === "existing").length === 0) {
+    if (files.length === 0 && previews.filter((p) => p.name === "existing").length === 0) {
       return setError("Add at least one photo or PDF.");
     }
     if (uploadType === "manual" && !selectedPharmacy) return setError("Select a pharmacy.");
-    if (/\d{10,}/.test(notes)) return setError("Mobile numbers not allowed in notes.");
+    if (/\d{10,}/.test(notes)) return setError("Mobile numbers are not allowed in notes.");
 
-    const addr = addresses.find(a => a.id === selectedAddressId);
+    const addr = addresses.find((a) => a.id === selectedAddressId);
     if (!addr || !addr.lat || !addr.lng) {
       return setError(uploadType === "manual"
-        ? "Please select a delivery address with location pin (use map)."
-        : "Please select a location using the map.");
+        ? "Please select a delivery address with location pin."
+        : "Please select an address using the map pin.");
     }
 
     setError("");
-    setStep(2);
+    setStep("parsing");
 
     try {
       const token = localStorage.getItem("token");
-
-      // Start with any existing URL (from initialFileUrl)
       const existingUrls = previews
-        .filter(p => p.name === "existing" && p.url)
-        .map(p => p.url);
+        .filter((p) => p.name === "existing" && p.url)
+        .map((p) => p.url);
 
-      // Upload new files one-by-one to your existing endpoint
       const uploadedUrls = [];
       for (const f of files) {
         const data = new FormData();
         data.append("prescription", f);
-        const uploadRes = await axios.post(
-          `${API_BASE_URL}/api/prescriptions/upload`,
-          data,
-          { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } }
-        );
+        // eslint-disable-next-line no-await-in-loop
+        const uploadRes = await axios.post(`${API_BASE_URL}/api/prescriptions/upload`, data, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        });
         uploadedUrls.push(uploadRes.data.prescriptionUrl || uploadRes.data.url);
       }
 
       const allUrls = [...existingUrls, ...uploadedUrls];
-
-      // Keep backward compatibility: still send prescriptionUrl (first)
       const primaryUrl = allUrls[0];
 
-      const orderRes = await axios.post(
-        `${API_BASE_URL}/api/prescriptions/order`,
-        {
-          prescriptionUrl: primaryUrl,        // ← legacy field (unchanged)
-          attachments: allUrls,               // ← NEW: full list (safe to add)
-          city: userCity,
-          area: userArea,
-          notes: sanitizeNotes(notes),
-          uploadType,
-          chosenPharmacyId: uploadType === "manual" ? selectedPharmacy : undefined,
-          address: addr || {},
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const payload = {
+        prescriptionUrl: primaryUrl,
+        attachments: allUrls,
+        city: userCity,
+        area: userArea,
+        notes: sanitizeNotes(notes),
+        uploadType,
+        chosenPharmacyId: uploadType === "manual" ? selectedPharmacy : undefined,
+        address: addr || {},
+        cartItems: (Array.isArray(cart) ? cart : [])
+          .map((item) => ({
+            _id: item?._id || item?.medicineId || item?.medicine_id || null,
+            medicineId: item?.medicineId || item?._id || null,
+            name: item?.name || item?.medicineName || "",
+            composition: item?.composition || "",
+            strength: item?.strength || "",
+            form: item?.form || item?.type || "",
+            quantity: Math.max(1, Math.round(asNumber(item?.quantity, 1))),
+            price: asNumber(item?.price, 0),
+          }))
+          .filter((item) => item.name),
+      };
 
-      setOrder(orderRes.data);
+      const orderRes = await axios.post(`${API_BASE_URL}/api/prescriptions/order`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const created = orderRes.data;
+      setOrder(created);
+      if (statusNeedsReview(created?.status)) {
+        const basket = Array.isArray(created?.parsedBasket) ? created.parsedBasket : [];
+        setReviewItems(basket.map((item) => normalizeBasketItem(item)).filter(Boolean));
+        setStep("review");
+      } else {
+        setStep("parsing");
+      }
     } catch (e) {
-      setError("Failed to submit. Try again.");
-      setStep(1);
+      setError(e?.response?.data?.message || "Failed to submit prescription. Please try again.");
+      setStep("form");
     }
   };
 
-  const handleClose = () => {
-    setStep(1);
+  const updateReviewItem = (idx, patch) => {
+    setReviewItems((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
+  };
+
+  const removeReviewItem = (idx) => {
+    setReviewItems((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleReviewSubmit = async () => {
+    if (!order?._id) return;
+    if (!reviewItems.length) {
+      setError("Please keep at least one medicine before continuing.");
+      return;
+    }
+
+    setError("");
+    setFinalSubmitting(true);
+    setStep("final");
+
+    try {
+      const token = localStorage.getItem("token");
+      const payload = {
+        items: reviewItems,
+        notes: sanitizeNotes(reviewNote),
+        budgetGuard: {
+          enabled: !!budgetGuard.enabled,
+          autoApproveBelow: asNumber(budgetGuard.autoApproveBelow, 0),
+          askAbove: asNumber(budgetGuard.askAbove, 0),
+          noCallUnlessImportant: !!budgetGuard.noCallUnlessImportant,
+        },
+      };
+      const res = await axios.put(`${API_BASE_URL}/api/prescriptions/review/${order._id}`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const fresh = res?.data?.order || order;
+      setOrder(fresh);
+      setFinalResult({
+        routed: !!res?.data?.routed,
+        queuedForAdmin: !!res?.data?.queuedForAdmin,
+      });
+      afterOrder?.(fresh);
+    } catch (e) {
+      setError(e?.response?.data?.error || "Failed to continue.");
+      setStep("review");
+    } finally {
+      setFinalSubmitting(false);
+    }
+  };
+
+  const resetLocalState = () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = null;
+    previews.forEach((p) => {
+      if (p?.url && p.name !== "existing") URL.revokeObjectURL(p.url);
+    });
+    setStep("form");
     setFiles([]);
     setPreviews([]);
     setError("");
     setOrder(null);
-    setQuoteReady(false);
-    setSnackbar({ open: false, message: "", severity: "success" });
+    setReviewItems([]);
+    setReviewNote("");
+    setBudgetGuard({
+      enabled: false,
+      autoApproveBelow: "",
+      askAbove: "",
+      noCallUnlessImportant: true,
+    });
+    setFinalSubmitting(false);
+    setFinalResult({ routed: false, queuedForAdmin: false });
     setNotes("");
     setUploadType("auto");
     setPharmacyList([]);
@@ -287,8 +473,74 @@ export default function PrescriptionUploadModal({
     setAddressFormOpen(false);
     setSelectedAddressId(addresses[0]?.id || null);
     setEditingAddress(null);
+  };
+
+  const handleClose = () => {
+    resetLocalState();
     onClose();
   };
+  const renderReviewList = (title, items, badgeTone) => (
+    <div className="rounded-xl border p-3" style={{ borderColor: `${DEEP}22` }}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="font-bold" style={{ color: "#0b3f30" }}>{title}</div>
+        <Badge
+          className="text-white"
+          style={{
+            backgroundColor:
+              badgeTone === "exact" ? "#15803d" : badgeTone === "probable" ? "#ca8a04" : "#b45309",
+          }}
+        >
+          {items.length}
+        </Badge>
+      </div>
+      {items.length === 0 && (
+        <div className="text-xs" style={{ color: "#0b3f3099" }}>
+          No items in this section.
+        </div>
+      )}
+      {items.map((item, idx) => {
+        const absoluteIndex = reviewItems.findIndex(
+          (row) =>
+            row.medicineName === item.medicineName &&
+            row.form === item.form &&
+            row.strength === item.strength &&
+            row.quantity === item.quantity
+        );
+        const key = `${title}-${item.medicineName}-${idx}`;
+        return (
+          <div key={key} className="border rounded-lg p-2 mb-2 last:mb-0" style={{ borderColor: `${DEEP}1f` }}>
+            <div className="text-sm font-semibold" style={{ color: "#0b3f30" }}>
+              {item.medicineName}
+            </div>
+            <div className="text-xs mb-2" style={{ color: "#0b3f3099" }}>
+              {[item.strength, item.form].filter(Boolean).join(" | ") || "Details unavailable"}
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={1}
+                value={item.quantity}
+                onChange={(e) =>
+                  updateReviewItem(absoluteIndex, {
+                    quantity: Math.max(1, Math.round(asNumber(e.target.value, 1))),
+                  })
+                }
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-red-600 hover:bg-red-50"
+                onClick={() => removeReviewItem(absoluteIndex)}
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Remove
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <>
@@ -305,14 +557,13 @@ export default function PrescriptionUploadModal({
         >
           <DialogHeader className="p-5 pb-3 flex-shrink-0 bg-white z-10 rounded-t-3xl border-b">
             <DialogTitle className="text-xl font-extrabold tracking-tight" style={{ color: DEEP }}>
-              Upload Prescription
+              {step === "review" ? "Review Medicines" : "Upload Prescription"}
             </DialogTitle>
           </DialogHeader>
 
           <div className="flex-1 px-4 pt-3 pb-2 overflow-y-auto" style={{ minHeight: 180 }}>
-            {step === 1 && (
+            {step === "form" && (
               <div className="flex flex-col gap-4">
-                {/* Delivery Address */}
                 <div>
                   <div className="font-bold mb-1" style={{ color: DEEP }}>Delivery Address</div>
 
@@ -320,56 +571,70 @@ export default function PrescriptionUploadModal({
                     <Button
                       className="w-full font-bold text-white"
                       style={{ backgroundColor: DEEP }}
-                      onClick={() => { setEditingAddress(null); setAddressFormOpen(true); }}
+                      onClick={() => {
+                        setEditingAddress(null);
+                        setAddressFormOpen(true);
+                      }}
                     >
                       <Plus className="w-5 h-5 mr-2" /> Add New Address
                     </Button>
                   ) : (
-                    addresses
-                      .filter(addr => !selectedAddressId || addr.id === selectedAddressId)
-                      .map(addr => (
-                        <div
-                          key={addr.id}
-                          className="rounded-xl bg-white border shadow-sm p-3 mb-2 flex flex-col gap-2"
-                          style={{ borderColor: `${DEEP}22` }}
-                        >
-                          <div className="flex items-center gap-2">
-                            <Badge className="px-2 py-0.5 text-white" style={{ backgroundColor: DEEP }}>
-                              <Home className="w-4 h-4 mr-1 text-white" />
-                              {addr.type || "Current"}
-                            </Badge>
-                            <span className="font-bold text-base" style={{ color: "#0b3f30" }}>{addr.name}</span>
-                            <span className="text-xs" style={{ color: "#0b3f30b3" }}>{addr.phone}</span>
-                          </div>
-                          <div className="text-xs" style={{ color: "#0b3f3099" }}>{addr.addressLine}</div>
-                          <div className="flex gap-2 mt-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="hover:bg-gray-50"
-                              style={{ color: DEEP }}
-                              onClick={e => { e.stopPropagation(); setEditingAddress(addr); setAddressFormOpen(true); }}
-                            >
-                              <Edit className="w-4 h-4 mr-1" /> Edit
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-red-600 hover:bg-red-50"
-                              onClick={e => { e.stopPropagation(); handleDeleteAddress(addr); }}
-                            >
-                              <Trash2 className="w-4 h-4 mr-1" /> Delete
-                            </Button>
-                          </div>
+                    addresses.map((addr) => (
+                      <div
+                        key={addr.id}
+                        className="rounded-xl bg-white border shadow-sm p-3 mb-2 flex flex-col gap-2 cursor-pointer"
+                        style={{
+                          borderColor: selectedAddressId === addr.id ? DEEP : `${DEEP}22`,
+                          boxShadow: selectedAddressId === addr.id ? "0 0 0 2px rgba(15,110,81,.15)" : undefined,
+                        }}
+                        onClick={() => setSelectedAddressId(addr.id)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Badge className="px-2 py-0.5 text-white" style={{ backgroundColor: DEEP }}>
+                            <Home className="w-4 h-4 mr-1 text-white" />
+                            {addr.type || "Current"}
+                          </Badge>
+                          <span className="font-bold text-base" style={{ color: "#0b3f30" }}>{addr.name}</span>
                         </div>
-                      ))
+                        <div className="text-xs" style={{ color: "#0b3f3099" }}>{addr.addressLine}</div>
+                        <div className="flex gap-2 mt-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="hover:bg-gray-50"
+                            style={{ color: DEEP }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingAddress(addr);
+                              setAddressFormOpen(true);
+                            }}
+                          >
+                            <Edit className="w-4 h-4 mr-1" /> Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-600 hover:bg-red-50"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteAddress(addr);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 mr-1" /> Delete
+                          </Button>
+                        </div>
+                      </div>
+                    ))
                   )}
 
                   {addresses.length > 0 && (
                     <Button
                       className="w-full mb-1 font-bold text-white"
                       style={{ backgroundColor: DEEP }}
-                      onClick={() => { setEditingAddress(null); setAddressFormOpen(true); }}
+                      onClick={() => {
+                        setEditingAddress(null);
+                        setAddressFormOpen(true);
+                      }}
                     >
                       <Plus className="w-5 h-5 mr-2" /> Add New Address
                     </Button>
@@ -377,31 +642,33 @@ export default function PrescriptionUploadModal({
 
                   <AddressForm
                     open={addressFormOpen}
-                    onClose={() => { setAddressFormOpen(false); setEditingAddress(null); }}
+                    onClose={() => {
+                      setAddressFormOpen(false);
+                      setEditingAddress(null);
+                    }}
                     onSave={handleSaveAddress}
-                    initial={editingAddress || addresses.find(a => a.id === selectedAddressId) || {}}
+                    initial={editingAddress || addresses.find((a) => a.id === selectedAddressId) || {}}
                     modalZIndex={3300}
                   />
                 </div>
 
-                {/* Upload Mode */}
                 <div className="flex gap-2 justify-center mt-1 mb-1">
                   <button
                     type="button"
                     onClick={() => setUploadType("auto")}
                     aria-pressed={uploadType === "auto"}
-                    className={`flex-1 rounded-lg px-3 py-3 font-semibold transition-all border
-                      ${uploadType === "auto" ? "text-white" : "text-[#0b3f30]"}
-                    `}
+                    className={`flex-1 rounded-lg px-3 py-3 font-semibold transition-all border ${
+                      uploadType === "auto" ? "text-white" : "text-[#0b3f30]"
+                    }`}
                     style={{
                       background: uploadType === "auto" ? DEEP : "#fff",
                       borderColor: uploadType === "auto" ? DEEP : `${DEEP}33`,
                       boxShadow: uploadType === "auto" ? "0 0 0 3px rgba(15,110,81,0.15)" : "none",
                     }}
                   >
-                    <div className="font-bold">Let GoDavaii Handle</div>
+                    <div className="font-bold">AI-first auto routing</div>
                     <div className="block text-xs mt-1" style={{ color: uploadType === "auto" ? "rgba(255,255,255,.9)" : "#0b3f3099" }}>
-                      Fastest quote, best price!
+                      Recommended for fastest confirmation
                     </div>
                   </button>
 
@@ -409,41 +676,38 @@ export default function PrescriptionUploadModal({
                     type="button"
                     onClick={() => setUploadType("manual")}
                     aria-pressed={uploadType === "manual"}
-                    className={`flex-1 rounded-lg px-3 py-3 font-semibold transition-all border
-                      ${uploadType === "manual" ? "text-white" : "text-[#0b3f30]"}
-                    `}
+                    className={`flex-1 rounded-lg px-3 py-3 font-semibold transition-all border ${
+                      uploadType === "manual" ? "text-white" : "text-[#0b3f30]"
+                    }`}
                     style={{
                       background: uploadType === "manual" ? DEEP : "#fff",
                       borderColor: uploadType === "manual" ? DEEP : `${DEEP}33`,
                       boxShadow: uploadType === "manual" ? "0 0 0 3px rgba(15,110,81,0.15)" : "none",
                     }}
                   >
-                    <div className="font-bold">Choose Pharmacy Yourself</div>
+                    <div className="font-bold">Specific pharmacy</div>
                     <div className="block text-xs mt-1" style={{ color: uploadType === "manual" ? "rgba(255,255,255,.9)" : "#0b3f3099" }}>
-                      Select pharmacy from list
+                      Optional manual preference
                     </div>
                   </button>
                 </div>
 
-                {/* File Upload + Camera (MULTI) */}
                 <div>
-                  {/* Pick from gallery/files (multi) */}
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept="image/*,application/pdf"
                     multiple
                     hidden
-                    onChange={handleFilePicker}
+                    onChange={(e) => addFiles(e.target.files)}
                   />
-                  {/* Camera (one shot at a time; tap multiple times to add many) */}
                   <input
                     ref={cameraInputRef}
                     type="file"
                     accept="image/*"
                     capture="environment"
                     hidden
-                    onChange={handleCameraCapture}
+                    onChange={(e) => addFiles(e.target.files)}
                   />
 
                   <div className="flex gap-2">
@@ -467,7 +731,6 @@ export default function PrescriptionUploadModal({
                     </Button>
                   </div>
 
-                  {/* Thumbnails / list */}
                   {!!previews.length && (
                     <div className="mt-2 grid grid-cols-4 gap-2">
                       {previews.map((p, idx) => (
@@ -477,7 +740,6 @@ export default function PrescriptionUploadModal({
                           style={{ borderColor: `${DEEP}22` }}
                           title={p.name}
                         >
-                          {/* Remove */}
                           <button
                             type="button"
                             onClick={() => removeAttachment(idx)}
@@ -486,7 +748,6 @@ export default function PrescriptionUploadModal({
                           >
                             <X className="w-4 h-4" />
                           </button>
-
                           {p.isPdf ? (
                             <div className="flex flex-col items-center justify-center h-20 text-xs text-[#0b3f30]">
                               <FileText className="w-7 h-7 mb-1" />
@@ -500,36 +761,34 @@ export default function PrescriptionUploadModal({
                     </div>
                   )}
                 </div>
-
                 <Input
                   placeholder="Add a note for pharmacy"
                   value={notes}
-                  onChange={e => setNotes(e.target.value.replace(/\d{10,}/g, ""))}
+                  onChange={(e) => setNotes(e.target.value.replace(/\d{10,}/g, ""))}
                   maxLength={120}
                   className="mt-1"
                   style={{ borderColor: `${DEEP}33` }}
                 />
 
                 {uploadType === "manual" && (
-                  <div data-pharmacy-dropdown style={{ position: "relative", zIndex: 50 }}>
+                  <div data-pharmacy-dropdown="true" style={{ position: "relative", zIndex: 50 }}>
                     <label className="block mb-1 text-sm font-semibold" style={{ color: DEEP }}>
                       Select a Pharmacy
                     </label>
-
                     <div
-                      onClick={() => setPhOpen(v => !v)}
+                      onClick={() => setPhOpen((v) => !v)}
                       className="w-full rounded-lg bg-white px-3 py-2 text-sm cursor-pointer flex items-center justify-between"
                       style={{ userSelect: "none", border: `1px solid ${DEEP}40` }}
                     >
                       <span className="truncate" style={{ color: "#0b3f30" }}>
                         {selectedPharmacy
                           ? (() => {
-                              const ph = pharmacyList.find(p => p._id === selectedPharmacy);
-                              return ph ? `${ph.name} (${ph.area}, ${ph.city})` : "Select pharmacy…";
+                              const ph = pharmacyList.find((p) => p._id === selectedPharmacy);
+                              return ph ? `${ph.name} (${ph.area}, ${ph.city})` : "Select pharmacy...";
                             })()
-                          : "Select pharmacy…"}
+                          : "Select pharmacy..."}
                       </span>
-                      <span style={{ opacity: 0.6, color: "#0b3f30" }}>▾</span>
+                      <span style={{ opacity: 0.6, color: "#0b3f30" }}>v</span>
                     </div>
 
                     {phOpen && (
@@ -539,33 +798,29 @@ export default function PrescriptionUploadModal({
                       >
                         {pharmacyLoading && (
                           <div className="px-3 py-2 text-sm" style={{ color: "#0b3f3099" }}>
-                            Loading pharmacies…
+                            Loading pharmacies...
                           </div>
                         )}
-
                         {!pharmacyLoading && pharmacyList.length === 0 && (
                           <div className="px-3 py-2 text-sm" style={{ color: "#0b3f3099" }}>
-                            {(() => {
-                              const addr = addresses.find(a => a.id === selectedAddressId);
-                              if (!addr || !addr.lat || !addr.lng) return "Select a delivery address with location pin.";
-                              return "No pharmacies found within 15km.";
-                            })()}
+                            No pharmacies found within 15 km.
                           </div>
                         )}
-
                         {!pharmacyLoading &&
-                          pharmacyList.map(ph => (
+                          pharmacyList.map((ph) => (
                             <button
                               key={ph._id}
                               type="button"
-                              onClick={() => { setSelectedPharmacy(ph._id); setPhOpen(false); }}
+                              onClick={() => {
+                                setSelectedPharmacy(ph._id);
+                                setPhOpen(false);
+                              }}
                               className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                               style={{
                                 whiteSpace: "nowrap",
                                 color: "#0b3f30",
                                 background: selectedPharmacy === ph._id ? "#f2fbf8" : "white",
                               }}
-                              title={`${ph.name} (${ph.area}, ${ph.city})`}
                             >
                               <span className="truncate inline-block max-w-full">
                                 {ph.name} ({ph.area}, {ph.city})
@@ -577,52 +832,125 @@ export default function PrescriptionUploadModal({
                   </div>
                 )}
 
-                <div className="mt-1">
-                  <span className="text-sm font-semibold" style={{ color: "#0b3f30" }}>
-                    Upload photos or PDF(s) of your prescription to get a quote from pharmacy.
-                  </span>
+                <div className="mt-1 text-sm font-semibold" style={{ color: "#0b3f30" }}>
+                  Upload photos or PDF files. We will identify medicines and prepare your order.
                 </div>
-
-                {error && (
-                  <div className="flex items-center gap-2 bg-red-50 text-red-600 text-sm px-3 py-2 rounded-lg mt-1">
-                    <AlertCircle className="w-4 h-4" />
-                    {error}
-                  </div>
-                )}
               </div>
             )}
 
-            {step === 2 && (
+            {step === "parsing" && (
               <div className="flex flex-col items-center gap-3 min-h-[140px] py-8">
-                {!quoteReady ? (
+                <Loader2 className="w-10 h-10 animate-spin" style={{ color: DEEP }} />
+                <div className="font-semibold text-center" style={{ color: "#0b3f30" }}>
+                  Preparing your prescription basket...
+                </div>
+                <div className="text-xs text-center" style={{ color: "#0b3f3099" }}>
+                  AI is extracting medicines and matching catalog items.
+                </div>
+              </div>
+            )}
+
+            {step === "review" && (
+              <div className="flex flex-col gap-3">
+                <div className="text-sm font-semibold" style={{ color: "#0b3f30" }}>
+                  We found these medicines from your prescription.
+                </div>
+                {estimatedRange && (
+                  <div className="rounded-lg border px-3 py-2 text-sm font-semibold" style={{ borderColor: `${DEEP}33`, color: DEEP }}>
+                    {estimatedRange}
+                  </div>
+                )}
+
+                {renderReviewList("Confirmed medicines", groupedReview.exact, "exact")}
+                {renderReviewList("Needs review", groupedReview.probable, "probable")}
+                {renderReviewList("We'll arrange for you", groupedReview.unclear, "unclear")}
+
+                <div className="rounded-xl border p-3" style={{ borderColor: `${DEEP}22` }}>
+                  <div className="font-bold mb-2" style={{ color: "#0b3f30" }}>Budget Guard</div>
+                  <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: "#0b3f30" }}>
+                    <input
+                      type="checkbox"
+                      checked={budgetGuard.enabled}
+                      onChange={(e) => setBudgetGuard((prev) => ({ ...prev, enabled: e.target.checked }))}
+                    />
+                    Enable budget guard
+                  </label>
+                  {budgetGuard.enabled && (
+                    <div className="grid grid-cols-1 gap-2 mt-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={budgetGuard.autoApproveBelow}
+                        onChange={(e) => setBudgetGuard((prev) => ({ ...prev, autoApproveBelow: e.target.value }))}
+                        placeholder="Auto-approve if total under Rs. X"
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        value={budgetGuard.askAbove}
+                        onChange={(e) => setBudgetGuard((prev) => ({ ...prev, askAbove: e.target.value }))}
+                        placeholder="Ask me if above Rs. X"
+                      />
+                      <label className="flex items-center gap-2 text-sm" style={{ color: "#0b3f30" }}>
+                        <input
+                          type="checkbox"
+                          checked={budgetGuard.noCallUnlessImportant}
+                          onChange={(e) =>
+                            setBudgetGuard((prev) => ({ ...prev, noCallUnlessImportant: e.target.checked }))
+                          }
+                        />
+                        No call unless important
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                <Input
+                  placeholder="Notes for pharmacy (optional)"
+                  value={reviewNote}
+                  onChange={(e) => setReviewNote(e.target.value)}
+                  maxLength={180}
+                />
+              </div>
+            )}
+
+            {step === "final" && (
+              <div className="flex flex-col items-center gap-3 min-h-[140px] py-8">
+                {finalSubmitting ? (
                   <>
                     <Loader2 className="w-10 h-10 animate-spin" style={{ color: DEEP }} />
                     <div className="font-semibold text-center" style={{ color: "#0b3f30" }}>
-                      Prescription sent!
-                      <br />Waiting for quote from pharmacy…
-                    </div>
-                    <div className="text-xs text-center" style={{ color: "#0b3f3099" }}>
-                      We’ll notify you as soon as a pharmacy sends a quote.
-                      <br />You can close this window and continue using the app.
+                      Sending your reviewed basket...
                     </div>
                   </>
                 ) : (
                   <>
                     <CheckCircle className="w-14 h-14" style={{ color: DEEP }} />
                     <div className="font-bold text-center" style={{ color: "#0b3f30" }}>
-                      Quote received! Check details on your orders page.
+                      {finalResult.queuedForAdmin
+                        ? "Your prescription is in pharmacist review queue."
+                        : "Basket shared with pharmacy for confirmation."}
                     </div>
                     <div className="text-xs text-center" style={{ color: "#0b3f3099" }}>
-                      Pharmacy has sent a quote for your prescription.
+                      {finalResult.queuedForAdmin
+                        ? "We will notify you once review is completed."
+                        : "You will get confirmation as soon as stock and final amount are ready."}
                     </div>
                   </>
                 )}
               </div>
             )}
+
+            {error && (
+              <div className="flex items-center gap-2 bg-red-50 text-red-600 text-sm px-3 py-2 rounded-lg mt-2">
+                <AlertCircle className="w-4 h-4" />
+                {error}
+              </div>
+            )}
           </div>
 
           <DialogFooter className="bg-white p-4 pt-2 rounded-b-3xl flex gap-2 border-t mt-0 flex-shrink-0 z-10">
-            {step === 1 && (
+            {step === "form" && (
               <>
                 <Button
                   variant="outline"
@@ -632,24 +960,53 @@ export default function PrescriptionUploadModal({
                 >
                   Cancel
                 </Button>
-
                 <Button
                   onClick={handleSubmit}
                   className="flex-1 font-bold text-white rounded-full hover:brightness-105 shadow-lg"
                   style={{ backgroundColor: DEEP }}
                 >
-                  Upload Prescription
+                  Prepare My Order
                 </Button>
               </>
             )}
 
-            {step === 2 && (
+            {step === "parsing" && (
               <Button
                 onClick={handleClose}
                 className="w-full font-bold text-white rounded-full hover:brightness-105 shadow-lg"
                 style={{ backgroundColor: DEEP }}
               >
                 Close
+              </Button>
+            )}
+
+            {step === "review" && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleClose}
+                  className="flex-1 font-bold bg-white hover:bg-gray-50"
+                  style={{ color: DEEP, borderColor: `${DEEP}66` }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleReviewSubmit}
+                  className="flex-1 font-bold text-white rounded-full hover:brightness-105 shadow-lg"
+                  style={{ backgroundColor: DEEP }}
+                >
+                  Continue
+                </Button>
+              </>
+            )}
+
+            {step === "final" && (
+              <Button
+                onClick={handleClose}
+                className="w-full font-bold text-white rounded-full hover:brightness-105 shadow-lg"
+                style={{ backgroundColor: DEEP }}
+              >
+                Done
               </Button>
             )}
           </DialogFooter>

@@ -181,6 +181,18 @@ function getDisplayAddress(address) {
 const STATUS_CFG = {
   pending:              { label: "Pending",       color: "#92400E", bg: "#FEF3C7", border: "#FDE68A", emoji: "🕐",  dot: "#F59E0B", live: false },
   placed:               { label: "Placed",        color: "#1E40AF", bg: "#EFF6FF", border: "#BFDBFE", emoji: "📋", dot: "#3B82F6", live: false },
+  review_required:      { label: "Reviewing",     color: "#1E40AF", bg: "#EFF6FF", border: "#BFDBFE", emoji: "🔎", dot: "#3B82F6", live: true  },
+  admin_review_required:{ label: "Reviewing",     color: "#1E40AF", bg: "#EFF6FF", border: "#BFDBFE", emoji: "🧑‍⚕️", dot: "#3B82F6", live: true  },
+  user_reviewed:        { label: "Reviewing",     color: "#1E40AF", bg: "#EFF6FF", border: "#BFDBFE", emoji: "🧾", dot: "#3B82F6", live: true  },
+  budget_guard_set:     { label: "Reviewing",     color: "#1E40AF", bg: "#EFF6FF", border: "#BFDBFE", emoji: "🛡️", dot: "#3B82F6", live: true  },
+  chemist_routing_pending:{ label: "Reviewing",   color: "#1E40AF", bg: "#EFF6FF", border: "#BFDBFE", emoji: "📡", dot: "#3B82F6", live: true  },
+  chemist_notified:     { label: "Reviewing",     color: "#1E40AF", bg: "#EFF6FF", border: "#BFDBFE", emoji: "🏥", dot: "#3B82F6", live: true  },
+  chemist_accepted:     { label: "Reviewing",     color: "#92400E", bg: "#FEF3C7", border: "#FDE68A", emoji: "👀", dot: "#F59E0B", live: true  },
+  chemist_confirmed:    { label: "Pharmacy Confirmed", color: "#065F46", bg: "#ECFDF5", border: "#6EE7B7", emoji: "✅", dot: "#10B981", live: false },
+  partial_confirmation: { label: "Reviewing",     color: "#92400E", bg: "#FEF3C7", border: "#FDE68A", emoji: "⚠️", dot: "#F59E0B", live: true  },
+  price_confirmation_pending:{ label: "Reviewing", color: "#92400E", bg: "#FEF3C7", border: "#FDE68A", emoji: "💬", dot: "#F59E0B", live: true  },
+  final_total_locked:   { label: "Pharmacy Confirmed", color: "#065F46", bg: "#ECFDF5", border: "#6EE7B7", emoji: "🔒", dot: "#10B981", live: false },
+  order_confirmed:      { label: "Pharmacy Confirmed", color: "#065F46", bg: "#ECFDF5", border: "#6EE7B7", emoji: "✅", dot: "#10B981", live: false },
   quoted:               { label: "Quote Ready",   color: "#5B21B6", bg: "#F5F3FF", border: "#C4B5FD", emoji: "💬", dot: "#8B5CF6", live: false },
   pending_user_confirm: { label: "Action Needed", color: "#991B1B", bg: "#FEF2F2", border: "#FECACA", emoji: "⚠️", dot: "#EF4444", live: false },
   processing:           { label: "Processing",    color: "#92400E", bg: "#FEF3C7", border: "#FDE68A", emoji: "⚙️", dot: "#F59E0B", live: true  },
@@ -194,8 +206,9 @@ const STATUS_CFG = {
   confirmed:            { label: "Confirmed",     color: "#065F46", bg: "#ECFDF5", border: "#6EE7B7", emoji: "✅", dot: "#10B981", live: false },
 };
 
-function StatusBadge({ status }) {
+function StatusBadge({ status, labelOverride = "" }) {
   const c = STATUS_CFG[status] || { label: status, color: "#475569", bg: "#F1F5F9", border: "#CBD5E1", emoji: "📄", dot: "#94A3B8", live: false };
+  const label = String(labelOverride || c.label || status || "Pending");
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 6,
@@ -212,7 +225,7 @@ function StatusBadge({ status }) {
         animation: c.live ? "liveDot 1.6s ease-in-out infinite" : "none",
         flexShrink: 0,
       }} />
-      {c.emoji} {c.label}
+      {c.emoji} {label}
     </span>
   );
 }
@@ -325,6 +338,7 @@ export default function MyOrdersPage() {
 
   const user   = JSON.parse(localStorage.getItem("user") || "{}");
   const userId = user._id || user.userId;
+  const token = localStorage.getItem("token") || "";
 
   const [showPharmacyRejectionPopup, setShowPharmacyRejectionPopup] = useState(false);
   const [rejectedPrescriptionOrder, setRejectedPrescriptionOrder]   = useState(null);
@@ -368,7 +382,8 @@ export default function MyOrdersPage() {
   const fetchOrders = async () => {
     try {
       if (!userId) return;
-      const res = await axios.get(`${API_BASE_URL}/api/allorders/myorders-userid/${userId}`);
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const res = await axios.get(`${API_BASE_URL}/api/allorders/myorders-userid/${userId}`, { headers });
       let presRes = [];
       try {
         presRes = await axios.get(`${API_BASE_URL}/api/prescriptions/user-orders`, {
@@ -441,7 +456,17 @@ export default function MyOrdersPage() {
         message: type === "rejected" ? "Order rejected." : "Order confirmed.",
         severity: type === "rejected" ? "info" : "success",
       });
-      setOrders(prev => prev.map(o => o._id === orderId ? { ...o, status: type === "rejected" ? "rejected" : "confirmed" } : o));
+      setOrders(prev =>
+        prev.map(o =>
+          o._id === orderId
+            ? {
+                ...o,
+                status: type === "rejected" ? "rejected" : "order_confirmed",
+                userStatus: type === "rejected" ? "Cancelled" : "Pharmacy confirmed",
+              }
+            : o
+        )
+      );
     } catch { setSnackbar({ open: true, message: "Failed to submit response", severity: "error" }); }
     setRejectSubmitting(false); setRejectReason(""); setRejectDialogOpen(false); setPendingRejectOrderId(null);
   };
@@ -453,10 +478,34 @@ export default function MyOrdersPage() {
 
   // ── Tab computed ───────────────────────────────────────────
   const activeOrders = orders.filter(o =>
-    ["placed","processing","assigned","accepted","picked_up","out_for_delivery","pending","quoted","pending_user_confirm"].includes(o.status)
+    [
+      "placed",
+      "processing",
+      "assigned",
+      "accepted",
+      "picked_up",
+      "out_for_delivery",
+      "pending",
+      "quoted",
+      "pending_user_confirm",
+      "review_required",
+      "admin_review_required",
+      "user_reviewed",
+      "budget_guard_set",
+      "chemist_routing_pending",
+      "chemist_notified",
+      "chemist_accepted",
+      "chemist_confirmed",
+      "partial_confirmation",
+      "price_confirmation_pending",
+      "final_total_locked",
+      "order_confirmed",
+    ].includes(String(o.status || "").toLowerCase())
   );
   const pastOrders = orders.filter(o =>
-    ["delivered","confirmed","cancelled","rejected"].includes(o.status)
+    ["delivered", "confirmed", "cancelled", "rejected", "failed", "converted_to_order"].includes(
+      String(o.status || "").toLowerCase()
+    )
   );
   const displayGrouped = activeTab === "active"
     ? groupSplitOrders(activeOrders)
@@ -465,14 +514,16 @@ export default function MyOrdersPage() {
     : groupedOrders;
 
   // ── Quick stats ────────────────────────────────────────────
-  const deliveredCount = orders.filter(o => ["delivered","confirmed"].includes(o.status)).length;
+  const deliveredCount = orders.filter(o =>
+    ["delivered", "confirmed", "converted_to_order"].includes(String(o.status || "").toLowerCase())
+  ).length;
   const totalSpent = orders
-    .filter(o => ["delivered","confirmed"].includes(o.status))
+    .filter(o => ["delivered", "confirmed", "converted_to_order"].includes(String(o.status || "").toLowerCase()))
     .reduce((sum, o) => sum + (Number(o.total) || getTotalPrice(o) || 0), 0);
 
   // Total Savings: sum of (mrp - price)*qty across all delivered orders
   const totalSavings = orders
-    .filter(o => ["delivered","confirmed"].includes(o.status))
+    .filter(o => ["delivered", "confirmed", "converted_to_order"].includes(String(o.status || "").toLowerCase()))
     .reduce((sum, o) => {
       const items = Array.isArray(o.items) ? o.items : [];
       return sum + items.reduce((s, i) => {
@@ -487,8 +538,24 @@ export default function MyOrdersPage() {
   // RENDER ORDER CARD — ALL LOGIC IDENTICAL, elite visual
   // ══════════════════════════════════════════════════════════
   const renderOrderCard = (o, splitBadge = null, uniqueKey = null) => {
-    const isActive = ["placed","processing","assigned","accepted","picked_up","out_for_delivery"].includes(o.status);
-    const isLive   = ["out_for_delivery","assigned","picked_up"].includes(o.status);
+    const statusKey = String(o.status || "").toLowerCase();
+    const userFacingStatus = o.publicStatus || o.userStatus || "";
+    const isActive = [
+      "placed",
+      "processing",
+      "assigned",
+      "accepted",
+      "picked_up",
+      "out_for_delivery",
+      "review_required",
+      "admin_review_required",
+      "chemist_notified",
+      "chemist_accepted",
+      "price_confirmation_pending",
+      "chemist_confirmed",
+      "order_confirmed",
+    ].includes(statusKey);
+    const isLive   = ["out_for_delivery","assigned","picked_up","chemist_notified","chemist_accepted"].includes(statusKey);
     const price    = Number(o.total) || getTotalPrice(o) || 0;
 
     return (
@@ -577,7 +644,7 @@ export default function MyOrdersPage() {
                 )}
               </div>
               {/* Status badge */}
-              <StatusBadge status={o.status} />
+              <StatusBadge status={statusKey} labelOverride={userFacingStatus} />
             </div>
 
             {/* Price block */}
@@ -627,7 +694,7 @@ export default function MyOrdersPage() {
               </div>
 
               {/* Quote block — IDENTICAL condition */}
-              {(o.status === "quoted" || o.status === "pending_user_confirm") && (
+              {["quoted", "pending_user_confirm", "price_confirmation_pending", "partial_confirmation", "chemist_confirmed"].includes(statusKey) && (
                 <div style={{
                   borderRadius: 20, overflow: "hidden", marginBottom: 14,
                   border: "1.5px solid rgba(12,90,62,0.18)",
@@ -697,7 +764,7 @@ export default function MyOrdersPage() {
                     )}
 
                     {/* Accept & Pay — IDENTICAL condition */}
-                    {o.status === "pending_user_confirm" && (
+                    {["pending_user_confirm", "price_confirmation_pending", "partial_confirmation", "chemist_confirmed"].includes(statusKey) && (
                       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                         <motion.button
                           whileTap={{ scale: 0.97 }}
@@ -738,7 +805,7 @@ export default function MyOrdersPage() {
               )}
 
               <div style={{ fontSize: 13, fontWeight: 700, color: "#2563EB" }}>
-                Status: <span style={{ marginLeft: 4, color: "#0B1F16", fontWeight: 600, textTransform: "capitalize" }}>{o.status}</span>
+                Status: <span style={{ marginLeft: 4, color: "#0B1F16", fontWeight: 600, textTransform: "capitalize" }}>{userFacingStatus || o.status}</span>
               </div>
             </>
           ) : (

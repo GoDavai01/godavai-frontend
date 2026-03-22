@@ -53,6 +53,14 @@ const steps = [
   { label: "Delivered", icon: CheckCheck },
 ];
 
+const PRESCRIPTION_QUOTE_ACTIONABLE_STATUSES = new Set([
+  "pending_user_confirm",
+  "price_confirmation_pending",
+  "partial_confirmation",
+  "pharmacy_confirmation_requested",
+  "chemist_confirmed",
+]);
+
 // ---------- helpers (same logic) ----------
 function formatAddress(address) {
   if (!address) return "";
@@ -358,11 +366,19 @@ export default function OrderTracking() {
     let cancelled = false;
     const interval = setInterval(async () => {
       try {
-        const res = await axios.get(`${API_BASE_URL}/api/orders/${orderId}`);
+        const token = getToken();
+        const isPrescription = order.__type === "prescription";
+        const url = isPrescription
+          ? `${API_BASE_URL}/api/prescriptions/order/${orderId}`
+          : `${API_BASE_URL}/api/orders/${orderId}`;
+        const res = await axios.get(
+          url,
+          isPrescription && token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+        );
         if (!cancelled) {
           setOrder((prev) => {
             if (!prev || prev.updatedAt !== res.data.updatedAt || prev.status !== res.data.status) {
-              return { ...res.data, __type: "order" };
+              return { ...res.data, __type: isPrescription ? "prescription" : "order" };
             }
             return prev;
           });
@@ -449,8 +465,17 @@ export default function OrderTracking() {
 
   // quote modal toggle
   useEffect(() => {
-    if (order && order.status === "quoted") setQuoteDialog(true);
-    else setQuoteDialog(false);
+    if (!order) return setQuoteDialog(false);
+    const status = String(order.status || "").toLowerCase();
+    if (order.__type === "prescription") {
+      const hasQuote =
+        !!order?.quote?.items?.length ||
+        !!order?.tempQuote?.items?.length ||
+        (Array.isArray(order?.quotes) && order.quotes.length > 0);
+      setQuoteDialog(hasQuote && PRESCRIPTION_QUOTE_ACTIONABLE_STATUSES.has(status));
+      return;
+    }
+    setQuoteDialog(status === "quoted" || status === "substitute_confirmation_pending");
   }, [order]);
 
   // clear local active id
@@ -462,21 +487,40 @@ export default function OrderTracking() {
 
   const handleAcceptQuote = async () => {
     setQuoteActionLoading(true);
-    await axios.post(`${API_BASE_URL}/api/orders/${order._id}/accept`);
-    setQuoteActionLoading(false);
-    setQuoteDialog(false);
-    window.location.reload();
+    try {
+      const token = getToken();
+      const cfg = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
+      if (order.__type === "prescription") {
+        await axios.put(`${API_BASE_URL}/api/prescriptions/${order._id}/accept`, {}, cfg);
+      } else if (String(order.status || "").toLowerCase() === "substitute_confirmation_pending") {
+        await axios.put(`${API_BASE_URL}/api/orders/${order._id}/substitute/accept`, {}, cfg);
+      } else {
+        await axios.put(`${API_BASE_URL}/api/orders/${order._id}/accept`, {}, cfg);
+      }
+      setQuoteDialog(false);
+      window.location.reload();
+    } finally {
+      setQuoteActionLoading(false);
+    }
   };
 
   const handleRejectQuote = async () => {
     setQuoteActionLoading(true);
-    await axios.put(`${API_BASE_URL}/api/orders/${order._id}/status`, {
-      status: "rejected",
-      statusText: "Rejected by User",
-    });
-    setQuoteActionLoading(false);
-    setQuoteDialog(false);
-    window.location.reload();
+    try {
+      const token = getToken();
+      const cfg = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
+      if (order.__type === "prescription") {
+        await axios.post(`${API_BASE_URL}/api/prescriptions/respond/${order._id}`, { response: "rejected" }, cfg);
+      } else if (String(order.status || "").toLowerCase() === "substitute_confirmation_pending") {
+        await axios.put(`${API_BASE_URL}/api/orders/${order._id}/substitute/reject`, {}, cfg);
+      } else {
+        await axios.put(`${API_BASE_URL}/api/orders/${order._id}/reject`, {}, cfg);
+      }
+      setQuoteDialog(false);
+      window.location.reload();
+    } finally {
+      setQuoteActionLoading(false);
+    }
   };
 
   const handleRatingSubmit = async () => {
@@ -557,18 +601,19 @@ export default function OrderTracking() {
     );
   }
 
+  const statusNormalized = String(order.status || "").toLowerCase();
   const currentStep =
     typeof order.status === "number"
       ? order.status
-      : order.status === "placed"
+      : ["placed", "pending", "quoted", "chemist_notified", "chemist_accepted", "price_confirmation_pending", "partial_confirmation", "pharmacy_confirmation_requested", "chemist_confirmed", "admin_review_required"].includes(statusNormalized)
       ? 0
-      : order.status === "processing"
+      : ["processing", "order_confirmed", "final_total_locked", "confirmed"].includes(statusNormalized)
       ? 1
-      : order.status === "out_for_delivery"
+      : ["out_for_delivery", "assigned", "accepted", "picked_up", "dispatched"].includes(statusNormalized)
       ? 2
-      : order.status === "delivered"
+      : ["delivered", "converted_to_order"].includes(statusNormalized)
       ? 3
-      : order.status === "rejected" || order.status === "cancelled"
+      : ["rejected", "cancelled", "failed"].includes(statusNormalized)
       ? -1
       : 0;
 
@@ -602,6 +647,9 @@ export default function OrderTracking() {
       prescriptionQuote = order.quotes[order.quotes.length - 1];
     }
   }
+  const isCatalogSubstitutePending =
+    order.__type !== "prescription" && statusNormalized === "substitute_confirmation_pending";
+  const substituteProposal = order?.substituteProposal || null;
 
   return (
     <div className="bg-slate-50 min-h-screen pb-24 pt-3">
@@ -635,7 +683,7 @@ export default function OrderTracking() {
                     isDelivered ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-700"
                   }`}
                 >
-                  {order.statusText || steps[currentStep]?.label}
+                  {order.userStatus || order.publicStatus || order.statusText || steps[currentStep]?.label || "Reviewing availability"}
                 </ShadBadge>
               </div>
             </div>
@@ -1033,23 +1081,42 @@ export default function OrderTracking() {
       <Dialog open={quoteDialog} onOpenChange={setQuoteDialog}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Quote Available</DialogTitle>
+            <DialogTitle>{isCatalogSubstitutePending ? "Substitute Approval Needed" : "Quote Available"}</DialogTitle>
           </DialogHeader>
           <div className="text-sm text-slate-700">
-            {prescriptionQuote && (
+            {isCatalogSubstitutePending ? (
+              <>
+                <div className="mb-2">Pharmacy has suggested substitute medicines for this order:</div>
+                {Array.isArray(substituteProposal?.items) && substituteProposal.items.length > 0 ? (
+                  <ul className="list-disc pl-5 space-y-1">
+                    {substituteProposal.items.map((item, idx) => (
+                      <li key={idx}>
+                        {item?.medicineName || item?.name || "Medicine"}{item?.brand ? ` - ${item.brand}` : ""}
+                        {item?.price ? ` - ₹${item.price}` : ""}{item?.quantity ? ` × ${item.quantity}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="mb-2">Review substitute message from pharmacy before continuing.</div>
+                )}
+                {substituteProposal?.message && <div className="mt-1 text-slate-500">Note: {substituteProposal.message}</div>}
+              </>
+            ) : prescriptionQuote ? (
               <>
                 <div className="mb-2">Pharmacy has sent you a quote for your prescription:</div>
                 <ul className="list-disc pl-5 space-y-1">
                   {prescriptionQuote.items?.map((item, idx) => (
                     <li key={idx}>
-                      {item.medicineName} – {item.brand} – ₹{item.price} × {item.quantity} [
+                      {item.medicineName} - {item.brand} - Rs {item.price} x {item.quantity} [
                       {item.available !== false ? "Available" : "Unavailable"}]
                     </li>
                   ))}
                 </ul>
-                <div className="mt-2 font-bold">Total: ₹{prescriptionQuote.price || prescriptionQuote.approxPrice}</div>
+                <div className="mt-2 font-bold">Total: Rs {prescriptionQuote.price || prescriptionQuote.approxPrice}</div>
                 {prescriptionQuote.message && <div className="mt-1 text-slate-500">Note: {prescriptionQuote.message}</div>}
               </>
+            ) : (
+              <div className="mb-2">Pharmacy has updated this order. Review and continue.</div>
             )}
           </div>
           <DialogFooter className="gap-2">
@@ -1059,14 +1126,14 @@ export default function OrderTracking() {
               onClick={handleRejectQuote}
               disabled={quoteActionLoading}
             >
-              Reject
+              {isCatalogSubstitutePending ? "Reject Substitute" : "Reject"}
             </Button>
             <Button
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
               onClick={handleAcceptQuote}
               disabled={quoteActionLoading}
             >
-              Accept & Pay
+              {isCatalogSubstitutePending ? "Approve Substitute" : "Accept & Pay"}
             </Button>
           </DialogFooter>
         </DialogContent>
