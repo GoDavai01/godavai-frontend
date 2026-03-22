@@ -1003,13 +1003,14 @@ function ChatBubble({
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
                       style={{
                         position: "absolute",
-                        bottom: "110%",
-                        left: 0,
+                        bottom: 0,
+                        left: "110%",
                         display: "flex",
+                        flexDirection: "column",
                         gap: 2,
                         background: "rgba(255,255,255,0.97)",
                         borderRadius: 28,
-                        padding: "6px 8px",
+                        padding: "4px 5px",
                         boxShadow: "0 8px 32px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08)",
                         border: "1px solid rgba(0,0,0,0.06)",
                         zIndex: 100,
@@ -1030,15 +1031,15 @@ function ChatBubble({
                             if (sentiment !== "neutral") onFeedback(m, sentiment);
                           }}
                           style={{
-                            width: isDesktop ? 38 : 36,
-                            height: isDesktop ? 38 : 36,
+                            width: isDesktop ? 36 : 32,
+                            height: isDesktop ? 36 : 32,
                             borderRadius: 999,
                             border: "none",
                             background: "transparent",
                             display: "grid",
                             placeItems: "center",
                             cursor: "pointer",
-                            fontSize: isDesktop ? 20 : 18,
+                            fontSize: isDesktop ? 18 : 16,
                             transition: "background 0.15s ease",
                           }}
                           onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.05)"; }}
