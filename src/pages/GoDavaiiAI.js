@@ -770,6 +770,7 @@ function ChatBubble({
   onFeedback,
   onShowFull,
   onRetry,
+  onReaction,
   speakingId,
   speakLoading,
   screen,
@@ -780,6 +781,20 @@ function ChatBubble({
   const isUser = m.role === "user";
   const isSpeaking = speakingId === m.id;
   const isDesktop = screen === "desktop";
+  const [showReactions, setShowReactions] = React.useState(false);
+  const reactionBarRef = React.useRef(null);
+  const longPressTimerRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!showReactions) return;
+    const handler = (e) => {
+      if (reactionBarRef.current && !reactionBarRef.current.contains(e.target)) {
+        setShowReactions(false);
+      }
+    };
+    document.addEventListener("pointerdown", handler);
+    return () => document.removeEventListener("pointerdown", handler);
+  }, [showReactions]);
   const displayText = m.fullText && m.role === "assistant" ? m.text : m.text;
   const assistantFullText = m.fullText || m.text || "";
   const showStreamingControl = !isUser && m.isStreaming && !m.streamDone;
@@ -826,6 +841,7 @@ function ChatBubble({
 
       <div
         style={{
+          position: "relative",
           maxWidth: isDesktop ? "75%" : "86%",
           borderRadius: isUser ? "22px 22px 8px 22px" : "22px 22px 22px 8px",
           padding: isDesktop ? "16px 18px" : "14px 15px",
@@ -966,36 +982,145 @@ function ChatBubble({
             )}
 
             {!isErrorBubble && (
-              <>
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => { if (navigator.vibrate) navigator.vibrate(40); onFeedback(m, "up"); }}
-                  style={{
-                    width: 30, height: 30, borderRadius: 999,
-                    border: "1px solid #E5E7EB", background: "#FAFAFA",
-                    display: "grid", placeItems: "center",
-                    cursor: "pointer", fontSize: 13,
-                  }}
-                  title="Helpful"
-                >
-                  👍
-                </motion.button>
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => { if (navigator.vibrate) navigator.vibrate(40); onFeedback(m, "down"); }}
-                  style={{
-                    width: 30, height: 30, borderRadius: 999,
-                    border: "1px solid #E5E7EB", background: "#FAFAFA",
-                    display: "grid", placeItems: "center",
-                    cursor: "pointer", fontSize: 13,
-                  }}
-                  title="Not helpful"
-                >
-                  👎
-                </motion.button>
-              </>
+              <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                {/* Current reaction display */}
+                {m.reaction && (
+                  <motion.button
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    whileTap={{ scale: 0.85 }}
+                    onClick={() => {
+                      if (navigator.vibrate) navigator.vibrate(25);
+                      onReaction(m, null);
+                      setShowReactions(false);
+                    }}
+                    style={{
+                      width: 32, height: 32, borderRadius: 999,
+                      border: "1px solid rgba(24,226,161,0.3)", background: "rgba(24,226,161,0.08)",
+                      display: "grid", placeItems: "center",
+                      cursor: "pointer", fontSize: 16,
+                      transition: "all 0.2s ease",
+                    }}
+                    title="Remove reaction"
+                  >
+                    {m.reaction}
+                  </motion.button>
+                )}
+
+                {/* Reaction trigger button */}
+                {!m.reaction && (
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => {
+                      if (navigator.vibrate) navigator.vibrate(20);
+                      setShowReactions(!showReactions);
+                    }}
+                    onPointerDown={() => {
+                      longPressTimerRef.current = setTimeout(() => {
+                        if (navigator.vibrate) navigator.vibrate(30);
+                        setShowReactions(true);
+                      }, 300);
+                    }}
+                    onPointerUp={() => clearTimeout(longPressTimerRef.current)}
+                    onPointerLeave={() => clearTimeout(longPressTimerRef.current)}
+                    style={{
+                      width: 30, height: 30, borderRadius: 999,
+                      border: "1px solid #E5E7EB", background: "#FAFAFA",
+                      display: "grid", placeItems: "center",
+                      cursor: "pointer", fontSize: 14,
+                    }}
+                    title="React"
+                  >
+                    😊
+                  </motion.button>
+                )}
+
+                {/* Floating reaction bar (WhatsApp-style) */}
+                <AnimatePresence>
+                  {showReactions && (
+                    <motion.div
+                      ref={reactionBarRef}
+                      initial={{ opacity: 0, scale: 0.6, y: 8 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.6, y: 8 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                      style={{
+                        position: "absolute",
+                        bottom: "110%",
+                        left: 0,
+                        display: "flex",
+                        gap: 2,
+                        background: "rgba(255,255,255,0.97)",
+                        borderRadius: 28,
+                        padding: "6px 8px",
+                        boxShadow: "0 8px 32px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08)",
+                        border: "1px solid rgba(0,0,0,0.06)",
+                        zIndex: 100,
+                        backdropFilter: "blur(12px)",
+                      }}
+                    >
+                      {["❤️", "👍", "👎", "😂", "😮", "🙏"].map((emoji) => (
+                        <motion.button
+                          key={emoji}
+                          whileHover={{ scale: 1.35, y: -4 }}
+                          whileTap={{ scale: 0.85 }}
+                          onClick={() => {
+                            if (navigator.vibrate) navigator.vibrate(50);
+                            onReaction(m, emoji);
+                            setShowReactions(false);
+                            // Map emoji to feedback for analytics
+                            const sentiment = ["❤️", "👍"].includes(emoji) ? "up" : emoji === "👎" ? "down" : "neutral";
+                            if (sentiment !== "neutral") onFeedback(m, sentiment);
+                          }}
+                          style={{
+                            width: isDesktop ? 38 : 36,
+                            height: isDesktop ? 38 : 36,
+                            borderRadius: 999,
+                            border: "none",
+                            background: "transparent",
+                            display: "grid",
+                            placeItems: "center",
+                            cursor: "pointer",
+                            fontSize: isDesktop ? 20 : 18,
+                            transition: "background 0.15s ease",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,0,0,0.05)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                        >
+                          {emoji}
+                        </motion.button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             )}
           </div>
+        )}
+
+        {/* Reaction badge on bubble corner */}
+        {m.reaction && (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            style={{
+              position: "absolute",
+              bottom: -8,
+              right: 12,
+              width: 28,
+              height: 28,
+              borderRadius: "50%",
+              background: "#fff",
+              border: "1px solid rgba(0,0,0,0.08)",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+              display: "grid",
+              placeItems: "center",
+              fontSize: 15,
+              zIndex: 5,
+            }}
+          >
+            {m.reaction}
+          </motion.div>
         )}
       </div>
     </motion.div>
@@ -1132,6 +1257,7 @@ export default function GoDavaiiAI() {
   const ttsCacheRef = useRef(new Map());
   const ttsPendingRef = useRef(new Map());
   const revealTimeoutsRef = useRef(new Map());
+  const stickyContextRef = useRef("");
   const latestMessagesRef = useRef([]);
   const lastAutoScrollRef = useRef(0);
 
@@ -1479,6 +1605,7 @@ export default function GoDavaiiAI() {
       replyLanguagePreference: replyLanguage,
       focus,
       desiIlaaj: true,
+      stickyContext: stickyContextRef.current || "",
       userSummary: {
         id: user?._id || user?.userId || null,
         name: user?.name || null,
@@ -1487,6 +1614,7 @@ export default function GoDavaiiAI() {
         dob: user?.dob || null,
       },
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [whoFor, whoForLabel, replyLanguage, focus, user]
   );
 
@@ -1656,6 +1784,16 @@ export default function GoDavaiiAI() {
     } catch (err) {
       console.error("Feedback submit failed:", err);
     }
+  }
+
+  function handleReaction(messageObj, emoji) {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageObj.id
+          ? { ...m, reaction: m.reaction === emoji ? null : emoji }
+          : m
+      )
+    );
   }
 
   async function transcribeAudioBlob(blob) {
@@ -1880,7 +2018,7 @@ export default function GoDavaiiAI() {
 
   /* ── Backend ────────────────────────────────────────────── */
   async function askBackend(messageText, history) {
-  const payload = { message: messageText, history, context: profileContext };
+  const payload = { message: messageText, history, context: { ...profileContext, stickyContext: stickyContextRef.current || "" } };
   const headers = getAuthHeaders();
 
   const endpoints = [
@@ -1902,6 +2040,10 @@ export default function GoDavaiiAI() {
 
       const t = r?.data?.reply || r?.data?.answer || r?.data?.message || "";
       if (String(t).trim()) {
+        // Update sticky context from backend response
+        if (r?.data?.stickyContext) {
+          stickyContextRef.current = String(r.data.stickyContext);
+        }
         return {
           reply: t,
           sessionId: r?.data?.sessionId || null,
@@ -2204,6 +2346,7 @@ export default function GoDavaiiAI() {
       }),
     ]);
     setCurrentSessionId(null);
+    stickyContextRef.current = "";
     setSidebarOpen(false);
   }
 
@@ -2470,6 +2613,7 @@ export default function GoDavaiiAI() {
               onFeedback={submitFeedback}
               onShowFull={showAssistantMessageFully}
               onRetry={handleRetryBubble}
+              onReaction={handleReaction}
               speakingId={speakingId}
               speakLoading={speakLoading}
               screen={screen}
