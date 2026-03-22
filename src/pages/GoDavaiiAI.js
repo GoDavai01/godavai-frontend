@@ -41,7 +41,6 @@ import {
   ClipboardList,
   FileText,
   FlaskConical,
-  Globe2,
   Menu,
   Mic,
   MicOff,
@@ -61,7 +60,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const CHAT_TIMEOUT_MS = 120000;
@@ -622,48 +621,6 @@ function createAssistantMessage({ id, text, meta = {}, isStreaming = false }) {
   };
 }
 
-function SummaryPill({ children, tone = "default" }) {
-  const styleMap = {
-    default: {
-      bg: "rgba(255,255,255,0.72)",
-      border: "rgba(12,90,62,0.08)",
-      color: TEXT,
-    },
-    active: {
-      bg: ACC_SOFT,
-      border: "rgba(24,226,161,0.22)",
-      color: DEEP,
-    },
-    danger: {
-      bg: "rgba(255,247,237,0.95)",
-      border: "#FED7AA",
-      color: "#9A3412",
-    },
-  };
-  const s = styleMap[tone] || styleMap.default;
-  return (
-    <div
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        height: 28,
-        borderRadius: 999,
-        padding: "0 11px",
-        background: s.bg,
-        border: `1px solid ${s.border}`,
-        color: s.color,
-        fontSize: 11.5,
-        fontWeight: 800,
-        whiteSpace: "nowrap",
-        backdropFilter: "blur(18px)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 /* ── Reply formatter ──────────────────────────────────────── */
 function FormatReply({ text, screen, uiLang }) {
   const clean = cleanAssistantText(text);
@@ -1210,7 +1167,6 @@ function ThinkingBlock({ hasFile }) {
    ═══════════════════════════════════════════════════════════ */
 export default function GoDavaiiAI() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
   const screen = useScreenSize();
 
@@ -1594,8 +1550,6 @@ export default function GoDavaiiAI() {
     return whoFor === "family" ? "Family Member" : "New Profile";
   }, [whoFor, familyLabel, customProfile, user?.name]);
 
-  const currentFocusMeta = useMemo(() => FOCUS.find((f) => f.key === focus) || FOCUS[0], [focus]);
-  const currentLangMeta = useMemo(() => LANG_OPTIONS.find((l) => l.key === replyLanguage) || LANG_OPTIONS[0], [replyLanguage]);
 
   const profileContext = useMemo(
     () => ({
@@ -2395,9 +2349,6 @@ export default function GoDavaiiAI() {
       </div>
     );
   }
-
-  // Context pills — shown inline under greeting on welcome screen, not in header
-  const topSummary = null;
 
   return (
     <div
