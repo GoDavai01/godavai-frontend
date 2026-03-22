@@ -1342,7 +1342,7 @@ export default function GoDavaiiAI() {
   const sidePad = isDesktop ? 20 : 12;
   const btnSize = isDesktop ? 48 : 44;
   const composerPadBottom = getSafeBottomPadding();
-  const composerOuterHeight = attachedFile ? 136 : 94;
+  const composerOuterHeight = attachedFile ? 146 : 110;
 
   useEffect(() => {
     throttledAutoScroll(true);
@@ -1509,11 +1509,11 @@ export default function GoDavaiiAI() {
 
     const text = fileMode
       ? looksTimeout
-        ? "Response me thoda delay ho gaya while report/file analyze ho rahi thi.\n\nAap retry karo ya thoda clearer file dubara bhejo."
-        : "File analysis me thoda issue aaya.\n\nAap retry karo ya file ko dubara upload karke bhejo."
+        ? "File analyze karne me thoda time lag gaya. Retry karo — usually kaam kar jata hai."
+        : "File read karne me issue hua. Retry karo ya file dubara upload karo."
       : looksTimeout
-        ? "Response me thoda delay ho gaya.\n\nPlease retry once."
-        : "Response me thoda issue aaya.\n\nPlease retry once.";
+        ? "Response me delay ho gaya. Retry karo."
+        : "Response me issue hua. Retry karo.";
 
     setMessages((prev) => [
       ...prev,
@@ -2351,47 +2351,44 @@ export default function GoDavaiiAI() {
   }
 
   function QuickActions() {
+    const quickItems = [
+      { label: "Symptoms", icon: Stethoscope, msg: "I have some symptoms to discuss" },
+      { label: "Upload Report", icon: FlaskConical, action: () => fileRef.current?.click() },
+      { label: "Medicine Info", icon: Pill, msg: "Tell me about a medicine" },
+    ];
+
     return (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8, marginTop: 10 }}>
-        {[
-          { label: "Symptoms", icon: Stethoscope, onClick: () => setFocus("symptom") },
-          { label: "Upload Report", icon: FlaskConical, onClick: () => fileRef.current?.click() },
-          { label: "Ask by Voice", icon: Mic, onClick: handleMicToggle },
-        ].map((item) => {
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {quickItems.map((item) => {
           const Icon = item.icon;
           return (
             <motion.button
               key={item.label}
-              whileTap={{ scale: 0.97 }}
-              onClick={item.onClick}
+              whileTap={{ scale: 0.96 }}
+              whileHover={{ scale: 1.02 }}
+              onClick={() => {
+                if (item.action) { item.action(); return; }
+                if (item.msg) { setInput(item.msg); }
+              }}
               style={{
-                border: "1px solid rgba(12,90,62,0.08)",
-                background: GLASS_STRONG,
-                borderRadius: 18,
-                padding: "12px 10px",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "flex-start",
-                gap: 9,
-                textAlign: "left",
-                boxShadow: "0 10px 30px rgba(16,24,40,0.04)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                height: 40,
+                borderRadius: 20,
+                border: `1px solid rgba(12,90,62,0.10)`,
+                background: "rgba(255,255,255,0.85)",
+                padding: "0 16px",
+                fontSize: 13,
+                fontWeight: 700,
+                color: TEXT,
                 cursor: "pointer",
+                backdropFilter: "blur(12px)",
+                boxShadow: "0 4px 16px rgba(16,24,40,0.04)",
               }}
             >
-              <div
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 12,
-                  display: "grid",
-                  placeItems: "center",
-                  background: ACC_SOFT,
-                  color: DEEP,
-                }}
-              >
-                <Icon style={{ width: 16, height: 16 }} />
-              </div>
-              <div style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{item.label}</div>
+              <Icon style={{ width: 15, height: 15, color: DEEP }} />
+              {item.label}
             </motion.button>
           );
         })}
@@ -2399,30 +2396,8 @@ export default function GoDavaiiAI() {
     );
   }
 
-  const topSummary = (
-    <div
-      style={{
-        display: "flex",
-        gap: 8,
-        overflowX: "auto",
-        paddingBottom: 2,
-        scrollbarWidth: "none",
-      }}
-    >
-      <SummaryPill tone="active">
-        <Sparkles style={{ width: 12, height: 12 }} />
-        {currentFocusMeta.label}
-      </SummaryPill>
-      <SummaryPill>
-        {whoFor === "self" ? <UserRound style={{ width: 12, height: 12 }} /> : <Users style={{ width: 12, height: 12 }} />}
-        {whoForLabel}
-      </SummaryPill>
-      <SummaryPill>
-        <Globe2 style={{ width: 12, height: 12 }} />
-        {currentLangMeta.label}
-      </SummaryPill>
-    </div>
-  );
+  // Context pills — shown inline under greeting on welcome screen, not in header
+  const topSummary = null;
 
   return (
     <div
@@ -2457,16 +2432,16 @@ export default function GoDavaiiAI() {
         }}
       />
 
-      {/* TOP BAR */}
+      {/* TOP BAR — Premium minimal (ChatGPT/Gemini style) */}
       <div
         style={{
           position: "relative",
           zIndex: 20,
-          padding: `${topPad}px ${sidePad}px 8px`,
+          padding: `${topPad}px ${sidePad}px 10px`,
           paddingTop: `calc(${topPad}px + env(safe-area-inset-top, 0px))`,
           backdropFilter: "blur(24px)",
-          background: "linear-gradient(180deg, rgba(244,251,248,0.92), rgba(244,251,248,0.76))",
-          borderBottom: "1px solid rgba(12,90,62,0.06)",
+          background: "linear-gradient(180deg, rgba(244,251,248,0.96), rgba(244,251,248,0.82))",
+          borderBottom: "1px solid rgba(12,90,62,0.05)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -2477,27 +2452,23 @@ export default function GoDavaiiAI() {
               loadChatHistory();
             }}
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 14,
-              border: "1px solid rgba(12,90,62,0.08)",
-              background: GLASS_STRONG,
+              width: 36,
+              height: 36,
+              borderRadius: 12,
+              border: "none",
+              background: "transparent",
               display: "grid",
               placeItems: "center",
-              boxShadow: "0 10px 24px rgba(16,24,40,0.04)",
               cursor: "pointer",
               flexShrink: 0,
             }}
           >
-            <Menu style={{ width: 18, height: 18, color: TEXT }} />
+            <Menu style={{ width: 20, height: 20, color: TEXT }} />
           </motion.button>
 
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: isDesktop ? 18 : 16, fontWeight: 900, color: TEXT }}>
+          <div style={{ flex: 1, minWidth: 0, textAlign: "center" }}>
+            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: isDesktop ? 17 : 15.5, fontWeight: 900, color: TEXT, letterSpacing: "-0.2px" }}>
               GoDavaii AI
-            </div>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: SUB, marginTop: 1 }}>
-              Personal health assistant
             </div>
           </div>
 
@@ -2505,45 +2476,18 @@ export default function GoDavaiiAI() {
             whileTap={{ scale: 0.92 }}
             onClick={() => setSettingsOpen(true)}
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 14,
-              border: "1px solid rgba(12,90,62,0.08)",
-              background: GLASS_STRONG,
-              display: "grid",
-              placeItems: "center",
-              boxShadow: "0 10px 24px rgba(16,24,40,0.04)",
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
-          >
-            <Settings2 style={{ width: 18, height: 18, color: TEXT }} />
-          </motion.button>
-        </div>
-
-        <div style={{ marginTop: 10 }}>{topSummary}</div>
-
-        <div style={{ marginTop: 9, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <SummaryPill tone="danger">
-            <AlertTriangle style={{ width: 12, height: 12 }} />
-            Health AI reference ke liye hai. Emergency me turant medical help lo.
-          </SummaryPill>
-
-          <motion.button
-            whileTap={{ scale: 0.96 }}
-            onClick={() => navigate("/home")}
-            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 12,
               border: "none",
               background: "transparent",
-              color: SUB,
-              fontSize: 11.5,
-              fontWeight: 800,
+              display: "grid",
+              placeItems: "center",
               cursor: "pointer",
-              padding: "0 2px",
               flexShrink: 0,
             }}
           >
-            Close
+            <Settings2 style={{ width: 20, height: 20, color: TEXT }} />
           </motion.button>
         </div>
       </div>
@@ -2569,38 +2513,19 @@ export default function GoDavaiiAI() {
             animate={{ opacity: 1, y: 0 }}
             style={{
               marginBottom: 18,
-              borderRadius: 28,
-              padding: isDesktop ? "22px 22px" : "18px 16px",
-              background: "linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.78))",
-              border: `1px solid ${GLASS_BORDER}`,
-              boxShadow: "0 18px 40px rgba(16,24,40,0.05)",
-              backdropFilter: "blur(26px)",
+              padding: isDesktop ? "32px 22px 22px" : "28px 16px 18px",
             }}
           >
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 16,
-                display: "grid",
-                placeItems: "center",
-                background: `linear-gradient(135deg, ${DEEP}, ${MID})`,
-                boxShadow: "0 14px 28px rgba(10,90,59,0.18)",
-                marginBottom: 14,
-              }}
-            >
-              <Sparkles style={{ width: 18, height: 18, color: ACC }} />
+            <div style={{ fontFamily: "’Sora’,sans-serif", fontSize: isDesktop ? 28 : 22, fontWeight: 900, color: SUB, lineHeight: 1.25, marginBottom: 4 }}>
+              Hi {whoForLabel || "there"}
+            </div>
+            <div style={{ fontFamily: "’Sora’,sans-serif", fontSize: isDesktop ? 28 : 22, fontWeight: 900, color: TEXT, lineHeight: 1.25 }}>
+              How can I help?
             </div>
 
-            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: isDesktop ? 22 : 18, fontWeight: 900, color: TEXT, lineHeight: 1.2 }}>
-              Premium health AI for symptoms, reports, prescriptions, and scans
+            <div style={{ marginTop: 20 }}>
+              <QuickActions />
             </div>
-
-            <div style={{ marginTop: 9, fontSize: 14, lineHeight: 1.72, color: SUB, fontWeight: 600 }}>
-              Type naturally, speak by voice, or upload a report. I’ll explain things simply and clearly.
-            </div>
-
-            <QuickActions />
           </motion.div>
         )}
 
@@ -2749,6 +2674,32 @@ export default function GoDavaiiAI() {
                     </button>
                   </div>
                 ))}
+
+                {/* Add more files button (mobile users add one at a time) */}
+                {(attachedFiles.length > 0 || attachedFile) && (attachedFiles.length < 5) && (
+                  <motion.button
+                    whileTap={{ scale: 0.96 }}
+                    onClick={() => fileRef.current?.click()}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      alignSelf: "flex-start",
+                      height: 28,
+                      borderRadius: 999,
+                      border: "1px dashed #A7F3D0",
+                      background: "rgba(236,253,245,0.6)",
+                      padding: "0 12px",
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: "#059669",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Plus style={{ width: 12, height: 12 }} />
+                    Add more files
+                  </motion.button>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -2760,29 +2711,36 @@ export default function GoDavaiiAI() {
             multiple
             style={{ display: "none" }}
             onChange={(e) => {
-              const files = Array.from(e.target.files || []);
-              if (files.length === 0) return;
-              if (files.length === 1) {
-                setAttachedFile(files[0]);
+              const newFiles = Array.from(e.target.files || []);
+              if (newFiles.length === 0) return;
+              // Stack files: on mobile, users may add one file at a time
+              const existing = attachedFiles.length > 0 ? [...attachedFiles] : (attachedFile ? [attachedFile] : []);
+              const combined = [...existing, ...newFiles].slice(0, 5); // Max 5 files
+              if (combined.length === 1) {
+                setAttachedFile(combined[0]);
                 setAttachedFiles([]);
               } else {
-                setAttachedFile(files[0]);
-                setAttachedFiles(files);
+                setAttachedFile(combined[0]);
+                setAttachedFiles(combined);
               }
               e.target.value = "";
             }}
           />
 
+          <div style={{ textAlign: "center", marginBottom: 6, fontSize: 10, fontWeight: 600, color: "#9CA3AF", letterSpacing: "0.1px" }}>
+            AI reference only · Not a doctor replacement
+          </div>
+
           <div
             style={{
               display: "flex",
               alignItems: "flex-end",
-              gap: 8,
-              borderRadius: 24,
-              background: "rgba(255,255,255,0.92)",
-              border: "1px solid rgba(12,90,62,0.10)",
-              boxShadow: "0 20px 40px rgba(16,24,40,0.08)",
-              padding: "8px 8px 8px 12px",
+              gap: 6,
+              borderRadius: 26,
+              background: "rgba(255,255,255,0.95)",
+              border: "1px solid rgba(12,90,62,0.08)",
+              boxShadow: "0 12px 36px rgba(16,24,40,0.06)",
+              padding: "6px 6px 6px 14px",
               backdropFilter: "blur(22px)",
             }}
           >
@@ -2831,15 +2789,15 @@ export default function GoDavaiiAI() {
                 style={{
                   width: btnSize,
                   height: btnSize,
-                  borderRadius: 16,
-                  border: "1px solid rgba(12,90,62,0.08)",
-                  background: "#fff",
+                  borderRadius: 999,
+                  border: "none",
+                  background: "rgba(12,90,62,0.06)",
                   display: "grid",
                   placeItems: "center",
                   cursor: "pointer",
                 }}
               >
-                <Paperclip style={{ width: 18, height: 18, color: DEEP }} />
+                <Paperclip style={{ width: 17, height: 17, color: DEEP }} />
               </motion.button>
 
               <motion.button
@@ -2849,9 +2807,9 @@ export default function GoDavaiiAI() {
                 style={{
                   width: btnSize,
                   height: btnSize,
-                  borderRadius: 16,
+                  borderRadius: 999,
                   border: "none",
-                  background: micOn ? "linear-gradient(135deg,#DC2626,#EF4444)" : "rgba(24,226,161,0.10)",
+                  background: micOn ? "linear-gradient(135deg,#DC2626,#EF4444)" : "rgba(12,90,62,0.06)",
                   display: "grid",
                   placeItems: "center",
                   cursor: micBusy ? "wait" : "pointer",
@@ -2902,7 +2860,7 @@ export default function GoDavaiiAI() {
                 style={{
                   width: btnSize,
                   height: btnSize,
-                  borderRadius: 16,
+                  borderRadius: 999,
                   border: "none",
                   background:
                     loading || (!input.trim() && !attachedFile)
