@@ -63,7 +63,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLocation } from "react-router-dom";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
-const CHAT_TIMEOUT_MS = 120000;
+const CHAT_TIMEOUT_MS = 180000;
 const FILE_ANALYZE_TIMEOUT_MS = 300000;
 
 /* ── Premium design tokens ───────────────────────────────── */
