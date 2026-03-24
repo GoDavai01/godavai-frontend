@@ -828,41 +828,139 @@ function DoctorsVerificationPanel({ token, onNotify }) {
         {!loading && rows.length === 0 ? <Typography sx={{ color: "#aaa" }}>No doctors found.</Typography> : null}
         {rows.map((d) => (
           <Card key={d.id} sx={{ p: 2, bgcolor: "#23272a", borderRadius: 2 }}>
-            <Typography fontWeight={800}>{d.name} ({d.specialty})</Typography>
-            <Typography variant="body2" sx={{ color: "#aaf" }}>{d.email || "-"} | {d.phone || "-"}</Typography>
-            <Typography variant="body2" sx={{ color: "#bbb" }}>
-              Status: {String(d.verificationStatus || "pending_verification").replace(/_/g, " ")} | Reg#: {d?.documents?.registrationNumber || "-"}
+            {/* ── Header: Photo + Name + Specialty ── */}
+            <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
+              {(d.profilePhotoUrl || d?.documents?.profilePhotoUrl) ? (
+                <Box component="img" src={d.profilePhotoUrl || d.documents.profilePhotoUrl} alt="photo"
+                  sx={{ width: 48, height: 48, borderRadius: 2, objectFit: "cover", border: "1px solid #444" }} />
+              ) : (
+                <Box sx={{ width: 48, height: 48, borderRadius: 2, bgcolor: "#333", display: "grid", placeItems: "center", fontSize: 20, color: "#666" }}>
+                  👨‍⚕️
+                </Box>
+              )}
+              <Box>
+                <Typography fontWeight={900} fontSize={15}>{d.fullName || d.name} {d.gender ? `(${d.gender})` : ""}</Typography>
+                <Typography variant="body2" sx={{ color: "#13C0A2", fontWeight: 700 }}>
+                  {d.specialty}{d.subSpecialty ? ` → ${d.subSpecialty}` : ""}
+                </Typography>
+              </Box>
+            </Stack>
+
+            {/* ── Contact + Identity ── */}
+            <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", mb: 0.5 }}>
+              <Typography variant="body2" sx={{ color: "#aaa" }}>📧 {d.email || "-"}</Typography>
+              <Typography variant="body2" sx={{ color: "#aaa" }}>📱 {d.phone || "-"}</Typography>
+              {d.dateOfBirth && <Typography variant="body2" sx={{ color: "#aaa" }}>🎂 {d.dateOfBirth}</Typography>}
+            </Stack>
+
+            {/* ── Professional Details ── */}
+            <Typography variant="body2" sx={{ color: "#ccc", mt: 0.5 }}>
+              {d.qualification || "-"}{d.university ? ` • ${d.university}` : ""}{d.qualificationYear ? ` (${d.qualificationYear})` : ""}
+              {d.yearsExperience ? ` • ${d.yearsExperience} yrs exp` : ""}
             </Typography>
+            <Typography variant="body2" sx={{ color: "#ccc" }}>
+              📍 {d.area || ""}{d.area && d.city ? ", " : ""}{d.city || "-"}
+              {d.languages?.length ? ` • 🗣 ${Array.isArray(d.languages) ? d.languages.join(", ") : d.languages}` : ""}
+            </Typography>
+
+            {/* ── NMC / Medical Council ── */}
+            <Box sx={{ mt: 1, p: 1, bgcolor: "#1a1e21", borderRadius: 1, border: "1px solid #333" }}>
+              <Typography variant="caption" sx={{ color: "#999", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1 }}>
+                Medical Registration
+              </Typography>
+              <Typography variant="body2" sx={{ color: "#eee", mt: 0.3 }}>
+                Reg#: <strong>{d?.documents?.registrationNumber || "-"}</strong>
+                {(d.smcName || d?.documents?.smcName) ? ` • ${d.smcName || d.documents.smcName}` : ""}
+                {(d.registrationYear || d?.documents?.registrationYear) ? ` • Year: ${d.registrationYear || d.documents.registrationYear}` : ""}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "#eee" }}>
+                Status: <strong style={{ color: d.verificationStatus === "approved" ? "#10B981" : d.verificationStatus === "rejected" ? "#EF4444" : "#F59E0B" }}>
+                  {String(d.verificationStatus || "pending_verification").replace(/_/g, " ").toUpperCase()}
+                </strong>
+              </Typography>
+            </Box>
+
+            {/* ── Consultation Modes + Fees ── */}
+            <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
+              {d.consultModes?.audio && (
+                <Typography variant="caption" sx={{ bgcolor: "#0C5A3E", color: "#fff", px: 1, py: 0.3, borderRadius: 1, fontWeight: 700 }}>
+                  🎧 Audio {d.feeAudio || d.feeCall ? `₹${d.feeAudio || d.feeCall}` : ""}
+                </Typography>
+              )}
+              {d.consultModes?.video && (
+                <Typography variant="caption" sx={{ bgcolor: "#0C5A3E", color: "#fff", px: 1, py: 0.3, borderRadius: 1, fontWeight: 700 }}>
+                  📹 Video {d.feeVideo ? `₹${d.feeVideo}` : ""}
+                </Typography>
+              )}
+              {d.consultModes?.inPerson && (
+                <Typography variant="caption" sx={{ bgcolor: "#0C5A3E", color: "#fff", px: 1, py: 0.3, borderRadius: 1, fontWeight: 700 }}>
+                  🏥 In-Person {d.feeInPerson ? `₹${d.feeInPerson}` : ""}
+                </Typography>
+              )}
+            </Stack>
+
+            {/* ── Bank / Payout Details ── */}
+            {(d.payoutDetails?.accountHolderName || d.payoutDetails?.bankName) && (
+              <Box sx={{ mt: 1, p: 1, bgcolor: "#1a1e21", borderRadius: 1, border: "1px solid #333" }}>
+                <Typography variant="caption" sx={{ color: "#999", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1 }}>
+                  Bank Details
+                </Typography>
+                <Typography variant="body2" sx={{ color: "#eee", mt: 0.3 }}>
+                  {d.payoutDetails.accountHolderName || "-"} • {d.payoutDetails.bankName || "-"} • IFSC: {d.payoutDetails.ifsc || "-"} • A/C: ****{d.payoutDetails.accountNumberLast4 || d.payoutDetails.accountNumber?.slice(-4) || "-"}
+                </Typography>
+              </Box>
+            )}
+
+            {/* ── Bio ── */}
+            {d.bio && (
+              <Typography variant="body2" sx={{ color: "#aaa", mt: 1, fontStyle: "italic" }}>
+                "{d.bio}"
+              </Typography>
+            )}
+
+            {/* ── Documents ── */}
             <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
               {[
-                ["Registration Certificate", d?.documents?.registrationCertificateUrl],
+                ["Reg. Certificate", d?.documents?.registrationCertificateUrl],
                 ["MBBS Degree", d?.documents?.mbbsDegreeUrl],
                 ["Specialist Degree", d?.documents?.specialistDegreeUrl],
                 ["PAN", d?.documents?.panUrl],
                 ["Bank Proof", d?.documents?.bankProofUrl],
                 ["Clinic Proof", d?.documents?.clinicProofUrl],
+                ["Profile Photo", d?.documents?.profilePhotoUrl || d?.profilePhotoUrl],
               ]
                 .filter((x) => !!x[1])
                 .map(([label, url]) => (
-                  <Button key={label} size="small" variant="text" component="a" href={url} target="_blank" rel="noreferrer">
-                    {label}
+                  <Button key={label} size="small" variant="text" component="a" href={url} target="_blank" rel="noreferrer"
+                    sx={{ fontSize: 11, textTransform: "none", color: "#13C0A2" }}>
+                    📄 {label}
                   </Button>
                 ))}
             </Stack>
+
+            {/* ── Admin Note + Actions ── */}
             <TextField
               fullWidth
               size="small"
               sx={{ mt: 1 }}
               value={notesByDoctor[d.id] || d.verificationNotes || ""}
               onChange={(e) => setNotesByDoctor((p) => ({ ...p, [d.id]: e.target.value }))}
-              label="Review note"
+              label="Review note (will be emailed to doctor)"
             />
             <Typography variant="caption" sx={{ color: "#8AA", mt: 0.5 }}>
               Reviewed At: {d?.verificationReviewedAt ? new Date(d.verificationReviewedAt).toLocaleString() : "-"}
             </Typography>
             <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
               {["approved", "rejected", "needs_more_info", "suspended", "pending_verification"].map((s) => (
-                <Button key={s} size="small" variant="outlined" disabled={busy === `${d.id}-${s}`} onClick={() => setStatus(d.id, s)}>
+                <Button key={s} size="small" variant="outlined" disabled={busy === `${d.id}-${s}`} onClick={() => setStatus(d.id, s)}
+                  sx={{
+                    fontSize: 11,
+                    textTransform: "none",
+                    borderColor: s === "approved" ? "#10B981" : s === "rejected" ? "#EF4444" : s === "needs_more_info" ? "#F59E0B" : s === "suspended" ? "#8B5CF6" : "#64748B",
+                    color: s === "approved" ? "#10B981" : s === "rejected" ? "#EF4444" : s === "needs_more_info" ? "#F59E0B" : s === "suspended" ? "#8B5CF6" : "#94A3B8",
+                    "&:hover": { bgcolor: "rgba(255,255,255,.05)" },
+                  }}>
+                  {s === "approved" ? "✅ " : s === "rejected" ? "❌ " : s === "needs_more_info" ? "📋 " : s === "suspended" ? "⚠️ " : "⏳ "}
                   {s.replace(/_/g, " ")}
                 </Button>
               ))}

@@ -414,7 +414,33 @@ export default function DoctorRegister() {
   /* ═══════════════════ RENDER ═══════════════════ */
   return (
     <div style={S.page}>
-      <div style={S.wrap}>
+      {/* Dark theme for native select/option dropdowns */}
+      <style>{`
+        .godavaii-reg select option {
+          background: #0F1F1A;
+          color: #E2E8F0;
+          padding: 8px 12px;
+          font-weight: 700;
+        }
+        .godavaii-reg select option:checked {
+          background: #13C0A2;
+          color: #fff;
+        }
+        .godavaii-reg select option:hover {
+          background: #1A3A2F;
+        }
+        .godavaii-reg select:focus {
+          border-color: rgba(13,192,162,.5);
+          box-shadow: 0 0 0 2px rgba(13,192,162,.15);
+        }
+        .godavaii-reg input:focus {
+          border-color: rgba(13,192,162,.5);
+        }
+        .godavaii-reg input[type="date"]::-webkit-calendar-picker-indicator {
+          filter: invert(0.7);
+        }
+      `}</style>
+      <div className="godavaii-reg" style={S.wrap}>
         {/* ── Hero ── */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={S.hero}>
           <div style={S.heroIcon}>
@@ -572,7 +598,7 @@ export default function DoctorRegister() {
                   </div>
                   <div style={S.fieldGroup}>
                     <label style={S.smallLabel}>Gender *</label>
-                    <select style={S.input} value={form.gender} onChange={(e) => patch("gender", e.target.value)}>
+                    <select style={S.select} value={form.gender} onChange={(e) => patch("gender", e.target.value)}>
                       <option value="">Select</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
@@ -587,7 +613,7 @@ export default function DoctorRegister() {
                 <div style={S.row2equal}>
                   <div style={S.fieldGroup}>
                     <label style={S.smallLabel}>Specialty *</label>
-                    <select style={S.input} value={form.specialty} onChange={(e) => patch("specialty", e.target.value)}>
+                    <select style={S.select} value={form.specialty} onChange={(e) => patch("specialty", e.target.value)}>
                       {SPECIALTIES.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
@@ -678,7 +704,7 @@ export default function DoctorRegister() {
 
                 <div style={S.fieldGroup}>
                   <label style={S.smallLabel}>Slot Duration</label>
-                  <select style={S.input} value={form.slotDurationMins} onChange={(e) => patch("slotDurationMins", e.target.value)}>
+                  <select style={S.select} value={form.slotDurationMins} onChange={(e) => patch("slotDurationMins", e.target.value)}>
                     <option value="10">10 min</option>
                     <option value="15">15 min</option>
                     <option value="20">20 min</option>
@@ -703,7 +729,7 @@ export default function DoctorRegister() {
                 <div style={S.row2equal}>
                   <div style={S.fieldGroup}>
                     <label style={S.smallLabel}>State Medical Council *</label>
-                    <select style={S.input} value={form.smcName} onChange={(e) => patch("smcName", e.target.value)}>
+                    <select style={S.select} value={form.smcName} onChange={(e) => patch("smcName", e.target.value)}>
                       <option value="">Select Council</option>
                       {SMC_COUNCILS.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
@@ -1032,6 +1058,30 @@ const S = {
     color: "#E2E8F0",
     transition: "border-color .2s",
     boxSizing: "border-box",
+  },
+  // Select (dark-themed dropdown)
+  select: {
+    width: "100%",
+    height: 40,
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,.1)",
+    padding: "0 12px",
+    fontSize: 13,
+    fontWeight: 700,
+    outline: "none",
+    background: "#0F1F1A",
+    color: "#E2E8F0",
+    transition: "border-color .2s",
+    boxSizing: "border-box",
+    WebkitAppearance: "none",
+    MozAppearance: "none",
+    appearance: "none",
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' stroke='%2313C0A2' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "right 12px center",
+    backgroundSize: "12px",
+    paddingRight: 30,
+    cursor: "pointer",
   },
   inputIcon: {
     position: "absolute",

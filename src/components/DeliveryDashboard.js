@@ -363,6 +363,7 @@ export default function DeliveryDashboard() {
   const firstLoad = useRef(true);
   const unreadTimerRef = useRef(null);
   const inflightRef = useRef(false); // <<< prevent overlapping polls
+  const toggleInflightRef = useRef(false); // <<< prevent polling from overwriting active toggle
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [loginDialog, setLoginDialog] = useState(!loggedIn);
   const [loginForm, setLoginForm] = useState({ mobile: "", password: "" });
@@ -622,7 +623,10 @@ export default function DeliveryDashboard() {
 
     // basic state set from API
     setPartner(resProfile.data.partner || {});
-    setActive(resProfile.data.partner?.active || false);
+    // Only update active from server if no toggle is in-flight (prevents revert)
+    if (!toggleInflightRef.current) {
+      setActive(resProfile.data.partner?.active || false);
+    }
     const activeOrders = resOrders.data || [];
     setOrders(activeOrders);
     setPastOrders(resProfile.data.pastOrders || []);
@@ -995,16 +999,38 @@ export default function DeliveryDashboard() {
                 checked={active}
                 onCheckedChange={async (next) => {
                   setActive(next);
+                  toggleInflightRef.current = true;
                   const token = localStorage.getItem("deliveryToken");
-                  if (navigator.geolocation && next) {
-                    navigator.geolocation.getCurrentPosition((pos) => {
-                      axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
-                        { active: next, lat: pos.coords.latitude, lng: pos.coords.longitude },
-                        { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
-                    });
-                  } else {
-                    await axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
-                      { active: next }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+                  try {
+                    if (navigator.geolocation && next) {
+                      await new Promise((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(
+                          async (pos) => {
+                            try {
+                              await axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
+                                { active: next, lat: pos.coords.latitude, lng: pos.coords.longitude },
+                                { headers: { Authorization: `Bearer ${token}` } });
+                              resolve();
+                            } catch (e) { reject(e); }
+                          },
+                          () => {
+                            // geolocation denied — still toggle without coords
+                            axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
+                              { active: next }, { headers: { Authorization: `Bearer ${token}` } })
+                              .then(resolve).catch(reject);
+                          },
+                          { timeout: 5000 }
+                        );
+                      });
+                    } else {
+                      await axios.patch(`${API_BASE_URL}/api/delivery/partner/${partner._id}/active`,
+                        { active: next }, { headers: { Authorization: `Bearer ${token}` } });
+                    }
+                  } catch {
+                    // revert on failure
+                    setActive(!next);
+                  } finally {
+                    toggleInflightRef.current = false;
                   }
                 }}
               />
