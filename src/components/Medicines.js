@@ -318,7 +318,7 @@ const MedCard = React.memo(function MedCard({ med, canDeliver, onTap, onAdd }) {
 
         {med.stock > 0 && (
           <div style={{ fontSize: 9, color: "#059669", fontWeight: 700, display: "flex", alignItems: "center", gap: 3, marginBottom: 2, background: "rgba(209,250,229,0.5)", padding: "1px 6px", borderRadius: 100, width: "fit-content" }}>
-            <span style={{ fontSize: 8 }}>📍</span> Available near you
+            <span style={{ fontSize: 8 }}>📍</span> Best price nearby
           </div>
         )}
         <div

@@ -904,6 +904,9 @@ export default function AdminDashboard() {
   const [rxAnalytics, setRxAnalytics] = useState(null);
   const [rxQueueBusy, setRxQueueBusy] = useState("");
   const [rxAssignByOrder, setRxAssignByOrder] = useState({});
+  // --- Price Override Approvals ---
+  const [priceOverrides, setPriceOverrides] = useState([]);
+  const [priceOverrideBusy, setPriceOverrideBusy] = useState("");
   // --- ONLY CHANGE: Expanded Order Dialog ---
   const [expandedOrder, setExpandedOrder] = useState(null);
 
@@ -958,6 +961,34 @@ export default function AdminDashboard() {
     const interval = setInterval(loadRxOps, 8000);
     return () => clearInterval(interval);
   }, [token]);
+
+  // Fetch pending price overrides
+  useEffect(() => {
+    if (!token) return;
+    const headers = { Authorization: `Bearer ${token}` };
+    const load = () => axios.get(`${API_BASE_URL}/api/pharmacies/price-overrides/pending`, { headers })
+      .then(r => setPriceOverrides(Array.isArray(r.data) ? r.data : []))
+      .catch(() => {});
+    load();
+    const iv = setInterval(load, 10000);
+    return () => clearInterval(iv);
+  }, [token]);
+
+  const handlePriceOverride = async (id, action, scope) => {
+    setPriceOverrideBusy(id);
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      await axios.patch(`${API_BASE_URL}/api/pharmacies/price-overrides/${id}/${action}`,
+        action === "approve" ? { scope } : {},
+        { headers }
+      );
+      setPriceOverrides(prev => prev.filter(o => o._id !== id));
+    } catch (e) {
+      alert(e?.response?.data?.error || "Failed");
+    } finally {
+      setPriceOverrideBusy("");
+    }
+  };
 
   const handleRxRouteNow = async (order) => {
     if (!order?._id) return;
@@ -1208,6 +1239,7 @@ export default function AdminDashboard() {
 <Tab label={`Rx Review (${rxReviewQueue.length})`} />
 <Tab label="Control Tower" />
 <Tab label="Incidents" />
+<Tab label={`Price Overrides${priceOverrides.length ? ` (${priceOverrides.length})` : ""}`} />
           </Tabs>
         </Box>
 
@@ -1653,6 +1685,76 @@ export default function AdminDashboard() {
 {/* ------------- INCIDENTS TAB ------------- */}
 {activeTab === 12 && (
   <AdminIncidentManager token={token} />
+)}
+
+{/* ------------- PRICE OVERRIDES TAB ------------- */}
+{activeTab === 13 && (
+  <Box>
+    <Typography variant="h6" mb={2}>Pharmacy Price Override Requests</Typography>
+    {priceOverrides.length === 0 ? (
+      <Typography sx={{ color: "#aaa" }}>No pending price override requests.</Typography>
+    ) : (
+      <Stack spacing={2}>
+        {priceOverrides.map(ov => {
+          const master = ov.medicineMasterId || {};
+          const pharmacy = ov.pharmacyId || {};
+          return (
+            <Card key={ov._id} sx={{ p: 2, bgcolor: "#23272a", borderRadius: 2 }}>
+              <Stack spacing={1}>
+                <Typography fontWeight={700}>{master.name || master.brand || "Unknown Medicine"}</Typography>
+                <Typography variant="body2" sx={{ color: "#aaa" }}>
+                  {master.brand && `Brand: ${master.brand} · `}{master.composition || ""}
+                </Typography>
+                <Typography variant="body2" sx={{ color: "#90caf9" }}>
+                  Pharmacy: {pharmacy.name || "?"} ({pharmacy.area || pharmacy.city || ""})
+                </Typography>
+                <Stack direction="row" spacing={3} alignItems="center">
+                  <Box>
+                    <Typography variant="caption" sx={{ color: "#aaa" }}>Master Price</Typography>
+                    <Typography fontWeight={700} sx={{ color: "#4caf50" }}>₹{master.price} (MRP ₹{master.mrp})</Typography>
+                  </Box>
+                  <Typography sx={{ color: "#FFD43B", fontSize: 20 }}>→</Typography>
+                  <Box>
+                    <Typography variant="caption" sx={{ color: "#aaa" }}>Requested Price</Typography>
+                    <Typography fontWeight={700} sx={{ color: "#ff9800" }}>₹{ov.requestedPrice} (MRP ₹{ov.requestedMrp})</Typography>
+                  </Box>
+                </Stack>
+                <Stack direction="row" spacing={1} mt={1}>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    color="success"
+                    disabled={priceOverrideBusy === ov._id}
+                    onClick={() => handlePriceOverride(ov._id, "approve", "pharmacy_only")}
+                  >
+                    Approve (This Pharmacy Only)
+                  </Button>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    sx={{ bgcolor: "#1976d2" }}
+                    disabled={priceOverrideBusy === ov._id}
+                    onClick={() => handlePriceOverride(ov._id, "approve", "master_catalog")}
+                  >
+                    Approve & Update Master Catalog
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    color="error"
+                    disabled={priceOverrideBusy === ov._id}
+                    onClick={() => handlePriceOverride(ov._id, "reject")}
+                  >
+                    Reject
+                  </Button>
+                </Stack>
+              </Stack>
+            </Card>
+          );
+        })}
+      </Stack>
+    )}
+  </Box>
 )}
 
         </Box>
