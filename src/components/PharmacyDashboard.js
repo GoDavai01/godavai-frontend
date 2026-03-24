@@ -1153,6 +1153,10 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
     setLoading(false);
   };
 
+  // Hooks MUST be above all conditional returns
+  const catalogTimerRef = useRef(null);
+  const [priceOverride, setPriceOverride] = useState({});
+
   if (!token) {
     return (
       <ThemeProvider theme={appTheme}>
@@ -1209,7 +1213,6 @@ const processingOrders = orders.filter(o => o.status === 1 || o.status === "proc
   const totalEarnings = payouts.reduce((s, p) => s + (p.pharmacyAmount || 0), 0);
 
   // Master catalog: auto-load on tab switch + search-as-you-type
-  const catalogTimerRef = useRef(null);
   const handleCatalogSearch = (q) => {
     setCatalogQ(q);
     if (catalogTimerRef.current) clearTimeout(catalogTimerRef.current);
@@ -1218,8 +1221,7 @@ const processingOrders = orders.filter(o => o.status === 1 || o.status === "proc
     }, 350);
   };
 
-  // Price override state for quick-add
-  const [priceOverride, setPriceOverride] = useState({});
+  // Price override quick-add handler
   const addToInventoryWithPrice = async (m) => {
     const override = priceOverride[m._id];
     try {
