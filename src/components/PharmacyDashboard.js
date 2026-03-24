@@ -2,10 +2,10 @@
 import React, { useEffect, useState, useRef } from "react";
 import {
   Box, Typography, Button, Card, CardContent, TextField, Stack, Chip,
-  Snackbar, Alert, ThemeProvider, createTheme, CssBaseline, Divider, IconButton,
-  MenuItem, Select, InputLabel, FormControl, Dialog, DialogTitle, DialogContent,
+  Snackbar, Alert, ThemeProvider, createTheme, CssBaseline, IconButton,
+  MenuItem, Select, InputLabel, FormControl, Dialog, DialogContent,
   DialogActions, Switch, Table, TableHead, TableRow, TableCell, TableBody,
-  Tabs, Tab, Checkbox, ListItemText, ToggleButton, ToggleButtonGroup
+  Checkbox, ListItemText, ToggleButton, ToggleButtonGroup
 } from "@mui/material";
 // eslint-disable-next-line no-unused-vars
 import Autocomplete from "@mui/material/Autocomplete";
@@ -31,11 +31,10 @@ import {
   Wallet,
   FileDown,
   BadgeCheck,
-  Loader2,
   LogOut
 } from "lucide-react";
 
-// Minimal shadcn usage (hero card wrapper) – no logic changed
+// eslint-disable-next-line no-unused-vars
 import { Card as SCard, CardHeader as SCardHeader, CardTitle as SCardTitle, CardContent as SCardContent } from "./ui/card";
 
 import stringSimilarity from "string-similarity";
@@ -498,27 +497,7 @@ export default function PharmacyDashboard() {
     // eslint-disable-next-line
   }, [token, tab]);
 
-  const addToInventory = async (m) => {
-    try {
-      setInvMsg("Adding...");
-      await axios.post(
-        `${API_BASE_URL}/api/pharmacies/inventory/add`,
-        {
-          medicineMasterId: m._id,
-          sellingPrice: m.price || 0, // default from master
-          mrp: m.mrp || 0,
-          discount: m.discount || 0,
-          stockQty: 1,
-          images: [], // empty means use master images
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setInvMsg("✅ Added to inventory!");
-      fetchInventory();
-    } catch (e) {
-      setInvMsg(e?.response?.data?.error || "❌ Failed to add.");
-    }
-  };
+  // addToInventory replaced by addToInventoryWithPrice (with price override support)
 
   const updateInventory = async (invId, patch) => {
     try {
@@ -1209,7 +1188,6 @@ const GD = "#065f46";
 const GDL = "#059669";
 const GDB = "#064e3b";
 const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0 || o.status === "pending");
-const processingOrders = orders.filter(o => o.status === 1 || o.status === "processing");
   const totalEarnings = payouts.reduce((s, p) => s + (p.pharmacyAmount || 0), 0);
 
   // Master catalog: auto-load on tab switch + search-as-you-type
