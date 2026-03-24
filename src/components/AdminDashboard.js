@@ -9,6 +9,8 @@ import { Visibility, Delete, LocalPharmacy, NotificationsNone, DirectionsRun } f
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import axios from "axios";
 import MedicineMasterAdmin from "./MedicineMasterAdmin";
+import AdminControlTower from "./AdminControlTower";
+import AdminIncidentManager from "./AdminIncidentManager";
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
@@ -1204,6 +1206,8 @@ export default function AdminDashboard() {
 <Tab label="Lab Partners" />
 <Tab label="Doctors Verification" />
 <Tab label={`Rx Review (${rxReviewQueue.length})`} />
+<Tab label="Control Tower" />
+<Tab label="Incidents" />
           </Tabs>
         </Box>
 
@@ -1639,6 +1643,16 @@ export default function AdminDashboard() {
       </Stack>
     )}
   </Box>
+)}
+
+{/* ------------- CONTROL TOWER TAB ------------- */}
+{activeTab === 11 && (
+  <AdminControlTower token={token} />
+)}
+
+{/* ------------- INCIDENTS TAB ------------- */}
+{activeTab === 12 && (
+  <AdminIncidentManager token={token} />
 )}
 
         </Box>

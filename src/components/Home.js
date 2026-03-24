@@ -2720,7 +2720,14 @@ export default function Home() {
               {lastOrder && (
                 <motion.button
                   whileTap={{ scale: 0.92 }}
-                  onClick={() => navigate("/orders")}
+                  onClick={() => {
+                    if (lastOrder?.items?.length) {
+                      lastOrder.items.forEach(item => {
+                        addToCart({ _id: item._id || item.medicineId, name: item.name || item.medicineName, price: item.price, quantity: item.quantity || 1 });
+                      });
+                      navigate("/cart");
+                    } else { navigate("/orders"); }
+                  }}
                   style={{
                     height: 38,
                     padding: "0 14px",

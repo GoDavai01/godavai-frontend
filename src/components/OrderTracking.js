@@ -34,6 +34,7 @@ import {
 // Existing modals (unchanged)
 import ChatModal from "./ChatModal";
 import ChatSupportModal from "./ChatSupportModal";
+import ReportIncidentModal from "./ReportIncidentModal";
 
 // ⭐ loader-based Maps util
 import { loadGoogleMaps } from "../utils/googleMaps";
@@ -302,6 +303,7 @@ export default function OrderTracking() {
   const [chatPartner, setChatPartner] = useState({ name: "", type: "" });
 
   const [supportChatOpen, setSupportChatOpen] = useState(false);
+  const [reportIncidentOpen, setReportIncidentOpen] = useState(false);
 
   const [eta, setEta] = useState("");
   // eslint-disable-next-line no-unused-vars
@@ -851,6 +853,14 @@ export default function OrderTracking() {
                       <Headset className="h-4 w-4 mr-2" />
                       Contact Support
                     </Button>
+                    <Button
+                      variant="outline"
+                      className="font-semibold"
+                      style={{ borderColor: "#ef4444", color: "#dc2626" }}
+                      onClick={() => setReportIncidentOpen(true)}
+                    >
+                      ⚠️ Report Issue
+                    </Button>
                   </div>
                 </>
               ) : (
@@ -886,6 +896,14 @@ export default function OrderTracking() {
                     >
                       <Headset className="h-4 w-4 mr-2" />
                       Contact Support
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="font-semibold"
+                      style={{ borderColor: "#ef4444", color: "#dc2626" }}
+                      onClick={() => setReportIncidentOpen(true)}
+                    >
+                      ⚠️ Report Issue
                     </Button>
                   </div>
                   {order.dosage && (
@@ -1052,6 +1070,14 @@ export default function OrderTracking() {
                         Contact Support
                       </Button>
                       <Button
+                        variant="outline"
+                        className="font-semibold mr-2"
+                        style={{ borderColor: "#ef4444", color: "#dc2626" }}
+                        onClick={() => setReportIncidentOpen(true)}
+                      >
+                        ⚠️ Report Issue
+                      </Button>
+                      <Button
                         disabled={!(pharmacyRating && deliveryRating && deliveryBehavior.length > 0) || ratingSubmitting}
                         onClick={handleRatingSubmit}
                         className="font-black text-base px-6 py-5 rounded-xl shadow"
@@ -1153,6 +1179,14 @@ export default function OrderTracking() {
 
       {/* Support chat */}
       <ChatSupportModal open={supportChatOpen} onClose={() => setSupportChatOpen(false)} orderId={order._id} />
+
+      {/* Report Incident */}
+      <ReportIncidentModal
+        open={reportIncidentOpen}
+        onClose={() => setReportIncidentOpen(false)}
+        orderId={order._id}
+        token={getToken()}
+      />
 
       {/* Inline toast */}
       <InlineToast

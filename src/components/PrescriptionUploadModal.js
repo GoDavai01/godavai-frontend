@@ -856,8 +856,20 @@ export default function PrescriptionUploadModal({
                   We found these medicines from your prescription.
                 </div>
                 {estimatedRange && (
-                  <div className="rounded-lg border px-3 py-2 text-sm font-semibold" style={{ borderColor: `${DEEP}33`, color: DEEP }}>
-                    {estimatedRange}
+                  <div className="rounded-2xl p-4 relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${DEEP}0A, ${DEEP}14)`, border: `1px solid ${DEEP}1A` }}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span style={{ fontSize: 14 }}>💰</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: DEEP }}>Estimated Total</span>
+                    </div>
+                    <div className="text-2xl font-bold" style={{ color: DEEP }}>
+                      {order?.estimatedPricing?.minTotal && order?.estimatedPricing?.maxTotal
+                        ? `₹${order.estimatedPricing.minTotal.toLocaleString("en-IN")} – ₹${order.estimatedPricing.maxTotal.toLocaleString("en-IN")}`
+                        : estimatedRange}
+                    </div>
+                    <p className="text-[11px] mt-1" style={{ color: "#6B7280" }}>
+                      Final price will be confirmed by pharmacy before packing
+                    </p>
+                    <div className="absolute -right-4 -bottom-4 w-16 h-16 rounded-full" style={{ background: `${DEEP}08` }} />
                   </div>
                 )}
 

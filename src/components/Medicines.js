@@ -316,19 +316,24 @@ const MedCard = React.memo(function MedCard({ med, canDeliver, onTap, onAdd }) {
           {med.brand || med.name}
         </div>
 
+        {med.stock > 0 && (
+          <div style={{ fontSize: 9, color: "#059669", fontWeight: 700, display: "flex", alignItems: "center", gap: 3, marginBottom: 2, background: "rgba(209,250,229,0.5)", padding: "1px 6px", borderRadius: 100, width: "fit-content" }}>
+            <span style={{ fontSize: 8 }}>📍</span> Available near you
+          </div>
+        )}
         <div
           style={{
-            fontSize: 10,
-            color: "#059669",
-            fontWeight: 600,
+            fontSize: 9,
+            color: "#6B7280",
+            fontWeight: 500,
             display: "flex",
             alignItems: "center",
             gap: 3,
             marginBottom: 6,
           }}
         >
-          <ShieldCheck style={{ width: 10, height: 10 }} />
-          Fulfilled by GoDavaii
+          <ShieldCheck style={{ width: 9, height: 9, color: "#059669" }} />
+          Fulfilled by verified pharmacy partner
         </div>
 
         <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 10 }}>

@@ -22,6 +22,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import BrandAutocomplete from "./fields/BrandAutocomplete";
 import CompositionAutocomplete from "./fields/CompositionAutocomplete";
 import { postSuggestLearn } from "../api/suggest";
+import PharmacySettlementTab from "./PharmacySettlementTab";
 
 import { motion } from "framer-motion";
 import {
@@ -1229,7 +1230,8 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
         >
           <Tab label="Overview" />
           <Tab label="Earnings" />
-          <Tab label="Medicines" /> {/* NEW */}
+          <Tab label="Medicines" />
+          <Tab label="Settlement" />
         </Tabs>
 
         {/* ================== OVERVIEW TAB ================== */}
@@ -1474,55 +1476,67 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
                       {/* Status Actions */}
                       <Box sx={{ mt: 2 }}>
                         {(order.status === "placed" || order.status === 0 || order.status === "pending") && (
-                          <Stack direction="row" spacing={2}>
-                            <Button
-                              size="small"
-                              variant="contained"
-                              className="rounded-xl"
-                              sx={{
-                                bgcolor: "#065f46",
-                                color: "white",
-                                fontWeight: 800,
-                                "&:hover": { bgcolor: "#064e3b" }
-                              }}
-                              onClick={() => handleCatalogDecision(order, "full")}
-                              disabled={loading}
-                            >
-                              FULL CONFIRM
-                            </Button>
+                          <>
+                            {/* Quick Info Bar */}
+                            <Box sx={{ display: "flex", gap: 1.5, mb: 1.5, flexWrap: "wrap", alignItems: "center" }}>
+                              <Chip size="small" icon={<Pill size={14} />} label={`${order.items?.length || 0} items`} sx={{ bgcolor: "#ecfdf5", color: "#065f46", fontWeight: 700 }} />
+                              {order.address?.area && (
+                                <Chip size="small" icon={<MapPin size={14} />} label={order.address.area} sx={{ bgcolor: "#f0f9ff", color: "#0369a1", fontWeight: 600 }} />
+                              )}
+                              <Chip size="small" icon={<Wallet size={14} />} label={`Est. ₹${Math.round((order.total || 0) * 0.84)} payout`} sx={{ bgcolor: "#fef9c3", color: "#92400e", fontWeight: 700 }} />
+                            </Box>
+                            <Stack direction="row" spacing={1.5}>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                className="rounded-xl"
+                                sx={{
+                                  flex: 1,
+                                  bgcolor: "#065f46",
+                                  color: "white",
+                                  fontWeight: 800,
+                                  py: 1,
+                                  "&:hover": { bgcolor: "#064e3b" }
+                                }}
+                                onClick={() => handleCatalogDecision(order, "full")}
+                                disabled={loading}
+                              >
+                                ✅ FULL CONFIRM
+                              </Button>
 
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              className="rounded-xl"
-                              sx={{
-                                borderColor: "#065f46",
-                                color: "#065f46",
-                                fontWeight: 800,
-                                "&:hover": { borderColor: "#064e3b", color: "#064e3b" }
-                              }}
-                              onClick={() => handleCatalogDecision(order, "partial")}
-                              disabled={loading}
-                            >
-                              PARTIAL
-                            </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                className="rounded-xl"
+                                sx={{
+                                  borderColor: "#065f46",
+                                  color: "#065f46",
+                                  fontWeight: 800,
+                                  py: 1,
+                                  "&:hover": { borderColor: "#064e3b", color: "#064e3b" }
+                                }}
+                                onClick={() => handleCatalogDecision(order, "partial")}
+                                disabled={loading}
+                              >
+                                PARTIAL
+                              </Button>
 
-                            <Button
-                              size="small"
-                              variant="contained"
-                              className="rounded-xl"
-                              sx={{
-                                bgcolor: "#dc2626",
-                                color: "white",
-                                fontWeight: 800,
-                                "&:hover": { bgcolor: "#b91c1c" }
-                              }}
-                              onClick={() => handleCatalogDecision(order, "unavailable")}
-                              disabled={loading}
-                            >
-                              UNAVAILABLE
-                            </Button>
-                          </Stack>
+                              <Button
+                                size="small"
+                                variant="text"
+                                className="rounded-xl"
+                                sx={{
+                                  color: "#dc2626",
+                                  fontWeight: 700,
+                                  "&:hover": { bgcolor: "#fef2f2" }
+                                }}
+                                onClick={() => handleCatalogDecision(order, "unavailable")}
+                                disabled={loading}
+                              >
+                                Skip
+                              </Button>
+                            </Stack>
+                          </>
                         )}
                         {(order.status === 1 || order.status === "processing") && (
                           <Chip label="Processing" color="primary" className="mt-2 font-bold" sx={{ pointerEvents: "none" }} />
@@ -2123,6 +2137,11 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
               </CardContent>
             </Card>
           </Box>
+        )}
+
+        {/* ================== SETTLEMENT TAB ================== */}
+        {tab === 3 && (
+          <PharmacySettlementTab token={token} />
         )}
 
         {/* Snackbars */}
