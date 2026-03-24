@@ -106,6 +106,10 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
   // New-order alert state
   const [newOrderAlert, setNewOrderAlert] = useState(null); // the order to show in dialog
 
+  // Pagination
+  const [rxPage, setRxPage] = useState(1);
+  const RX_PER_PAGE = 10;
+
   // Keep a stable set of already seen order ids (across re-renders)
   const seenRef = React.useRef(new Set(JSON.parse(localStorage.getItem(seenKey) || "[]")));
 
@@ -384,7 +388,7 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
 
   return (
     <Box sx={{ mb: 4 }}>
-      {orders.map((order) => {
+      {orders.slice(0, rxPage * RX_PER_PAGE).map((order) => {
         const quoteTimer = timers[order._id] ?? 0;
         const acceptTimer = getSecondsLeft(order.acceptExpiry);
         const isRejected = order.status === "cancelled" || order.userResponse === "rejected";
@@ -632,6 +636,20 @@ export default function PrescriptionOrdersTab({ token, medicines }) {
           </Card>
         );
       })}
+
+      {/* Load More */}
+      {orders.length > rxPage * RX_PER_PAGE && (
+        <Box sx={{ textAlign: "center", mt: 2, mb: 2 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => setRxPage(p => p + 1)}
+            sx={{ borderRadius: 3, fontWeight: 700, fontSize: 12, borderColor: BRAND_GREEN, color: BRAND_GREEN }}
+          >
+            Load More ({orders.length - rxPage * RX_PER_PAGE} remaining)
+          </Button>
+        </Box>
+      )}
 
       {/* --- AcceptDialog (All Available) --- */}
       <Dialog open={acceptDialogOpen} onClose={() => setAcceptDialogOpen(false)} maxWidth="sm" fullWidth>
