@@ -1741,18 +1741,19 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                             {it.priceOverrideStatus === "rejected" && (
                               <Typography sx={{ fontSize: 9, fontWeight: 800, color: "#dc2626", bgcolor: "#fee2e2", display: "inline-block", px: 1, py: 0.2, borderRadius: 2, mt: 0.4 }}>
                                 Override rejected — catalog price
-                            </Typography>
-                          )}
-                        </Box>
-                        <Stack direction="row" spacing={0.5}>
-                          <motion.button whileTap={{ scale: 0.9 }} onClick={() => openEditInventory(it)}
-                            style={{ padding: "5px 12px", borderRadius: 8, border: `1.5px solid ${GD}30`, background: "#fff", color: GD, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                            Edit
-                          </motion.button>
-                          <motion.button whileTap={{ scale: 0.9 }} onClick={() => removeFromInventory(it._id)}
-                            style={{ padding: "5px 10px", borderRadius: 8, border: "1.5px solid #fecaca", background: "#fff", color: "#dc2626", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                            Remove
-                          </motion.button>
+                              </Typography>
+                            )}
+                          </Box>
+                          <Stack direction="row" spacing={0.5}>
+                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => openEditInventory(it)}
+                              style={{ padding: "5px 12px", borderRadius: 8, border: `1.5px solid ${GD}30`, background: "#fff", color: GD, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                              Edit
+                            </motion.button>
+                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => removeFromInventory(it._id)}
+                              style={{ padding: "5px 10px", borderRadius: 8, border: "1.5px solid #fecaca", background: "#fff", color: "#dc2626", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                              Remove
+                            </motion.button>
+                          </Stack>
                         </Stack>
                       </Box>
                     ))}
