@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -40,7 +40,13 @@ export default function AdminControlTower({ token }) {
   const [search, setSearch] = useState("");
   const [expandedOrder, setExpandedOrder] = useState(null);
 
-  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const headers = useMemo(
+  () => ({
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  }),
+  [token]
+);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -56,7 +62,7 @@ export default function AdminControlTower({ token }) {
       }
     } catch (err) { console.error("Control tower fetch error:", err); }
     setLoading(false);
-  }, [activeTab, page, search, token]);
+  }, [activeTab, page, search, headers]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
   useEffect(() => { const iv = setInterval(fetchOrders, 15000); return () => clearInterval(iv); }, [fetchOrders]);

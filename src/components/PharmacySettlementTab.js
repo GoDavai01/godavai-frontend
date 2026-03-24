@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -16,7 +16,13 @@ export default function PharmacySettlementTab({ token, pharmacyId }) {
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState("overview");
 
-  const headers = { Authorization: `Bearer ${token}`, pharmacyid: pharmacyId || "" };
+  const headers = useMemo(
+  () => ({
+    Authorization: `Bearer ${token}`,
+    pharmacyid: pharmacyId || "",
+  }),
+  [token, pharmacyId]
+);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -31,7 +37,7 @@ export default function PharmacySettlementTab({ token, pharmacyId }) {
       if (perfData.ok) setPerformance(perfData.performance);
     } catch (err) { console.error("Settlement fetch error:", err); }
     setLoading(false);
-  }, [period, token, pharmacyId]);
+  }, [period, headers]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

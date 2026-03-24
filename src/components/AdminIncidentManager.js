@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
@@ -54,7 +54,13 @@ export default function AdminIncidentManager({ token }) {
   const [resolveForm, setResolveForm] = useState({});
   const [view, setView] = useState("list");
 
-  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const headers = useMemo(
+  () => ({
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  }),
+  [token]
+);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -73,7 +79,7 @@ export default function AdminIncidentManager({ token }) {
       if (statsData.ok) setStats(statsData.stats);
     } catch (err) { console.error("Incident fetch error:", err); }
     setLoading(false);
-  }, [page, filter, token]);
+  }, [page, filter, headers]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
