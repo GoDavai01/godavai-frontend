@@ -348,6 +348,8 @@ export default function MyOrdersPage() {
   const [activeTab, setActiveTab] = useState("all");
   const [myConsults, setMyConsults] = useState([]);
   const [consultsLoading, setConsultsLoading] = useState(false);
+  const [myIncidents, setMyIncidents] = useState([]);
+  const [incidentsLoading, setIncidentsLoading] = useState(false);
 
   // ── IDENTICAL EFFECTS ──────────────────────────────────────
   useEffect(() => {
@@ -377,6 +379,17 @@ export default function MyOrdersPage() {
         .catch(() => {});
     }, 20000);
     return () => clearInterval(pollConsults);
+  }, [userId]);
+
+  // Fetch customer incidents
+  useEffect(() => {
+    const t = localStorage.getItem("token");
+    if (!t) return;
+    setIncidentsLoading(true);
+    axios.get(`${API_BASE_URL}/api/incidents/mine`, { headers: { Authorization: `Bearer ${t}` } })
+      .then((r) => setMyIncidents(Array.isArray(r?.data?.incidents) ? r.data.incidents : []))
+      .catch(() => setMyIncidents([]))
+      .finally(() => setIncidentsLoading(false));
   }, [userId]);
 
   const fetchOrders = async () => {
@@ -996,6 +1009,7 @@ export default function MyOrdersPage() {
             { key: "active", label: "Active", count: activeOrders.length },
             { key: "consults", label: "Consults", count: myConsults.filter(c => c.status !== "pending_payment").length },
             { key: "past",   label: "Past",   count: pastOrders.length },
+            { key: "incidents", label: "Issues", count: myIncidents.length },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -1193,6 +1207,52 @@ export default function MyOrdersPage() {
                           </motion.button>
                         )}
                       </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )
+        ) : activeTab === "incidents" ? (
+          /* ═══ INCIDENTS TAB ═══ */
+          incidentsLoading ? (
+            <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: "#94A3B8", fontWeight: 700 }}>Loading issues...</div>
+          ) : myIncidents.length === 0 ? (
+            <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} style={{ textAlign: "center", padding: "60px 20px" }}>
+              <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }} style={{ fontSize: 64, marginBottom: 14 }}>✅</motion.div>
+              <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 18, fontWeight: 900, color: "#0B1F16", marginBottom: 8 }}>No issues reported</div>
+              <div style={{ fontSize: 13, color: "#94A3B8", lineHeight: 1.6 }}>If you face any issue with an order, you can report it from the order tracking page.</div>
+            </motion.div>
+          ) : (
+            <div style={{ paddingBottom: 8 }}>
+              {myIncidents.map((inc) => {
+                const sevColor = { critical: "#DC2626", high: "#EA580C", medium: "#D97706", low: "#65A30D" }[inc.severity] || "#6B7280";
+                const sevBg = { critical: "#FEF2F2", high: "#FFF7ED", medium: "#FFFBEB", low: "#F7FEE7" }[inc.severity] || "#F9FAFB";
+                const statusColor = { open: "#D97706", investigating: "#2563EB", resolved: "#059669", closed: "#6B7280", escalated: "#DC2626" }[inc.status] || "#6B7280";
+                return (
+                  <motion.div key={inc._id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                    style={{ background: "#fff", borderRadius: 20, border: "1.5px solid rgba(12,90,62,0.08)", boxShadow: "0 2px 16px rgba(0,0,0,0.04)", marginBottom: 14, overflow: "hidden" }}>
+                    <div style={{ padding: "16px 18px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 800, color: "#0A1F14", marginBottom: 4 }}>{inc.title || inc.category?.replace(/_/g, " ")}</div>
+                          <div style={{ fontSize: 11, color: "#94A3B8" }}>
+                            {inc.orderId ? `Order #${String(inc.orderId?._id || inc.orderId).slice(-5)}` : ""} · {new Date(inc.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: sevColor, background: sevBg, padding: "3px 10px", borderRadius: 100, textTransform: "uppercase" }}>{inc.severity}</span>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: statusColor, background: "#F8FAFC", border: "1px solid #E2E8F0", padding: "3px 10px", borderRadius: 100, textTransform: "uppercase" }}>{inc.status}</span>
+                        </div>
+                      </div>
+                      {inc.description && <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.5, marginBottom: 8 }}>{inc.description}</div>}
+                      {inc.resolution?.action && (
+                        <div style={{ background: "#F0FDF4", borderRadius: 12, padding: "10px 14px", border: "1px solid #D1FAE5" }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: "#065F46", textTransform: "uppercase", marginBottom: 4 }}>Resolution</div>
+                          <div style={{ fontSize: 12, color: "#065F46", fontWeight: 600 }}>{inc.resolution.action}</div>
+                          {inc.resolution.refundAmount > 0 && <div style={{ fontSize: 11, color: "#047857", marginTop: 4 }}>Refund: ₹{inc.resolution.refundAmount}</div>}
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 );

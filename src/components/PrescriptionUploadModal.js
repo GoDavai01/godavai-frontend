@@ -855,6 +855,19 @@ export default function PrescriptionUploadModal({
                 <div className="text-sm font-semibold" style={{ color: "#0b3f30" }}>
                   We found these medicines from your prescription.
                 </div>
+
+                {/* Mixed basket indicator — cart + prescription merge */}
+                {Array.isArray(cart) && cart.length > 0 && reviewItems.length > 0 && (
+                  <div className="rounded-xl px-3 py-2 flex items-center gap-2 text-xs font-semibold" style={{ background: "#f0fdf4", border: `1px solid ${DEEP}22`, color: DEEP }}>
+                    <span>🛒</span>
+                    <span>{cart.length} from cart</span>
+                    <span style={{ color: "#9ca3af" }}>+</span>
+                    <span>{reviewItems.length} from prescription</span>
+                    <span style={{ color: "#9ca3af" }}>=</span>
+                    <span style={{ fontWeight: 800 }}>{cart.length + reviewItems.length} total items</span>
+                  </div>
+                )}
+
                 {estimatedRange && (
                   <div className="rounded-2xl p-4 relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${DEEP}0A, ${DEEP}14)`, border: `1px solid ${DEEP}1A` }}>
                     <div className="flex items-center gap-2 mb-1">

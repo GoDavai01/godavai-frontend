@@ -731,6 +731,21 @@ export default function OrderTracking() {
               </div>
             </div>
 
+            {/* Pack SLA breach warning — pharmacy taking too long */}
+            {order.exceptionMeta?.packSlaBreached && !["delivered", "out_for_delivery", "cancelled"].includes(String(order.status).toLowerCase()) && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center gap-3"
+              >
+                <Timer className="h-5 w-5 text-amber-600 shrink-0" />
+                <div>
+                  <div className="text-sm font-bold text-amber-800">Packing is taking longer than usual</div>
+                  <div className="text-xs text-amber-600">We've notified the pharmacy — your order will be ready soon.</div>
+                </div>
+              </motion.div>
+            )}
+
             {/* Delivery partner (out for delivery) */}
             {order.status === "out_for_delivery" && (
               <div className="mb-3 rounded-2xl border border-emerald-100 bg-white p-3 flex items-center justify-between shadow-[0_8px_30px_rgb(0,0,0,0.03)]">

@@ -1575,6 +1575,14 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
                     <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
                       Order #{String(incomingOrder._id || incomingOrder.id).slice(-5)}
                     </Typography>
+                    {/* Quick info chips — payout, items, locality */}
+                    <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: "wrap", gap: 0.5 }}>
+                      <Chip size="small" icon={<Pill size={14} />} label={`${incomingOrder.items?.length || 0} items`} sx={{ bgcolor: "#ecfdf5", color: "#065f46", fontWeight: 700 }} />
+                      {incomingOrder.address?.area && (
+                        <Chip size="small" icon={<MapPin size={14} />} label={incomingOrder.address.area} sx={{ bgcolor: "#f0f9ff", color: "#0369a1", fontWeight: 600 }} />
+                      )}
+                      <Chip size="small" icon={<Wallet size={14} />} label={`Est. ₹${Math.round((incomingOrder.total || 0) * 0.84)} payout`} sx={{ bgcolor: "#fef9c3", color: "#92400e", fontWeight: 700 }} />
+                    </Stack>
                     <Typography sx={{ mb: 0.5 }}>
                       <b>Items:</b>{" "}
                       {incomingOrder.items?.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ") || "—"}
