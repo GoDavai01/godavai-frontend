@@ -338,11 +338,12 @@ function Glass({ children, style }) {
   return (
     <div
       style={{
-        background: "rgba(255,255,255,0.84)",
-        border: "1px solid rgba(12,90,62,0.08)",
-        borderRadius: 22,
-        boxShadow: "0 8px 30px rgba(0,0,0,0.05)",
-        backdropFilter: "blur(10px)",
+        background: "rgba(255,255,255,0.92)",
+        border: "1px solid rgba(12,90,62,0.06)",
+        borderRadius: 24,
+        boxShadow: "0 16px 34px rgba(16,24,40,0.05)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
         ...style,
       }}
     >
@@ -583,142 +584,149 @@ function DoctorCard({ doctor, mode, onBook }) {
         ? doctor.customerPriceLabelCall || `Consultation Rs ${fee}`
         : doctor.customerPriceLabelVideo || `Consultation Rs ${fee}`;
 
+  const modeIcons = doctor.consultationModes || doctor.consultModes || {};
+
   return (
-    <Glass style={{ padding: 14, marginBottom: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+    <motion.div
+      whileTap={{ scale: 0.985 }}
+      whileHover={{ y: -2 }}
+      style={{
+        padding: 16,
+        marginBottom: 12,
+        borderRadius: 24,
+        background: "rgba(255,255,255,0.92)",
+        border: "1px solid rgba(12,90,62,0.06)",
+        boxShadow: "0 16px 34px rgba(16,24,40,0.05)",
+        backdropFilter: "blur(20px)",
+        cursor: "pointer",
+      }}
+    >
+      {/* Doctor info row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div
           style={{
-            width: 46,
-            height: 46,
-            borderRadius: 16,
-            background: "linear-gradient(135deg,#E8F5EF,#D1FAE5)",
+            width: 52,
+            height: 52,
+            borderRadius: 18,
+            background: "linear-gradient(135deg,#EEF8F4,#DDF5EA)",
             display: "grid",
             placeItems: "center",
-            fontSize: 18,
             flexShrink: 0,
-            fontWeight: 900,
-            color: DEEP,
+            overflow: "hidden",
           }}
         >
-          DR
+          {doctor.profilePhotoUrl ? (
+            <img src={doctor.profilePhotoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            <Stethoscope style={{ width: 22, height: 22, color: DEEP }} />
+          )}
         </div>
 
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div
-            style={{
-              fontFamily: "'Sora',sans-serif",
-              fontWeight: 900,
-              color: "#0B1F16",
-              fontSize: 14.5,
-            }}
-          >
-            {doctor.name}
+          <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 1000, color: "#10231A", fontSize: 15, letterSpacing: "-0.3px" }}>
+            Dr. {doctor.name}
           </div>
-          <div style={{ fontSize: 11.5, color: "#64748B", fontWeight: 700 }}>
-            {doctor.specialty}
+          <div style={{ fontSize: 12, color: "#6A7A73", fontWeight: 700, marginTop: 1 }}>
+            {doctor.specialty}{doctor.subSpecialty ? ` • ${doctor.subSpecialty}` : ""}
           </div>
-          <div style={{ marginTop: 3, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, color: "#D97706", fontWeight: 900 }}>
+              <Star style={{ width: 12, height: 12, fill: "#D97706" }} /> {doctor.rating}
+            </span>
+            <span style={{ fontSize: 11, color: "#6A7A73", fontWeight: 700 }}>
+              {doctor.exp || doctor.yearsExperience} yrs
+            </span>
+            <span style={{ fontSize: 11, color: "#6A7A73", fontWeight: 700 }}>
+              {(doctor.languages || []).slice(0, 2).join(", ")}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Location */}
+      <div style={{ marginTop: 10, fontSize: 12, color: "#6A7A73", fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
+        <MapPin style={{ width: 13, height: 13, color: "#94A3B8" }} />
+        {doctor.locality || doctor.clinic || doctor.city}
+        {doctor.area ? `, ${doctor.area}` : ""}
+      </div>
+
+      {/* Tags */}
+      {(doctor.tags || []).length > 0 && (
+        <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {(doctor.tags || []).slice(0, 4).map((tag) => (
             <span
+              key={`${doctor.id}-${tag}`}
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 3,
+                padding: "4px 10px",
+                borderRadius: 999,
+                background: "rgba(24,226,161,0.08)",
+                color: "#065F46",
                 fontSize: 10.5,
-                color: "#0F766E",
                 fontWeight: 800,
               }}
             >
-              <Star style={{ width: 11, height: 11 }} /> {doctor.rating}
+              {tag}
             </span>
-            <span style={{ fontSize: 10.5, color: "#64748B", fontWeight: 700 }}>
-              {doctor.exp} yrs exp
+          ))}
+        </div>
+      )}
+
+      {/* Available modes indicator */}
+      <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
+        {modeIcons.video && (
+          <span style={{ fontSize: 10, fontWeight: 800, color: "#7C3AED", background: "#F5F3FF", border: "1px solid #EDE9FE", padding: "3px 8px", borderRadius: 8, display: "inline-flex", alignItems: "center", gap: 3 }}>
+            <Video style={{ width: 10, height: 10 }} /> Video
+          </span>
+        )}
+        {modeIcons.audio && (
+          <span style={{ fontSize: 10, fontWeight: 800, color: "#0EA5E9", background: "#F0F9FF", border: "1px solid #BAE6FD", padding: "3px 8px", borderRadius: 8, display: "inline-flex", alignItems: "center", gap: 3 }}>
+            <Phone style={{ width: 10, height: 10 }} /> Audio
+          </span>
+        )}
+        {modeIcons.inPerson && (
+          <span style={{ fontSize: 10, fontWeight: 800, color: "#D97706", background: "#FFFBEB", border: "1px solid #FDE68A", padding: "3px 8px", borderRadius: 8, display: "inline-flex", alignItems: "center", gap: 3 }}>
+            <MapPin style={{ width: 10, height: 10 }} /> In-Person
+          </span>
+        )}
+      </div>
+
+      {/* Price + Book */}
+      <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+            <span style={{ fontFamily: "'Sora',sans-serif", fontWeight: 1000, color: DEEP, fontSize: 20 }}>
+              ₹{fee}
             </span>
-            <span style={{ fontSize: 10.5, color: "#64748B", fontWeight: 700 }}>
-              {(doctor.languages || []).join(", ")}
+            <span style={{ fontSize: 11, color: "#94A3B8", fontWeight: 700 }}>
+              {mode === "video" ? "video" : mode === "call" ? "audio" : "visit"}
             </span>
           </div>
         </div>
-      </div>
-
-      <div
-        style={{
-          marginTop: 10,
-          fontSize: 11,
-          color: "#64748B",
-          fontWeight: 700,
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-        }}
-      >
-        <MapPin style={{ width: 12, height: 12 }} /> {doctor.locality || doctor.clinic}
-      </div>
-
-      <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {(doctor.tags || []).map((tag) => (
-          <span
-            key={`${doctor.id}-${tag}`}
-            style={{
-              padding: "4px 9px",
-              borderRadius: 999,
-              background: "#F0FDF4",
-              border: "1px solid #D1FAE5",
-              color: "#065F46",
-              fontSize: 10,
-              fontWeight: 800,
-            }}
-          >
-            {tag}
-          </span>
-        ))}
-      </div>
-
-      <div
-        style={{
-          marginTop: 12,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 10,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <IndianRupee style={{ width: 14, height: 14, color: DEEP }} />
-          <span
-            style={{
-              fontFamily: "'Sora',sans-serif",
-              fontWeight: 900,
-              color: DEEP,
-              fontSize: 15,
-            }}
-          >
-            {fee}
-          </span>
-          <span style={{ fontSize: 11, color: "#64748B", fontWeight: 700 }}>
-            {priceLabel}
-          </span>
-        </div>
 
         <motion.button
-          whileTap={{ scale: 0.95 }}
+          whileTap={{ scale: 0.92 }}
           onClick={onBook}
           style={{
-            height: 36,
+            height: 42,
             border: "none",
-            borderRadius: 11,
-            padding: "0 14px",
+            borderRadius: 14,
+            padding: "0 20px",
             background: `linear-gradient(135deg,${DEEP},${MID})`,
             color: "#fff",
             fontFamily: "'Sora',sans-serif",
             fontWeight: 900,
-            fontSize: 11.5,
+            fontSize: 13,
             cursor: "pointer",
+            boxShadow: "0 8px 24px rgba(12,90,62,0.2)",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
           }}
         >
-          Book Slot
+          Book Now
         </motion.button>
       </div>
-    </Glass>
+    </motion.div>
   );
 }
 
@@ -1114,51 +1122,55 @@ export default function Doctors() {
   return (
     <div
       style={{
-        maxWidth: 520,
+        maxWidth: 480,
         margin: "0 auto",
         minHeight: "100vh",
-        paddingBottom: 120,
-        background: "linear-gradient(180deg,#ECFDF5 0%,#E6F4FF 45%,#F8FAFC 100%)",
+        paddingBottom: `calc(88px + env(safe-area-inset-bottom, 0px))`,
+        background: "linear-gradient(180deg,#F4FBF8 0%,#EEF8F4 25%,#F0F9FF 50%,#F5F3FF 75%,#F4FBF8 100%)",
+        backgroundSize: "100% 400%",
+        fontFamily: "'Plus Jakarta Sans', -apple-system, sans-serif",
       }}
     >
-      <div style={{ padding: "14px 14px 8px" }}>
-        <Glass
-          style={{
-            padding: 14,
-            background: "linear-gradient(135deg,#0B4D35,#0A623E)",
-            color: "#fff",
-            border: "none",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 15,
-                background: "rgba(0,217,126,0.18)",
-                display: "grid",
-                placeItems: "center",
-              }}
-            >
-              <Stethoscope style={{ width: 20, height: 20, color: ACC }} />
+      {/* ── Sticky Header ── */}
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+          padding: "14px 18px 12px",
+          backdropFilter: "blur(22px)",
+          WebkitBackdropFilter: "blur(22px)",
+          background: "linear-gradient(180deg, rgba(244,251,248,0.94), rgba(244,251,248,0.82))",
+          borderBottom: "1px solid rgba(12,90,62,0.05)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div
+            style={{
+              width: 46,
+              height: 46,
+              borderRadius: 16,
+              background: "linear-gradient(135deg,#0C5A3E,#13C0A2)",
+              display: "grid",
+              placeItems: "center",
+              flexShrink: 0,
+              boxShadow: "0 8px 24px rgba(12,90,62,0.18)",
+            }}
+          >
+            <Stethoscope style={{ width: 22, height: 22, color: "#fff" }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 21, fontWeight: 1000, color: "#10231A", letterSpacing: "-0.5px" }}>
+              Find a Doctor
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 18, fontWeight: 900 }}>
-                Doctor Consult
-              </div>
-              <div
-                style={{
-                  fontSize: 11.5,
-                  fontWeight: 700,
-                  color: "rgba(255,255,255,0.72)",
-                }}
-              >
-                Book video, audio, or in-person appointment with payment lock.
-              </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#6A7A73", marginTop: 1 }}>
+              Video • Audio • In-Person
             </div>
           </div>
-        </Glass>
+        </div>
+      </div>
+
+      <div style={{ padding: "12px 18px 8px" }}>
 
         {error && (
           <div style={{ marginTop: 8, fontSize: 12, color: "#B91C1C", fontWeight: 800 }}>
@@ -1166,45 +1178,64 @@ export default function Doctors() {
           </div>
         )}
 
-        <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+        <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
           <div style={{ flex: 1, position: "relative" }}>
-            <Search
-              style={{ width: 14, height: 14, color: "#94A3B8", position: "absolute", top: 12, left: 10 }}
-            />
+            <div style={{
+              position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)",
+              width: 36, height: 36, borderRadius: 13, background: "#F1F5F9",
+              display: "grid", placeItems: "center",
+            }}>
+              <Search style={{ width: 15, height: 15, color: "#94A3B8" }} />
+            </div>
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search doctor, specialty, symptom..."
+              placeholder="Search doctors, specialties..."
               style={{
                 width: "100%",
-                height: 38,
-                borderRadius: 12,
-                border: "1.5px solid rgba(12,90,62,0.16)",
-                padding: "0 10px 0 32px",
-                fontSize: 12.5,
-                fontWeight: 700,
+                height: 54,
+                borderRadius: 18,
+                border: "1.5px solid rgba(12,90,62,0.08)",
+                padding: "0 14px 0 56px",
+                fontSize: 14.5,
+                fontWeight: 800,
                 outline: "none",
+                background: "rgba(255,255,255,0.97)",
+                color: "#10231A",
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+                boxSizing: "border-box",
               }}
             />
           </div>
 
-          <div style={{ width: 112, position: "relative" }}>
+          <div style={{ width: 100, position: "relative" }}>
             <Filter
-              style={{ width: 13, height: 13, color: "#94A3B8", position: "absolute", top: 12, left: 8 }}
+              style={{ width: 13, height: 13, color: "#6A7A73", position: "absolute", top: 20, left: 10, zIndex: 1, pointerEvents: "none" }}
             />
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value)}
               style={{
                 width: "100%",
-                height: 38,
-                borderRadius: 12,
-                border: "1.5px solid rgba(12,90,62,0.16)",
-                padding: "0 8px 0 26px",
-                fontSize: 11.5,
-                fontWeight: 700,
-                background: "#fff",
+                height: 54,
+                borderRadius: 18,
+                border: "1.5px solid rgba(12,90,62,0.08)",
+                padding: "0 10px 0 28px",
+                fontSize: 12,
+                fontWeight: 800,
+                background: "rgba(255,255,255,0.97)",
                 outline: "none",
+                color: "#10231A",
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+                WebkitAppearance: "none",
+                MozAppearance: "none",
+                appearance: "none",
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' stroke='%230C5A3E' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                backgroundRepeat: "no-repeat",
+                backgroundPosition: "right 10px center",
+                backgroundSize: "12px",
+                paddingRight: 26,
+                boxSizing: "border-box",
               }}
             >
               <option value="soonest">Soonest</option>
@@ -1214,96 +1245,69 @@ export default function Doctors() {
           </div>
         </div>
 
-        <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-          <button
-            onClick={() => setMode("video")}
-            style={{
-              flex: 1,
-              height: 34,
-              borderRadius: 999,
-              border: mode === "video" ? "none" : "1px solid #D1D5DB",
-              background: mode === "video" ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff",
-              color: mode === "video" ? "#fff" : "#1F2937",
-              fontWeight: 800,
-              fontSize: 12,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 5,
-            }}
-          >
-            <Video style={{ width: 13, height: 13 }} /> Video
-          </button>
-
-          <button
-            onClick={() => setMode("inperson")}
-            style={{
-              flex: 1,
-              height: 34,
-              borderRadius: 999,
-              border: mode === "inperson" ? "none" : "1px solid #D1D5DB",
-              background: mode === "inperson" ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff",
-              color: mode === "inperson" ? "#fff" : "#1F2937",
-              fontWeight: 800,
-              fontSize: 12,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 5,
-            }}
-          >
-            <MapPin style={{ width: 13, height: 13 }} /> In-Person
-          </button>
-
-          <button
-            onClick={() => setMode("call")}
-            style={{
-              flex: 1,
-              height: 34,
-              borderRadius: 999,
-              border: mode === "call" ? "none" : "1px solid #D1D5DB",
-              background: mode === "call" ? `linear-gradient(135deg,${DEEP},${MID})` : "#fff",
-              color: mode === "call" ? "#fff" : "#1F2937",
-              fontWeight: 800,
-              fontSize: 12,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 5,
-            }}
-          >
-            <PhoneCall style={{ width: 13, height: 13 }} /> Audio
-          </button>
+        <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+          {[
+            { key: "video", label: "Video", Icon: Video },
+            { key: "inperson", label: "In-Person", Icon: MapPin },
+            { key: "call", label: "Audio", Icon: PhoneCall },
+          ].map(({ key, label, Icon }) => (
+            <motion.button
+              key={key}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setMode(key)}
+              style={{
+                flex: 1,
+                height: 44,
+                borderRadius: 16,
+                border: mode === key ? "none" : "1.5px solid rgba(12,90,62,0.08)",
+                background: mode === key ? `linear-gradient(135deg,${DEEP},${MID})` : "rgba(255,255,255,0.92)",
+                color: mode === key ? "#fff" : "#10231A",
+                fontWeight: 900,
+                fontSize: 12.5,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                fontFamily: "'Sora', sans-serif",
+                boxShadow: mode === key ? "0 8px 24px rgba(12,90,62,0.2)" : "0 2px 8px rgba(0,0,0,0.03)",
+                transition: "all .2s",
+              }}
+            >
+              <Icon style={{ width: 14, height: 14 }} /> {label}
+            </motion.button>
+          ))}
         </div>
 
-        <div style={{ marginTop: 8, display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none" }}>
+        <div style={{ marginTop: 10, display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none", WebkitOverflowScrolling: "touch", paddingBottom: 2 }}>
           {specialties.map((s) => (
-            <button
+            <motion.button
               key={s}
+              whileTap={{ scale: 0.95 }}
               onClick={() => setSpecialty(s)}
               style={{
                 flexShrink: 0,
-                height: 32,
+                height: 36,
                 borderRadius: 999,
-                border: specialty === s ? "none" : "1px solid rgba(12,90,62,0.18)",
-                padding: "0 12px",
+                border: specialty === s ? "none" : "1.5px solid rgba(12,90,62,0.08)",
+                padding: "0 16px",
                 fontWeight: 800,
-                fontSize: 11.5,
+                fontSize: 12,
                 cursor: "pointer",
-                background: specialty === s ? DEEP : "#fff",
-                color: specialty === s ? "#fff" : "#1F2937",
+                background: specialty === s ? `linear-gradient(135deg,${DEEP},${MID})` : "rgba(255,255,255,0.92)",
+                color: specialty === s ? "#fff" : "#10231A",
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+                boxShadow: specialty === s ? "0 4px 16px rgba(12,90,62,0.15)" : "none",
+                transition: "all .2s",
               }}
             >
               {s}
-            </button>
+            </motion.button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding: "0 14px 8px" }}>
+      <div style={{ padding: "0 18px 8px" }}>
         <Glass style={{ padding: "12px 14px", marginBottom: 12 }}>
           <div
             style={{
@@ -1792,12 +1796,16 @@ const canJoin =
                 right: 0,
                 bottom: 0,
                 zIndex: 1301,
-                maxWidth: 520,
+                maxWidth: 480,
                 margin: "0 auto",
-                background: "#fff",
-                borderTopLeftRadius: 24,
-                borderTopRightRadius: 24,
-                padding: "14px 14px calc(14px + env(safe-area-inset-bottom,0px))",
+                background: "rgba(255,255,255,0.98)",
+                backdropFilter: "blur(20px)",
+                borderTopLeftRadius: 28,
+                borderTopRightRadius: 28,
+                padding: "16px 18px calc(16px + env(safe-area-inset-bottom,0px))",
+                boxShadow: "0 -20px 60px rgba(0,0,0,0.12)",
+                maxHeight: "85vh",
+                overflowY: "auto",
               }}
             >
               <div

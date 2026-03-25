@@ -244,6 +244,11 @@ export default function ConsultRoom() {
 
   const statusPill = useMemo(() => buildStatusPill(consult), [consult]);
   const counterpartName = role === "doctor" ? consult?.patientName || "Patient" : consult?.doctorName || "Doctor";
+
+  // ── Doctor-controlled join: patient can only join AFTER doctor starts session ──
+  const doctorHasJoined = sessionInfo?.state === "live" || consult?.callState === "live";
+  const canPatientJoinCall = role === "patient" && doctorHasJoined;
+  const canStartCall = role === "doctor" || canPatientJoinCall;
   const sharedRecords = useMemo(() => {
     const consultFiles = Array.isArray(consult?.patientAttachments) ? consult.patientAttachments : [];
     const messageFiles = messages.flatMap((message) =>
@@ -317,9 +322,9 @@ export default function ConsultRoom() {
         }
 
         const consultStatus = String(nextConsult?.status || "").toLowerCase();
-        if (role === "patient" && !["accepted", "upcoming", "live_now", "completed"].includes(consultStatus)) {
-          if (consultStatus === "pending" || consultStatus === "confirmed") {
-            throw new Error("Doctor has not accepted this consult yet");
+        if (role === "patient" && !["confirmed", "accepted", "upcoming", "live_now", "completed"].includes(consultStatus)) {
+          if (consultStatus === "pending" || consultStatus === "pending_payment") {
+            throw new Error("Booking is not yet confirmed. Please complete payment first.");
           }
           if (["cancelled", "rejected"].includes(consultStatus)) {
             throw new Error("This consult room is no longer available");
@@ -378,7 +383,9 @@ export default function ConsultRoom() {
         if (!active) return;
         setMessagesLoading(false);
         firstRun = false;
-        timer = window.setTimeout(pollMessages, 4000);
+        // Fast polling during live call, slower when idle
+        const pollInterval = (consult?.callState === "live" || sessionInfo?.state === "live") ? 1500 : 3000;
+        timer = window.setTimeout(pollMessages, pollInterval);
       }
     }
 
@@ -462,6 +469,12 @@ export default function ConsultRoom() {
   async function handleStartMeeting(nextMode) {
     if (!consultId || sessionStarting) return;
 
+    // Patient cannot start call — only join after doctor starts
+    if (role === "patient" && !canPatientJoinCall) {
+      setMeetingError("Please wait for the doctor to start the consultation.");
+      return;
+    }
+
     setMeetingError("");
     setSessionStarting(true);
     try {
@@ -469,15 +482,19 @@ export default function ConsultRoom() {
       let nextSession = sessionInfo;
 
       if (role === "doctor") {
+        // Doctor initiates session — this marks callState as "live" in backend
         const { data } = await axios.post(`${API}/api/consults/${consultId}/session/join`, {}, getDoctorAuthConfig());
         nextConsult = normalizeConsult(data?.dashboardConsult || data?.consult || nextConsult || {});
         nextSession = data?.session || nextSession;
-      } else if (!nextSession?.roomId) {
-        nextSession = {
-          roomId: roomName,
-          state: "live",
-          joinedAt: new Date().toISOString(),
-        };
+      } else {
+        // Patient joining existing session — no API call needed, just connect to Jitsi
+        if (!nextSession?.roomId) {
+          nextSession = {
+            roomId: roomName,
+            state: "live",
+            joinedAt: new Date().toISOString(),
+          };
+        }
       }
 
       if (nextConsult) {
@@ -502,8 +519,16 @@ export default function ConsultRoom() {
     setLeaving(true);
     try {
       if (role === "doctor") {
+        // Doctor ends the entire consultation session
         await axios.post(`${API}/api/consults/${consultId}/session/end`, {}, getDoctorAuthConfig());
       }
+      // Patient just disconnects from Jitsi — doesn't end the session
+      if (jitsiApiRef.current) {
+        try { jitsiApiRef.current.dispose(); } catch (_) {}
+        jitsiApiRef.current = null;
+      }
+      setMeetingMode(null);
+      setMeetingReady(false);
     } catch (_) {
     } finally {
       navigate(getBackPath(role), { replace: true });
@@ -626,16 +651,16 @@ export default function ConsultRoom() {
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <ActionButton
                     icon={<Phone style={{ width: 16, height: 16 }} />}
-                    label={sessionInfo?.state === "live" && meetingMode !== "call" ? "Rejoin call" : "Call"}
+                    label={role === "doctor" ? (sessionInfo?.state === "live" && meetingMode !== "call" ? "Rejoin call" : "Start Call") : (canPatientJoinCall ? "Join Call" : "Waiting...")}
                     accent="#14b8a6"
-                    disabled={sessionStarting}
+                    disabled={sessionStarting || !canStartCall}
                     onClick={() => handleStartMeeting("call")}
                   />
                   <ActionButton
                     icon={<Video style={{ width: 16, height: 16 }} />}
-                    label={sessionInfo?.state === "live" && meetingMode !== "video" ? "Rejoin video" : "Video call"}
-                    accent="#2563eb"
-                    disabled={sessionStarting}
+                    label={role === "doctor" ? (sessionInfo?.state === "live" && meetingMode !== "video" ? "Rejoin video" : "Start Video") : (canPatientJoinCall ? "Join Video" : "Waiting...")}
+                    accent="#13C0A2"
+                    disabled={sessionStarting || !canStartCall}
                     onClick={() => handleStartMeeting("video")}
                   />
                 </div>
@@ -654,27 +679,69 @@ export default function ConsultRoom() {
                   <div style={meetingPlaceholderStyle}>
                     <div style={avatarCircleStyle}>{String(counterpartName || "P").trim().charAt(0).toUpperCase()}</div>
                     <div style={{ fontSize: isCompact ? 28 : 34, fontWeight: 900, letterSpacing: "-0.03em" }}>{counterpartName}</div>
-                    <div style={{ color: "rgba(226,232,240,0.72)", maxWidth: 540, textAlign: "center", lineHeight: 1.6 }}>
-                      Join meeting ka broken step hata diya hai. Ab seedha `Call` ya `Video call` button dabao aur consult start hoga, chat right side par ready rahegi.
-                    </div>
-                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
-                      <ActionButton
-                        icon={<Phone style={{ width: 16, height: 16 }} />}
-                        label={sessionInfo?.state === "live" ? "Rejoin call" : "Start call"}
-                        accent="#14b8a6"
-                        disabled={sessionStarting}
-                        onClick={() => handleStartMeeting("call")}
-                      />
-                      <ActionButton
-                        icon={<Video style={{ width: 16, height: 16 }} />}
-                        label={sessionInfo?.state === "live" ? "Rejoin video" : "Start video call"}
-                        accent="#2563eb"
-                        disabled={sessionStarting}
-                        onClick={() => handleStartMeeting("video")}
-                      />
-                    </div>
+
+                    {role === "doctor" ? (
+                      <>
+                        <div style={{ color: "rgba(226,232,240,0.72)", maxWidth: 540, textAlign: "center", lineHeight: 1.6, fontSize: 14 }}>
+                          Start the consultation by clicking Call or Video. Patient will be able to join once you start.
+                        </div>
+                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+                          <ActionButton
+                            icon={<Phone style={{ width: 16, height: 16 }} />}
+                            label={sessionInfo?.state === "live" ? "Rejoin Call" : "Start Audio Call"}
+                            accent="#14b8a6"
+                            disabled={sessionStarting}
+                            onClick={() => handleStartMeeting("call")}
+                          />
+                          <ActionButton
+                            icon={<Video style={{ width: 16, height: 16 }} />}
+                            label={sessionInfo?.state === "live" ? "Rejoin Video" : "Start Video Call"}
+                            accent="#13C0A2"
+                            disabled={sessionStarting}
+                            onClick={() => handleStartMeeting("video")}
+                          />
+                        </div>
+                      </>
+                    ) : canPatientJoinCall ? (
+                      <>
+                        <div style={{ color: "#10B981", fontSize: 14, fontWeight: 800, textAlign: "center" }}>
+                          Doctor has started the consultation. Join now!
+                        </div>
+                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+                          <ActionButton
+                            icon={<Phone style={{ width: 16, height: 16 }} />}
+                            label="Join Audio Call"
+                            accent="#14b8a6"
+                            disabled={sessionStarting}
+                            onClick={() => handleStartMeeting("call")}
+                          />
+                          <ActionButton
+                            icon={<Video style={{ width: 16, height: 16 }} />}
+                            label="Join Video Call"
+                            accent="#13C0A2"
+                            disabled={sessionStarting}
+                            onClick={() => handleStartMeeting("video")}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{
+                          display: "flex", alignItems: "center", gap: 8, padding: "12px 20px",
+                          background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.25)",
+                          borderRadius: 14, color: "#FBBF24", fontSize: 13, fontWeight: 800,
+                        }}>
+                          <Clock3 style={{ width: 18, height: 18, flexShrink: 0 }} />
+                          Waiting for doctor to start the consultation...
+                        </div>
+                        <div style={{ color: "rgba(226,232,240,0.5)", fontSize: 12, fontWeight: 600, textAlign: "center", maxWidth: 400 }}>
+                          You can send messages, symptoms, and reports in the chat while waiting. The doctor will start the call/video when ready.
+                        </div>
+                      </>
+                    )}
+
                     <div style={helpTextStyle}>
-                      Reports, symptom notes, aur consult messages right side chat panel se bhej sakte ho.
+                      Use the chat panel to share symptoms, reports, and messages anytime.
                     </div>
                   </div>
                 )}
@@ -718,18 +785,27 @@ export default function ConsultRoom() {
                 </div>
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                  <IconActionButton
-                    icon={<Phone style={{ width: 15, height: 15 }} />}
-                    label="Call"
-                    accent="#14b8a6"
-                    onClick={() => handleStartMeeting("call")}
-                  />
-                  <IconActionButton
-                    icon={<Video style={{ width: 15, height: 15 }} />}
-                    label="Video"
-                    accent="#2563eb"
-                    onClick={() => handleStartMeeting("video")}
-                  />
+                  {canStartCall && (
+                    <>
+                      <IconActionButton
+                        icon={<Phone style={{ width: 15, height: 15 }} />}
+                        label={role === "doctor" ? "Call" : "Join"}
+                        accent="#14b8a6"
+                        onClick={() => handleStartMeeting("call")}
+                      />
+                      <IconActionButton
+                        icon={<Video style={{ width: 15, height: 15 }} />}
+                        label={role === "doctor" ? "Video" : "Join"}
+                        accent="#13C0A2"
+                        onClick={() => handleStartMeeting("video")}
+                      />
+                    </>
+                  )}
+                  {!canStartCall && role === "patient" && (
+                    <div style={{ fontSize: 11, color: "#FBBF24", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                      <Clock3 style={{ width: 12, height: 12 }} /> Waiting for doctor
+                    </div>
+                  )}
                 </div>
               </div>
 

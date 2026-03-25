@@ -1,5 +1,5 @@
 // src/components/PharmacyDashboard.js
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   Box, Button, TextField, Stack, Chip,
   Snackbar, Alert, createTheme, IconButton,
@@ -35,7 +35,12 @@ import {
   Package,
   Settings,
   RefreshCw,
-  Plus
+  Plus,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  ShieldCheck
 } from "lucide-react";
 
 // eslint-disable-next-line no-unused-vars
@@ -1033,6 +1038,14 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
   const [ordersPage, setOrdersPage] = useState(1);
   const ORDERS_PER_PAGE = 10;
 
+  // ─── Catalog filters & detail dialog ───
+  const [catFilter, setCatFilter] = useState("All");
+  const [typeFilter, setTypeFilter] = useState("All");
+  const [medTypeFilter, setMedTypeFilter] = useState("All");
+  const [catalogDetail, setCatalogDetail] = useState(null);
+  const [detailImgIdx, setDetailImgIdx] = useState(0);
+  const [detailDesc, setDetailDesc] = useState("");
+
   // ─── Design constants (match Home.js) ───
   const DEEP = "#0A5A3B";
   const MID_ = "#0F7A53";
@@ -1042,6 +1055,35 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
   const BORDER_ = "rgba(12,90,62,0.08)";
   const TEXT_ = "#10231A";
   const SUB_ = "#6A7A73";
+
+  // Client-side filtered catalog (must be before conditional returns)
+  const filteredCatalog = useMemo(() => {
+    return catalog.filter(m => {
+      if (catFilter !== "All") {
+        const cats = Array.isArray(m.category) ? m.category : (m.category ? [m.category] : []);
+        if (!cats.some(c => c === catFilter)) return false;
+      }
+      if (typeFilter === "Branded" && !m.brand) return false;
+      if (typeFilter === "Generic" && m.brand) return false;
+      if (medTypeFilter !== "All" && m.type !== medTypeFilter) return false;
+      return true;
+    });
+  }, [catalog, catFilter, typeFilter, medTypeFilter]);
+
+  // Unique medicine types from catalog for filter chips
+  const catalogMedTypes = useMemo(() => {
+    const types = new Set();
+    catalog.forEach(m => { if (m.type) types.add(m.type); });
+    return ["All", ...Array.from(types).sort()];
+  }, [catalog]);
+
+  // Image URL helper (same as Medicines.js)
+  const getImgUrl = (img) => {
+    if (!img) return null;
+    if (img.startsWith("/uploads/")) return `${API_BASE_URL}${img}`;
+    if (img.startsWith("http")) return img;
+    return null;
+  };
 
   if (!token) {
     return (
@@ -1094,6 +1136,21 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
     catalogTimerRef.current = setTimeout(() => {
       if (q.length >= 2 || q.length === 0) fetchCatalog();
     }, 350);
+  };
+
+  // Open detail dialog + lazy-load description
+  const openCatalogDetail = async (m) => {
+    setCatalogDetail(m);
+    setDetailImgIdx(0);
+    setDetailDesc(m.description || "");
+    if (!m.description && m._id) {
+      try {
+        const res = await axios.post(`${API_BASE_URL}/api/medicines/${m._id}/ensure-description`, {}, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.data?.description) setDetailDesc(res.data.description);
+      } catch {}
+    }
   };
 
   // Price override quick-add handler
@@ -1361,69 +1418,272 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
             {tab === 2 && (
               <motion.div key="medicines" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
 
-                {/* Master Catalog */}
-                <div style={{ background: GLASS, border: `1px solid ${BORDER_}`, borderRadius: 20, padding: 16, marginBottom: 14, boxShadow: "0 4px 16px rgba(16,24,40,0.03)" }}>
-                  <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 900, color: DEEP, marginBottom: 2 }}>Add from Master Catalog</div>
-                  <div style={{ fontSize: 11, color: SUB_, marginBottom: 12 }}>Search medicines. Set your price or quick-add at catalog price.</div>
+                {/* ─── Master Catalog Header (Medicines-page style) ─── */}
+                <div style={{ background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, borderRadius: 20, padding: "16px 16px 12px", marginBottom: 0, position: "relative" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 17, fontWeight: 900, color: "#fff" }}>Master Catalog</div>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>Browse & add to your inventory</div>
+                    </div>
+                    <div style={{ background: "rgba(255,255,255,0.18)", borderRadius: 100, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: "#fff" }}>
+                      {filteredCatalog.length}/{catalog.length}
+                    </div>
+                  </div>
+                  {/* Search */}
+                  <div style={{ position: "relative" }}>
+                    <Search size={15} color="rgba(255,255,255,0.5)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", zIndex: 1 }} />
+                    <input value={catalogQ} onChange={(e) => handleCatalogSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && fetchCatalog()}
+                      placeholder="Search medicine name, brand, composition..."
+                      style={{ width: "100%", padding: "10px 12px 10px 36px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: 13, fontWeight: 600, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+                  </div>
+                </div>
 
-                  <TextField fullWidth size="small" placeholder="Search medicine name, brand, composition..." value={catalogQ}
-                    onChange={(e) => handleCatalogSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && fetchCatalog()}
-                    InputProps={{ sx: { borderRadius: "14px", background: "rgba(244,251,248,0.6)", fontWeight: 600, fontSize: 13, border: `1px solid ${BORDER_}` } }} />
+                {/* ─── Filter Chips ─── */}
+                <div style={{ background: GLASS, border: `1px solid ${BORDER_}`, borderTop: "none", borderRadius: "0 0 20px 20px", padding: "12px 12px 8px", marginBottom: 14 }}>
+                  {/* Category row */}
+                  <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
+                    {["All", ...CUSTOMER_CATEGORIES].map(c => (
+                      <motion.button key={c} whileTap={{ scale: 0.93 }} onClick={() => setCatFilter(c)}
+                        style={{ padding: "6px 14px", borderRadius: 100, border: catFilter === c ? "none" : `1px solid ${BORDER_}`, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                          background: catFilter === c ? DEEP : "#fff", color: catFilter === c ? "#fff" : SUB_,
+                          fontFamily: "'Sora',sans-serif", fontSize: 11, fontWeight: 700 }}>
+                        {c}
+                      </motion.button>
+                    ))}
+                  </div>
+                  {/* Type row (Branded/Generic) */}
+                  <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
+                    {["All", "Branded", "Generic"].map(t => (
+                      <motion.button key={t} whileTap={{ scale: 0.93 }} onClick={() => setTypeFilter(t)}
+                        style={{ padding: "6px 14px", borderRadius: 100, border: typeFilter === t ? "none" : `1px solid ${BORDER_}`, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                          background: typeFilter === t ? MID_ : "#fff", color: typeFilter === t ? "#fff" : SUB_,
+                          fontFamily: "'Sora',sans-serif", fontSize: 11, fontWeight: 700 }}>
+                        {t}
+                      </motion.button>
+                    ))}
+                  </div>
+                  {/* Medicine type row (Tablet/Capsule etc) */}
+                  <div style={{ display: "flex", gap: 6, overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
+                    {catalogMedTypes.map(t => (
+                      <motion.button key={t} whileTap={{ scale: 0.93 }} onClick={() => setMedTypeFilter(t)}
+                        style={{ padding: "5px 12px", borderRadius: 100, border: medTypeFilter === t ? `2px solid ${MID_}` : `1px solid ${BORDER_}`, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                          background: medTypeFilter === t ? `${ACCENT}15` : "#fff", color: medTypeFilter === t ? DEEP : SUB_,
+                          fontSize: 10, fontWeight: 700 }}>
+                        {t}
+                      </motion.button>
+                    ))}
+                  </div>
+                </div>
 
-                  <div style={{ marginTop: 12, maxHeight: 480, overflowY: "auto" }}>
-                    {catalog.map((m) => {
+                {/* ─── 2-Column Medicine Card Grid ─── */}
+                {invMsg && <div style={{ marginBottom: 8, fontSize: 12, fontWeight: 700, color: invMsg.includes("Failed") || invMsg.includes("❌") ? "#dc2626" : DEEP, textAlign: "center" }}>{invMsg}</div>}
+
+                {filteredCatalog.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px 0" }}>
+                    <Pill size={36} color="#d1d5db" style={{ margin: "0 auto 10px" }} />
+                    <div style={{ fontSize: 13, color: SUB_, fontWeight: 600 }}>{catalog.length === 0 ? "Loading catalog..." : "No medicines match filters."}</div>
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+                    {filteredCatalog.map((m) => {
                       const inInv = inventory.some(inv => String(inv.medicineMasterId) === String(m._id));
                       const hasOverride = priceOverride[m._id];
+                      const imgSrc = getImgUrl(m.images?.[0]);
+                      const mrp = Number(m.mrp || 0);
+                      const price = Number(m.price || 0);
+                      const discPct = mrp > 0 && price > 0 && price < mrp ? Math.round(((mrp - price) / mrp) * 100) : 0;
                       return (
-                        <motion.div key={m._id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                          <div style={{ padding: 12, marginBottom: 8, borderRadius: 14, background: inInv ? `${ACCENT}08` : "rgba(248,250,252,0.8)", border: `1px solid ${inInv ? `${ACCENT}25` : BORDER_}`, transition: "all 0.2s" }}>
-                            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                              {m.images?.[0] ? (
-                                <img src={m.images[0]} alt="" style={{ width: 44, height: 44, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+                        <motion.div key={m._id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
+                          <div style={{ background: GLASS, border: `1px solid ${inInv ? `${ACCENT}30` : BORDER_}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 16px rgba(16,24,40,0.04)", position: "relative", transition: "all 0.2s" }}>
+                            {/* Image Area */}
+                            <div onClick={() => openCatalogDetail(m)} style={{ position: "relative", aspectRatio: "4/3", cursor: "pointer", background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)" }}>
+                              {imgSrc ? (
+                                <img src={imgSrc} alt={m.name} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 8 }} />
                               ) : (
-                                <div style={{ width: 44, height: 44, borderRadius: 12, background: "#e2e8f0", flexShrink: 0, display: "grid", placeItems: "center" }}><Pill size={18} color={SUB_} /></div>
+                                <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", fontSize: 38 }}>💊</div>
                               )}
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, color: TEXT_, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</div>
-                                <div style={{ fontSize: 11, color: SUB_ }}>₹{m.price} | MRP ₹{m.mrp}</div>
-                                {m.composition && <div style={{ fontSize: 10, color: SUB_, marginTop: 1 }}>{m.composition.slice(0, 40)}{m.composition.length > 40 ? "..." : ""}</div>}
-                                {m.prescriptionRequired && <div style={{ fontSize: 9, color: "#ea580c", fontWeight: 700, marginTop: 1 }}>Rx Required</div>}
+                              {/* Badges */}
+                              <div style={{ position: "absolute", top: 6, left: 6, display: "flex", flexDirection: "column", gap: 3 }}>
+                                {m.prescriptionRequired && <span style={{ fontSize: 8, fontWeight: 900, padding: "2px 6px", borderRadius: 6, background: "#dc2626", color: "#fff" }}>Rx</span>}
+                                {!m.brand && <span style={{ fontSize: 8, fontWeight: 800, padding: "2px 6px", borderRadius: 6, background: ACCENT, color: DEEP }}>Generic</span>}
                               </div>
-                              {inInv ? (
-                                <span style={{ fontSize: 10, fontWeight: 800, padding: "3px 10px", borderRadius: 100, background: `${ACCENT}15`, color: DEEP }}>Added</span>
-                              ) : !hasOverride ? (
-                                <div style={{ display: "flex", gap: 6 }}>
-                                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => addToInventoryWithPrice(m)}
-                                    style={{ padding: "6px 14px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer", boxShadow: `0 2px 8px ${DEEP}25` }}>+ Add</motion.button>
-                                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => setPriceOverride(p => ({ ...p, [m._id]: { price: m.price, mrp: m.mrp, stock: 1 } }))}
-                                    style={{ padding: "6px 10px", borderRadius: 10, border: `1px solid ${DEEP}30`, background: "#fff", color: DEEP, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Set Price</motion.button>
+                              {discPct > 0 && (
+                                <span style={{ position: "absolute", top: 6, right: 6, fontSize: 9, fontWeight: 900, padding: "2px 7px", borderRadius: 8, background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff" }}>
+                                  {discPct}% OFF
+                                </span>
+                              )}
+                              {inInv && (
+                                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: `linear-gradient(0deg, ${DEEP}dd, transparent)`, padding: "14px 8px 6px", textAlign: "center" }}>
+                                  <span style={{ fontSize: 10, fontWeight: 900, color: "#fff", letterSpacing: 0.5 }}>✓ IN INVENTORY</span>
                                 </div>
-                              ) : null}
+                              )}
                             </div>
-                            {!inInv && hasOverride && (
-                              <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER_}`, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                                <TextField size="small" type="number" label="Sell Price" value={hasOverride.price} onChange={(e) => setPriceOverride(p => ({ ...p, [m._id]: { ...p[m._id], price: e.target.value } }))} sx={{ flex: 1, minWidth: 70, "& input": { fontSize: 12, p: "7px 8px" } }} />
-                                <TextField size="small" type="number" label="MRP" value={hasOverride.mrp} onChange={(e) => setPriceOverride(p => ({ ...p, [m._id]: { ...p[m._id], mrp: e.target.value } }))} sx={{ flex: 1, minWidth: 60, "& input": { fontSize: 12, p: "7px 8px" } }} />
-                                <TextField size="small" type="number" label="Stock" value={hasOverride.stock} onChange={(e) => setPriceOverride(p => ({ ...p, [m._id]: { ...p[m._id], stock: e.target.value } }))} sx={{ width: 60, "& input": { fontSize: 12, p: "7px 8px" } }} />
-                                <motion.button whileTap={{ scale: 0.9 }} onClick={() => addToInventoryWithPrice(m)}
-                                  style={{ padding: "8px 16px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>Add</motion.button>
-                                <motion.button whileTap={{ scale: 0.9 }} onClick={() => setPriceOverride(p => { const n = { ...p }; delete n[m._id]; return n; })}
-                                  style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${BORDER_}`, background: "#fff", color: SUB_, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Cancel</motion.button>
+                            {/* Card Content */}
+                            <div style={{ padding: "10px 10px 8px" }}>
+                              <div onClick={() => openCatalogDetail(m)} style={{ fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 800, color: TEXT_, cursor: "pointer",
+                                overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", lineHeight: 1.3, minHeight: 31 }}>
+                                {m.name}
                               </div>
-                            )}
+                              {m.composition && <div style={{ fontSize: 9, color: SUB_, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.composition}</div>}
+                              {/* Price */}
+                              <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 4 }}>
+                                <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 900, color: TEXT_ }}>₹{price}</span>
+                                {mrp > price && <span style={{ fontSize: 10, color: SUB_, textDecoration: "line-through" }}>₹{mrp}</span>}
+                              </div>
+                              {/* Actions */}
+                              {!inInv && !hasOverride && (
+                                <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+                                  <motion.button whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); addToInventoryWithPrice(m); }}
+                                    style={{ flex: 1, padding: "7px 0", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>+ Add</motion.button>
+                                  <motion.button whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setPriceOverride(p => ({ ...p, [m._id]: { price: m.price, mrp: m.mrp, stock: 1 } })); }}
+                                    style={{ padding: "7px 10px", borderRadius: 10, border: `1px solid ${DEEP}25`, background: "#fff", color: DEEP, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Set Price</motion.button>
+                                </div>
+                              )}
+                              {/* Price Override inline */}
+                              {!inInv && hasOverride && (
+                                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+                                  <div style={{ display: "flex", gap: 4 }}>
+                                    <input type="number" placeholder="Sell ₹" value={hasOverride.price} onChange={(e) => setPriceOverride(p => ({ ...p, [m._id]: { ...p[m._id], price: e.target.value } }))}
+                                      style={{ flex: 1, padding: "6px 6px", borderRadius: 8, border: `1px solid ${BORDER_}`, fontSize: 11, fontWeight: 600, outline: "none", minWidth: 0 }} />
+                                    <input type="number" placeholder="MRP" value={hasOverride.mrp} onChange={(e) => setPriceOverride(p => ({ ...p, [m._id]: { ...p[m._id], mrp: e.target.value } }))}
+                                      style={{ flex: 1, padding: "6px 6px", borderRadius: 8, border: `1px solid ${BORDER_}`, fontSize: 11, fontWeight: 600, outline: "none", minWidth: 0 }} />
+                                  </div>
+                                  <input type="number" placeholder="Stock Qty" value={hasOverride.stock} onChange={(e) => setPriceOverride(p => ({ ...p, [m._id]: { ...p[m._id], stock: e.target.value } }))}
+                                    style={{ padding: "6px 6px", borderRadius: 8, border: `1px solid ${BORDER_}`, fontSize: 11, fontWeight: 600, outline: "none" }} />
+                                  <div style={{ display: "flex", gap: 4 }}>
+                                    <motion.button whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); addToInventoryWithPrice(m); }}
+                                      style={{ flex: 1, padding: "7px 0", borderRadius: 8, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>Add</motion.button>
+                                    <motion.button whileTap={{ scale: 0.9 }} onClick={(e) => { e.stopPropagation(); setPriceOverride(p => { const n = { ...p }; delete n[m._id]; return n; }); }}
+                                      style={{ padding: "7px 10px", borderRadius: 8, border: `1px solid ${BORDER_}`, background: "#fff", color: SUB_, fontSize: 10, fontWeight: 600, cursor: "pointer" }}>✕</motion.button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </motion.div>
                       );
                     })}
-                    {catalog.length === 0 && (
-                      <div style={{ textAlign: "center", padding: "30px 0" }}>
-                        <Pill size={32} color="#d1d5db" style={{ margin: "0 auto 8px" }} />
-                        <div style={{ fontSize: 13, color: SUB_, fontWeight: 600 }}>{catalogQ.length >= 2 ? "No medicines found." : "Type to search catalog..."}</div>
-                      </div>
-                    )}
                   </div>
-                  {invMsg && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: invMsg.includes("Failed") || invMsg.includes("❌") ? "#dc2626" : DEEP }}>{invMsg}</div>}
-                </div>
+                )}
+
+                {/* ─── Medicine Detail Dialog ─── */}
+                <Dialog open={!!catalogDetail} onClose={() => setCatalogDetail(null)} fullWidth maxWidth="xs" PaperProps={{ sx: { borderRadius: "24px", overflow: "hidden", maxHeight: "90vh", m: 1 } }}>
+                  {catalogDetail && (() => {
+                    const m = catalogDetail;
+                    const imgs = (m.images || []).map(getImgUrl).filter(Boolean);
+                    const inInv = inventory.some(inv => String(inv.medicineMasterId) === String(m._id));
+                    const mrp = Number(m.mrp || 0);
+                    const price = Number(m.price || 0);
+                    const discPct = mrp > 0 && price > 0 && price < mrp ? Math.round(((mrp - price) / mrp) * 100) : 0;
+                    const cats = Array.isArray(m.category) ? m.category : (m.category ? [m.category] : []);
+                    return (
+                      <>
+                        {/* Header */}
+                        <div style={{ background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, padding: "18px 18px 14px", position: "relative" }}>
+                          <motion.button whileTap={{ scale: 0.85 }} onClick={() => setCatalogDetail(null)}
+                            style={{ position: "absolute", top: 12, right: 12, background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 100, width: 32, height: 32, display: "grid", placeItems: "center", cursor: "pointer" }}>
+                            <X size={16} color="#fff" />
+                          </motion.button>
+                          <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 18, fontWeight: 900, color: "#fff", lineHeight: 1.25, paddingRight: 36 }}>{m.name}</div>
+                          {m.company && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 600, marginTop: 2 }}>{m.company}</div>}
+                        </div>
+
+                        {/* Trust badge */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", background: `${ACCENT}10`, borderBottom: `1px solid ${BORDER_}` }}>
+                          <ShieldCheck size={14} color={DEEP} />
+                          <span style={{ fontSize: 10, fontWeight: 700, color: DEEP }}>Verified in GoDavaii Master Catalog</span>
+                        </div>
+
+                        {/* Image Carousel */}
+                        {imgs.length > 0 && (
+                          <div style={{ position: "relative", background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)", aspectRatio: "4/3" }}>
+                            <img src={imgs[detailImgIdx % imgs.length]} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 12 }} />
+                            {imgs.length > 1 && (
+                              <>
+                                <button onClick={() => setDetailImgIdx(i => (i - 1 + imgs.length) % imgs.length)}
+                                  style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.85)", border: "none", borderRadius: 100, width: 30, height: 30, display: "grid", placeItems: "center", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
+                                  <ChevronLeft size={16} color={DEEP} />
+                                </button>
+                                <button onClick={() => setDetailImgIdx(i => (i + 1) % imgs.length)}
+                                  style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.85)", border: "none", borderRadius: 100, width: 30, height: 30, display: "grid", placeItems: "center", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
+                                  <ChevronRight size={16} color={DEEP} />
+                                </button>
+                                <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 5 }}>
+                                  {imgs.map((_, i) => <div key={i} style={{ width: 7, height: 7, borderRadius: 100, background: i === (detailImgIdx % imgs.length) ? DEEP : "rgba(0,0,0,0.15)", transition: "background 0.2s" }} />)}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                        {imgs.length === 0 && (
+                          <div style={{ background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)", aspectRatio: "4/3", display: "grid", placeItems: "center", fontSize: 54 }}>💊</div>
+                        )}
+
+                        {/* Info Section */}
+                        <div style={{ padding: 16 }}>
+                          {/* Info chips */}
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                            {cats.map(c => <span key={c} style={{ fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, background: `${ACCENT}12`, color: DEEP }}>{c}</span>)}
+                            {m.type && <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, background: "rgba(248,250,252,1)", color: SUB_, border: `1px solid ${BORDER_}` }}>{m.type}</span>}
+                            {m.packCount && <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, background: "rgba(248,250,252,1)", color: SUB_, border: `1px solid ${BORDER_}` }}>{m.packCount} {m.packUnit || ""}</span>}
+                            {m.prescriptionRequired && <span style={{ fontSize: 9, fontWeight: 800, padding: "3px 10px", borderRadius: 100, background: "#fef2f2", color: "#dc2626" }}>Rx Required</span>}
+                          </div>
+
+                          {/* Price */}
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+                            <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 24, fontWeight: 900, color: TEXT_ }}>₹{price}</span>
+                            {mrp > price && <span style={{ fontSize: 14, color: SUB_, textDecoration: "line-through" }}>₹{mrp}</span>}
+                            {discPct > 0 && <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 100, background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff" }}>{discPct}% OFF</span>}
+                          </div>
+
+                          {/* Composition */}
+                          {m.composition && (
+                            <div style={{ marginBottom: 10 }}>
+                              <div style={{ fontSize: 10, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Composition</div>
+                              <div style={{ fontSize: 12, color: TEXT_, fontWeight: 600, lineHeight: 1.4 }}>{m.composition}</div>
+                            </div>
+                          )}
+
+                          {/* Brand */}
+                          {m.brand && (
+                            <div style={{ marginBottom: 10 }}>
+                              <div style={{ fontSize: 10, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Brand</div>
+                              <div style={{ fontSize: 12, color: TEXT_, fontWeight: 600 }}>{m.brand}</div>
+                            </div>
+                          )}
+
+                          {/* Description */}
+                          {detailDesc && (
+                            <div style={{ marginBottom: 10, background: `${BG_}`, borderRadius: 14, padding: 12 }}>
+                              <div style={{ fontSize: 10, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Description</div>
+                              <div style={{ fontSize: 11, color: TEXT_, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{detailDesc}</div>
+                            </div>
+                          )}
+
+                          {/* Actions */}
+                          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                            <motion.button whileTap={{ scale: 0.95 }} onClick={() => setCatalogDetail(null)}
+                              style={{ flex: 1, padding: "12px 0", borderRadius: 14, border: `1px solid ${BORDER_}`, background: "#fff", color: SUB_, fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                              Close
+                            </motion.button>
+                            {inInv ? (
+                              <div style={{ flex: 2, padding: "12px 0", borderRadius: 14, background: `${ACCENT}15`, textAlign: "center", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, color: DEEP }}>
+                                ✓ Already in Inventory
+                              </div>
+                            ) : (
+                              <>
+                                <motion.button whileTap={{ scale: 0.95 }} onClick={() => { addToInventoryWithPrice(m); setCatalogDetail(null); }}
+                                  style={{ flex: 2, padding: "12px 0", borderRadius: 14, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: `0 4px 14px ${DEEP}30` }}>
+                                  + Add to Inventory
+                                </motion.button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </Dialog>
 
                 {/* My Inventory */}
                 <div style={{ background: GLASS, border: `1px solid ${BORDER_}`, borderRadius: 20, padding: 16, marginBottom: 14, boxShadow: "0 4px 16px rgba(16,24,40,0.03)" }}>

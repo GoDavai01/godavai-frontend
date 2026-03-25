@@ -46,6 +46,7 @@ import {
   Wallet,
   ClipboardPlus,
 } from "lucide-react";
+import DoctorBottomNav from "../components/DoctorBottomNav";
 
 dayjs.extend(relativeTime);
 
@@ -447,6 +448,7 @@ function TextArea({ value, onChange, placeholder, rows = 4, className = "" }) {
 
 export default function DoctorDashboard() {
   const navigate = useNavigate();
+  const [mobileTab, setMobileTab] = useState("home");
   const [doctor, setDoctor] = useState(createEmptyDoctor());
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [upcomingConsults, setUpcomingConsults] = useState([]);
@@ -1253,47 +1255,42 @@ export default function DoctorDashboard() {
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#effaf6_0%,#f7fbff_44%,#f4f7fb_100%)]">
-      <div className="mx-auto max-w-[1320px] px-4 pb-32 pt-4 sm:px-6 sm:pb-24 lg:px-8">
+      <div className="mx-auto max-w-[1320px] px-3 pb-24 pt-3 sm:px-6 sm:pb-24 lg:px-8 lg:pt-4">
         {/* HEADER */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden rounded-[30px] border border-emerald-200/60 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_30%),linear-gradient(135deg,#083c34_0%,#0f6d57_55%,#0f7c66_100%)] p-5 text-white shadow-[0_20px_50px_rgba(3,31,27,0.22)]"
+          className="relative overflow-hidden rounded-[22px] sm:rounded-[30px] border border-emerald-200/60 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_30%),linear-gradient(135deg,#083c34_0%,#0f6d57_55%,#0f7c66_100%)] p-4 sm:p-5 text-white shadow-[0_20px_50px_rgba(3,31,27,0.22)]"
         >
           <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.05),transparent)]" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center">
             <div className="flex min-w-0 flex-1 items-center gap-4">
-              <Avatar className="h-16 w-16 border border-white/20 ring-4 ring-white/10">
+              <Avatar className="h-12 w-12 sm:h-16 sm:w-16 border border-white/20 ring-4 ring-white/10">
                 {doctor.avatar ? <AvatarImage src={doctor.avatar} alt={doctor.fullName} /> : null}
                 <AvatarFallback className="bg-white/15 text-lg font-black text-white">{initials(doctor.fullName)}</AvatarFallback>
               </Avatar>
 
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="truncate text-[26px] font-black tracking-tight">{doctor.fullName}</h1>
+                  <h1 className="truncate text-lg sm:text-[26px] font-black tracking-tight">{doctor.fullName}</h1>
                   <Badge className="border border-white/20 bg-white/10 font-bold text-white">
                     <BadgeCheck className="mr-1 h-3.5 w-3.5" />
                     {doctor.profileStatus}
                   </Badge>
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-emerald-50/90">
+                <div className="mt-1 flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm text-emerald-50/90">
                   <span>{doctor.specialty}</span>
+                  <span className="hidden sm:inline">•</span>
+                  <span className="hidden sm:inline">{doctor.qualification}</span>
                   <span>•</span>
-                  <span>{doctor.qualification}</span>
+                  <span>{doctor.yearsExperience} yrs</span>
                   <span>•</span>
-                  <span>{doctor.yearsExperience} yrs exp</span>
-                  <span>•</span>
-                  <span>
-                    {doctor.city}, {doctor.area}
-                  </span>
+                  <span>{doctor.city}</span>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-2">
+                <div className="mt-3 hidden sm:flex flex-wrap items-center gap-2">
                   <div className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold">
-                    GoDavaii Platform / Service Fee Band:{" "}
-                    <span className="font-black">
-                      {currentBand.fee == null ? "Manual Approval" : `${currentBand.label} • ${money(currentBand.fee)} + GST`}
-                    </span>
+                    Platform Fee: <span className="font-black">{currentBand.fee == null ? "Manual" : `${money(currentBand.fee)} + GST`}</span>
                   </div>
                   <div className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold">
                     Payout: <span className="font-black">{doctor.payoutAccountMasked}</span>
@@ -1302,25 +1299,25 @@ export default function DoctorDashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-full lg:max-w-[500px] lg:flex-none">
-              <div className="rounded-[22px] border border-white/15 bg-white/10 p-4 backdrop-blur">
-                <div className="text-xs uppercase tracking-[0.12em] text-emerald-50/80">Next Consult</div>
-                <div className="mt-2 text-lg font-black">{nextConsult ? countdownLabel(nextConsult.bookedFor) : "No queue"}</div>
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-4 lg:w-full lg:max-w-[500px] lg:flex-none">
+              <div className="rounded-[16px] sm:rounded-[22px] border border-white/15 bg-white/10 p-3 sm:p-4 backdrop-blur">
+                <div className="text-[10px] sm:text-xs uppercase tracking-[0.12em] text-emerald-50/80">Next Consult</div>
+                <div className="mt-1 sm:mt-2 text-sm sm:text-lg font-black">{nextConsult ? countdownLabel(nextConsult.bookedFor) : "No queue"}</div>
               </div>
 
-              <div className="rounded-[22px] border border-white/15 bg-white/10 p-4 backdrop-blur">
-                <div className="text-xs uppercase tracking-[0.12em] text-emerald-50/80">Pending</div>
-                <div className="mt-2 text-lg font-black">{todaySummary.pending}</div>
+              <div className="rounded-[16px] sm:rounded-[22px] border border-white/15 bg-white/10 p-3 sm:p-4 backdrop-blur">
+                <div className="text-[10px] sm:text-xs uppercase tracking-[0.12em] text-emerald-50/80">Pending</div>
+                <div className="mt-1 sm:mt-2 text-sm sm:text-lg font-black">{todaySummary.pending}</div>
               </div>
 
-              <div className="rounded-[22px] border border-white/15 bg-white/10 p-4 backdrop-blur">
-                <div className="text-xs uppercase tracking-[0.12em] text-emerald-50/80">Today Earnings</div>
-                <div className="mt-2 text-lg font-black">{money(todaySummary.earnings)}</div>
+              <div className="rounded-[16px] sm:rounded-[22px] border border-white/15 bg-white/10 p-3 sm:p-4 backdrop-blur">
+                <div className="text-[10px] sm:text-xs uppercase tracking-[0.12em] text-emerald-50/80">Today</div>
+                <div className="mt-1 sm:mt-2 text-sm sm:text-lg font-black">{money(todaySummary.earnings)}</div>
               </div>
 
-              <div className="rounded-[22px] border border-white/15 bg-white/10 p-4 backdrop-blur">
-                <div className="text-xs uppercase tracking-[0.12em] text-emerald-50/80">Notifications</div>
-                <div className="mt-2 flex items-center gap-2 text-lg font-black">
+              <div className="rounded-[16px] sm:rounded-[22px] border border-white/15 bg-white/10 p-3 sm:p-4 backdrop-blur">
+                <div className="text-[10px] sm:text-xs uppercase tracking-[0.12em] text-emerald-50/80">Alerts</div>
+                <div className="mt-1 sm:mt-2 flex items-center gap-2 text-sm sm:text-lg font-black">
                   {unreadNotifications}
                   <NotificationBadge count={unreadNotifications} />
                 </div>
@@ -1329,8 +1326,8 @@ export default function DoctorDashboard() {
           </div>
         </motion.div>
 
-        {/* TOP CONTROL RAIL */}
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]">
+        {/* TOP CONTROL RAIL — visible on Home tab (mobile) or always (desktop) */}
+        <div className={cx("mt-3 sm:mt-4 grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)]", mobileTab !== "home" && mobileTab !== "settings" ? "hidden lg:grid" : "")}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard label="Upcoming Consults" value={todaySummary.upcoming} sub="Today queue" icon={CalendarClock} tone="indigo" />
             <KpiCard label="Pending Requests" value={todaySummary.pending} sub="Need action now" icon={AlertCircle} tone="amber" />
@@ -1373,8 +1370,8 @@ export default function DoctorDashboard() {
           </SectionCard>
         </div>
 
-        {/* MAIN CONTENT */}
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)] 2xl:grid-cols-[1.35fr_0.92fr]">
+        {/* MAIN CONTENT — Appointments/Prescriptions visible based on mobile tab */}
+        <div className={cx("mt-3 sm:mt-4 grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)] 2xl:grid-cols-[1.35fr_0.92fr]", mobileTab === "earnings" || mobileTab === "settings" ? "hidden lg:grid" : "")}>
           {/* LEFT COLUMN */}
           <div className="space-y-4">
             <SectionCard
@@ -2047,6 +2044,52 @@ export default function DoctorDashboard() {
           </div>
         </div>
       </div>
+
+      {/* ========================= EARNINGS TAB (Mobile) ========================= */}
+      {mobileTab === "earnings" && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-3 space-y-3"
+        >
+          <div className="rounded-[22px] border border-emerald-200/60 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-700">
+                <Wallet className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-slate-900">Earnings</h2>
+                <p className="text-sm text-slate-500">Your consultation revenue</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Today</div>
+                <div className="mt-2 text-2xl font-black text-emerald-900">{money(todaySummary.earnings)}</div>
+                <div className="text-xs text-emerald-600 mt-1">{todaySummary.completed} consults</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Platform Fee</div>
+                <div className="mt-2 text-2xl font-black text-slate-900">{currentBand.fee == null ? "Manual" : money(currentBand.fee)}</div>
+                <div className="text-xs text-slate-500 mt-1">{currentBand.label} + GST</div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+              <div className="flex items-center gap-2 text-sm">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <span className="font-bold text-amber-800">Payout Account:</span>
+                <span className="text-amber-700">{doctor.payoutAccountMasked || "Not set"}</span>
+              </div>
+            </div>
+
+            <div className="mt-4 text-center text-sm text-slate-400 font-semibold">
+              Full earnings history coming soon
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* ------------------------------ CALL MODAL ----------------------------- */}
       <Dialog open={callOpen} onOpenChange={setCallOpen}>
@@ -3066,7 +3109,7 @@ export default function DoctorDashboard() {
             animate={{ opacity: 1, y: 0, x: "-50%" }}
             exit={{ opacity: 0, y: 16, x: "-50%" }}
             className={cx(
-              "fixed bottom-6 left-1/2 z-[5000] rounded-full px-5 py-3 text-sm font-black shadow-xl",
+              "fixed bottom-20 left-1/2 z-[5000] rounded-full px-5 py-3 text-sm font-black shadow-xl",
               snackbar.tone === "error" ? "bg-rose-600 text-white" : "bg-emerald-600 text-white"
             )}
           >
@@ -3074,6 +3117,13 @@ export default function DoctorDashboard() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* DOCTOR BOTTOM NAV — Mobile */}
+      <DoctorBottomNav
+        activeTab={mobileTab}
+        onTabChange={setMobileTab}
+        unreadCount={incomingRequests.filter((x) => x.status === BOOKING_STATES.PENDING).length + unreadNotifications}
+      />
     </div>
   );
 }
