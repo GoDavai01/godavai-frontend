@@ -45,6 +45,7 @@ import {
   BadgeCheck,
   Wallet,
   ClipboardPlus,
+  LogOut,
 } from "lucide-react";
 import DoctorBottomNav from "../components/DoctorBottomNav";
 
@@ -521,6 +522,13 @@ export default function DoctorDashboard() {
     const maxFee = activeFees.length ? Math.max(...activeFees) : 0;
     return getBandFromFee(maxFee);
   }, [settingsDraft]);
+
+  /* ---- Logout handler ---- */
+  function handleLogout() {
+    localStorage.removeItem("doctorToken");
+    localStorage.removeItem("doctorCurrentId");
+    navigate("/doctor/login");
+  }
 
   useEffect(() => {
     if (!callOpen) {
@@ -1263,6 +1271,14 @@ export default function DoctorDashboard() {
           className="relative overflow-hidden rounded-[22px] sm:rounded-[30px] border border-emerald-200/60 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_30%),linear-gradient(135deg,#083c34_0%,#0f6d57_55%,#0f7c66_100%)] p-4 sm:p-5 text-white shadow-[0_20px_50px_rgba(3,31,27,0.22)]"
         >
           <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.05),transparent)]" />
+          {/* Logout button — top right of header */}
+          <button
+            onClick={handleLogout}
+            className="absolute right-3 top-3 sm:right-5 sm:top-5 z-10 flex items-center gap-1.5 rounded-full border border-rose-400/30 bg-rose-500/20 px-3 py-1.5 text-xs font-bold text-rose-100 backdrop-blur transition hover:bg-rose-500/40 hover:text-white"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Logout</span>
+          </button>
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center">
             <div className="flex min-w-0 flex-1 items-center gap-4">
               <Avatar className="h-12 w-12 sm:h-16 sm:w-16 border border-white/20 ring-4 ring-white/10">
@@ -1877,6 +1893,12 @@ export default function DoctorDashboard() {
                     <Button onClick={handleSaveSettings} className="w-full rounded-2xl bg-emerald-600 font-black text-white hover:bg-emerald-700">
                       <CheckCircle2 className="mr-2 h-4 w-4" />
                       Save Doctor Settings
+                    </Button>
+                  </div>
+                  <div className="mt-3">
+                    <Button onClick={handleLogout} variant="outline" className="w-full rounded-2xl border-rose-300 bg-rose-50 font-black text-rose-600 hover:bg-rose-100 hover:text-rose-700">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Logout
                     </Button>
                   </div>
                 </div>
