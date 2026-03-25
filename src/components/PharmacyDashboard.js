@@ -1656,8 +1656,14 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                 )}
 
                     </div>
-                    {/* ─── Medicine Detail Dialog ─── */}
-                <Dialog open={!!catalogDetail} onClose={() => setCatalogDetail(null)} fullWidth maxWidth="xs" PaperProps={{ sx: { borderRadius: "24px", overflow: "hidden", maxHeight: "90vh", m: 1 } }}>
+
+                  </motion.div>
+                )}
+                </AnimatePresence>
+
+                {/* Medicine Detail Dialog — rendered OUTSIDE overlay so z-index works */}
+                <Dialog open={Boolean(catalogDetail)} onClose={() => setCatalogDetail(null)} fullWidth maxWidth="sm"
+                  sx={{ zIndex: 13000, "& .MuiDialog-paper": { borderRadius: "20px", overflow: "hidden", margin: "16px", maxHeight: "90vh" } }}>
                   {catalogDetail && (() => {
                     const m = catalogDetail;
                     const imgs = (m.images || []).map(getImgUrl).filter(Boolean);
@@ -1678,7 +1684,7 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                           {m.company && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 600, marginTop: 2 }}>{m.company}</div>}
                         </div>
 
-                        {/* Trust badge — matching Medicines.js */}
+                        {/* Trust badge */}
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "linear-gradient(135deg, #ECFDF5, #D1FAE5)", borderBottom: `1px solid ${BORDER_}` }}>
                           <ShieldCheck size={16} color={DEEP} />
                           <div>
@@ -1714,7 +1720,6 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
 
                         {/* Info Section */}
                         <div style={{ padding: 16 }}>
-                          {/* Info chips */}
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
                             {cats.map(c => <span key={c} style={{ fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, background: `${ACCENT}12`, color: DEEP }}>{c}</span>)}
                             {m.type && <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, background: "rgba(248,250,252,1)", color: SUB_, border: `1px solid ${BORDER_}` }}>{m.type}</span>}
@@ -1722,14 +1727,12 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                             {m.prescriptionRequired && <span style={{ fontSize: 9, fontWeight: 800, padding: "3px 10px", borderRadius: 100, background: "#fef2f2", color: "#dc2626" }}>Rx Required</span>}
                           </div>
 
-                          {/* Price */}
                           <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
                             <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 24, fontWeight: 900, color: TEXT_ }}>₹{price}</span>
                             {mrp > price && <span style={{ fontSize: 14, color: SUB_, textDecoration: "line-through" }}>₹{mrp}</span>}
                             {discPct > 0 && <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 100, background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff" }}>{discPct}% OFF</span>}
                           </div>
 
-                          {/* Composition */}
                           {m.composition && (
                             <div style={{ marginBottom: 10 }}>
                               <div style={{ fontSize: 10, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Composition</div>
@@ -1737,7 +1740,6 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                             </div>
                           )}
 
-                          {/* Brand */}
                           {m.brand && (
                             <div style={{ marginBottom: 10 }}>
                               <div style={{ fontSize: 10, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Brand</div>
@@ -1745,7 +1747,6 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                             </div>
                           )}
 
-                          {/* Description */}
                           {detailDesc && (
                             <div style={{ marginBottom: 10, background: `${BG_}`, borderRadius: 14, padding: 12 }}>
                               <div style={{ fontSize: 10, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Description</div>
@@ -1753,7 +1754,6 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                             </div>
                           )}
 
-                          {/* Actions */}
                           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
                             {inInv ? (
                               <>
@@ -1789,10 +1789,6 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                     );
                   })()}
                 </Dialog>
-
-                  </motion.div>
-                )}
-                </AnimatePresence>
 
                 {/* My Inventory */}
                 <div style={{ background: GLASS, border: `1px solid ${BORDER_}`, borderRadius: 20, padding: 16, marginBottom: 14, boxShadow: "0 4px 16px rgba(16,24,40,0.03)" }}>
