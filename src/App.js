@@ -108,7 +108,8 @@ function AppContent() {
     location.pathname === "/home" ||
     location.pathname.startsWith("/ai") ||
     location.pathname.startsWith("/step-tracker") ||
-    location.pathname.startsWith("/consult-room");
+    location.pathname.startsWith("/consult-room") ||
+    location.pathname.startsWith("/pharmacy/dashboard");
   const hideViewCartBar = location.pathname.startsWith("/consult-room");
     
   React.useEffect(() => {
@@ -132,6 +133,7 @@ function AppContent() {
         <Route path="/otp-login" element={<OtpLogin />} />
         <Route path="/onboarding" element={<OnboardingWizard />} />
         <Route path="/pharmacy/login" element={<PharmacyLogin />} />
+        <Route path="/pharmacy/dashboard" element={<PharmacyDashboard />} />
         <Route path="/order/:orderId" element={<OrderTracking />} />
         <Route path="/order-tracking/:orderId" element={<OrderTracking />} />
         <Route path="/orders/:orderId" element={<OrderTracking />} />
@@ -186,14 +188,7 @@ function AppContent() {
             }
           />
 
-          <Route
-            path="/pharmacy/dashboard"
-            element={
-              <ProtectedRoute>
-                <PharmacyDashboard />
-              </ProtectedRoute>
-            }
-          />
+          {/* pharmacy/dashboard moved to standalone route above */}
           <Route
             path="/pharmacy/register"
             element={

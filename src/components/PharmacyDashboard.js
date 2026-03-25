@@ -24,14 +24,20 @@ import CompositionAutocomplete from "./fields/CompositionAutocomplete";
 import { postSuggestLearn } from "../api/suggest";
 import PharmacySettlementTab from "./PharmacySettlementTab";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Pill,
   MapPin,
   Wallet,
   FileDown,
   BadgeCheck,
-  LogOut
+  LogOut,
+  Package,
+  Settings,
+  ChevronDown,
+  RefreshCw,
+  Plus,
+  Search
 } from "lucide-react";
 
 // eslint-disable-next-line no-unused-vars
@@ -192,216 +198,108 @@ function EarningsTab({ payouts, token }) {
   const [payoutsPage, setPayoutsPage] = useState(1);
   const PAYOUTS_PER_PAGE = 10;
 
-  // fetch order details for payouts (unchanged)
-  const [ordersById, setOrdersById] = useState({});
-  useEffect(() => {
-    const ids = payouts.map(p => p?.orderId?._id).filter(Boolean);
-    const toFetch = ids.filter(id => !ordersById[id]);
-    if (!toFetch.length) return;
+  // Order details come pre-populated from pay.orderId (no individual fetch needed)
 
-    Promise.all(
-      toFetch.map(id =>
-        axios
-          .get(`${API_BASE_URL}/api/orders/${id}`, { headers: { Authorization: `Bearer ${token}` } })
-          .then(res => [id, res.data])
-          .catch(() => [id, null])
-      )
-    ).then(entries => {
-      setOrdersById(prev => {
-        const out = { ...prev };
-        for (const [id, data] of entries) if (data) out[id] = data;
-        return out;
-      });
-    });
-  }, [payouts]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rows = view === "daily" ? daily : view === "weekly" ? weekly : monthly;
 
   return (
-    <Box className="mt-2">
-      {/* KPI row */}
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={2}
-        sx={{ mb: 2 }}
-        className="[&>*]:rounded-2xl"
-      >
-        {[{
-          label: "Total Earnings (All Time)",
-          value: formatRupees(totalAll),
-          Icon: Wallet
-        },{
-          label: "Payouts",
-          value: payouts.length,
-          Icon: BadgeCheck
-        },{
-          label: "Average Payout",
-          value: formatRupees(avg),
-          Icon: Wallet
-        },{
-          label: "Largest Payout",
-          value: formatRupees(largest),
-          Icon: Wallet
-        }].map(({label, value, Icon}, idx) => (
-          <motion.div
-            key={idx}
-            initial={{opacity:0, y:8, scale:.98}}
-            animate={{opacity:1, y:0, scale:1}}
-            transition={{duration:.25, delay: idx*0.05}}
-            style={{ flex: 1 }}
-          >
-            <Card className="bg-white border border-emerald-200">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-emerald-700 uppercase tracking-wide text-xs font-bold">
-                  <Icon size={16} />
-                  {label}
-                </div>
-                <div className="mt-2 text-2xl font-extrabold text-slate-900">{value}</div>
-              </CardContent>
-            </Card>
+    <div>
+      {/* KPI Grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+        {[
+          { label: "Total Earnings", value: formatRupees(totalAll), Icon: Wallet },
+          { label: "Payouts", value: payouts.length, Icon: BadgeCheck },
+          { label: "Avg Payout", value: formatRupees(avg), Icon: Wallet },
+          { label: "Largest", value: formatRupees(largest), Icon: Wallet },
+        ].map(({ label, value, Icon }, idx) => (
+          <motion.div key={idx} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }}>
+            <div style={{ background: "rgba(255,255,255,0.92)", border: "1px solid rgba(12,90,62,0.08)", borderRadius: 18, padding: "14px 16px", boxShadow: "0 4px 16px rgba(16,24,40,0.03)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                <Icon size={14} color="#0A5A3B" />
+                <span style={{ fontSize: 10, fontWeight: 800, color: "#6A7A73", textTransform: "uppercase", letterSpacing: 0.8 }}>{label}</span>
+              </div>
+              <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 20, fontWeight: 900, color: "#10231A" }}>{value}</div>
+            </div>
           </motion.div>
         ))}
-      </Stack>
-
-      {/* View switcher */}
-      <div className="mb-3 flex items-center gap-3">
-        <span className="text-emerald-700 text-xs uppercase font-bold">View:</span>
-        <ToggleButtonGroup
-          exclusive
-          color="primary"
-          size="small"
-          value={view}
-          onChange={(_, v) => v && setView(v)}
-          sx={{ "& .MuiToggleButton-root": { fontWeight: 700 } }}
-        >
-          <ToggleButton value="daily">Daily</ToggleButton>
-          <ToggleButton value="weekly">Weekly</ToggleButton>
-          <ToggleButton value="monthly">Monthly</ToggleButton>
-        </ToggleButtonGroup>
       </div>
 
-      {/* Aggregated table */}
-      <motion.div
-        initial={{opacity:0, y:8}}
-        animate={{opacity:1, y:0}}
-        transition={{duration:.25}}
-      >
-        <Card className="bg-white border border-emerald-200 rounded-2xl mb-4">
-          <CardContent>
-            <Typography variant="h6" className="mb-2 font-extrabold">
-              {view === "daily" ? "Daily totals (last 30 days)" :
-               view === "weekly" ? "Weekly totals (last 12 weeks)" :
-               "Monthly totals (last 12 months)"}
-            </Typography>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{view === "weekly" ? "Week" : view === "monthly" ? "Month" : "Date"}</TableCell>
-                  <TableCell align="right">Earnings</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(view === "daily" ? daily : view === "weekly" ? weekly : monthly).map((row) => (
-                  <TableRow key={row.key}>
-                    <TableCell>
-                      {view === "weekly" ? weekLabel(row.date) : row.key}
-                    </TableCell>
-                    <TableCell align="right">{formatRupees(row.amount)}</TableCell>
-                  </TableRow>
-                ))}
-                {(view === "daily" ? daily : view === "weekly" ? weekly : monthly).length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={2}><Typography color="warning.main">No data yet.</Typography></TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </motion.div>
+      {/* View Switcher */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {["daily", "weekly", "monthly"].map((v) => (
+          <motion.button key={v} whileTap={{ scale: 0.95 }} onClick={() => setView(v)}
+            style={{
+              padding: "8px 18px", borderRadius: 100, border: "none", cursor: "pointer",
+              background: view === v ? "#0A5A3B" : "rgba(255,255,255,0.92)",
+              color: view === v ? "#fff" : "#6A7A73",
+              fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 800,
+              boxShadow: view === v ? "0 4px 14px rgba(10,90,59,0.25)" : "0 2px 8px rgba(16,24,40,0.03)",
+              border: view === v ? "none" : "1px solid rgba(12,90,62,0.08)",
+            }}>
+            {v.charAt(0).toUpperCase() + v.slice(1)}
+          </motion.button>
+        ))}
+      </div>
 
-      {/* Raw payouts table — horizontally scrollable + extra cols (unchanged logic) */}
-      <motion.div
-        initial={{opacity:0, y:8}}
-        animate={{opacity:1, y:0}}
-        transition={{duration:.25, delay:.05}}
-      >
-        <Card className="bg-white border border-emerald-200 rounded-2xl">
-          <CardContent>
-            <div className="mb-2 flex items-center gap-2">
-              <Wallet size={18} className="text-emerald-700" />
-              <Typography variant="h6" className="font-extrabold">All Payouts</Typography>
+      {/* Aggregated Rows */}
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+        <div style={{ background: "rgba(255,255,255,0.92)", border: "1px solid rgba(12,90,62,0.08)", borderRadius: 20, padding: 16, marginBottom: 16, boxShadow: "0 4px 16px rgba(16,24,40,0.03)" }}>
+          <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 900, color: "#10231A", marginBottom: 12 }}>
+            {view === "daily" ? "Daily (last 30 days)" : view === "weekly" ? "Weekly (last 12 weeks)" : "Monthly (last 12 months)"}
+          </div>
+          {rows.length === 0 && <div style={{ color: "#6A7A73", fontSize: 13, fontWeight: 600, textAlign: "center", padding: 20 }}>No data yet.</div>}
+          {rows.map((row, i) => (
+            <div key={row.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: i < rows.length - 1 ? "1px solid rgba(12,90,62,0.06)" : "none" }}>
+              <span style={{ fontSize: 12, color: "#6A7A73", fontWeight: 600 }}>{view === "weekly" ? weekLabel(row.date) : row.key}</span>
+              <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 800, color: "#0A5A3B" }}>{formatRupees(row.amount)}</span>
             </div>
-
-            <Box sx={{ overflowX: "auto" }}>
-              <Table size="small" sx={{ minWidth: 980 }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Order</TableCell>
-                    <TableCell>Date</TableCell>
-                    <TableCell>Amount</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Order Detail</TableCell>
-                    <TableCell>Invoice</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {payouts
-                    .slice()
-                    .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))
-                    .slice(0, payoutsPage * PAYOUTS_PER_PAGE)
-                    .map((pay) => {
-                      const orderId = pay.orderId?._id;
-                      const order   = orderId ? (ordersById[orderId] || pay.orderId) : null;
-                      const itemsText = order?.items?.length
-                        ? order.items.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ")
-                        : "—";
-                      return (
-                        <TableRow key={pay._id}>
-                          <TableCell className="font-semibold">{orderId ? orderId.slice(-5) : "—"}</TableCell>
-                          <TableCell>{new Date(pay.createdAt).toLocaleString()}</TableCell>
-                          <TableCell>{formatRupees(pay.pharmacyAmount)}</TableCell>
-                          <TableCell className="capitalize">{pay.status}</TableCell>
-                          <TableCell title={itemsText} className="max-w-[360px] truncate">{itemsText}</TableCell>
-                          <TableCell>
-                            {order?.invoiceFile ? (
-                              <a href={order.invoiceFile} target="_blank" rel="noopener noreferrer" className="inline-flex">
-                                <Button
-                                  variant="outlined"
-                                  size="small"
-                                  className="rounded-xl"
-                                  startIcon={<FileDown size={16} />}
-                                >
-                                  Download
-                                </Button>
-                              </a>
-                            ) : (
-                              <span className="text-slate-500">—</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  {payouts.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6}>
-                        <Typography color="warning.main">No payouts yet.</Typography>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </Box>
-            {payouts.length > payoutsPage * PAYOUTS_PER_PAGE && (
-              <Box sx={{ textAlign: "center", mt: 2 }}>
-                <Button size="small" variant="outlined" onClick={() => setPayoutsPage(p => p + 1)}
-                  sx={{ borderRadius: 3, fontWeight: 700, fontSize: 12 }}>
-                  Load More ({payouts.length - payoutsPage * PAYOUTS_PER_PAGE} remaining)
-                </Button>
-              </Box>
-            )}
-          </CardContent>
-        </Card>
+          ))}
+        </div>
       </motion.div>
-    </Box>
+
+      {/* Payout Cards */}
+      <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 900, color: "#10231A", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+        <Wallet size={16} color="#0A5A3B" /> All Payouts
+      </div>
+      {payouts.length === 0 && <div style={{ color: "#6A7A73", fontSize: 13, fontWeight: 600, textAlign: "center", padding: 30 }}>No payouts yet.</div>}
+      {payouts
+        .slice()
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, payoutsPage * PAYOUTS_PER_PAGE)
+        .map((pay) => {
+          const orderId = pay.orderId?._id;
+          const order = pay.orderId || null;
+          const itemsText = order?.items?.length ? order.items.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ") : "";
+          return (
+            <motion.div key={pay._id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <div style={{ background: "rgba(255,255,255,0.92)", border: "1px solid rgba(12,90,62,0.08)", borderRadius: 16, padding: "12px 14px", marginBottom: 8, boxShadow: "0 2px 8px rgba(16,24,40,0.02)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, color: "#10231A" }}>#{orderId ? orderId.slice(-5) : "—"}</span>
+                  <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 900, color: "#0A5A3B" }}>{formatRupees(pay.pharmacyAmount)}</span>
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 10, color: "#6A7A73", fontWeight: 600 }}>{new Date(pay.createdAt).toLocaleDateString()}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 100, background: pay.status === "paid" ? "rgba(10,90,59,0.08)" : "rgba(245,158,11,0.1)", color: pay.status === "paid" ? "#0A5A3B" : "#d97706", textTransform: "capitalize" }}>{pay.status}</span>
+                </div>
+                {itemsText && <div style={{ fontSize: 11, color: "#6A7A73", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{itemsText}</div>}
+                {order?.invoiceFile && (
+                  <a href={order.invoiceFile} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, fontSize: 11, fontWeight: 700, color: "#0A5A3B", textDecoration: "none" }}>
+                    <FileDown size={12} /> Invoice
+                  </a>
+                )}
+              </div>
+            </motion.div>
+          );
+        })}
+      {payouts.length > payoutsPage * PAYOUTS_PER_PAGE && (
+        <div style={{ textAlign: "center", marginTop: 12 }}>
+          <motion.button whileTap={{ scale: 0.95 }} onClick={() => setPayoutsPage(p => p + 1)}
+            style={{ padding: "8px 24px", borderRadius: 100, border: "1px solid rgba(12,90,62,0.15)", background: "rgba(10,90,59,0.04)", color: "#0A5A3B", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            Load More ({payouts.length - payoutsPage * PAYOUTS_PER_PAGE} remaining)
+          </motion.button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1141,57 +1039,57 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
   const [ordersPage, setOrdersPage] = useState(1);
   const ORDERS_PER_PAGE = 10;
 
+  // ─── Design constants (match Home.js) ───
+  const DEEP = "#0A5A3B";
+  const MID_ = "#0F7A53";
+  const ACCENT = "#18E2A1";
+  const BG_ = "#F4FBF8";
+  const GLASS = "rgba(255,255,255,0.92)";
+  const BORDER_ = "rgba(12,90,62,0.08)";
+  const TEXT_ = "#10231A";
+  const SUB_ = "#6A7A73";
+
   if (!token) {
     return (
-      <ThemeProvider theme={appTheme}>
-        <CssBaseline />
-        <Box className="min-h-screen" sx={{ bgcolor: "background.default" }}>
-          <Box className="mt-10 w-full max-w-[420px] mx-auto rounded-2xl border border-emerald-200 bg-white p-5 shadow">
-            <div className="flex items-center gap-2 mb-3">
-              <Pill className="text-emerald-700" size={22} />
-              <Typography variant="h5" className="font-extrabold">Pharmacy Login</Typography>
-            </div>
-            <TextField
-              label="Mobile number or Email"
-              fullWidth sx={{ mb: 2 }}
-              value={login.email}
-              onChange={e => setLogin({ ...login, email: e.target.value })}
-              onFocus={() => setIsEditing(true)}
-              onBlur={() => setIsEditing(false)}
-            />
-            <TextField
-              label="Password"
-              type="password"
-              fullWidth sx={{ mb: 2 }}
-              value={login.password}
-              onChange={e => setLogin({ ...login, password: e.target.value })}
-              onFocus={() => setIsEditing(true)}
-              onBlur={() => setIsEditing(false)}
-            />
-            <Button variant="outlined" fullWidth onClick={handleSendOtp} disabled={loading} sx={{ mb: 2 }}>
-              {loading ? "Sending OTP..." : "Send OTP"}
-            </Button>
-            <Button variant="contained" fullWidth onClick={handleLogin} disabled={loading}>
-              {loading ? "Logging in..." : "Login"}
-            </Button>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: `linear-gradient(180deg, ${BG_}, #EEF8F4)`, position: "relative", overflow: "hidden" }}>
+        {/* Decorative orbs */}
+        <div style={{ position: "absolute", top: -60, right: -60, width: 200, height: 200, borderRadius: "50%", background: `radial-gradient(circle, ${ACCENT}15, transparent 70%)`, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", bottom: -40, left: -40, width: 140, height: 140, borderRadius: "50%", background: `radial-gradient(circle, ${MID_}10, transparent 70%)`, pointerEvents: "none" }} />
 
-            <Snackbar open={!!msg} autoHideDuration={2400} onClose={() => setMsg("")}>
-              <Alert onClose={() => setMsg("")} severity={
-                /fail|error|not found|invalid|incorrect|missing|unable/i.test(msg) ? "error" : "success"
-              }>
-                {msg}
-              </Alert>
-            </Snackbar>
-          </Box>
-        </Box>
-      </ThemeProvider>
+        <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          style={{ width: "100%", maxWidth: 420, background: GLASS, border: `1px solid ${BORDER_}`, borderRadius: 28, padding: "32px 24px", boxShadow: "0 24px 64px rgba(16,24,40,0.06), 0 0 0 1px rgba(12,90,62,0.04)" }}>
+
+          {/* Header */}
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 20, background: `${DEEP}10`, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+              <Pill size={24} color={DEEP} />
+            </div>
+            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 22, fontWeight: 900, color: TEXT_, letterSpacing: -0.5 }}>Partner Portal</div>
+            <div style={{ fontSize: 13, color: SUB_, fontWeight: 600, marginTop: 4 }}>Sign in to your pharmacy dashboard</div>
+          </div>
+
+          <TextField label="Mobile number or Email" fullWidth value={login.email} onChange={e => setLogin({ ...login, email: e.target.value })} onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)}
+            sx={{ mb: 2, "& .MuiOutlinedInput-root": { borderRadius: "14px", background: "rgba(244,251,248,0.6)", "& fieldset": { borderColor: BORDER_ } } }} />
+          <TextField label="Password" type="password" fullWidth value={login.password} onChange={e => setLogin({ ...login, password: e.target.value })} onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)}
+            sx={{ mb: 2.5, "& .MuiOutlinedInput-root": { borderRadius: "14px", background: "rgba(244,251,248,0.6)", "& fieldset": { borderColor: BORDER_ } } }} />
+
+          <motion.button whileTap={{ scale: 0.97 }} onClick={handleSendOtp} disabled={loading}
+            style={{ width: "100%", height: 48, borderRadius: 14, border: `2px solid ${MID_}`, background: "transparent", color: MID_, fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 800, cursor: "pointer", marginBottom: 10 }}>
+            {loading ? "Sending OTP..." : "Send OTP"}
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.97 }} onClick={handleLogin} disabled={loading}
+            style={{ width: "100%", height: 48, borderRadius: 14, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 800, cursor: "pointer", boxShadow: `0 6px 20px ${DEEP}30` }}>
+            {loading ? "Logging in..." : "Login"}
+          </motion.button>
+
+          <Snackbar open={!!msg} autoHideDuration={2400} onClose={() => setMsg("")}>
+            <Alert onClose={() => setMsg("")} severity={/fail|error|not found|invalid|incorrect|missing|unable/i.test(msg) ? "error" : "success"}>{msg}</Alert>
+          </Snackbar>
+        </motion.div>
+      </div>
     );
   }
 
-  // Premium style constants
-const GD = "#065f46";
-const GDL = "#059669";
-const GDB = "#064e3b";
 const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0 || o.status === "pending");
   const totalEarnings = payouts.reduce((s, p) => s + (p.pharmacyAmount || 0), 0);
 
@@ -1236,710 +1134,476 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const visibleOrders = nonPendingOrders.slice(0, ordersPage * ORDERS_PER_PAGE);
 
+  // ─── Bottom nav config ───
+  const navItems = [
+    { icon: Package, label: "Orders", idx: 0 },
+    { icon: Pill, label: "Medicines", idx: 2 },
+    { icon: Wallet, label: "Earnings", idx: 1 },
+    { icon: Settings, label: "More", idx: 3 },
+  ];
+
   return (
-    <ThemeProvider theme={appTheme}>
-      <CssBaseline />
-      <Box sx={{ bgcolor: "#f0faf5", minHeight: "100vh" }}>
-        <Box sx={{ maxWidth: 520, mx: "auto", px: 1.5, pb: 10 }}>
+    <div style={{ background: BG_, minHeight: "100vh", position: "relative" }}>
+      {/* Subtle background gradient */}
+      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(circle at top right, rgba(24,226,161,0.06), transparent 26%), radial-gradient(circle at bottom left, rgba(15,122,83,0.04), transparent 30%)" }} />
 
-          {/* ===== PREMIUM HERO HEADER ===== */}
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-            <Box sx={{
-              background: `linear-gradient(145deg, ${GDB} 0%, ${GD} 30%, ${GDL} 70%, #10b981 100%)`,
-              borderRadius: "0 0 32px 32px",
-              px: 2.5, pt: 3.5, pb: 3,
-              position: "relative", overflow: "hidden"
-            }}>
-              {/* Decorative elements */}
-              <Box sx={{ position: "absolute", right: -40, top: -40, width: 160, height: 160, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%)" }} />
-              <Box sx={{ position: "absolute", left: -20, bottom: -30, width: 100, height: 100, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%)" }} />
+      <div style={{ maxWidth: 520, margin: "0 auto", paddingBottom: 88, position: "relative" }}>
 
-              <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                <Box>
-                  <Typography sx={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: 2, textTransform: "uppercase", mb: 0.5 }}>
-                    GoDavaii Partner
-                  </Typography>
-                  <Typography sx={{ fontSize: 24, fontWeight: 900, color: "#fff", letterSpacing: -0.5, lineHeight: 1.1 }}>
-                    {pharmacy?.name || "Pharmacy"}
-                  </Typography>
-                </Box>
-                <Stack direction="row" alignItems="center" spacing={0.8}>
-                  <Box sx={{
-                    px: 1.5, py: 0.5, borderRadius: 100,
-                    bgcolor: active ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.25)",
-                    backdropFilter: "blur(8px)",
-                    border: `1px solid ${active ? "rgba(74,222,128,0.3)" : "rgba(248,113,113,0.3)"}`,
-                    display: "flex", alignItems: "center", gap: 0.5,
-                  }}>
-                    <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: active ? "#4ade80" : "#f87171", boxShadow: active ? "0 0 10px #4ade80" : "0 0 10px #f87171", animation: active ? "pulse 2s infinite" : "none" }} />
-                    <Typography sx={{ fontSize: 10, fontWeight: 800, color: "#fff", letterSpacing: 0.5 }}>{active ? "ONLINE" : "OFFLINE"}</Typography>
-                  </Box>
-                  <Switch
-                    checked={active}
-                    size="small"
-                    onChange={async (e) => {
-                      const next = e.target.checked;
-                      setActive(next);
-                      try { await axios.patch(`${API_BASE_URL}/api/pharmacies/active`, { active: next }, { headers: { Authorization: `Bearer ${token}` } }); }
-                      catch { setActive(!next); setMsg("Failed to update."); }
-                    }}
-                    sx={{ "& .MuiSwitch-thumb": { bgcolor: "#fff" }, "& .Mui-checked .MuiSwitch-thumb": { bgcolor: "#4ade80" } }}
-                  />
-                </Stack>
-              </Stack>
-
-              {/* Quick stats row */}
-              <Stack direction="row" spacing={1} sx={{ mt: 2.5 }}>
-                {[
-                  { label: "Today", value: ordersToday.length, color: "#6ee7b7" },
-                  { label: "Pending", value: pendingOrders.length, color: "#fbbf24" },
-                  { label: "Delivered", value: completedOrders.length, color: "#34d399" },
-                  { label: "Earned", value: `₹${Math.round(totalEarnings).toLocaleString("en-IN")}`, color: "#a7f3d0" },
-                ].map((s, i) => (
-                  <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.06 }} style={{ flex: 1 }}>
-                    <Box sx={{
-                      bgcolor: "rgba(255,255,255,0.1)", backdropFilter: "blur(16px)",
-                      border: "1px solid rgba(255,255,255,0.12)", borderRadius: 3,
-                      px: 1, py: 1.2, textAlign: "center",
-                    }}>
-                      <Typography sx={{ fontSize: 18, fontWeight: 900, color: "#fff", lineHeight: 1 }}>{s.value}</Typography>
-                      <Typography sx={{ fontSize: 9, fontWeight: 700, color: s.color, textTransform: "uppercase", letterSpacing: 0.8, mt: 0.5 }}>{s.label}</Typography>
-                    </Box>
-                  </motion.div>
-                ))}
-              </Stack>
-            </Box>
-          </motion.div>
-
-          {/* ===== PILL TABS ===== */}
-          <Box sx={{ display: "flex", gap: 0.8, mt: 2.5, mb: 2, px: 0.5, overflowX: "auto", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}>
-            {["Overview", "Earnings", "Medicines", "Settlement"].map((label, i) => (
-              <motion.button
-                key={label}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setTab(i)}
-                style={{
-                  padding: "9px 20px", borderRadius: 100, border: "none", cursor: "pointer",
-                  background: tab === i ? GD : "#fff",
-                  color: tab === i ? "#fff" : "#64748b",
-                  fontWeight: 800, fontSize: 13, whiteSpace: "nowrap",
-                  boxShadow: tab === i ? `0 4px 16px ${GD}35` : "0 1px 6px rgba(0,0,0,0.04)",
-                  transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+        {/* ===== STICKY HEADER ===== */}
+        <div style={{ position: "sticky", top: 0, zIndex: 20, padding: "14px 18px 0", backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)", background: "linear-gradient(180deg, rgba(244,251,248,0.94), rgba(244,251,248,0.82))", borderBottom: `1px solid ${BORDER_}` }}>
+          {/* Top row: name + status */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 900, color: SUB_, textTransform: "uppercase", letterSpacing: 1.5 }}>GoDavaii Partner</div>
+              <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 20, fontWeight: 1000, color: TEXT_, lineHeight: 1.15, letterSpacing: -0.5 }}>{pharmacy?.name || "Pharmacy"}</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 100, background: active ? "rgba(24,226,161,0.12)" : "rgba(248,113,113,0.12)", border: `1px solid ${active ? "rgba(24,226,161,0.2)" : "rgba(248,113,113,0.2)"}` }}>
+                <div style={{ width: 7, height: 7, borderRadius: "50%", background: active ? ACCENT : "#f87171", boxShadow: active ? `0 0 8px ${ACCENT}` : "0 0 8px #f87171", animation: "glowPulse 2s ease-in-out infinite" }} />
+                <span style={{ fontSize: 10, fontWeight: 800, color: active ? DEEP : "#dc2626" }}>{active ? "ONLINE" : "OFFLINE"}</span>
+              </div>
+              <Switch checked={active} size="small"
+                onChange={async (e) => {
+                  const next = e.target.checked;
+                  setActive(next);
+                  try { await axios.patch(`${API_BASE_URL}/api/pharmacies/active`, { active: next }, { headers: { Authorization: `Bearer ${token}` } }); }
+                  catch { setActive(!next); setMsg("Failed to update."); }
                 }}
-              >
-                {label}
-              </motion.button>
-            ))}
-          </Box>
+                sx={{ "& .MuiSwitch-thumb": { bgcolor: "#fff" }, "& .Mui-checked .MuiSwitch-thumb": { bgcolor: ACCENT }, "& .Mui-checked+.MuiSwitch-track": { bgcolor: `${DEEP} !important` } }} />
+            </div>
+          </div>
 
-          {/* ================== OVERVIEW TAB ================== */}
-          {tab === 0 && (
-            <>
-              {/* Fulfillment Controls */}
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-                <Box sx={{ bgcolor: "#fff", borderRadius: 4, border: "1px solid #d1fae5", p: 2, mb: 2, boxShadow: "0 2px 16px rgba(0,0,0,0.03)" }}>
-                  <Typography sx={{ fontSize: 12, fontWeight: 800, color: GD, mb: 1.5, textTransform: "uppercase", letterSpacing: 1 }}>
-                    Fulfillment Controls
-                  </Typography>
-                  <Stack direction="row" spacing={1.5}>
-                    {[
-                      { label: "Rx Enabled", key: "rxEnabled", color: GDL },
-                      { label: "OTC Only", key: "otcOnly", color: "#0ea5e9" },
-                    ].map((ctrl) => (
-                      <Box key={ctrl.key} sx={{
-                        flex: 1, display: "flex", alignItems: "center", justifyContent: "space-between",
-                        bgcolor: liveConfig[ctrl.key] ? `${ctrl.color}10` : "#f8fafc",
-                        border: `1.5px solid ${liveConfig[ctrl.key] ? `${ctrl.color}30` : "#e2e8f0"}`,
-                        borderRadius: 3, px: 1.5, py: 1,
-                      }}>
-                        <Typography sx={{ fontSize: 12, fontWeight: 700, color: liveConfig[ctrl.key] ? ctrl.color : "#94a3b8" }}>{ctrl.label}</Typography>
-                        <Switch
-                          size="small"
-                          checked={!!liveConfig[ctrl.key]}
-                          disabled={savingLiveConfig}
-                          onChange={(e) => saveLiveConfig({ [ctrl.key]: e.target.checked })}
-                          sx={{ "& .Mui-checked": { color: ctrl.color } }}
-                        />
-                      </Box>
-                    ))}
-                  </Stack>
-
-                  {/* Location */}
-                  <motion.button
-                    whileTap={{ scale: 0.97 }}
-                    onClick={async () => {
-                      if (!navigator.geolocation) { alert("Geolocation not supported."); return; }
-                      navigator.geolocation.getCurrentPosition(
-                        async (pos) => {
-                          try {
-                            const { latitude, longitude } = pos.coords;
-                            const res = await axios.get(`${API_BASE_URL}/api/geocode?lat=${latitude}&lng=${longitude}`);
-                            const formatted = res.data.results?.[0]?.formatted_address || "";
-                            await axios.patch(`${API_BASE_URL}/api/pharmacies/set-location`, { lat: latitude, lng: longitude, formatted }, { headers: { Authorization: `Bearer ${token}` } });
-                            setMsg("Location updated!");
-                          } catch { setMsg("Failed to update location!"); }
-                        },
-                        (err) => alert("Could not fetch location: " + err.message)
-                      );
-                    }}
-                    style={{
-                      width: "100%", marginTop: 14, padding: "10px 16px", borderRadius: 14,
-                      border: `1.5px solid ${pharmacy.location?.coordinates?.[0] ? "#d1fae5" : "#fde68a"}`,
-                      background: pharmacy.location?.coordinates?.[0] ? "#f0fdf4" : "#fffbeb",
-                      display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
-                    }}
-                  >
-                    <MapPin size={16} color={pharmacy.location?.coordinates?.[0] ? GD : "#d97706"} />
-                    <div style={{ textAlign: "left", flex: 1 }}>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: pharmacy.location?.coordinates?.[0] ? GD : "#92400e" }}>
-                        {pharmacy.location?.coordinates?.[0] ? "Location Set" : "Set Your Location"}
-                      </div>
-                      {pharmacy.location?.formatted && (
-                        <div style={{ fontSize: 10, color: "#64748b", marginTop: 2, lineHeight: 1.3 }}>{pharmacy.location.formatted}</div>
-                      )}
-                    </div>
-                  </motion.button>
-                </Box>
+          {/* Quick stats row */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, paddingBottom: 14 }}>
+            {[
+              { label: "Today", value: ordersToday.length },
+              { label: "Pending", value: pendingOrders.length },
+              { label: "Delivered", value: completedOrders.length },
+              { label: "Earned", value: `₹${Math.round(totalEarnings).toLocaleString("en-IN")}` },
+            ].map((s, i) => (
+              <motion.div key={i} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 + i * 0.04 }}>
+                <div style={{ background: GLASS, border: `1px solid ${BORDER_}`, borderRadius: 14, padding: "10px 8px", textAlign: "center", boxShadow: "0 4px 12px rgba(16,24,40,0.02)" }}>
+                  <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900, color: TEXT_, lineHeight: 1 }}>{s.value}</div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: SUB_, textTransform: "uppercase", letterSpacing: 0.7, marginTop: 3 }}>{s.label}</div>
+                </div>
               </motion.div>
+            ))}
+          </div>
+        </div>
 
-              {/* Pending Orders — Priority */}
-              {pendingOrders.length > 0 && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography sx={{ fontSize: 12, fontWeight: 800, color: "#dc2626", textTransform: "uppercase", letterSpacing: 0.8, mb: 1, display: "flex", alignItems: "center", gap: 0.5 }}>
-                    <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#dc2626", animation: "pulse 1.5s infinite" }} />
-                    {pendingOrders.length} Pending {pendingOrders.length === 1 ? "Order" : "Orders"}
-                  </Typography>
-                  {pendingOrders.map((order, idx) => (
-                    <motion.div key={order._id || order.id} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.06 }}>
-                      <Box sx={{
-                        bgcolor: "#fff", borderRadius: 4, borderLeft: "4px solid #fbbf24", border: "1.5px solid #fde68a", p: 2, mb: 1.5,
-                        boxShadow: "0 2px 12px rgba(234,179,8,0.1)",
-                      }}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                          <Typography sx={{ fontSize: 14, fontWeight: 900, color: "#0f172a" }}>
-                            #{String(order._id || order.id).slice(-5)}
-                          </Typography>
-                          <Typography sx={{ fontSize: 10, color: "#94a3b8", fontWeight: 600 }}>
-                            {order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
-                          </Typography>
-                        </Stack>
+        {/* ===== TAB CONTENT ===== */}
+        <div style={{ padding: "16px 18px" }}>
+          <AnimatePresence mode="wait">
 
-                        <Stack direction="row" spacing={0.8} sx={{ mb: 1.5, flexWrap: "wrap", gap: 0.5 }}>
-                          <Chip size="small" icon={<Pill size={12} />} label={`${order.items?.length || 0} items`} sx={{ bgcolor: "#ecfdf5", color: GD, fontWeight: 700, fontSize: 11, height: 26 }} />
-                          {order.address?.area && <Chip size="small" icon={<MapPin size={12} />} label={order.address.area} sx={{ bgcolor: "#f0f9ff", color: "#0369a1", fontWeight: 600, fontSize: 11, height: 26 }} />}
-                          <Chip size="small" icon={<Wallet size={12} />} label={`₹${Math.round((order.total || 0) * 0.84)}`} sx={{ bgcolor: "#fef9c3", color: "#92400e", fontWeight: 700, fontSize: 11, height: 26 }} />
-                        </Stack>
-
-                        <Typography sx={{ fontSize: 12, color: "#475569", mb: 1.5, lineHeight: 1.5 }}>
-                          {order.items?.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(" | ") || "No items"}
-                        </Typography>
-
-                        <Stack direction="row" spacing={1}>
-                          <motion.button whileTap={{ scale: 0.95 }} onClick={() => handleCatalogDecision(order, "full")} disabled={loading}
-                            style={{ flex: 2, height: 40, borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${GD}, ${GDL})`, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: `0 4px 14px ${GD}40` }}>
-                            Confirm All
-                          </motion.button>
-                          <motion.button whileTap={{ scale: 0.95 }} onClick={() => handleCatalogDecision(order, "partial")} disabled={loading}
-                            style={{ flex: 1, height: 40, borderRadius: 12, border: `2px solid ${GD}`, background: "#fff", color: GD, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
-                            Partial
-                          </motion.button>
-                          <motion.button whileTap={{ scale: 0.95 }} onClick={() => handleCatalogDecision(order, "unavailable")} disabled={loading}
-                            style={{ flex: 1, height: 40, borderRadius: 12, border: "2px solid #fecaca", background: "#fff", color: "#dc2626", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                            Skip
-                          </motion.button>
-                        </Stack>
-                      </Box>
-                    </motion.div>
+            {/* ================== ORDERS TAB ================== */}
+            {tab === 0 && (
+              <motion.div key="orders" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                {/* Fulfillment Controls */}
+                <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                  {[
+                    { label: "Rx Enabled", key: "rxEnabled" },
+                    { label: "OTC Only", key: "otcOnly" },
+                  ].map((ctrl) => (
+                    <div key={ctrl.key} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", background: liveConfig[ctrl.key] ? `${DEEP}08` : GLASS, border: `1px solid ${liveConfig[ctrl.key] ? `${DEEP}20` : BORDER_}`, borderRadius: 14, padding: "8px 12px" }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: liveConfig[ctrl.key] ? DEEP : SUB_ }}>{ctrl.label}</span>
+                      <Switch size="small" checked={!!liveConfig[ctrl.key]} disabled={savingLiveConfig} onChange={(e) => saveLiveConfig({ [ctrl.key]: e.target.checked })}
+                        sx={{ "& .Mui-checked": { color: DEEP }, "& .Mui-checked+.MuiSwitch-track": { bgcolor: `${DEEP} !important` } }} />
+                    </div>
                   ))}
-                </Box>
-              )}
+                </div>
 
-              {/* Recent Orders — Paginated */}
-              <Typography sx={{ fontSize: 12, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.8, mb: 1 }}>
-                Recent Orders
-              </Typography>
-              {!orders.length && (
-                <Box sx={{ textAlign: "center", py: 5 }}>
-                  <Pill size={40} color="#d1d5db" style={{ margin: "0 auto 8px" }} />
-                  <Typography sx={{ fontSize: 14, fontWeight: 700, color: "#94a3b8" }}>No orders yet</Typography>
-                </Box>
-              )}
-              <Box sx={{ mb: 2 }}>
+                {/* Location */}
+                <motion.button whileTap={{ scale: 0.97 }} onClick={async () => {
+                  if (!navigator.geolocation) { alert("Geolocation not supported."); return; }
+                  navigator.geolocation.getCurrentPosition(async (pos) => {
+                    try {
+                      const { latitude, longitude } = pos.coords;
+                      const res = await axios.get(`${API_BASE_URL}/api/geocode?lat=${latitude}&lng=${longitude}`);
+                      const formatted = res.data.results?.[0]?.formatted_address || "";
+                      await axios.patch(`${API_BASE_URL}/api/pharmacies/set-location`, { lat: latitude, lng: longitude, formatted }, { headers: { Authorization: `Bearer ${token}` } });
+                      setMsg("Location updated!");
+                    } catch { setMsg("Failed to update location!"); }
+                  }, (err) => alert("Could not fetch location: " + err.message));
+                }} style={{ width: "100%", marginBottom: 16, padding: "12px 16px", borderRadius: 16, border: `1px solid ${pharmacy.location?.coordinates?.[0] ? `${ACCENT}30` : "rgba(245,158,11,0.25)"}`, background: pharmacy.location?.coordinates?.[0] ? `${ACCENT}08` : "rgba(255,251,235,0.6)", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                  <MapPin size={16} color={pharmacy.location?.coordinates?.[0] ? DEEP : "#d97706"} />
+                  <div style={{ textAlign: "left", flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: pharmacy.location?.coordinates?.[0] ? DEEP : "#92400e" }}>{pharmacy.location?.coordinates?.[0] ? "Location Set" : "Set Your Location"}</div>
+                    {pharmacy.location?.formatted && <div style={{ fontSize: 10, color: SUB_, marginTop: 2, lineHeight: 1.3 }}>{pharmacy.location.formatted}</div>}
+                  </div>
+                </motion.button>
+
+                {/* Pending Orders */}
+                {pendingOrders.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#dc2626", animation: "glowPulse 1.5s ease-in-out infinite" }} />
+                      <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", textTransform: "uppercase", letterSpacing: 0.8 }}>{pendingOrders.length} Pending {pendingOrders.length === 1 ? "Order" : "Orders"}</span>
+                    </div>
+                    {pendingOrders.map((order, idx) => (
+                      <motion.div key={order._id || order.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.05 }}>
+                        <div style={{ background: GLASS, border: `1px solid rgba(245,158,11,0.2)`, borderLeft: "4px solid #fbbf24", borderRadius: 18, padding: 16, marginBottom: 10, boxShadow: "0 4px 16px rgba(234,179,8,0.06)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                            <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 900, color: TEXT_ }}>#{String(order._id || order.id).slice(-5)}</span>
+                            <span style={{ fontSize: 10, color: SUB_, fontWeight: 600 }}>{order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
+                          </div>
+                          <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 10px", borderRadius: 100, background: `${DEEP}08`, color: DEEP }}>{order.items?.length || 0} items</span>
+                            {order.address?.area && <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 10px", borderRadius: 100, background: "rgba(14,165,233,0.08)", color: "#0369a1" }}>{order.address.area}</span>}
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 10px", borderRadius: 100, background: "rgba(245,158,11,0.08)", color: "#92400e" }}>₹{Math.round((order.total || 0) * 0.84)}</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: "#475569", marginBottom: 12, lineHeight: 1.5 }}>{order.items?.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(" | ") || "No items"}</div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <motion.button whileTap={{ scale: 0.95 }} onClick={() => handleCatalogDecision(order, "full")} disabled={loading}
+                              style={{ flex: 2, height: 40, borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: `0 4px 14px ${DEEP}30` }}>
+                              Confirm All
+                            </motion.button>
+                            <motion.button whileTap={{ scale: 0.95 }} onClick={() => handleCatalogDecision(order, "partial")} disabled={loading}
+                              style={{ flex: 1, height: 40, borderRadius: 12, border: `2px solid ${DEEP}`, background: "#fff", color: DEEP, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+                              Partial
+                            </motion.button>
+                            <motion.button whileTap={{ scale: 0.95 }} onClick={() => handleCatalogDecision(order, "unavailable")} disabled={loading}
+                              style={{ flex: 1, height: 40, borderRadius: 12, border: "2px solid #fecaca", background: "#fff", color: "#dc2626", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                              Skip
+                            </motion.button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Recent Orders */}
+                <div style={{ fontSize: 11, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 }}>Recent Orders</div>
+                {!orders.length && (
+                  <div style={{ textAlign: "center", padding: "40px 0" }}>
+                    <Package size={40} color="#d1d5db" style={{ margin: "0 auto 8px" }} />
+                    <div style={{ fontSize: 14, fontWeight: 700, color: SUB_ }}>No orders yet</div>
+                  </div>
+                )}
                 {visibleOrders.map((order, idx) => (
                   <motion.div key={order._id || order.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(idx * 0.03, 0.15) }}>
-                    <Box sx={{
-                      bgcolor: "#fff", borderRadius: 3.5, border: "1px solid #e2e8f0", p: 1.5, mb: 1,
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.03), 0 2px 8px rgba(0,0,0,0.02)",
-                      "&:hover": { borderColor: "#d1fae5" }, transition: "border-color 0.2s",
-                    }}>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Typography sx={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>#{String(order._id || order.id).slice(-5)}</Typography>
-                          <Chip size="small" label={getStatusLabel(order.status)} color={getStatusColor(order.status)}
-                            sx={{ fontWeight: 700, fontSize: 10, height: 22 }} />
-                        </Stack>
-                        <Typography sx={{ fontSize: 13, fontWeight: 800, color: GD }}>{formatRupees(order.total)}</Typography>
-                      </Stack>
-                      <Typography sx={{ fontSize: 11, color: "#94a3b8", mt: 0.5 }}>
-                        {order.items?.map(i => i.name).join(", ") || "-"}
-                      </Typography>
+                    <div style={{ background: GLASS, border: `1px solid ${BORDER_}`, borderRadius: 16, padding: "12px 14px", marginBottom: 8, boxShadow: "0 2px 8px rgba(16,24,40,0.02)", transition: "box-shadow 0.2s" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, color: TEXT_ }}>#{String(order._id || order.id).slice(-5)}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 10px", borderRadius: 100, background: (order.status === 3 || order.status === "delivered") ? `${DEEP}08` : (order.status === -1 || order.status === "rejected") ? "rgba(220,38,38,0.08)" : "rgba(245,158,11,0.08)", color: (order.status === 3 || order.status === "delivered") ? DEEP : (order.status === -1 || order.status === "rejected") ? "#dc2626" : "#d97706" }}>
+                            {getStatusLabel(order.status)}
+                          </span>
+                        </div>
+                        <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, color: DEEP }}>{formatRupees(order.total)}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: SUB_, marginTop: 4 }}>{order.items?.map(i => i.name).join(", ") || "-"}</div>
                       {editOrderId === (order.id || order._id) ? (
-                        <Box sx={{ mt: 1 }}>
+                        <div style={{ marginTop: 8 }}>
                           <TextField size="small" label="Dosage" fullWidth value={edit.dosage} onChange={e => setEdit({ ...edit, dosage: e.target.value })} sx={{ mb: 0.5 }} onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)} />
                           <TextField size="small" label="Note" fullWidth value={edit.note} onChange={e => setEdit({ ...edit, note: e.target.value })} sx={{ mb: 0.5 }} onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)} />
-                          <Button size="small" variant="contained" onClick={handleSave} disabled={loading} sx={{ mr: 0.5, fontSize: 11 }}>Save</Button>
+                          <Button size="small" variant="contained" onClick={handleSave} disabled={loading} sx={{ mr: 0.5, fontSize: 11, bgcolor: DEEP }}>Save</Button>
                           <Button size="small" onClick={() => setEditOrderId("")} sx={{ fontSize: 11 }}>Cancel</Button>
-                        </Box>
+                        </div>
                       ) : (
                         (order.status !== 3 && order.status !== "delivered" && order.status !== -1 && order.status !== "rejected") && (
-                          <Button size="small" sx={{ mt: 0.5, fontSize: 10, fontWeight: 700 }} onClick={() => { setEditOrderId(order._id || order.id); setEdit({ dosage: order.dosage || "", note: order.note || "" }); }}>
-                            Edit Note
-                          </Button>
+                          <motion.button whileTap={{ scale: 0.95 }} onClick={() => { setEditOrderId(order._id || order.id); setEdit({ dosage: order.dosage || "", note: order.note || "" }); }}
+                            style={{ marginTop: 6, fontSize: 10, fontWeight: 700, color: DEEP, background: "none", border: "none", cursor: "pointer", padding: 0 }}>Edit Note</motion.button>
                         )
                       )}
                       {order.invoiceFile && (
-                        <a href={order.invoiceFile} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-                          <Button size="small" variant="outlined" startIcon={<ReceiptLongIcon sx={{ fontSize: 14 }} />} sx={{ mt: 0.5, fontSize: 10, fontWeight: 700, borderRadius: 2 }}>Invoice</Button>
+                        <a href={order.invoiceFile} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6, fontSize: 10, fontWeight: 700, color: DEEP, textDecoration: "none" }}>
+                          <ReceiptLongIcon sx={{ fontSize: 13 }} /> Invoice
                         </a>
                       )}
-                    </Box>
+                    </div>
                   </motion.div>
                 ))}
                 {nonPendingOrders.length > ordersPage * ORDERS_PER_PAGE && (
-                  <Box sx={{ textAlign: "center", mt: 1.5 }}>
+                  <div style={{ textAlign: "center", marginTop: 12 }}>
                     <motion.button whileTap={{ scale: 0.95 }} onClick={() => setOrdersPage(p => p + 1)}
-                      style={{ padding: "8px 24px", borderRadius: 100, border: `1.5px solid ${GD}30`, background: "#f0fdf4", color: GD, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                      style={{ padding: "8px 24px", borderRadius: 100, border: `1px solid ${DEEP}20`, background: `${DEEP}06`, color: DEEP, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                       Load More ({nonPendingOrders.length - ordersPage * ORDERS_PER_PAGE} more)
                     </motion.button>
-                  </Box>
+                  </div>
                 )}
-              </Box>
 
-              {/* Incoming Order Dialog */}
-              <Dialog open={incomingOpen} onClose={() => setIncomingOpen(false)} fullWidth maxWidth="xs"
-                PaperProps={{ sx: { borderRadius: 4, overflow: "hidden" } }}>
-                <Box sx={{ background: `linear-gradient(135deg, ${GDB}, ${GD}, ${GDL})`, px: 2.5, py: 2 }}>
-                  <Typography sx={{ fontSize: 18, fontWeight: 900, color: "#fff" }}>New Order Received!</Typography>
-                </Box>
-                <DialogContent sx={{ pt: 2.5 }}>
-                  {incomingOrder ? (
-                    <Box>
-                      <Typography sx={{ fontSize: 15, fontWeight: 800, mb: 1 }}>Order #{String(incomingOrder._id || incomingOrder.id).slice(-5)}</Typography>
-                      <Stack direction="row" spacing={0.8} sx={{ mb: 1.5, flexWrap: "wrap", gap: 0.5 }}>
-                        <Chip size="small" icon={<Pill size={12} />} label={`${incomingOrder.items?.length || 0} items`} sx={{ bgcolor: "#ecfdf5", color: GD, fontWeight: 700 }} />
-                        {incomingOrder.address?.area && <Chip size="small" icon={<MapPin size={12} />} label={incomingOrder.address.area} sx={{ bgcolor: "#f0f9ff", color: "#0369a1", fontWeight: 600 }} />}
-                        <Chip size="small" icon={<Wallet size={12} />} label={`Est. ₹${Math.round((incomingOrder.total || 0) * 0.84)} payout`} sx={{ bgcolor: "#fef9c3", color: "#92400e", fontWeight: 700 }} />
-                      </Stack>
-                      <Typography sx={{ fontSize: 13, color: "#475569", lineHeight: 1.6 }}>
-                        {incomingOrder.items?.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ") || "No items"}
-                      </Typography>
-                      <Typography sx={{ fontSize: 15, fontWeight: 800, color: GD, mt: 1 }}>Total: {formatRupees(incomingOrder.total || 0)}</Typography>
-                    </Box>
-                  ) : <Typography>No details.</Typography>}
-                </DialogContent>
-                <DialogActions sx={{ px: 2.5, pb: 2.5, gap: 1 }}>
-                  <Button fullWidth variant="outlined" sx={{ borderColor: "#fecaca", color: "#dc2626", fontWeight: 800, borderRadius: 3, py: 1.2 }}
-                    onClick={async () => { if (!incomingOrder) return setIncomingOpen(false); await handleCatalogDecision(incomingOrder, "unavailable"); setIncomingOpen(false); }}>
-                    Skip
-                  </Button>
-                  <Button fullWidth variant="contained" sx={{ bgcolor: GD, fontWeight: 800, borderRadius: 3, py: 1.2, boxShadow: `0 4px 12px ${GD}40`, "&:hover": { bgcolor: GDB } }}
-                    onClick={async () => { if (!incomingOrder) return setIncomingOpen(false); await handleCatalogDecision(incomingOrder, "full"); setIncomingOpen(false); }}>
-                    Accept Order
-                  </Button>
-                </DialogActions>
-              </Dialog>
+                {/* Incoming Order Dialog */}
+                <Dialog open={incomingOpen} onClose={() => setIncomingOpen(false)} fullWidth maxWidth="xs" PaperProps={{ sx: { borderRadius: "24px", overflow: "hidden" } }}>
+                  <div style={{ background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, padding: "18px 22px" }}>
+                    <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 18, fontWeight: 900, color: "#fff" }}>New Order Received!</div>
+                  </div>
+                  <DialogContent sx={{ pt: 2.5 }}>
+                    {incomingOrder ? (
+                      <div>
+                        <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Order #{String(incomingOrder._id || incomingOrder.id).slice(-5)}</div>
+                        <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 100, background: `${DEEP}08`, color: DEEP }}>{incomingOrder.items?.length || 0} items</span>
+                          {incomingOrder.address?.area && <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 100, background: "rgba(14,165,233,0.08)", color: "#0369a1" }}>{incomingOrder.address.area}</span>}
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 100, background: "rgba(245,158,11,0.08)", color: "#92400e" }}>Est. ₹{Math.round((incomingOrder.total || 0) * 0.84)} payout</span>
+                        </div>
+                        <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.6 }}>{incomingOrder.items?.map(i => `${i.name} x${i.qty || i.quantity || 1}`).join(", ") || "No items"}</div>
+                        <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 800, color: DEEP, marginTop: 8 }}>Total: {formatRupees(incomingOrder.total || 0)}</div>
+                      </div>
+                    ) : <div>No details.</div>}
+                  </DialogContent>
+                  <DialogActions sx={{ px: 2.5, pb: 2.5, gap: 1 }}>
+                    <Button fullWidth sx={{ borderColor: "#fecaca", color: "#dc2626", fontWeight: 800, borderRadius: 3, py: 1.2, border: "2px solid #fecaca" }}
+                      onClick={async () => { if (!incomingOrder) return setIncomingOpen(false); await handleCatalogDecision(incomingOrder, "unavailable"); setIncomingOpen(false); }}>Skip</Button>
+                    <Button fullWidth variant="contained" sx={{ bgcolor: DEEP, fontWeight: 800, borderRadius: 3, py: 1.2, boxShadow: `0 4px 12px ${DEEP}40`, "&:hover": { bgcolor: "#064e3b" } }}
+                      onClick={async () => { if (!incomingOrder) return setIncomingOpen(false); await handleCatalogDecision(incomingOrder, "full"); setIncomingOpen(false); }}>Accept Order</Button>
+                  </DialogActions>
+                </Dialog>
 
-              {/* Prescription Orders */}
-              <Typography sx={{ fontSize: 12, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.8, mb: 1, mt: 2 }}>
-                Prescription Orders
-              </Typography>
-              <PrescriptionOrdersTab token={token} medicines={medicines} />
+                {/* Prescription Orders */}
+                <div style={{ fontSize: 11, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10, marginTop: 20 }}>Prescription Orders</div>
+                <PrescriptionOrdersTab token={token} medicines={medicines} />
+              </motion.div>
+            )}
 
-              {/* Logout */}
-              <Box sx={{ textAlign: "center", mt: 4, mb: 2 }}>
-                <motion.button whileTap={{ scale: 0.95 }} onClick={handleLogout}
-                  style={{ padding: "10px 32px", borderRadius: 100, border: "2px solid #fecaca", background: "#fff", color: "#dc2626", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
-                  <LogOut size={14} style={{ marginRight: 6, verticalAlign: "middle" }} /> Logout
-                </motion.button>
-              </Box>
-            </>
-          )}
+            {/* ================== EARNINGS TAB ================== */}
+            {tab === 1 && (
+              <motion.div key="earnings" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                <EarningsTab payouts={payouts} token={token} />
+              </motion.div>
+            )}
 
-          {/* ================== EARNINGS TAB ================== */}
-          {tab === 1 && <EarningsTab payouts={payouts} token={token} />}
+            {/* ================== MEDICINES TAB ================== */}
+            {tab === 2 && (
+              <motion.div key="medicines" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
 
-          {/* ================== MEDICINES TAB ================== */}
-          {tab === 2 && (
-            <Box sx={{ mb: 10 }}>
+                {/* Master Catalog */}
+                <div style={{ background: GLASS, border: `1px solid ${BORDER_}`, borderRadius: 20, padding: 16, marginBottom: 14, boxShadow: "0 4px 16px rgba(16,24,40,0.03)" }}>
+                  <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 900, color: DEEP, marginBottom: 2 }}>Add from Master Catalog</div>
+                  <div style={{ fontSize: 11, color: SUB_, marginBottom: 12 }}>Search medicines. Set your price or quick-add at catalog price.</div>
 
-              {/* ===== MASTER CATALOG — Browse & Add ===== */}
-              <Box sx={{ bgcolor: "#fff", borderRadius: 4, border: "1px solid #d1fae5", p: 2, mb: 2, boxShadow: "0 2px 16px rgba(0,0,0,0.03)" }}>
-                <Typography sx={{ fontSize: 14, fontWeight: 900, color: GD, mb: 0.5 }}>
-                  Add from Master Catalog
-                </Typography>
-                <Typography sx={{ fontSize: 11, color: "#94a3b8", mb: 1.5 }}>
-                  Browse or search medicines. Set your own price or quick-add at catalog price.
-                </Typography>
+                  <TextField fullWidth size="small" placeholder="Search medicine name, brand, composition..." value={catalogQ}
+                    onChange={(e) => handleCatalogSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && fetchCatalog()}
+                    InputProps={{ sx: { borderRadius: "14px", background: "rgba(244,251,248,0.6)", fontWeight: 600, fontSize: 13, border: `1px solid ${BORDER_}` } }} />
 
-                {/* Search */}
-                <TextField
-                  fullWidth size="small"
-                  placeholder="Search medicine name, brand, composition..."
-                  value={catalogQ}
-                  onChange={(e) => handleCatalogSearch(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && fetchCatalog()}
-                  InputProps={{
-                    sx: { borderRadius: 3, bgcolor: "#f8fafc", fontWeight: 600, fontSize: 13, border: "1px solid #e2e8f0" },
-                  }}
-                />
-
-                {/* Catalog Results */}
-                <Box sx={{ mt: 1.5, maxHeight: 480, overflowY: "auto" }}>
-                  {catalog.map((m) => {
-                    const inInv = inventory.some(inv => String(inv.medicineMasterId) === String(m._id));
-                    const hasOverride = priceOverride[m._id];
-                    return (
-                      <motion.div key={m._id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        <Box sx={{
-                          p: 1.5, mb: 1, borderRadius: 3,
-                          bgcolor: inInv ? "#f0fdf4" : "#fafafa",
-                          border: `1.5px solid ${inInv ? "#bbf7d0" : "#f1f5f9"}`,
-                          transition: "all 0.2s",
-                          "&:hover": { borderColor: inInv ? "#86efac" : "#d1fae5", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" },
-                        }}>
-                          <Stack direction="row" spacing={1.5} alignItems="center">
-                            {/* Image */}
-                            {m.images?.[0] ? (
-                              <img src={m.images[0]} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
-                            ) : (
-                              <Box sx={{ width: 44, height: 44, borderRadius: 2.5, bgcolor: "#e2e8f0", flexShrink: 0, display: "grid", placeItems: "center" }}>
-                                <Pill size={18} color="#94a3b8" />
-                              </Box>
+                  <div style={{ marginTop: 12, maxHeight: 480, overflowY: "auto" }}>
+                    {catalog.map((m) => {
+                      const inInv = inventory.some(inv => String(inv.medicineMasterId) === String(m._id));
+                      const hasOverride = priceOverride[m._id];
+                      return (
+                        <motion.div key={m._id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                          <div style={{ padding: 12, marginBottom: 8, borderRadius: 14, background: inInv ? `${ACCENT}08` : "rgba(248,250,252,0.8)", border: `1px solid ${inInv ? `${ACCENT}25` : BORDER_}`, transition: "all 0.2s" }}>
+                            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                              {m.images?.[0] ? (
+                                <img src={m.images[0]} alt="" style={{ width: 44, height: 44, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+                              ) : (
+                                <div style={{ width: 44, height: 44, borderRadius: 12, background: "#e2e8f0", flexShrink: 0, display: "grid", placeItems: "center" }}><Pill size={18} color={SUB_} /></div>
+                              )}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, color: TEXT_, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</div>
+                                <div style={{ fontSize: 11, color: SUB_ }}>₹{m.price} | MRP ₹{m.mrp}</div>
+                                {m.composition && <div style={{ fontSize: 10, color: SUB_, marginTop: 1 }}>{m.composition.slice(0, 40)}{m.composition.length > 40 ? "..." : ""}</div>}
+                                {m.prescriptionRequired && <div style={{ fontSize: 9, color: "#ea580c", fontWeight: 700, marginTop: 1 }}>Rx Required</div>}
+                              </div>
+                              {inInv ? (
+                                <span style={{ fontSize: 10, fontWeight: 800, padding: "3px 10px", borderRadius: 100, background: `${ACCENT}15`, color: DEEP }}>Added</span>
+                              ) : !hasOverride ? (
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => addToInventoryWithPrice(m)}
+                                    style={{ padding: "6px 14px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer", boxShadow: `0 2px 8px ${DEEP}25` }}>+ Add</motion.button>
+                                  <motion.button whileTap={{ scale: 0.9 }} onClick={() => setPriceOverride(p => ({ ...p, [m._id]: { price: m.price, mrp: m.mrp, stock: 1 } }))}
+                                    style={{ padding: "6px 10px", borderRadius: 10, border: `1px solid ${DEEP}30`, background: "#fff", color: DEEP, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>Set Price</motion.button>
+                                </div>
+                              ) : null}
+                            </div>
+                            {!inInv && hasOverride && (
+                              <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER_}`, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                                <TextField size="small" type="number" label="Sell Price" value={hasOverride.price} onChange={(e) => setPriceOverride(p => ({ ...p, [m._id]: { ...p[m._id], price: e.target.value } }))} sx={{ flex: 1, minWidth: 70, "& input": { fontSize: 12, p: "7px 8px" } }} />
+                                <TextField size="small" type="number" label="MRP" value={hasOverride.mrp} onChange={(e) => setPriceOverride(p => ({ ...p, [m._id]: { ...p[m._id], mrp: e.target.value } }))} sx={{ flex: 1, minWidth: 60, "& input": { fontSize: 12, p: "7px 8px" } }} />
+                                <TextField size="small" type="number" label="Stock" value={hasOverride.stock} onChange={(e) => setPriceOverride(p => ({ ...p, [m._id]: { ...p[m._id], stock: e.target.value } }))} sx={{ width: 60, "& input": { fontSize: 12, p: "7px 8px" } }} />
+                                <motion.button whileTap={{ scale: 0.9 }} onClick={() => addToInventoryWithPrice(m)}
+                                  style={{ padding: "8px 16px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>Add</motion.button>
+                                <motion.button whileTap={{ scale: 0.9 }} onClick={() => setPriceOverride(p => { const n = { ...p }; delete n[m._id]; return n; })}
+                                  style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${BORDER_}`, background: "#fff", color: SUB_, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Cancel</motion.button>
+                              </div>
                             )}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                    {catalog.length === 0 && (
+                      <div style={{ textAlign: "center", padding: "30px 0" }}>
+                        <Pill size={32} color="#d1d5db" style={{ margin: "0 auto 8px" }} />
+                        <div style={{ fontSize: 13, color: SUB_, fontWeight: 600 }}>{catalogQ.length >= 2 ? "No medicines found." : "Type to search catalog..."}</div>
+                      </div>
+                    )}
+                  </div>
+                  {invMsg && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: invMsg.includes("Failed") || invMsg.includes("❌") ? "#dc2626" : DEEP }}>{invMsg}</div>}
+                </div>
 
-                            {/* Info */}
-                            <Box sx={{ flex: 1, minWidth: 0 }}>
-                              <Typography sx={{ fontSize: 13, fontWeight: 800, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</Typography>
-                              <Typography sx={{ fontSize: 11, color: "#64748b" }}>
-                                ₹{m.price} | MRP ₹{m.mrp}
-                              </Typography>
-                              {m.composition && <Typography sx={{ fontSize: 10, color: "#94a3b8", mt: 0.2 }}>{m.composition.slice(0, 40)}{m.composition.length > 40 ? "..." : ""}</Typography>}
-                              {m.prescriptionRequired && <Typography sx={{ fontSize: 9, color: "#ea580c", fontWeight: 700, mt: 0.2 }}>Rx Required</Typography>}
-                            </Box>
-
-                            {/* Action */}
-                            {inInv ? (
-                              <Chip size="small" label="Added" sx={{ bgcolor: "#dcfce7", color: GD, fontWeight: 800, fontSize: 10 }} />
-                            ) : (
-                              <Stack spacing={0.5} alignItems="flex-end">
-                                {!hasOverride ? (
-                                  <Stack direction="row" spacing={0.5}>
-                                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => addToInventoryWithPrice(m)}
-                                      style={{ padding: "6px 14px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${GD}, ${GDL})`, color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer", boxShadow: `0 2px 8px ${GD}30` }}>
-                                      + Add
-                                    </motion.button>
-                                    <motion.button whileTap={{ scale: 0.9 }} onClick={() => setPriceOverride(p => ({ ...p, [m._id]: { price: m.price, mrp: m.mrp, stock: 1 } }))}
-                                      style={{ padding: "6px 10px", borderRadius: 10, border: `1.5px solid ${GD}40`, background: "#fff", color: GD, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                                      Set Price
-                                    </motion.button>
-                                  </Stack>
-                                ) : null}
-                              </Stack>
-                            )}
-                          </Stack>
-
-                          {/* Price override fields — below the row */}
-                          {!inInv && hasOverride && (
-                            <Box sx={{ mt: 1.5, pt: 1.5, borderTop: "1px solid #e2e8f0", display: "flex", gap: 0.8, alignItems: "center", flexWrap: "wrap" }}>
-                              <TextField size="small" type="number" label="Selling Price" value={hasOverride.price}
-                                onChange={(e) => setPriceOverride(p => ({ ...p, [m._id]: { ...p[m._id], price: e.target.value } }))}
-                                sx={{ flex: 1, minWidth: 70, "& input": { fontSize: 12, p: "7px 8px" } }} />
-                              <TextField size="small" type="number" label="MRP" value={hasOverride.mrp}
-                                onChange={(e) => setPriceOverride(p => ({ ...p, [m._id]: { ...p[m._id], mrp: e.target.value } }))}
-                                sx={{ flex: 1, minWidth: 60, "& input": { fontSize: 12, p: "7px 8px" } }} />
-                              <TextField size="small" type="number" label="Stock" value={hasOverride.stock}
-                                onChange={(e) => setPriceOverride(p => ({ ...p, [m._id]: { ...p[m._id], stock: e.target.value } }))}
-                                sx={{ width: 65, "& input": { fontSize: 12, p: "7px 8px" } }} />
-                              <motion.button whileTap={{ scale: 0.9 }} onClick={() => addToInventoryWithPrice(m)}
-                                style={{ padding: "8px 16px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${GD}, ${GDL})`, color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer", boxShadow: `0 2px 8px ${GD}30` }}>
-                                Add
-                              </motion.button>
-                              <motion.button whileTap={{ scale: 0.9 }} onClick={() => setPriceOverride(p => { const n = { ...p }; delete n[m._id]; return n; })}
-                                style={{ padding: "8px 10px", borderRadius: 10, border: "1.5px solid #e2e8f0", background: "#fff", color: "#94a3b8", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                                Cancel
-                              </motion.button>
-                            </Box>
-                          )}
-                        </Box>
-                      </motion.div>
-                    );
-                  })}
-                  {catalog.length === 0 && (
-                    <Box sx={{ textAlign: "center", py: 4 }}>
-                      <Pill size={32} color="#d1d5db" style={{ margin: "0 auto 8px" }} />
-                      <Typography sx={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>
-                        {catalogQ.length >= 2 ? "No medicines found. Try different keywords." : "Loading catalog..."}
-                      </Typography>
-                    </Box>
+                {/* My Inventory */}
+                <div style={{ background: GLASS, border: `1px solid ${BORDER_}`, borderRadius: 20, padding: 16, marginBottom: 14, boxShadow: "0 4px 16px rgba(16,24,40,0.03)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 900, color: DEEP }}>My Inventory</div>
+                      <div style={{ fontSize: 11, color: SUB_ }}>{inventory.length} medicines stocked</div>
+                    </div>
+                    <motion.button whileTap={{ scale: 0.95 }} onClick={fetchInventory}
+                      style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", borderRadius: 10, border: `1px solid ${DEEP}20`, background: `${DEEP}06`, color: DEEP, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                      <RefreshCw size={12} /> Refresh
+                    </motion.button>
+                  </div>
+                  {inventory.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "30px 0" }}>
+                      <Pill size={36} color="#d1d5db" style={{ margin: "0 auto 8px" }} />
+                      <div style={{ fontSize: 13, color: SUB_, fontWeight: 600 }}>No inventory yet. Add from catalog above.</div>
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: 420, overflowY: "auto" }}>
+                      {inventory.map((it) => (
+                        <div key={it._id} style={{ padding: 12, marginBottom: 8, borderRadius: 14, background: "rgba(248,250,252,0.8)", border: `1px solid ${BORDER_}`, borderLeft: `3px solid ${MID_}`, transition: "all 0.2s" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, color: TEXT_, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
+                                <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 100, background: `${DEEP}08`, color: DEEP }}>₹{Number(it.sellingPrice ?? it.price ?? 0)}</span>
+                                <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 100, background: "rgba(248,250,252,1)", color: SUB_ }}>MRP ₹{Number(it.mrp ?? 0)}</span>
+                                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 100, background: Number(it.stockQty ?? it.stock ?? 0) > 0 ? `${DEEP}08` : "rgba(220,38,38,0.08)", color: Number(it.stockQty ?? it.stock ?? 0) > 0 ? DEEP : "#dc2626" }}>Stock: {Number(it.stockQty ?? it.stock ?? 0)}</span>
+                              </div>
+                              {(it.composition || it.type) && <div style={{ fontSize: 10, color: SUB_, marginTop: 4 }}>{it.type && <strong>{it.type}</strong>}{it.type && it.composition ? " · " : ""}{it.composition ? it.composition.slice(0, 50) : ""}</div>}
+                              {it.priceOverrideStatus === "pending" && <div style={{ fontSize: 9, fontWeight: 800, color: "#d97706", background: "#fef3c7", display: "inline-block", padding: "1px 8px", borderRadius: 100, marginTop: 4 }}>Price ₹{it.requestedPrice} pending</div>}
+                              {it.priceOverrideStatus === "approved" && it.requestedPrice > 0 && <div style={{ fontSize: 9, fontWeight: 800, color: DEEP, background: `${ACCENT}15`, display: "inline-block", padding: "1px 8px", borderRadius: 100, marginTop: 4 }}>Override approved</div>}
+                              {it.priceOverrideStatus === "rejected" && <div style={{ fontSize: 9, fontWeight: 800, color: "#dc2626", background: "#fee2e2", display: "inline-block", padding: "1px 8px", borderRadius: 100, marginTop: 4 }}>Override rejected</div>}
+                            </div>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <motion.button whileTap={{ scale: 0.9 }} onClick={() => openEditInventory(it)}
+                                style={{ padding: "5px 12px", borderRadius: 8, border: `1px solid ${DEEP}20`, background: "#fff", color: DEEP, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Edit</motion.button>
+                              <motion.button whileTap={{ scale: 0.9 }} onClick={() => removeFromInventory(it._id)}
+                                style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #fecaca", background: "#fff", color: "#dc2626", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Remove</motion.button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </Box>
-                {invMsg && <Typography sx={{ mt: 1, fontSize: 12, fontWeight: 700, color: invMsg.includes("Failed") || invMsg.includes("❌") ? "#dc2626" : GD }}>{invMsg}</Typography>}
-              </Box>
+                </div>
 
-              {/* ===== MY INVENTORY ===== */}
-              <Box sx={{ bgcolor: "#fff", borderRadius: 4, border: "1px solid #d1fae5", p: 2, mb: 2, boxShadow: "0 2px 16px rgba(0,0,0,0.03)" }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
-                  <Box>
-                    <Typography sx={{ fontSize: 14, fontWeight: 900, color: GD }}>My Inventory</Typography>
-                    <Typography sx={{ fontSize: 11, color: "#94a3b8" }}>{inventory.length} medicines stocked</Typography>
-                  </Box>
-                  <motion.button whileTap={{ scale: 0.95 }} onClick={fetchInventory}
-                    style={{ padding: "6px 14px", borderRadius: 10, border: `1.5px solid ${GD}30`, background: "#f0fdf4", color: GD, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                    Refresh
-                  </motion.button>
-                </Stack>
-
-                {inventory.length === 0 ? (
-                  <Box sx={{ textAlign: "center", py: 4 }}>
-                    <Pill size={36} color="#d1d5db" style={{ margin: "0 auto 8px" }} />
-                    <Typography sx={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>No inventory yet. Add medicines from the catalog above.</Typography>
-                  </Box>
-                ) : (
-                  <Box sx={{ maxHeight: 420, overflowY: "auto" }}>
-                    {inventory.map((it) => (
-                      <Box key={it._id} sx={{
-                        p: 1.5, mb: 1, bgcolor: "#fafafa", borderRadius: 3,
-                        border: "1px solid #f1f5f9", borderLeft: `3px solid ${GDL}`,
-                        "&:hover": { borderColor: "#d1fae5", boxShadow: "0 1px 6px rgba(0,0,0,0.04)" },
-                        transition: "all 0.2s",
-                      }}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1}>
-                          <Box sx={{ minWidth: 0, flex: 1 }}>
-                            <Typography sx={{ fontSize: 13, fontWeight: 800, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</Typography>
-                            <Stack direction="row" spacing={0.8} sx={{ mt: 0.5, flexWrap: "wrap", gap: 0.3 }}>
-                              <Chip size="small" label={`₹${Number(it.sellingPrice ?? it.price ?? 0)}`} sx={{ bgcolor: "#ecfdf5", color: GD, fontWeight: 800, fontSize: 11, height: 22 }} />
-                              <Chip size="small" label={`MRP ₹${Number(it.mrp ?? 0)}`} sx={{ bgcolor: "#f8fafc", color: "#64748b", fontWeight: 600, fontSize: 10, height: 22 }} />
-                              <Chip size="small" label={`Stock: ${Number(it.stockQty ?? it.stock ?? 0)}`} sx={{ bgcolor: Number(it.stockQty ?? it.stock ?? 0) > 0 ? "#f0fdf4" : "#fef2f2", color: Number(it.stockQty ?? it.stock ?? 0) > 0 ? GD : "#dc2626", fontWeight: 700, fontSize: 10, height: 22 }} />
-                            </Stack>
-                            {(it.composition || it.type) && (
-                              <Typography sx={{ fontSize: 10, color: "#94a3b8", mt: 0.5 }}>
-                                {it.type && <span style={{ fontWeight: 700 }}>{it.type}</span>}
-                                {it.type && it.composition ? " · " : ""}
-                                {it.composition ? it.composition.slice(0, 50) : ""}
-                              </Typography>
-                            )}
-                            {it.priceOverrideStatus === "pending" && (
-                              <Typography sx={{ fontSize: 9, fontWeight: 800, color: "#d97706", bgcolor: "#fef3c7", display: "inline-block", px: 1, py: 0.2, borderRadius: 2, mt: 0.4 }}>
-                                Price ₹{it.requestedPrice} pending approval
-                              </Typography>
-                            )}
-                            {it.priceOverrideStatus === "approved" && it.requestedPrice > 0 && (
-                              <Typography sx={{ fontSize: 9, fontWeight: 800, color: "#059669", bgcolor: "#d1fae5", display: "inline-block", px: 1, py: 0.2, borderRadius: 2, mt: 0.4 }}>
-                                Price override approved
-                              </Typography>
-                            )}
-                            {it.priceOverrideStatus === "rejected" && (
-                              <Typography sx={{ fontSize: 9, fontWeight: 800, color: "#dc2626", bgcolor: "#fee2e2", display: "inline-block", px: 1, py: 0.2, borderRadius: 2, mt: 0.4 }}>
-                                Override rejected — catalog price
-                              </Typography>
-                            )}
-                          </Box>
-                          <Stack direction="row" spacing={0.5}>
-                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => openEditInventory(it)}
-                              style={{ padding: "5px 12px", borderRadius: 8, border: `1.5px solid ${GD}30`, background: "#fff", color: GD, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                              Edit
-                            </motion.button>
-                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => removeFromInventory(it._id)}
-                              style={{ padding: "5px 10px", borderRadius: 8, border: "1.5px solid #fecaca", background: "#fff", color: "#dc2626", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                              Remove
-                            </motion.button>
-                          </Stack>
-                        </Stack>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
-              </Box>
-
-              {/* Edit Inventory Dialog */}
-              <Dialog open={editInvOpen} onClose={() => setEditInvOpen(false)} fullWidth maxWidth="xs"
-                PaperProps={{ sx: { borderRadius: 4 } }}>
-                <Box sx={{ background: `linear-gradient(135deg, ${GD}, ${GDL})`, px: 2.5, py: 1.5 }}>
-                  <Typography sx={{ fontSize: 16, fontWeight: 900, color: "#fff" }}>Edit Price & Stock</Typography>
-                  <Typography sx={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>Changes apply only to your pharmacy</Typography>
-                </Box>
-                <DialogContent sx={{ pt: 2.5 }}>
-                  <Stack spacing={2}>
-                    <TextField label="Selling Price" type="number" value={editInvForm.sellingPrice}
-                      onChange={(e) => setEditInvForm(f => ({ ...f, sellingPrice: e.target.value }))} fullWidth />
-                    <TextField label="MRP" type="number" value={editInvForm.mrp}
-                      onChange={(e) => setEditInvForm(f => ({ ...f, mrp: e.target.value }))} fullWidth />
-                    <TextField label="Stock Quantity" type="number" value={editInvForm.stockQty}
-                      onChange={(e) => setEditInvForm(f => ({ ...f, stockQty: e.target.value }))} fullWidth />
-                  </Stack>
-                </DialogContent>
-                <DialogActions sx={{ px: 2.5, pb: 2 }}>
-                  <Button onClick={() => setEditInvOpen(false)} sx={{ color: "#94a3b8" }}>Cancel</Button>
-                  <Button variant="contained" onClick={saveEditInventory} sx={{ bgcolor: GD, fontWeight: 800, borderRadius: 3, px: 3, "&:hover": { bgcolor: GDB } }}>Save</Button>
-                </DialogActions>
-              </Dialog>
-
-              {/* ===== REQUEST NEW MEDICINE — TRIGGER BUTTON ===== */}
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setRequestMedOpen(true)}
-                style={{ width: "100%", height: 52, borderRadius: 16, border: "2px dashed #fde68a",
-                  background: "linear-gradient(135deg, #fffbeb, #fef3c7)", color: "#92400e",
-                  fontSize: 14, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                  boxShadow: "0 2px 12px rgba(146,64,14,0.08)" }}>
-                <span style={{ fontSize: 18 }}>+</span> Request New Medicine
-              </motion.button>
-
-              {/* Request Medicine Dialog */}
-              <Dialog open={requestMedOpen} onClose={() => setRequestMedOpen(false)} fullWidth maxWidth="sm"
-                PaperProps={{ sx: { borderRadius: 4, overflow: "hidden", maxHeight: "85vh" } }}>
-                <Box sx={{ background: "linear-gradient(135deg, #92400e, #b45309)", px: 2.5, py: 1.5 }}>
-                  <Typography sx={{ fontSize: 16, fontWeight: 900, color: "#fff" }}>Request New Medicine</Typography>
-                  <Typography sx={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>Not in master catalog? Submit for admin approval.</Typography>
-                </Box>
-                <DialogContent sx={{ pt: 2, pb: 1 }}>
-                  <Stack spacing={2}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Brand Type</InputLabel>
-                      <Select label="Brand Type" value={medForm.productKind}
-                        onChange={(e) => { const v = e.target.value; setMedForm(f => ({ ...f, productKind: v, brand: v === "generic" ? "" : f.brand, name: v === "generic" ? (f.name || f.composition || "") : (f.name || f.brand || "") })); }}>
-                        <MenuItem value="branded">Branded</MenuItem>
-                        <MenuItem value="generic">Generic</MenuItem>
-                      </Select>
-                    </FormControl>
-
-                    {medForm.productKind === "branded" && (
-                      <BrandAutocomplete value={medForm.brand}
-                        onValueChange={(val) => setMedForm(f => { const nb = keepUnlessExplicitClear(f.brand, val); return { ...f, brand: nb, name: f.name || nb }; })}
-                        onPrefill={(p) => setMedForm(f => ({ ...f, productKind: "branded", name: f.name || p.name || f.brand, type: p.type ?? f.type, packCount: p.packCount ?? f.packCount, packUnit: p.packUnit ?? f.packUnit, hsn: p.hsn ?? f.hsn, gstRate: p.gstRate ?? f.gstRate }))} />
-                    )}
-
-                    <Stack direction="row" spacing={1} alignItems="flex-start">
-                      <Box sx={{ flex: 1 }}>
-                        <CompositionAutocomplete value={medForm.composition}
-                          onValueChange={(val) => setMedForm(f => ({ ...f, composition: keepUnlessExplicitClear(f.composition, val) }))}
-                          onPrefill={(p) => setMedForm(f => ({ ...f, productKind: f.productKind === "generic" ? "generic" : (p.productKind || f.productKind), name: f.productKind === "generic" ? (f.name || p.name || f.composition || "") : f.name, type: p.type ?? f.type, packUnit: p.packUnit ?? f.packUnit, hsn: p.hsn ?? f.hsn, gstRate: p.gstRate ?? f.gstRate }))} />
-                      </Box>
-                      <Button variant="outlined" size="small" onClick={() => setMedForm(f => { const a = (f.composition || "").trim(); if (!a) return f; const s = new Set((f.compositions || []).map(x => x.toLowerCase())); if (!s.has(a.toLowerCase())) return { ...f, compositions: [...(f.compositions || []), a], composition: "" }; return { ...f, composition: "" }; })}>+</Button>
+                {/* Edit Inventory Dialog */}
+                <Dialog open={editInvOpen} onClose={() => setEditInvOpen(false)} fullWidth maxWidth="xs" PaperProps={{ sx: { borderRadius: "24px", overflow: "hidden" } }}>
+                  <div style={{ background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, padding: "16px 22px" }}>
+                    <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900, color: "#fff" }}>Edit Price & Stock</div>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>Changes apply only to your pharmacy</div>
+                  </div>
+                  <DialogContent sx={{ pt: 2.5 }}>
+                    <Stack spacing={2}>
+                      <TextField label="Selling Price" type="number" value={editInvForm.sellingPrice} onChange={(e) => setEditInvForm(f => ({ ...f, sellingPrice: e.target.value }))} fullWidth sx={{ "& .MuiOutlinedInput-root": { borderRadius: "14px" } }} />
+                      <TextField label="MRP" type="number" value={editInvForm.mrp} onChange={(e) => setEditInvForm(f => ({ ...f, mrp: e.target.value }))} fullWidth sx={{ "& .MuiOutlinedInput-root": { borderRadius: "14px" } }} />
+                      <TextField label="Stock Quantity" type="number" value={editInvForm.stockQty} onChange={(e) => setEditInvForm(f => ({ ...f, stockQty: e.target.value }))} fullWidth sx={{ "& .MuiOutlinedInput-root": { borderRadius: "14px" } }} />
                     </Stack>
-                    {(medForm.compositions || []).length > 0 && (
-                      <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>
-                        {medForm.compositions.map((c) => <Chip key={c} size="small" label={c} onDelete={() => setMedForm(f => ({ ...f, compositions: (f.compositions || []).filter(x => x.toLowerCase() !== c.toLowerCase()) }))} />)}
-                      </Stack>
-                    )}
+                  </DialogContent>
+                  <DialogActions sx={{ px: 2.5, pb: 2 }}>
+                    <Button onClick={() => setEditInvOpen(false)} sx={{ color: SUB_ }}>Cancel</Button>
+                    <Button variant="contained" onClick={saveEditInventory} sx={{ bgcolor: DEEP, fontWeight: 800, borderRadius: 3, px: 3, "&:hover": { bgcolor: "#064e3b" } }}>Save</Button>
+                  </DialogActions>
+                </Dialog>
 
-                    <TextField size="small" label="Company" value={medForm.company} onChange={e => setMedForm(f => ({ ...f, company: e.target.value }))} />
+                {/* Request Medicine Button */}
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => setRequestMedOpen(true)}
+                  style={{ width: "100%", height: 52, borderRadius: 16, border: "2px dashed rgba(245,158,11,0.3)", background: "linear-gradient(135deg, rgba(255,251,235,0.8), rgba(254,243,199,0.6))", color: "#92400e", fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 2px 12px rgba(146,64,14,0.06)" }}>
+                  <Plus size={16} /> Request New Medicine
+                </motion.button>
 
-                    <Stack direction="row" spacing={1}>
-                      <TextField size="small" label="Price" type="number" value={medForm.price} onChange={e => setMedForm(f => ({ ...f, price: e.target.value }))} fullWidth onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)} />
-                      <TextField size="small" label="MRP" type="number" value={medForm.mrp} onChange={e => setMedForm(f => ({ ...f, mrp: e.target.value }))} fullWidth onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)} />
-                    </Stack>
-                    <Stack direction="row" spacing={1}>
-                      <TextField size="small" label="Stock" type="number" value={medForm.stock} onChange={e => setMedForm(f => ({ ...f, stock: e.target.value }))} fullWidth onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)} />
-                      <TextField size="small" label="Discount %" type="number" value={medForm.discount} onChange={e => setMedForm(f => ({ ...f, discount: e.target.value }))} inputProps={{ min: 0, max: 90 }} fullWidth onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)} />
-                    </Stack>
-
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Category</InputLabel>
-                      <Select multiple value={Array.isArray(medForm.category) ? medForm.category : (medForm.category ? [medForm.category] : [])} label="Category"
-                        onChange={e => setMedForm(f => ({ ...f, category: e.target.value }))} renderValue={(sel) => sel.join(", ")} MenuProps={{ PaperProps: { style: { zIndex: 2000 } } }}>
-                        {allPharmacyCategories.map(opt => <MenuItem key={opt} value={opt}><Checkbox size="small" checked={Array.isArray(medForm.category) && medForm.category.indexOf(opt) > -1} /><ListItemText primary={opt} /></MenuItem>)}
-                      </Select>
-                    </FormControl>
-                    {((Array.isArray(medForm.category) ? medForm.category.includes("Other") : medForm.category === "Other")) && (
-                      <TextField size="small" label="Custom Category" value={medForm.customCategory}
-                        onChange={e => setMedForm(f => ({ ...f, customCategory: e.target.value }))}
-                        onFocus={() => setIsEditing(true)} onBlur={e => { setIsEditing(false); handleCustomCategoryBlur(e.target.value); }}
-                        error={!!medMsg && medMsg.toLowerCase().includes("category")} helperText={!!medMsg && medMsg.toLowerCase().includes("category") ? medMsg : ""} />
-                    )}
-
-                    <FormControl fullWidth size="small">
-                      <InputLabel>Type</InputLabel>
-                      <Select value={medForm.type} label="Type" onChange={(e) => { setMedForm(f => ({ ...f, type: e.target.value, packCount: "", packUnit: "" })); setUsePackPreset(e.target.value !== "Other"); }}>
-                        {TYPE_OPTIONS.map(opt => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
-                      </Select>
-                    </FormControl>
-                    {medForm.type === "Other" && <TextField size="small" label="Custom Type" fullWidth value={medForm.customType} onChange={e => setMedForm(f => ({ ...f, customType: e.target.value }))} onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)} />}
-
-                    {medForm.type !== "Other" && usePackPreset && (
-                      <FormControl fullWidth size="small">
-                        <InputLabel>Pack Size</InputLabel>
-                        <Select label="Pack Size" value={packLabel(medForm.packCount, medForm.packUnit) || ""}
-                          onChange={(e) => { if (e.target.value === "__CUSTOM__") { setUsePackPreset(false); setMedForm(f => ({ ...f, packCount: "", packUnit: "" })); return; } const opt = normalizePackOpt(e.target.value); setMedForm(f => ({ ...f, packCount: opt.count, packUnit: opt.unit })); }}>
-                          {(PACK_SIZES_BY_TYPE[medForm.type] || []).map((raw) => { const o = normalizePackOpt(raw); return <MenuItem key={o.label} value={o.label}>{o.label}</MenuItem>; })}
-                          <MenuItem value="__CUSTOM__">Custom...</MenuItem>
+                {/* Request Medicine Dialog */}
+                <Dialog open={requestMedOpen} onClose={() => setRequestMedOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: "24px", overflow: "hidden", maxHeight: "85vh" } }}>
+                  <div style={{ background: "linear-gradient(135deg, #92400e, #b45309)", padding: "16px 22px" }}>
+                    <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900, color: "#fff" }}>Request New Medicine</div>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>Not in catalog? Submit for admin approval.</div>
+                  </div>
+                  <DialogContent sx={{ pt: 2, pb: 1 }}>
+                    <Stack spacing={2}>
+                      <FormControl fullWidth size="small"><InputLabel>Brand Type</InputLabel>
+                        <Select label="Brand Type" value={medForm.productKind} onChange={(e) => { const v = e.target.value; setMedForm(f => ({ ...f, productKind: v, brand: v === "generic" ? "" : f.brand, name: v === "generic" ? (f.name || f.composition || "") : (f.name || f.brand || "") })); }}>
+                          <MenuItem value="branded">Branded</MenuItem><MenuItem value="generic">Generic</MenuItem>
                         </Select>
                       </FormControl>
-                    )}
-                    {(medForm.type === "Other" || !usePackPreset) && (
+                      {medForm.productKind === "branded" && <BrandAutocomplete value={medForm.brand} onValueChange={(val) => setMedForm(f => { const nb = keepUnlessExplicitClear(f.brand, val); return { ...f, brand: nb, name: f.name || nb }; })} onPrefill={(p) => setMedForm(f => ({ ...f, productKind: "branded", name: f.name || p.name || f.brand, type: p.type ?? f.type, packCount: p.packCount ?? f.packCount, packUnit: p.packUnit ?? f.packUnit, hsn: p.hsn ?? f.hsn, gstRate: p.gstRate ?? f.gstRate }))} />}
+                      <Stack direction="row" spacing={1} alignItems="flex-start">
+                        <Box sx={{ flex: 1 }}><CompositionAutocomplete value={medForm.composition} onValueChange={(val) => setMedForm(f => ({ ...f, composition: keepUnlessExplicitClear(f.composition, val) }))} onPrefill={(p) => setMedForm(f => ({ ...f, productKind: f.productKind === "generic" ? "generic" : (p.productKind || f.productKind), name: f.productKind === "generic" ? (f.name || p.name || f.composition || "") : f.name, type: p.type ?? f.type, packUnit: p.packUnit ?? f.packUnit, hsn: p.hsn ?? f.hsn, gstRate: p.gstRate ?? f.gstRate }))} /></Box>
+                        <Button variant="outlined" size="small" onClick={() => setMedForm(f => { const a = (f.composition || "").trim(); if (!a) return f; const s = new Set((f.compositions || []).map(x => x.toLowerCase())); if (!s.has(a.toLowerCase())) return { ...f, compositions: [...(f.compositions || []), a], composition: "" }; return { ...f, composition: "" }; })}>+</Button>
+                      </Stack>
+                      {(medForm.compositions || []).length > 0 && <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>{medForm.compositions.map((c) => <Chip key={c} size="small" label={c} onDelete={() => setMedForm(f => ({ ...f, compositions: (f.compositions || []).filter(x => x.toLowerCase() !== c.toLowerCase()) }))} />)}</Stack>}
+                      <TextField size="small" label="Company" value={medForm.company} onChange={e => setMedForm(f => ({ ...f, company: e.target.value }))} />
                       <Stack direction="row" spacing={1}>
-                        <TextField size="small" label="Pack Count" type="number" value={medForm.packCount} onChange={e => setMedForm(f => ({ ...f, packCount: e.target.value }))} fullWidth />
-                        <FormControl fullWidth size="small">
-                          <InputLabel>Pack Unit</InputLabel>
-                          <Select label="Pack Unit" value={medForm.packUnit} onChange={e => setMedForm(f => ({ ...f, packUnit: e.target.value }))}>
-                            {["tablets","capsules","ml","g","units","sachets","drops"].map(u => <MenuItem key={u} value={u}>{u}</MenuItem>)}
-                          </Select>
-                        </FormControl>
+                        <TextField size="small" label="Price" type="number" value={medForm.price} onChange={e => setMedForm(f => ({ ...f, price: e.target.value }))} fullWidth onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)} />
+                        <TextField size="small" label="MRP" type="number" value={medForm.mrp} onChange={e => setMedForm(f => ({ ...f, mrp: e.target.value }))} fullWidth onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)} />
                       </Stack>
-                    )}
-
-                    <Stack direction="row" alignItems="center" justifyContent="space-between">
-                      <Typography sx={{ fontSize: 13 }}>Prescription Required</Typography>
-                      <Switch checked={!!medForm.prescriptionRequired} onChange={e => setMedForm(f => ({ ...f, prescriptionRequired: e.target.checked }))} color="success" size="small" />
-                    </Stack>
-
-                    <Stack direction="row" spacing={1}>
-                      <TextField size="small" label="HSN" value={medForm.hsn} onChange={e => setMedForm(f => ({ ...f, hsn: e.target.value.replace(/[^\d]/g, "") }))} fullWidth />
-                      <FormControl fullWidth size="small">
-                        <InputLabel>GST</InputLabel>
-                        <Select label="GST" value={medForm.gstRate} onChange={e => setMedForm(f => ({ ...f, gstRate: Number(e.target.value) }))}>
-                          {[0, 5, 12, 18].map(r => <MenuItem key={r} value={r}>{r}%</MenuItem>)}
+                      <Stack direction="row" spacing={1}>
+                        <TextField size="small" label="Stock" type="number" value={medForm.stock} onChange={e => setMedForm(f => ({ ...f, stock: e.target.value }))} fullWidth onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)} />
+                        <TextField size="small" label="Discount %" type="number" value={medForm.discount} onChange={e => setMedForm(f => ({ ...f, discount: e.target.value }))} inputProps={{ min: 0, max: 90 }} fullWidth onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)} />
+                      </Stack>
+                      <FormControl fullWidth size="small"><InputLabel>Category</InputLabel>
+                        <Select multiple value={Array.isArray(medForm.category) ? medForm.category : (medForm.category ? [medForm.category] : [])} label="Category" onChange={e => setMedForm(f => ({ ...f, category: e.target.value }))} renderValue={(sel) => sel.join(", ")} MenuProps={{ PaperProps: { style: { zIndex: 2000 } } }}>
+                          {allPharmacyCategories.map(opt => <MenuItem key={opt} value={opt}><Checkbox size="small" checked={Array.isArray(medForm.category) && medForm.category.indexOf(opt) > -1} /><ListItemText primary={opt} /></MenuItem>)}
                         </Select>
                       </FormControl>
-                    </Stack>
-
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <input type="file" accept="image/*" multiple hidden ref={fileInputRef} onChange={handleImagesChange} />
-                      <input type="file" accept="image/*" multiple capture="environment" hidden ref={cameraInputRef} onChange={handleImagesChange} />
-                      <Button size="small" startIcon={<PhotoCamera />} variant={medImages?.length ? "contained" : "outlined"}
-                        onClick={() => fileInputRef.current?.click()} color={medImages?.length ? "success" : "primary"} sx={{ fontSize: 11 }}>
-                        {medImages?.length ? `${medImages.length} Image${medImages.length > 1 ? "s" : ""}` : "Upload"}
-                      </Button>
-                      <IconButton size="small" color="primary" onClick={() => cameraInputRef.current?.click()}><PhotoCamera fontSize="small" /></IconButton>
-                    </Stack>
-                    {medImages?.length > 0 && (
-                      <Stack direction="row" spacing={0.5}>
-                        {medImages.map((img, i) => <Box key={i} component="img" src={URL.createObjectURL(img)} sx={{ width: 44, height: 44, borderRadius: 2, objectFit: "cover", border: "1px solid #e2e8f0" }} />)}
+                      {((Array.isArray(medForm.category) ? medForm.category.includes("Other") : medForm.category === "Other")) && <TextField size="small" label="Custom Category" value={medForm.customCategory} onChange={e => setMedForm(f => ({ ...f, customCategory: e.target.value }))} onFocus={() => setIsEditing(true)} onBlur={e => { setIsEditing(false); handleCustomCategoryBlur(e.target.value); }} error={!!medMsg && medMsg.toLowerCase().includes("category")} helperText={!!medMsg && medMsg.toLowerCase().includes("category") ? medMsg : ""} />}
+                      <FormControl fullWidth size="small"><InputLabel>Type</InputLabel>
+                        <Select value={medForm.type} label="Type" onChange={(e) => { setMedForm(f => ({ ...f, type: e.target.value, packCount: "", packUnit: "" })); setUsePackPreset(e.target.value !== "Other"); }}>
+                          {TYPE_OPTIONS.map(opt => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
+                        </Select>
+                      </FormControl>
+                      {medForm.type === "Other" && <TextField size="small" label="Custom Type" fullWidth value={medForm.customType} onChange={e => setMedForm(f => ({ ...f, customType: e.target.value }))} onFocus={() => setIsEditing(true)} onBlur={() => setIsEditing(false)} />}
+                      {medForm.type !== "Other" && usePackPreset && <FormControl fullWidth size="small"><InputLabel>Pack Size</InputLabel><Select label="Pack Size" value={packLabel(medForm.packCount, medForm.packUnit) || ""} onChange={(e) => { if (e.target.value === "__CUSTOM__") { setUsePackPreset(false); setMedForm(f => ({ ...f, packCount: "", packUnit: "" })); return; } const opt = normalizePackOpt(e.target.value); setMedForm(f => ({ ...f, packCount: opt.count, packUnit: opt.unit })); }}>{(PACK_SIZES_BY_TYPE[medForm.type] || []).map((raw) => { const o = normalizePackOpt(raw); return <MenuItem key={o.label} value={o.label}>{o.label}</MenuItem>; })}<MenuItem value="__CUSTOM__">Custom...</MenuItem></Select></FormControl>}
+                      {(medForm.type === "Other" || !usePackPreset) && <Stack direction="row" spacing={1}><TextField size="small" label="Pack Count" type="number" value={medForm.packCount} onChange={e => setMedForm(f => ({ ...f, packCount: e.target.value }))} fullWidth /><FormControl fullWidth size="small"><InputLabel>Pack Unit</InputLabel><Select label="Pack Unit" value={medForm.packUnit} onChange={e => setMedForm(f => ({ ...f, packUnit: e.target.value }))}>{["tablets","capsules","ml","g","units","sachets","drops"].map(u => <MenuItem key={u} value={u}>{u}</MenuItem>)}</Select></FormControl></Stack>}
+                      <Stack direction="row" alignItems="center" justifyContent="space-between"><span style={{ fontSize: 13 }}>Prescription Required</span><Switch checked={!!medForm.prescriptionRequired} onChange={e => setMedForm(f => ({ ...f, prescriptionRequired: e.target.checked }))} color="success" size="small" /></Stack>
+                      <Stack direction="row" spacing={1}><TextField size="small" label="HSN" value={medForm.hsn} onChange={e => setMedForm(f => ({ ...f, hsn: e.target.value.replace(/[^\d]/g, "") }))} fullWidth /><FormControl fullWidth size="small"><InputLabel>GST</InputLabel><Select label="GST" value={medForm.gstRate} onChange={e => setMedForm(f => ({ ...f, gstRate: Number(e.target.value) }))}>{[0, 5, 12, 18].map(r => <MenuItem key={r} value={r}>{r}%</MenuItem>)}</Select></FormControl></Stack>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <input type="file" accept="image/*" multiple hidden ref={fileInputRef} onChange={handleImagesChange} />
+                        <input type="file" accept="image/*" multiple capture="environment" hidden ref={cameraInputRef} onChange={handleImagesChange} />
+                        <Button size="small" startIcon={<PhotoCamera />} variant={medImages?.length ? "contained" : "outlined"} onClick={() => fileInputRef.current?.click()} color={medImages?.length ? "success" : "primary"} sx={{ fontSize: 11 }}>{medImages?.length ? `${medImages.length} Image${medImages.length > 1 ? "s" : ""}` : "Upload"}</Button>
+                        <IconButton size="small" color="primary" onClick={() => cameraInputRef.current?.click()}><PhotoCamera fontSize="small" /></IconButton>
                       </Stack>
-                    )}
-                  </Stack>
-                </DialogContent>
-                <DialogActions sx={{ px: 2.5, pb: 2, pt: 1 }}>
-                  <Button onClick={() => setRequestMedOpen(false)} sx={{ color: "#94a3b8", fontWeight: 700 }}>Cancel</Button>
-                  <Button variant="contained" onClick={handleRequestMedicine} disabled={loading}
-                    sx={{ bgcolor: "#92400e", fontWeight: 800, borderRadius: 3, px: 3, boxShadow: "0 4px 14px rgba(146,64,14,0.3)", "&:hover": { bgcolor: "#b45309" } }}>
-                    {loading ? "Submitting..." : "Submit for Approval"}
-                  </Button>
-                </DialogActions>
-              </Dialog>
-            </Box>
-          )}
+                      {medImages?.length > 0 && <Stack direction="row" spacing={0.5}>{medImages.map((img, i) => <Box key={i} component="img" src={URL.createObjectURL(img)} sx={{ width: 44, height: 44, borderRadius: 2, objectFit: "cover", border: `1px solid ${BORDER_}` }} />)}</Stack>}
+                    </Stack>
+                  </DialogContent>
+                  <DialogActions sx={{ px: 2.5, pb: 2, pt: 1 }}>
+                    <Button onClick={() => setRequestMedOpen(false)} sx={{ color: SUB_, fontWeight: 700 }}>Cancel</Button>
+                    <Button variant="contained" onClick={handleRequestMedicine} disabled={loading} sx={{ bgcolor: "#92400e", fontWeight: 800, borderRadius: 3, px: 3, boxShadow: "0 4px 14px rgba(146,64,14,0.3)", "&:hover": { bgcolor: "#b45309" } }}>{loading ? "Submitting..." : "Submit for Approval"}</Button>
+                  </DialogActions>
+                </Dialog>
+              </motion.div>
+            )}
 
-          {/* ================== SETTLEMENT TAB ================== */}
-          {tab === 3 && <PharmacySettlementTab token={token} />}
+            {/* ================== MORE/SETTINGS TAB ================== */}
+            {tab === 3 && (
+              <motion.div key="more" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                <PharmacySettlementTab token={token} />
 
-          {/* Snackbars */}
-          <Snackbar open={!!msg} autoHideDuration={2500} onClose={() => setMsg("")}>
-            <Alert onClose={() => setMsg("")} severity={msg.includes("fail") || msg.includes("Failed") ? "error" : "success"}>{msg}</Alert>
-          </Snackbar>
-          <Snackbar open={!!medMsg} autoHideDuration={2200} onClose={() => setMedMsg("")}>
-            <Alert onClose={() => setMedMsg("")} severity={isErrorText(medMsg) ? "error" : "success"}>{medMsg}</Alert>
-          </Snackbar>
-        </Box>
-      </Box>
-    </ThemeProvider>
+                {/* Logout */}
+                <div style={{ textAlign: "center", marginTop: 32, marginBottom: 16 }}>
+                  <motion.button whileTap={{ scale: 0.95 }} onClick={handleLogout}
+                    style={{ padding: "12px 32px", borderRadius: 100, border: "2px solid #fecaca", background: "#fff", color: "#dc2626", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <LogOut size={14} /> Logout
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
+
+          </AnimatePresence>
+        </div>
+
+        {/* ===== FIXED BOTTOM NAV BAR ===== */}
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", background: "rgba(255,255,255,0.88)", borderTop: `1px solid ${BORDER_}`, boxShadow: "0 -4px 20px rgba(16,24,40,0.04)" }}>
+          <div style={{ maxWidth: 520, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
+            {navItems.map(({ icon: Icon, label, idx }) => (
+              <motion.button key={idx} whileTap={{ scale: 0.9 }} onClick={() => setTab(idx)}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "10px 0 8px", background: "none", border: "none", cursor: "pointer", position: "relative" }}>
+                {tab === idx && <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 20, height: 3, borderRadius: 100, background: `linear-gradient(90deg, ${DEEP}, ${ACCENT})`, boxShadow: `0 2px 8px ${ACCENT}40` }} />}
+                <Icon size={20} color={tab === idx ? DEEP : "#94a3b8"} strokeWidth={tab === idx ? 2.5 : 1.8} />
+                <span style={{ fontSize: 10, fontWeight: tab === idx ? 800 : 600, color: tab === idx ? DEEP : "#94a3b8", marginTop: 3, fontFamily: "'Sora',sans-serif" }}>{label}</span>
+              </motion.button>
+            ))}
+          </div>
+        </div>
+
+        {/* Snackbars */}
+        <Snackbar open={!!msg} autoHideDuration={2500} onClose={() => setMsg("")}>
+          <Alert onClose={() => setMsg("")} severity={msg.includes("fail") || msg.includes("Failed") ? "error" : "success"}>{msg}</Alert>
+        </Snackbar>
+        <Snackbar open={!!medMsg} autoHideDuration={2200} onClose={() => setMedMsg("")}>
+          <Alert onClose={() => setMedMsg("")} severity={isErrorText(medMsg) ? "error" : "success"}>{medMsg}</Alert>
+        </Snackbar>
+      </div>
+    </div>
   );
 }
