@@ -109,7 +109,8 @@ function AppContent() {
     location.pathname.startsWith("/ai") ||
     location.pathname.startsWith("/step-tracker") ||
     location.pathname.startsWith("/consult-room") ||
-    location.pathname.startsWith("/pharmacy/dashboard");
+    location.pathname.startsWith("/pharmacy/dashboard") ||
+    location.pathname.startsWith("/doctor/dashboard");
   const hideViewCartBar = location.pathname.startsWith("/consult-room");
     
   React.useEffect(() => {
