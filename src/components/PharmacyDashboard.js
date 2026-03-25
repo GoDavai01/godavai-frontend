@@ -34,6 +34,7 @@ import {
   LogOut,
   Package,
   Settings,
+  // eslint-disable-next-line no-unused-vars
   RefreshCw,
   Plus,
   Search,
@@ -468,31 +469,10 @@ export default function PharmacyDashboard() {
     }
   };
 
-  // ✅ EDIT INVENTORY MODAL STATE
-  const [editInvOpen, setEditInvOpen] = useState(false);
+  // ✅ EDIT INVENTORY FORM STATE (used by inventory detail dialog)
+  // eslint-disable-next-line no-unused-vars
   const [editInv, setEditInv] = useState(null);
   const [editInvForm, setEditInvForm] = useState({ sellingPrice: 0, mrp: 0, stockQty: 0 });
-
-  const openEditInventory = (it) => {
-    setEditInv(it);
-    setEditInvForm({
-      sellingPrice: Number(it.sellingPrice ?? it.price ?? 0),
-      mrp: Number(it.mrp ?? 0),
-      stockQty: Number(it.stockQty ?? it.stock ?? 0),
-    });
-    setEditInvOpen(true);
-  };
-
-  const saveEditInventory = async () => {
-    if (!editInv?._id) return;
-    await updateInventory(editInv._id, {
-      sellingPrice: Number(editInvForm.sellingPrice || 0),
-      mrp: Number(editInvForm.mrp || 0),
-      stockQty: Number(editInvForm.stockQty || 0),
-      // discount backend auto-calc logic stays as-is
-    });
-    setEditInvOpen(false);
-  };
 
   const saveLiveConfig = async (patch = {}) => {
     const next = { ...liveConfig, ...patch };
@@ -1079,6 +1059,9 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
   const [catalogDetail, setCatalogDetail] = useState(null);
   const [detailImgIdx, setDetailImgIdx] = useState(0);
   const [detailDesc, setDetailDesc] = useState("");
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [invSearch, setInvSearch] = useState("");
+  const [invDetail, setInvDetail] = useState(null);
 
   // ─── Design constants (match Home.js) ───
   const DEEP = "#0A5A3B";
@@ -1117,6 +1100,24 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
     if (img.startsWith("/uploads/")) return `${API_BASE_URL}${img}`;
     if (img.startsWith("http")) return img;
     return null;
+  };
+
+  // Filtered inventory for search in overlay (must be before conditional return)
+  const filteredInventory = useMemo(() => {
+    if (!invSearch.trim()) return inventory;
+    const q = invSearch.toLowerCase();
+    return inventory.filter(it => (it.name || "").toLowerCase().includes(q) || (it.composition || "").toLowerCase().includes(q) || (it.brand || "").toLowerCase().includes(q));
+  }, [inventory, invSearch]);
+
+  // Open inventory detail for editing
+  const openInvDetail = (it) => {
+    setInvDetail(it);
+    setEditInvForm({
+      sellingPrice: Number(it.sellingPrice ?? it.price ?? 0),
+      mrp: Number(it.mrp ?? 0),
+      stockQty: Number(it.stockQty ?? it.stock ?? 0),
+    });
+    setDetailImgIdx(0);
   };
 
   if (!token) {
@@ -1796,70 +1797,224 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                   })()}
                 </Dialog>
 
-                {/* My Inventory */}
-                <div style={{ background: GLASS, border: `1px solid ${BORDER_}`, borderRadius: 20, padding: 16, marginBottom: 14, boxShadow: "0 4px 16px rgba(16,24,40,0.03)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                {/* My Inventory — clickable card to open full overlay */}
+                <motion.div whileTap={{ scale: 0.98 }} onClick={() => { setInventoryOpen(true); setInvSearch(""); fetchInventory(); }}
+                  style={{ background: `linear-gradient(135deg, ${MID_}12, ${ACCENT}08)`, border: `1.5px solid ${MID_}25`, borderRadius: 20, padding: "18px 18px", marginBottom: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 4px 16px rgba(16,24,40,0.03)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg, ${MID_}, ${ACCENT})`, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                      <Package size={20} color="#fff" />
+                    </div>
                     <div>
                       <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 15, fontWeight: 900, color: DEEP }}>My Inventory</div>
-                      <div style={{ fontSize: 11, color: SUB_ }}>{inventory.length} medicines stocked</div>
+                      <div style={{ fontSize: 11, color: SUB_, fontWeight: 600 }}>{inventory.length} medicines stocked · Tap to manage</div>
                     </div>
-                    <motion.button whileTap={{ scale: 0.95 }} onClick={fetchInventory}
-                      style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", borderRadius: 10, border: `1px solid ${DEEP}20`, background: `${DEEP}06`, color: DEEP, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                      <RefreshCw size={12} /> Refresh
-                    </motion.button>
                   </div>
-                  {inventory.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "30px 0" }}>
-                      <Pill size={36} color="#d1d5db" style={{ margin: "0 auto 8px" }} />
-                      <div style={{ fontSize: 13, color: SUB_, fontWeight: 600 }}>No inventory yet. Add from catalog above.</div>
+                  <ChevronRight size={20} color={SUB_} />
+                </motion.div>
+
+                {/* ═══════ INVENTORY FULL-PAGE OVERLAY ═══════ */}
+                <AnimatePresence>
+                {inventoryOpen && (
+                  <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 28, stiffness: 300 }}
+                    style={{ position: "fixed", inset: 0, zIndex: 9999, background: BG_, display: "flex", flexDirection: "column", fontFamily: "'Plus Jakarta Sans',-apple-system,sans-serif" }}>
+
+                    {/* Overlay Header */}
+                    <div style={{ flexShrink: 0, background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, padding: "16px 16px 14px", boxShadow: "0 4px 20px rgba(10,90,59,0.15)" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <motion.button whileTap={{ scale: 0.85 }} onClick={() => setInventoryOpen(false)}
+                            style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 10, width: 34, height: 34, display: "grid", placeItems: "center", cursor: "pointer" }}>
+                            <ChevronLeft size={18} color="#fff" />
+                          </motion.button>
+                          <div>
+                            <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 17, fontWeight: 900, color: "#fff" }}>My Inventory</div>
+                            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", fontWeight: 600 }}>{inventory.length} medicines in stock</div>
+                          </div>
+                        </div>
+                        <div style={{ background: "rgba(255,255,255,0.15)", padding: "4px 12px", borderRadius: 100 }}>
+                          <span style={{ fontSize: 13, fontWeight: 900, color: "#fff" }}>{inventory.length}</span>
+                        </div>
+                      </div>
+
+                      {/* Search */}
+                      <div style={{ position: "relative" }}>
+                        <Search size={15} color="rgba(255,255,255,0.5)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+                        <input value={invSearch} onChange={e => setInvSearch(e.target.value)} placeholder="Search your inventory..."
+                          style={{ width: "100%", height: 38, borderRadius: 12, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.1)", color: "#fff", paddingLeft: 36, paddingRight: 12, fontSize: 12, fontWeight: 600, outline: "none", boxSizing: "border-box" }} />
+                      </div>
                     </div>
-                  ) : (
-                    <div style={{ maxHeight: 420, overflowY: "auto" }}>
-                      {inventory.map((it) => (
-                        <div key={it._id} style={{ padding: 12, marginBottom: 8, borderRadius: 14, background: "rgba(248,250,252,0.8)", border: `1px solid ${BORDER_}`, borderLeft: `3px solid ${MID_}`, transition: "all 0.2s" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                            <div style={{ minWidth: 0, flex: 1 }}>
-                              <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, color: TEXT_, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
-                              <div style={{ display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
-                                <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 100, background: `${DEEP}08`, color: DEEP }}>₹{Number(it.sellingPrice ?? it.price ?? 0)}</span>
-                                <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 100, background: "rgba(248,250,252,1)", color: SUB_ }}>MRP ₹{Number(it.mrp ?? 0)}</span>
-                                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 100, background: Number(it.stockQty ?? it.stock ?? 0) > 0 ? `${DEEP}08` : "rgba(220,38,38,0.08)", color: Number(it.stockQty ?? it.stock ?? 0) > 0 ? DEEP : "#dc2626" }}>Stock: {Number(it.stockQty ?? it.stock ?? 0)}</span>
-                              </div>
-                              {(it.composition || it.type) && <div style={{ fontSize: 10, color: SUB_, marginTop: 4 }}>{it.type && <strong>{it.type}</strong>}{it.type && it.composition ? " · " : ""}{it.composition ? it.composition.slice(0, 50) : ""}</div>}
-                              {it.priceOverrideStatus === "pending" && <div style={{ fontSize: 9, fontWeight: 800, color: "#d97706", background: "#fef3c7", display: "inline-block", padding: "1px 8px", borderRadius: 100, marginTop: 4 }}>Price ₹{it.requestedPrice} pending</div>}
-                              {it.priceOverrideStatus === "approved" && it.requestedPrice > 0 && <div style={{ fontSize: 9, fontWeight: 800, color: DEEP, background: `${ACCENT}15`, display: "inline-block", padding: "1px 8px", borderRadius: 100, marginTop: 4 }}>Override approved</div>}
-                              {it.priceOverrideStatus === "rejected" && <div style={{ fontSize: 9, fontWeight: 800, color: "#dc2626", background: "#fee2e2", display: "inline-block", padding: "1px 8px", borderRadius: 100, marginTop: 4 }}>Override rejected</div>}
+
+                    {/* Scrollable inventory grid */}
+                    <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "12px 12px 24px", maxWidth: 520, margin: "0 auto", width: "100%" }}>
+                      {filteredInventory.length === 0 ? (
+                        <div style={{ textAlign: "center", padding: "60px 0" }}>
+                          <Pill size={40} color="#d1d5db" style={{ margin: "0 auto 10px" }} />
+                          <div style={{ fontSize: 14, color: SUB_, fontWeight: 700 }}>{invSearch ? "No matches found" : "No inventory yet"}</div>
+                          <div style={{ fontSize: 11, color: SUB_, marginTop: 4 }}>Add medicines from Master Catalog</div>
+                        </div>
+                      ) : (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+                          {filteredInventory.map((it) => {
+                            const imgSrc = getImgUrl(it.images?.[0]);
+                            const stock = Number(it.stockQty ?? it.stock ?? 0);
+                            const price = Number(it.sellingPrice ?? it.price ?? 0);
+                            const mrp = Number(it.mrp ?? 0);
+                            return (
+                              <motion.div key={it._id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                                onClick={() => openInvDetail(it)}
+                                style={{ background: GLASS, border: `1px solid ${BORDER_}`, borderRadius: 16, overflow: "hidden", cursor: "pointer", boxShadow: "0 2px 12px rgba(16,24,40,0.03)", minWidth: 0 }}>
+                                {/* Image */}
+                                <div style={{ position: "relative", width: "100%", paddingTop: "70%", background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)", overflow: "hidden" }}>
+                                  {imgSrc ? (
+                                    <img src={imgSrc} alt="" style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "contain", padding: 8 }}
+                                      onError={e => { e.target.style.display = "none"; e.target.nextSibling && (e.target.nextSibling.style.display = "grid"); }} />
+                                  ) : null}
+                                  <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: imgSrc ? "none" : "grid", placeItems: "center", fontSize: 28 }}>💊</div>
+                                  {/* Stock badge */}
+                                  <div style={{ position: "absolute", top: 6, right: 6, padding: "2px 8px", borderRadius: 100, fontSize: 8, fontWeight: 800,
+                                    background: stock > 0 ? `${ACCENT}20` : "rgba(220,38,38,0.12)", color: stock > 0 ? DEEP : "#dc2626" }}>
+                                    {stock > 0 ? `Stock: ${stock}` : "Out of Stock"}
+                                  </div>
+                                  {it.priceOverrideStatus === "pending" && (
+                                    <div style={{ position: "absolute", top: 6, left: 6, padding: "2px 6px", borderRadius: 100, fontSize: 7, fontWeight: 800, background: "#fef3c7", color: "#d97706" }}>⏳ Pending</div>
+                                  )}
+                                </div>
+                                {/* Info */}
+                                <div style={{ padding: "8px 10px 10px" }}>
+                                  <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 11, fontWeight: 800, color: TEXT_, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 4 }}>{it.name}</div>
+                                  <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 }}>
+                                    <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 14, fontWeight: 900, color: DEEP }}>₹{price}</span>
+                                    {mrp > price && <span style={{ fontSize: 10, color: SUB_, textDecoration: "line-through" }}>₹{mrp}</span>}
+                                  </div>
+                                  {it.type && <div style={{ fontSize: 8, fontWeight: 700, padding: "2px 6px", borderRadius: 100, background: `${DEEP}08`, color: SUB_, display: "inline-block" }}>{it.type}</div>}
+                                </div>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+                </AnimatePresence>
+
+                {/* ═══════ INVENTORY DETAIL / EDIT DIALOG ═══════ */}
+                <Dialog open={Boolean(invDetail)} onClose={() => setInvDetail(null)} fullWidth maxWidth="sm"
+                  sx={{ zIndex: 13000, "& .MuiDialog-paper": { borderRadius: "20px", overflow: "hidden", margin: "12px", maxHeight: "92vh", display: "flex", flexDirection: "column" } }}>
+                  {invDetail && (() => {
+                    const it = invDetail;
+                    const imgs = (it.images || []).map(getImgUrl).filter(Boolean);
+                    const stock = Number(it.stockQty ?? it.stock ?? 0);
+                    const price = Number(it.sellingPrice ?? it.price ?? 0);
+                    const mrp = Number(it.mrp ?? 0);
+                    const discPct = mrp > 0 && price > 0 && price < mrp ? Math.round(((mrp - price) / mrp) * 100) : 0;
+                    return (
+                      <>
+                        {/* Header */}
+                        <div style={{ background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, padding: "16px 16px 12px", position: "relative", flexShrink: 0 }}>
+                          <motion.button whileTap={{ scale: 0.85 }} onClick={() => setInvDetail(null)}
+                            style={{ position: "absolute", top: 10, right: 10, background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 100, width: 30, height: 30, display: "grid", placeItems: "center", cursor: "pointer" }}>
+                            <X size={15} color="#fff" />
+                          </motion.button>
+                          <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900, color: "#fff", lineHeight: 1.25, paddingRight: 36 }}>{it.name}</div>
+                          {it.company && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", fontWeight: 600, marginTop: 2 }}>{it.company}</div>}
+                        </div>
+
+                        {/* Scrollable content */}
+                        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+                          {/* Image */}
+                          {imgs.length > 0 ? (
+                            <div style={{ position: "relative", background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)", paddingTop: "60%", overflow: "hidden" }}>
+                              <img src={imgs[detailImgIdx % imgs.length]} alt="" style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "contain", padding: 10 }} />
+                              {imgs.length > 1 && (
+                                <>
+                                  <button onClick={() => setDetailImgIdx(i => (i - 1 + imgs.length) % imgs.length)} style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.85)", border: "none", borderRadius: 100, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer" }}><ChevronLeft size={14} color={DEEP} /></button>
+                                  <button onClick={() => setDetailImgIdx(i => (i + 1) % imgs.length)} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.85)", border: "none", borderRadius: 100, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer" }}><ChevronRight size={14} color={DEEP} /></button>
+                                </>
+                              )}
                             </div>
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <motion.button whileTap={{ scale: 0.9 }} onClick={() => openEditInventory(it)}
-                                style={{ padding: "5px 12px", borderRadius: 8, border: `1px solid ${DEEP}20`, background: "#fff", color: DEEP, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Edit</motion.button>
-                              <motion.button whileTap={{ scale: 0.9 }} onClick={() => removeFromInventory(it._id)}
-                                style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #fecaca", background: "#fff", color: "#dc2626", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Remove</motion.button>
+                          ) : (
+                            <div style={{ background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)", paddingTop: "45%", position: "relative" }}>
+                              <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "grid", placeItems: "center", fontSize: 40 }}>💊</div>
+                            </div>
+                          )}
+
+                          {/* Current pricing info */}
+                          <div style={{ padding: "14px 16px" }}>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+                              <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 22, fontWeight: 900, color: TEXT_ }}>₹{price}</span>
+                              {mrp > price && <span style={{ fontSize: 13, color: SUB_, textDecoration: "line-through" }}>₹{mrp}</span>}
+                              {discPct > 0 && <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 100, background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff" }}>{discPct}% OFF</span>}
+                            </div>
+
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                              <span style={{ fontSize: 9, fontWeight: 800, padding: "3px 10px", borderRadius: 100, background: stock > 0 ? `${ACCENT}15` : "rgba(220,38,38,0.1)", color: stock > 0 ? DEEP : "#dc2626" }}>{stock > 0 ? `Stock: ${stock}` : "Out of Stock"}</span>
+                              {it.type && <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, background: `${DEEP}08`, color: SUB_ }}>{it.type}</span>}
+                              {it.prescriptionRequired && <span style={{ fontSize: 9, fontWeight: 800, padding: "3px 10px", borderRadius: 100, background: "#fef2f2", color: "#dc2626" }}>Rx Required</span>}
+                            </div>
+
+                            {it.composition && (
+                              <div style={{ marginBottom: 8 }}>
+                                <div style={{ fontSize: 9, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>Composition</div>
+                                <div style={{ fontSize: 11, color: TEXT_, fontWeight: 600, lineHeight: 1.4 }}>{it.composition}</div>
+                              </div>
+                            )}
+                            {it.brand && (
+                              <div style={{ marginBottom: 8 }}>
+                                <div style={{ fontSize: 9, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>Brand</div>
+                                <div style={{ fontSize: 11, color: TEXT_, fontWeight: 600 }}>{it.brand}</div>
+                              </div>
+                            )}
+
+                            {it.priceOverrideStatus === "pending" && <div style={{ fontSize: 10, fontWeight: 800, color: "#d97706", background: "#fef3c7", padding: "6px 12px", borderRadius: 12, marginBottom: 8 }}>⏳ Price ₹{it.requestedPrice} pending admin approval</div>}
+                            {it.priceOverrideStatus === "approved" && it.requestedPrice > 0 && <div style={{ fontSize: 10, fontWeight: 800, color: DEEP, background: `${ACCENT}15`, padding: "6px 12px", borderRadius: 12, marginBottom: 8 }}>✓ Price override approved</div>}
+                            {it.priceOverrideStatus === "rejected" && <div style={{ fontSize: 10, fontWeight: 800, color: "#dc2626", background: "#fee2e2", padding: "6px 12px", borderRadius: 12, marginBottom: 8 }}>✗ Price override rejected</div>}
+
+                            {/* Edit form */}
+                            <div style={{ background: `${BG_}`, borderRadius: 16, padding: 14, marginTop: 6 }}>
+                              <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 900, color: DEEP, marginBottom: 10 }}>Edit Price & Stock</div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                                <div style={{ position: "relative" }}>
+                                  <div style={{ position: "absolute", top: -7, left: 12, fontSize: 8, fontWeight: 800, color: SUB_, background: BG_, padding: "0 4px", zIndex: 1 }}>Selling Price</div>
+                                  <input type="number" value={editInvForm.sellingPrice} onChange={e => setEditInvForm(f => ({ ...f, sellingPrice: e.target.value }))}
+                                    style={{ width: "100%", height: 42, borderRadius: 12, border: `1.5px solid ${BORDER_}`, padding: "0 12px", fontSize: 14, fontWeight: 700, color: TEXT_, background: "#fff", outline: "none", boxSizing: "border-box" }} />
+                                </div>
+                                <div style={{ display: "flex", gap: 8 }}>
+                                  <div style={{ flex: 1, position: "relative" }}>
+                                    <div style={{ position: "absolute", top: -7, left: 12, fontSize: 8, fontWeight: 800, color: SUB_, background: BG_, padding: "0 4px", zIndex: 1 }}>MRP</div>
+                                    <input type="number" value={editInvForm.mrp} onChange={e => setEditInvForm(f => ({ ...f, mrp: e.target.value }))}
+                                      style={{ width: "100%", height: 42, borderRadius: 12, border: `1.5px solid ${BORDER_}`, padding: "0 12px", fontSize: 14, fontWeight: 700, color: TEXT_, background: "#fff", outline: "none", boxSizing: "border-box" }} />
+                                  </div>
+                                  <div style={{ flex: 1, position: "relative" }}>
+                                    <div style={{ position: "absolute", top: -7, left: 12, fontSize: 8, fontWeight: 800, color: SUB_, background: BG_, padding: "0 4px", zIndex: 1 }}>Stock Qty</div>
+                                    <input type="number" value={editInvForm.stockQty} onChange={e => setEditInvForm(f => ({ ...f, stockQty: e.target.value }))}
+                                      style={{ width: "100%", height: 42, borderRadius: 12, border: `1.5px solid ${BORDER_}`, padding: "0 12px", fontSize: 14, fontWeight: 700, color: TEXT_, background: "#fff", outline: "none", boxSizing: "border-box" }} />
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
 
-                {/* Edit Inventory Dialog */}
-                <Dialog open={editInvOpen} onClose={() => setEditInvOpen(false)} fullWidth maxWidth="xs" PaperProps={{ sx: { borderRadius: "24px", overflow: "hidden" } }}>
-                  <div style={{ background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, padding: "16px 22px" }}>
-                    <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900, color: "#fff" }}>Edit Price & Stock</div>
-                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>Changes apply only to your pharmacy</div>
-                  </div>
-                  <DialogContent sx={{ pt: 2.5 }}>
-                    <Stack spacing={2}>
-                      <TextField label="Selling Price" type="number" value={editInvForm.sellingPrice} onChange={(e) => setEditInvForm(f => ({ ...f, sellingPrice: e.target.value }))} fullWidth sx={{ "& .MuiOutlinedInput-root": { borderRadius: "14px" } }} />
-                      <TextField label="MRP" type="number" value={editInvForm.mrp} onChange={(e) => setEditInvForm(f => ({ ...f, mrp: e.target.value }))} fullWidth sx={{ "& .MuiOutlinedInput-root": { borderRadius: "14px" } }} />
-                      <TextField label="Stock Quantity" type="number" value={editInvForm.stockQty} onChange={(e) => setEditInvForm(f => ({ ...f, stockQty: e.target.value }))} fullWidth sx={{ "& .MuiOutlinedInput-root": { borderRadius: "14px" } }} />
-                    </Stack>
-                  </DialogContent>
-                  <DialogActions sx={{ px: 2.5, pb: 2 }}>
-                    <Button onClick={() => setEditInvOpen(false)} sx={{ color: SUB_ }}>Cancel</Button>
-                    <Button variant="contained" onClick={saveEditInventory} sx={{ bgcolor: DEEP, fontWeight: 800, borderRadius: 3, px: 3, "&:hover": { bgcolor: "#064e3b" } }}>Save</Button>
-                  </DialogActions>
+                        {/* Sticky bottom actions */}
+                        <div style={{ flexShrink: 0, padding: "10px 14px", borderTop: `1px solid ${BORDER_}`, background: "#fff", boxShadow: "0 -2px 12px rgba(0,0,0,0.04)" }}>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <motion.button whileTap={{ scale: 0.95 }} onClick={() => { removeFromInventory(it._id); setInvDetail(null); }}
+                              style={{ flex: 1, height: 44, borderRadius: 12, border: "1.5px solid #fecaca", background: "#fff5f5", color: "#dc2626", fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                              Remove
+                            </motion.button>
+                            <motion.button whileTap={{ scale: 0.95 }} onClick={async () => {
+                              await updateInventory(it._id, { sellingPrice: Number(editInvForm.sellingPrice || 0), mrp: Number(editInvForm.mrp || 0), stockQty: Number(editInvForm.stockQty || 0) });
+                              setInvDetail(null);
+                            }}
+                              style={{ flex: 2, height: 44, borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: `0 4px 16px rgba(12,90,62,0.35)` }}>
+                              Save Changes
+                            </motion.button>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </Dialog>
 
                 {/* Request Medicine Button */}
