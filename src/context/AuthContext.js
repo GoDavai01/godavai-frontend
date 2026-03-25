@@ -223,6 +223,8 @@ export function AuthProvider({ children }) {
   }, [clearAuthState, refreshSession]);
 
   useEffect(() => {
+    // Skip user-auth API calls on pharmacy dashboard (uses separate auth)
+    if (window.location.pathname.startsWith("/pharmacy/")) return;
     if (user?._id) {
       axios
         .get(`${API_BASE_URL}/api/users/${user._id}/addresses`)
@@ -234,6 +236,8 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   useEffect(() => {
+    // Skip user-auth API calls on pharmacy dashboard (uses separate auth)
+    if (window.location.pathname.startsWith("/pharmacy/")) return;
     if (!token) return;
     axios
       .get(`${API_BASE_URL}/api/profile`)
