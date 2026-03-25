@@ -1,11 +1,11 @@
 // src/components/PharmacyDashboard.js
 import React, { useEffect, useState, useRef } from "react";
 import {
-  Box, Typography, Button, Card, CardContent, TextField, Stack, Chip,
-  Snackbar, Alert, ThemeProvider, createTheme, CssBaseline, IconButton,
+  Box, Button, TextField, Stack, Chip,
+  Snackbar, Alert, createTheme, IconButton,
   MenuItem, Select, InputLabel, FormControl, Dialog, DialogContent,
-  DialogActions, Switch, Table, TableHead, TableRow, TableCell, TableBody,
-  Checkbox, ListItemText, ToggleButton, ToggleButtonGroup
+  DialogActions, Switch,
+  Checkbox, ListItemText
 } from "@mui/material";
 // eslint-disable-next-line no-unused-vars
 import Autocomplete from "@mui/material/Autocomplete";
@@ -34,10 +34,8 @@ import {
   LogOut,
   Package,
   Settings,
-  ChevronDown,
   RefreshCw,
-  Plus,
-  Search
+  Plus
 } from "lucide-react";
 
 // eslint-disable-next-line no-unused-vars
@@ -58,21 +56,16 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://localhost:500
 
 /* ---------------------------- UTILITIES ---------------------------- */
 
-// Light theme: deep emerald accents, light surfaces
+// Theme kept for MUI components that need it
+// eslint-disable-next-line no-unused-vars
 const appTheme = createTheme({
   palette: {
     mode: "light",
-    primary: { main: "#059669" },   // emerald-600
-    secondary: { main: "#10b981" }, // emerald-500
+    primary: { main: "#059669" },
+    secondary: { main: "#10b981" },
     success: { main: "#059669" },
-    background: {
-      default: "#f7fcf9",
-      paper: "#ffffff",
-    },
-    text: {
-      primary: "#0f172a",  // slate-900
-      secondary: "#334155" // slate-700
-    }
+    background: { default: "#f7fcf9", paper: "#ffffff" },
+    text: { primary: "#0f172a", secondary: "#334155" }
   }
 });
 
@@ -144,6 +137,7 @@ function getStatusLabel(status) {
   if (status === -1 || status === "rejected") return "Rejected";
   return "Unknown";
 }
+// eslint-disable-next-line no-unused-vars
 function getStatusColor(status) {
   if (status === "quoted") return "warning";
   if (status === 3 || status === "delivered") return "success";
@@ -229,7 +223,7 @@ function EarningsTab({ payouts, token }) {
         {["daily", "weekly", "monthly"].map((v) => (
           <motion.button key={v} whileTap={{ scale: 0.95 }} onClick={() => setView(v)}
             style={{
-              padding: "8px 18px", borderRadius: 100, border: "none", cursor: "pointer",
+              padding: "8px 18px", borderRadius: 100, cursor: "pointer",
               background: view === v ? "#0A5A3B" : "rgba(255,255,255,0.92)",
               color: view === v ? "#fff" : "#6A7A73",
               fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 800,
