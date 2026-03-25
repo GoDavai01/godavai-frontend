@@ -1038,7 +1038,8 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
   const [ordersPage, setOrdersPage] = useState(1);
   const ORDERS_PER_PAGE = 10;
 
-  // ─── Catalog filters & detail dialog ───
+  // ─── Catalog full-page overlay & filters ───
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const [catFilter, setCatFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
   const [medTypeFilter, setMedTypeFilter] = useState("All");
@@ -1418,28 +1419,51 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
             {tab === 2 && (
               <motion.div key="medicines" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
 
-                {/* ─── Master Catalog Header (Medicines-page style) ─── */}
-                <div style={{ background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, borderRadius: 20, padding: "16px 16px 12px", marginBottom: 0, position: "relative" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <div>
-                      <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 17, fontWeight: 900, color: "#fff" }}>Master Catalog</div>
-                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>Browse & add to your inventory</div>
-                    </div>
-                    <div style={{ background: "rgba(255,255,255,0.18)", borderRadius: 100, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: "#fff" }}>
-                      {filteredCatalog.length}/{catalog.length}
-                    </div>
+                {/* ─── Master Catalog Button (opens full-page) ─── */}
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => { setCatalogOpen(true); if (catalog.length === 0) fetchCatalog(); }}
+                  style={{ width: "100%", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, borderRadius: 20, padding: "18px 16px", marginBottom: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, boxShadow: `0 6px 20px ${DEEP}30` }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 16, background: "rgba(255,255,255,0.15)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                    <Search size={22} color="#fff" />
                   </div>
-                  {/* Search */}
-                  <div style={{ position: "relative" }}>
-                    <Search size={15} color="rgba(255,255,255,0.5)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", zIndex: 1 }} />
-                    <input value={catalogQ} onChange={(e) => handleCatalogSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && fetchCatalog()}
-                      placeholder="Search medicine name, brand, composition..."
-                      style={{ width: "100%", padding: "10px 12px 10px 36px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: 13, fontWeight: 600, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+                  <div style={{ textAlign: "left" }}>
+                    <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900, color: "#fff" }}>Browse Master Catalog</div>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 600, marginTop: 2 }}>Search & add medicines to your inventory</div>
                   </div>
-                </div>
+                  <ChevronRight size={20} color="rgba(255,255,255,0.5)" style={{ marginLeft: "auto" }} />
+                </motion.button>
 
-                {/* ─── Filter Chips ─── */}
-                <div style={{ background: GLASS, border: `1px solid ${BORDER_}`, borderTop: "none", borderRadius: "0 0 20px 20px", padding: "12px 12px 8px", marginBottom: 14 }}>
+                {/* ─── Full-Page Catalog Overlay ─── */}
+                <AnimatePresence>
+                {catalogOpen && (
+                  <motion.div key="catalog-overlay" initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 28, stiffness: 300 }}
+                    style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: BG_, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+
+                    {/* Sticky Header */}
+                    <div style={{ position: "sticky", top: 0, zIndex: 10, background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, padding: "12px 14px 10px", boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                        <motion.button whileTap={{ scale: 0.85 }} onClick={() => setCatalogOpen(false)}
+                          style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 12, width: 36, height: 36, display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0 }}>
+                          <ChevronLeft size={20} color="#fff" />
+                        </motion.button>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 17, fontWeight: 900, color: "#fff" }}>Master Catalog</div>
+                          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", fontWeight: 600 }}>Browse & add to inventory</div>
+                        </div>
+                        <div style={{ background: "rgba(255,255,255,0.18)", borderRadius: 100, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: "#fff" }}>
+                          {filteredCatalog.length}/{catalog.length}
+                        </div>
+                      </div>
+                      {/* Search */}
+                      <div style={{ position: "relative" }}>
+                        <Search size={15} color="rgba(255,255,255,0.5)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", zIndex: 1 }} />
+                        <input value={catalogQ} onChange={(e) => handleCatalogSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && fetchCatalog()}
+                          placeholder="Search medicine name, brand, composition..."
+                          style={{ width: "100%", padding: "10px 12px 10px 36px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: 13, fontWeight: 600, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+                      </div>
+                    </div>
+
+                    {/* Filter Chips */}
+                    <div style={{ background: GLASS, borderBottom: `1px solid ${BORDER_}`, padding: "10px 12px 6px" }}>
                   {/* Category row */}
                   <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
                     {["All", ...CUSTOMER_CATEGORIES].map(c => (
@@ -1475,8 +1499,9 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                   </div>
                 </div>
 
-                {/* ─── 2-Column Medicine Card Grid ─── */}
-                {invMsg && <div style={{ marginBottom: 8, fontSize: 12, fontWeight: 700, color: invMsg.includes("Failed") || invMsg.includes("❌") ? "#dc2626" : DEEP, textAlign: "center" }}>{invMsg}</div>}
+                    {/* ─── 2-Column Medicine Card Grid ─── */}
+                    <div style={{ flex: 1, padding: "12px 12px 24px", overflowY: "auto" }}>
+                    {invMsg && <div style={{ marginBottom: 8, fontSize: 12, fontWeight: 700, color: invMsg.includes("Failed") || invMsg.includes("❌") ? "#dc2626" : DEEP, textAlign: "center" }}>{invMsg}</div>}
 
                 {filteredCatalog.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "40px 0" }}>
@@ -1566,7 +1591,8 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                   </div>
                 )}
 
-                {/* ─── Medicine Detail Dialog ─── */}
+                    </div>
+                    {/* ─── Medicine Detail Dialog ─── */}
                 <Dialog open={!!catalogDetail} onClose={() => setCatalogDetail(null)} fullWidth maxWidth="xs" PaperProps={{ sx: { borderRadius: "24px", overflow: "hidden", maxHeight: "90vh", m: 1 } }}>
                   {catalogDetail && (() => {
                     const m = catalogDetail;
@@ -1684,6 +1710,10 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                     );
                   })()}
                 </Dialog>
+
+                  </motion.div>
+                )}
+                </AnimatePresence>
 
                 {/* My Inventory */}
                 <div style={{ background: GLASS, border: `1px solid ${BORDER_}`, borderRadius: 20, padding: 16, marginBottom: 14, boxShadow: "0 4px 16px rgba(16,24,40,0.03)" }}>
