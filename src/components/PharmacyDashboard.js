@@ -1062,6 +1062,7 @@ headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json"
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [invSearch, setInvSearch] = useState("");
   const [invDetail, setInvDetail] = useState(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   // ─── Design constants (match Home.js) ───
   const DEEP = "#0A5A3B";
@@ -1899,7 +1900,7 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                 </AnimatePresence>
 
                 {/* ═══════ INVENTORY DETAIL / EDIT DIALOG ═══════ */}
-                <Dialog open={Boolean(invDetail)} onClose={() => setInvDetail(null)} fullWidth maxWidth="sm"
+                <Dialog open={Boolean(invDetail)} onClose={() => { setInvDetail(null); setConfirmRemove(false); }} fullWidth maxWidth="sm"
                   sx={{ zIndex: 13000, "& .MuiDialog-paper": { borderRadius: "20px", overflow: "hidden", margin: "12px", maxHeight: "92vh", display: "flex", flexDirection: "column" } }}>
                   {invDetail && (() => {
                     const it = invDetail;
@@ -1912,7 +1913,7 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                       <>
                         {/* Header */}
                         <div style={{ background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, padding: "16px 16px 12px", position: "relative", flexShrink: 0 }}>
-                          <motion.button whileTap={{ scale: 0.85 }} onClick={() => setInvDetail(null)}
+                          <motion.button whileTap={{ scale: 0.85 }} onClick={() => { setInvDetail(null); setConfirmRemove(false); }}
                             style={{ position: "absolute", top: 10, right: 10, background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 100, width: 30, height: 30, display: "grid", placeItems: "center", cursor: "pointer" }}>
                             <X size={15} color="#fff" />
                           </motion.button>
@@ -1998,19 +1999,41 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
 
                         {/* Sticky bottom actions */}
                         <div style={{ flexShrink: 0, padding: "10px 14px", borderTop: `1px solid ${BORDER_}`, background: "#fff", boxShadow: "0 -2px 12px rgba(0,0,0,0.04)" }}>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            <motion.button whileTap={{ scale: 0.95 }} onClick={() => { removeFromInventory(it._id); setInvDetail(null); }}
-                              style={{ flex: 1, height: 44, borderRadius: 12, border: "1.5px solid #fecaca", background: "#fff5f5", color: "#dc2626", fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                              Remove
-                            </motion.button>
-                            <motion.button whileTap={{ scale: 0.95 }} onClick={async () => {
-                              await updateInventory(it._id, { sellingPrice: Number(editInvForm.sellingPrice || 0), mrp: Number(editInvForm.mrp || 0), stockQty: Number(editInvForm.stockQty || 0) });
-                              setInvDetail(null);
-                            }}
-                              style={{ flex: 2, height: 44, borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: `0 4px 16px rgba(12,90,62,0.35)` }}>
-                              Save Changes
-                            </motion.button>
-                          </div>
+                          {confirmRemove ? (
+                            <div>
+                              <p style={{ margin: "0 0 8px", textAlign: "center", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 700, color: "#dc2626" }}>
+                                Remove this medicine from inventory?
+                              </p>
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <motion.button whileTap={{ scale: 0.95 }} onClick={() => setConfirmRemove(false)}
+                                  style={{ flex: 1, height: 44, borderRadius: 12, border: `1.5px solid ${BORDER_}`, background: "#fff", color: TEXT_, fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                                  No, Keep
+                                </motion.button>
+                                <motion.button whileTap={{ scale: 0.95 }} onClick={() => { removeFromInventory(it._id); setInvDetail(null); setConfirmRemove(false); }}
+                                  style={{ flex: 1, height: 44, borderRadius: 12, border: "none", background: "linear-gradient(135deg, #dc2626, #b91c1c)", color: "#fff", fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 12px rgba(220,38,38,0.3)" }}>
+                                  Yes, Remove
+                                </motion.button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <motion.button whileTap={{ scale: 0.95 }} onClick={() => setConfirmRemove(true)}
+                                style={{ flex: 1, height: 44, borderRadius: 12, border: "1.5px solid #fecaca", background: "#fff5f5", color: "#dc2626", fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                                Remove
+                              </motion.button>
+                              <motion.button whileTap={{ scale: 0.95 }} onClick={() => { setInvDetail(null); setConfirmRemove(false); }}
+                                style={{ flex: 1, height: 44, borderRadius: 12, border: `1.5px solid ${BORDER_}`, background: "#fff", color: SUB_, fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                                Cancel
+                              </motion.button>
+                              <motion.button whileTap={{ scale: 0.95 }} onClick={async () => {
+                                await updateInventory(it._id, { sellingPrice: Number(editInvForm.sellingPrice || 0), mrp: Number(editInvForm.mrp || 0), stockQty: Number(editInvForm.stockQty || 0) });
+                                setInvDetail(null); setConfirmRemove(false);
+                              }}
+                                style={{ flex: 1.5, height: 44, borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: `0 4px 16px rgba(12,90,62,0.35)` }}>
+                                Save Changes
+                              </motion.button>
+                            </div>
+                          )}
                         </div>
                       </>
                     );
