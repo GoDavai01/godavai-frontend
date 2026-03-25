@@ -1663,7 +1663,7 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
 
                 {/* Medicine Detail Dialog — rendered OUTSIDE overlay so z-index works */}
                 <Dialog open={Boolean(catalogDetail)} onClose={() => setCatalogDetail(null)} fullWidth maxWidth="sm"
-                  sx={{ zIndex: 13000, "& .MuiDialog-paper": { borderRadius: "20px", overflow: "hidden", margin: "16px", maxHeight: "90vh" } }}>
+                  sx={{ zIndex: 13000, "& .MuiDialog-paper": { borderRadius: "20px", overflow: "hidden", margin: "12px", maxHeight: "92vh", display: "flex", flexDirection: "column" } }}>
                   {catalogDetail && (() => {
                     const m = catalogDetail;
                     const imgs = (m.images || []).map(getImgUrl).filter(Boolean);
@@ -1674,116 +1674,122 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                     const cats = Array.isArray(m.category) ? m.category : (m.category ? [m.category] : []);
                     return (
                       <>
-                        {/* Header */}
-                        <div style={{ background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, padding: "18px 18px 14px", position: "relative" }}>
+                        {/* Header — fixed top */}
+                        <div style={{ background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, padding: "16px 16px 12px", position: "relative", flexShrink: 0 }}>
                           <motion.button whileTap={{ scale: 0.85 }} onClick={() => setCatalogDetail(null)}
-                            style={{ position: "absolute", top: 12, right: 12, background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 100, width: 32, height: 32, display: "grid", placeItems: "center", cursor: "pointer" }}>
-                            <X size={16} color="#fff" />
+                            style={{ position: "absolute", top: 10, right: 10, background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 100, width: 30, height: 30, display: "grid", placeItems: "center", cursor: "pointer" }}>
+                            <X size={15} color="#fff" />
                           </motion.button>
-                          <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 18, fontWeight: 900, color: "#fff", lineHeight: 1.25, paddingRight: 36 }}>{m.name}</div>
-                          {m.company && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 600, marginTop: 2 }}>{m.company}</div>}
+                          <div style={{ fontFamily: "'Sora',sans-serif", fontSize: 16, fontWeight: 900, color: "#fff", lineHeight: 1.25, paddingRight: 36 }}>{m.name}</div>
+                          {m.company && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", fontWeight: 600, marginTop: 2 }}>{m.company}</div>}
                         </div>
 
-                        {/* Trust badge */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "linear-gradient(135deg, #ECFDF5, #D1FAE5)", borderBottom: `1px solid ${BORDER_}` }}>
-                          <ShieldCheck size={16} color={DEEP} />
-                          <div>
-                            <div style={{ fontSize: 11, fontWeight: 800, color: DEEP }}>Fulfilled by GoDavaii</div>
-                            <div style={{ fontSize: 9, color: SUB_ }}>Verified pharmacy partner · Quality guaranteed</div>
+                        {/* Scrollable content area */}
+                        <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch" }}>
+                          {/* Trust badge */}
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", background: "linear-gradient(135deg, #ECFDF5, #D1FAE5)", borderBottom: `1px solid ${BORDER_}` }}>
+                            <ShieldCheck size={14} color={DEEP} />
+                            <div>
+                              <div style={{ fontSize: 10, fontWeight: 800, color: DEEP }}>Fulfilled by GoDavaii</div>
+                              <div style={{ fontSize: 8, color: SUB_ }}>Verified pharmacy partner · Quality guaranteed</div>
+                            </div>
                           </div>
-                        </div>
 
-                        {/* Image Carousel */}
-                        {imgs.length > 0 && (
-                          <div style={{ position: "relative", background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)", aspectRatio: "4/3" }}>
-                            <img src={imgs[detailImgIdx % imgs.length]} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 12 }} />
-                            {imgs.length > 1 && (
-                              <>
-                                <button onClick={() => setDetailImgIdx(i => (i - 1 + imgs.length) % imgs.length)}
-                                  style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.85)", border: "none", borderRadius: 100, width: 30, height: 30, display: "grid", placeItems: "center", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
-                                  <ChevronLeft size={16} color={DEEP} />
-                                </button>
-                                <button onClick={() => setDetailImgIdx(i => (i + 1) % imgs.length)}
-                                  style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.85)", border: "none", borderRadius: 100, width: 30, height: 30, display: "grid", placeItems: "center", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
-                                  <ChevronRight size={16} color={DEEP} />
-                                </button>
-                                <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 5 }}>
-                                  {imgs.map((_, i) => <div key={i} style={{ width: 7, height: 7, borderRadius: 100, background: i === (detailImgIdx % imgs.length) ? DEEP : "rgba(0,0,0,0.15)", transition: "background 0.2s" }} />)}
-                                </div>
-                              </>
+                          {/* Image Carousel */}
+                          {imgs.length > 0 && (
+                            <div style={{ position: "relative", background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)", paddingTop: "65%", overflow: "hidden" }}>
+                              <img src={imgs[detailImgIdx % imgs.length]} alt="" style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "contain", padding: 10 }} />
+                              {imgs.length > 1 && (
+                                <>
+                                  <button onClick={() => setDetailImgIdx(i => (i - 1 + imgs.length) % imgs.length)}
+                                    style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.85)", border: "none", borderRadius: 100, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
+                                    <ChevronLeft size={14} color={DEEP} />
+                                  </button>
+                                  <button onClick={() => setDetailImgIdx(i => (i + 1) % imgs.length)}
+                                    style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.85)", border: "none", borderRadius: 100, width: 28, height: 28, display: "grid", placeItems: "center", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
+                                    <ChevronRight size={14} color={DEEP} />
+                                  </button>
+                                  <div style={{ position: "absolute", bottom: 6, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 4 }}>
+                                    {imgs.map((_, i) => <div key={i} style={{ width: 6, height: 6, borderRadius: 100, background: i === (detailImgIdx % imgs.length) ? DEEP : "rgba(0,0,0,0.15)", transition: "background 0.2s" }} />)}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                          {imgs.length === 0 && (
+                            <div style={{ background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)", paddingTop: "50%", position: "relative" }}>
+                              <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "grid", placeItems: "center", fontSize: 44 }}>💊</div>
+                            </div>
+                          )}
+
+                          {/* Info Section */}
+                          <div style={{ padding: "12px 14px 14px" }}>
+                            <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 10 }}>
+                              {cats.map(c => <span key={c} style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 100, background: `${ACCENT}12`, color: DEEP }}>{c}</span>)}
+                              {m.type && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 100, background: "rgba(248,250,252,1)", color: SUB_, border: `1px solid ${BORDER_}` }}>{m.type}</span>}
+                              {m.packCount && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 100, background: "rgba(248,250,252,1)", color: SUB_, border: `1px solid ${BORDER_}` }}>{m.packCount} {m.packUnit || ""}</span>}
+                              {m.prescriptionRequired && <span style={{ fontSize: 9, fontWeight: 800, padding: "2px 8px", borderRadius: 100, background: "#fef2f2", color: "#dc2626" }}>Rx Required</span>}
+                            </div>
+
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+                              <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 22, fontWeight: 900, color: TEXT_ }}>₹{price}</span>
+                              {mrp > price && <span style={{ fontSize: 13, color: SUB_, textDecoration: "line-through" }}>₹{mrp}</span>}
+                              {discPct > 0 && <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 100, background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff" }}>{discPct}% OFF</span>}
+                            </div>
+
+                            {m.composition && (
+                              <div style={{ marginBottom: 8 }}>
+                                <div style={{ fontSize: 9, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>Composition</div>
+                                <div style={{ fontSize: 11, color: TEXT_, fontWeight: 600, lineHeight: 1.4 }}>{m.composition}</div>
+                              </div>
                             )}
-                          </div>
-                        )}
-                        {imgs.length === 0 && (
-                          <div style={{ background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)", aspectRatio: "4/3", display: "grid", placeItems: "center", fontSize: 54 }}>💊</div>
-                        )}
 
-                        {/* Info Section */}
-                        <div style={{ padding: 16 }}>
-                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-                            {cats.map(c => <span key={c} style={{ fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, background: `${ACCENT}12`, color: DEEP }}>{c}</span>)}
-                            {m.type && <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, background: "rgba(248,250,252,1)", color: SUB_, border: `1px solid ${BORDER_}` }}>{m.type}</span>}
-                            {m.packCount && <span style={{ fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 100, background: "rgba(248,250,252,1)", color: SUB_, border: `1px solid ${BORDER_}` }}>{m.packCount} {m.packUnit || ""}</span>}
-                            {m.prescriptionRequired && <span style={{ fontSize: 9, fontWeight: 800, padding: "3px 10px", borderRadius: 100, background: "#fef2f2", color: "#dc2626" }}>Rx Required</span>}
-                          </div>
+                            {m.brand && (
+                              <div style={{ marginBottom: 8 }}>
+                                <div style={{ fontSize: 9, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>Brand</div>
+                                <div style={{ fontSize: 11, color: TEXT_, fontWeight: 600 }}>{m.brand}</div>
+                              </div>
+                            )}
 
-                          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
-                            <span style={{ fontFamily: "'Sora',sans-serif", fontSize: 24, fontWeight: 900, color: TEXT_ }}>₹{price}</span>
-                            {mrp > price && <span style={{ fontSize: 14, color: SUB_, textDecoration: "line-through" }}>₹{mrp}</span>}
-                            {discPct > 0 && <span style={{ fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 100, background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff" }}>{discPct}% OFF</span>}
-                          </div>
-
-                          {m.composition && (
-                            <div style={{ marginBottom: 10 }}>
-                              <div style={{ fontSize: 10, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Composition</div>
-                              <div style={{ fontSize: 12, color: TEXT_, fontWeight: 600, lineHeight: 1.4 }}>{m.composition}</div>
-                            </div>
-                          )}
-
-                          {m.brand && (
-                            <div style={{ marginBottom: 10 }}>
-                              <div style={{ fontSize: 10, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Brand</div>
-                              <div style={{ fontSize: 12, color: TEXT_, fontWeight: 600 }}>{m.brand}</div>
-                            </div>
-                          )}
-
-                          {detailDesc && (
-                            <div style={{ marginBottom: 10, background: `${BG_}`, borderRadius: 14, padding: 12 }}>
-                              <div style={{ fontSize: 10, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Description</div>
-                              <div style={{ fontSize: 11, color: TEXT_, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{detailDesc}</div>
-                            </div>
-                          )}
-
-                          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
-                            {inInv ? (
-                              <>
-                                <div style={{ padding: "12px 0", borderRadius: 14, background: `${ACCENT}15`, textAlign: "center", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, color: DEEP }}>
-                                  ✓ Already in Inventory
-                                </div>
-                                <div style={{ display: "flex", gap: 8 }}>
-                                  <motion.button whileTap={{ scale: 0.95 }} onClick={() => setCatalogDetail(null)}
-                                    style={{ flex: 1, padding: "12px 0", borderRadius: 14, border: `1.5px solid rgba(12,90,62,0.15)`, background: "#F8FBFA", color: "#374151", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                                    <X size={14} /> Close
-                                  </motion.button>
-                                  <motion.button whileTap={{ scale: 0.95 }} onClick={() => { const inv = inventory.find(i => String(i.medicineMasterId) === String(m._id)); if (inv) removeFromInventory(inv._id); setCatalogDetail(null); }}
-                                    style={{ flex: 1, padding: "12px 0", borderRadius: 14, border: "1.5px solid #fecaca", background: "#fff", color: "#dc2626", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                                    Remove
-                                  </motion.button>
-                                </div>
-                              </>
-                            ) : (
-                              <div style={{ display: "flex", gap: 8 }}>
-                                <motion.button whileTap={{ scale: 0.95 }} onClick={() => setCatalogDetail(null)}
-                                  style={{ flex: 1, padding: "12px 0", borderRadius: 14, border: `1.5px solid rgba(12,90,62,0.15)`, background: "#F8FBFA", color: "#374151", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                                  <X size={14} /> Close
-                                </motion.button>
-                                <motion.button whileTap={{ scale: 0.95 }} onClick={() => { addToInventoryWithPrice(m); setCatalogDetail(null); }}
-                                  style={{ flex: 2, padding: "12px 0", borderRadius: 14, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: `0 4px 16px rgba(12,90,62,0.35)` }}>
-                                  + Add to Inventory
-                                </motion.button>
+                            {detailDesc && (
+                              <div style={{ marginBottom: 8, background: `${BG_}`, borderRadius: 12, padding: 10 }}>
+                                <div style={{ fontSize: 9, fontWeight: 800, color: SUB_, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Description</div>
+                                <div style={{ fontSize: 10, color: TEXT_, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{detailDesc}</div>
                               </div>
                             )}
                           </div>
+                        </div>
+
+                        {/* Sticky bottom action buttons */}
+                        <div style={{ flexShrink: 0, padding: "10px 14px", borderTop: `1px solid ${BORDER_}`, background: "#fff", boxShadow: "0 -2px 12px rgba(0,0,0,0.04)" }}>
+                          {inInv ? (
+                            <>
+                              <div style={{ padding: "8px 0", borderRadius: 12, background: `${ACCENT}15`, textAlign: "center", fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: 800, color: DEEP, marginBottom: 8 }}>
+                                ✓ Already in Inventory
+                              </div>
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <motion.button whileTap={{ scale: 0.95 }} onClick={() => setCatalogDetail(null)}
+                                  style={{ flex: 1, height: 44, borderRadius: 12, border: `1.5px solid rgba(12,90,62,0.15)`, background: "#F8FBFA", color: "#374151", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                                  <X size={14} /> Close
+                                </motion.button>
+                                <motion.button whileTap={{ scale: 0.95 }} onClick={() => { const inv = inventory.find(i => String(i.medicineMasterId) === String(m._id)); if (inv) removeFromInventory(inv._id); setCatalogDetail(null); }}
+                                  style={{ flex: 1, height: 44, borderRadius: 12, border: "1.5px solid #fecaca", background: "#fff5f5", color: "#dc2626", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                                  Remove
+                                </motion.button>
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <motion.button whileTap={{ scale: 0.95 }} onClick={() => setCatalogDetail(null)}
+                                style={{ flex: 1, height: 46, borderRadius: 12, border: `1.5px solid rgba(12,90,62,0.15)`, background: "#F8FBFA", color: "#374151", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                                <X size={14} /> Close
+                              </motion.button>
+                              <motion.button whileTap={{ scale: 0.95 }} onClick={() => { addToInventoryWithPrice(m); setCatalogDetail(null); }}
+                                style={{ flex: 2, height: 46, borderRadius: 12, border: "none", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: `0 4px 16px rgba(12,90,62,0.35)` }}>
+                                + Add to Inventory
+                              </motion.button>
+                            </div>
+                          )}
                         </div>
                       </>
                     );
