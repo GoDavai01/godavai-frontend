@@ -1940,3 +1940,4 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
     </div>
   );
 }
+
