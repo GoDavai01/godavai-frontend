@@ -1470,7 +1470,7 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                 <AnimatePresence>
                 {catalogOpen && (
                   <motion.div key="catalog-overlay" initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 28, stiffness: 300 }}
-                    style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: BG_, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+                    style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: BG_, overflowY: "auto", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto" }}>
 
                     {/* Sticky Header */}
                     <div style={{ position: "sticky", top: 0, zIndex: 10, background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, padding: "12px 14px 10px", boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }}>
@@ -1555,11 +1555,11 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                         <motion.div key={m._id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
                           <div style={{ background: GLASS, border: `1px solid ${inInv ? `${ACCENT}30` : BORDER_}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 16px rgba(16,24,40,0.04)", position: "relative", transition: "all 0.2s" }}>
                             {/* Image Area */}
-                            <div onClick={() => openCatalogDetail(m)} style={{ position: "relative", aspectRatio: "4/3", cursor: "pointer", background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)" }}>
+                            <div onClick={() => openCatalogDetail(m)} style={{ position: "relative", aspectRatio: "1/1", cursor: "pointer", background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)" }}>
                               {imgSrc ? (
                                 <img src={imgSrc} alt={m.name} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 8 }} />
                               ) : (
-                                <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", fontSize: 38 }}>💊</div>
+                                <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", fontSize: 28 }}>💊</div>
                               )}
                               {/* Badges */}
                               <div style={{ position: "absolute", top: 6, left: 6, display: "flex", flexDirection: "column", gap: 3 }}>
