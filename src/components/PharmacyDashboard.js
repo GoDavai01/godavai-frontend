@@ -1470,7 +1470,7 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                 <AnimatePresence>
                 {catalogOpen && (
                   <motion.div key="catalog-overlay" initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 28, stiffness: 300 }}
-                    style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: BG_, overflowY: "auto", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto" }}>
+                    style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: BG_, overflowY: "auto", overflowX: "hidden" }}>
 
                     {/* Sticky Header */}
                     <div style={{ position: "sticky", top: 0, zIndex: 10, background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, padding: "12px 14px 10px", boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }}>
@@ -1543,7 +1543,7 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                     <div style={{ fontSize: 13, color: SUB_, fontWeight: 600 }}>{catalog.length === 0 ? "Loading catalog..." : "No medicines match filters."}</div>
                   </div>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginBottom: 14, width: "100%" }}>
                     {filteredCatalog.map((m) => {
                       const inInv = inventory.some(inv => String(inv.medicineMasterId) === String(m._id));
                       const hasOverride = priceOverride[m._id];
@@ -1552,28 +1552,28 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                       const price = Number(m.price || 0);
                       const discPct = mrp > 0 && price > 0 && price < mrp ? Math.round(((mrp - price) / mrp) * 100) : 0;
                       return (
-                        <motion.div key={m._id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}>
+                        <motion.div key={m._id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }} style={{ minWidth: 0, overflow: "hidden" }}>
                           <div style={{ background: GLASS, border: `1px solid ${inInv ? `${ACCENT}30` : BORDER_}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 16px rgba(16,24,40,0.04)", position: "relative", transition: "all 0.2s" }}>
                             {/* Image Area */}
-                            <div onClick={() => openCatalogDetail(m)} style={{ position: "relative", aspectRatio: "1/1", cursor: "pointer", background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)" }}>
+                            <div onClick={() => openCatalogDetail(m)} style={{ position: "relative", width: "100%", paddingTop: "75%", cursor: "pointer", background: "linear-gradient(145deg,#EEF7F1,#D8EDE2)", overflow: "hidden" }}>
                               {imgSrc ? (
-                                <img src={imgSrc} alt={m.name} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "contain", padding: 8 }} />
+                                <img src={imgSrc} alt={m.name} loading="lazy" style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "contain", padding: 6 }} />
                               ) : (
-                                <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", fontSize: 28 }}>💊</div>
+                                <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", display: "grid", placeItems: "center", fontSize: 28 }}>💊</div>
                               )}
                               {/* Badges */}
-                              <div style={{ position: "absolute", top: 6, left: 6, display: "flex", flexDirection: "column", gap: 3 }}>
+                              <div style={{ position: "absolute", top: 4, left: 4, display: "flex", flexDirection: "column", gap: 2, zIndex: 2 }}>
                                 {m.prescriptionRequired && <span style={{ fontSize: 8, fontWeight: 900, padding: "2px 6px", borderRadius: 6, background: "#dc2626", color: "#fff" }}>Rx</span>}
                                 {!m.brand && <span style={{ fontSize: 8, fontWeight: 800, padding: "2px 6px", borderRadius: 6, background: ACCENT, color: DEEP }}>Generic</span>}
                               </div>
                               {discPct > 0 && (
-                                <span style={{ position: "absolute", top: 6, right: 6, fontSize: 9, fontWeight: 900, padding: "2px 7px", borderRadius: 8, background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff" }}>
+                                <span style={{ position: "absolute", top: 4, right: 4, fontSize: 8, fontWeight: 900, padding: "2px 6px", borderRadius: 6, background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, color: "#fff", zIndex: 2 }}>
                                   {discPct}% OFF
                                 </span>
                               )}
                               {inInv && (
-                                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: `linear-gradient(0deg, ${DEEP}dd, transparent)`, padding: "14px 8px 6px", textAlign: "center" }}>
-                                  <span style={{ fontSize: 10, fontWeight: 900, color: "#fff", letterSpacing: 0.5 }}>✓ IN INVENTORY</span>
+                                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: `linear-gradient(0deg, ${DEEP}dd, transparent)`, padding: "10px 6px 4px", textAlign: "center", zIndex: 2 }}>
+                                  <span style={{ fontSize: 9, fontWeight: 900, color: "#fff", letterSpacing: 0.5 }}>✓ IN INVENTORY</span>
                                 </div>
                               )}
                             </div>
