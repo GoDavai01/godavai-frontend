@@ -379,14 +379,46 @@ export default function PharmacyDashboard() {
   // ====== MEDICINES TAB: MASTER CATALOG + INVENTORY + REQUEST ======
   const [catalogQ, setCatalogQ] = useState("");
   const [catalog, setCatalog] = useState([]);
+  const [catalogHasMore, setCatalogHasMore] = useState(true);
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogTotal, setCatalogTotal] = useState(0);
   const [inventory, setInventory] = useState([]);
   const [invMsg, setInvMsg] = useState("");
+  const catalogObserverRef = useRef(null);
 
-  const fetchCatalog = async () => {
-    const res = await axios.get(`${API_BASE_URL}/api/medicine-master?q=${encodeURIComponent(catalogQ)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    setCatalog(res.data || []);
+  const fetchCatalog = async (reset = true, pageOverride) => {
+    if (catalogLoading) return;
+    setCatalogLoading(true);
+    try {
+      const pg = reset ? 1 : (pageOverride || catalogPage);
+      const res = await axios.get(`${API_BASE_URL}/api/medicine-master?q=${encodeURIComponent(catalogQ)}&page=${pg}&limit=80`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = res.data;
+      // Support both old format (array) and new format ({ meds, total, hasMore })
+      if (Array.isArray(data)) {
+        setCatalog(data);
+        setCatalogHasMore(false);
+        setCatalogTotal(data.length);
+      } else {
+        if (reset) {
+          setCatalog(data.meds || []);
+        } else {
+          setCatalog(prev => [...prev, ...(data.meds || [])]);
+        }
+        setCatalogHasMore(data.hasMore ?? false);
+        setCatalogTotal(data.total || 0);
+        setCatalogPage(pg + 1);
+      }
+    } catch (e) {
+      console.error("Catalog fetch error:", e);
+    }
+    setCatalogLoading(false);
+  };
+
+  const loadMoreCatalog = () => {
+    if (catalogHasMore && !catalogLoading) fetchCatalog(false);
   };
 
   const fetchInventory = async () => {
@@ -399,7 +431,7 @@ export default function PharmacyDashboard() {
   useEffect(() => {
     if (token && tab === 2) {
       fetchInventory();
-      fetchCatalog();
+      if (catalog.length === 0) fetchCatalog(true);
     }
     // eslint-disable-next-line
   }, [token, tab]);
@@ -1133,9 +1165,10 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
   // Master catalog: auto-load on tab switch + search-as-you-type
   const handleCatalogSearch = (q) => {
     setCatalogQ(q);
+    setCatalogPage(1);
     if (catalogTimerRef.current) clearTimeout(catalogTimerRef.current);
     catalogTimerRef.current = setTimeout(() => {
-      if (q.length >= 2 || q.length === 0) fetchCatalog();
+      if (q.length >= 2 || q.length === 0) fetchCatalog(true);
     }, 350);
   };
 
@@ -1420,7 +1453,7 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
               <motion.div key="medicines" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
 
                 {/* ─── Master Catalog Button (opens full-page) ─── */}
-                <motion.button whileTap={{ scale: 0.97 }} onClick={() => { setCatalogOpen(true); if (catalog.length === 0) fetchCatalog(); }}
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => { setCatalogOpen(true); if (catalog.length === 0) fetchCatalog(true); }}
                   style={{ width: "100%", background: `linear-gradient(135deg, ${DEEP}, ${MID_})`, borderRadius: 20, padding: "18px 16px", marginBottom: 14, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, boxShadow: `0 6px 20px ${DEEP}30` }}>
                   <div style={{ width: 48, height: 48, borderRadius: 16, background: "rgba(255,255,255,0.15)", display: "grid", placeItems: "center", flexShrink: 0 }}>
                     <Search size={22} color="#fff" />
@@ -1450,7 +1483,7 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", fontWeight: 600 }}>Browse & add to inventory</div>
                         </div>
                         <div style={{ background: "rgba(255,255,255,0.18)", borderRadius: 100, padding: "4px 12px", fontSize: 11, fontWeight: 800, color: "#fff" }}>
-                          {filteredCatalog.length}/{catalog.length}
+                          {filteredCatalog.length}/{catalogTotal || catalog.length}
                         </div>
                       </div>
                       {/* Search */}
@@ -1588,6 +1621,21 @@ const pendingOrders = orders.filter(o => o.status === "placed" || o.status === 0
                         </motion.div>
                       );
                     })}
+                  </div>
+                )}
+
+                {/* Load More / Loading */}
+                {catalogHasMore && (
+                  <div style={{ textAlign: "center", padding: "16px 0 8px" }}>
+                    <motion.button whileTap={{ scale: 0.95 }} onClick={loadMoreCatalog} disabled={catalogLoading}
+                      style={{ padding: "12px 32px", borderRadius: 100, border: `1px solid ${DEEP}20`, background: GLASS, color: DEEP, fontFamily: "'Sora',sans-serif", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: "0 2px 12px rgba(16,24,40,0.04)" }}>
+                      {catalogLoading ? "Loading..." : "Load More Medicines"}
+                    </motion.button>
+                  </div>
+                )}
+                {catalogLoading && catalog.length === 0 && (
+                  <div style={{ textAlign: "center", padding: "40px 0" }}>
+                    <div style={{ fontSize: 13, color: SUB_, fontWeight: 600 }}>Loading catalog...</div>
                   </div>
                 )}
 
