@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   Clock3,
   Filter,
-  IndianRupee,
+  // IndianRupee,
   Landmark,
   MapPin,
   PhoneCall,
@@ -33,6 +33,7 @@ import {
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 const DEEP = "#0C5A3E";
 const MID = "#0E7A4F";
+// eslint-disable-next-line no-unused-vars
 const ACC = "#00D97E";
 
 const FALLBACK_SPECIALTIES = [
@@ -577,6 +578,7 @@ function DoctorCard({ doctor, mode, onBook }) {
         ? doctor.feeCall
         : doctor.feeInPerson;
 
+  // eslint-disable-next-line no-unused-vars
   const priceLabel =
     mode === "inperson"
       ? doctor.customerPriceLabelInPerson || `In-Person Visit Rs ${fee}`

@@ -394,6 +394,7 @@ export default function ConsultRoom() {
       active = false;
       if (timer) window.clearTimeout(timer);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [consultId, error, loading, role]);
 
   useEffect(() => {

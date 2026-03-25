@@ -4,7 +4,9 @@ import { motion } from "framer-motion";
 import { LogIn, Stethoscope } from "lucide-react";
 import axios from "axios";
 
+// eslint-disable-next-line no-unused-vars
 const DEEP = "#0C5A3E";
+// eslint-disable-next-line no-unused-vars
 const MID = "#0E7A4F";
 const API = process.env.REACT_APP_API_BASE_URL || "http://localhost:5000";
 
