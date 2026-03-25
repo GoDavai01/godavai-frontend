@@ -385,6 +385,7 @@ export default function PharmacyDashboard() {
   const [catalogTotal, setCatalogTotal] = useState(0);
   const [inventory, setInventory] = useState([]);
   const [invMsg, setInvMsg] = useState("");
+  // eslint-disable-next-line no-unused-vars
   const catalogObserverRef = useRef(null);
 
   const fetchCatalog = async (reset = true, pageOverride) => {
