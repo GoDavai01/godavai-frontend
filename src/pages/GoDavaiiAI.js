@@ -37,6 +37,7 @@ import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
+  Bookmark,
   Check,
   ClipboardList,
   FileText,
@@ -728,6 +729,7 @@ function ChatBubble({
   onShowFull,
   onRetry,
   onReaction,
+  onStar,
   speakingId,
   speakLoading,
   screen,
@@ -890,6 +892,31 @@ function ChatBubble({
                 title="Change playback speed"
               >
                 {ttsSpeed}x
+              </motion.button>
+            )}
+
+            {/* Save/Star button */}
+            {!isUser && m.streamDone && onStar && (
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => onStar(m)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  border: "1px solid #E5E7EB",
+                  borderRadius: 999,
+                  background: "#FAFAFA",
+                  padding: "6px 10px",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: "#6B7280",
+                  cursor: "pointer",
+                }}
+                title="Save this reply"
+              >
+                <Bookmark style={{ width: 11, height: 11 }} />
+                Save
               </motion.button>
             )}
 
@@ -1199,6 +1226,8 @@ export default function GoDavaiiAI() {
   useEffect(() => { ttsSpeedRef.current = ttsSpeed; }, [ttsSpeed]);
   const TTS_SPEEDS = [1, 1.25, 1.5, 2, 0.75];
   const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [showMemoryPrompt, setShowMemoryPrompt] = useState(false);
+  const pendingStickyRef = useRef("");
 
   const recognitionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -1215,6 +1244,7 @@ export default function GoDavaiiAI() {
   const ttsPendingRef = useRef(new Map());
   const revealTimeoutsRef = useRef(new Map());
   const stickyContextRef = useRef("");
+  const newChatFlagRef = useRef(false);
   const latestMessagesRef = useRef([]);
   const lastAutoScrollRef = useRef(0);
 
@@ -1973,7 +2003,9 @@ export default function GoDavaiiAI() {
 
   /* ── Backend ────────────────────────────────────────────── */
   async function askBackend(messageText, history) {
-  const payload = { message: messageText, history, context: { ...profileContext, stickyContext: stickyContextRef.current || "" } };
+  const isNew = newChatFlagRef.current;
+  if (isNew) newChatFlagRef.current = false; // consume flag after first use
+  const payload = { message: messageText, history, context: { ...profileContext, stickyContext: stickyContextRef.current || "", ...(isNew ? { newChat: true } : {}) } };
   const headers = getAuthHeaders();
 
   const endpoints = [
@@ -2291,6 +2323,10 @@ export default function GoDavaiiAI() {
     });
     revealTimeoutsRef.current.clear();
 
+    // Save current sticky for memory transfer prompt
+    const hadSticky = (stickyContextRef.current || "").trim().length > 0;
+    pendingStickyRef.current = stickyContextRef.current || "";
+
     setMessages([
       createAssistantMessage({
         id: makeId(),
@@ -2302,7 +2338,23 @@ export default function GoDavaiiAI() {
     ]);
     setCurrentSessionId(null);
     stickyContextRef.current = "";
+    newChatFlagRef.current = true;
     setSidebarOpen(false);
+
+    // Show memory transfer prompt if there was previous context
+    if (hadSticky) {
+      setShowMemoryPrompt(true);
+    }
+  }
+
+  function handleMemoryChoice(keepFindings) {
+    if (keepFindings) {
+      stickyContextRef.current = pendingStickyRef.current;
+    } else {
+      stickyContextRef.current = "";
+    }
+    pendingStickyRef.current = "";
+    setShowMemoryPrompt(false);
   }
 
   function QuickActions() {
@@ -2501,14 +2553,90 @@ export default function GoDavaiiAI() {
                   const idx = TTS_SPEEDS.indexOf(prev);
                   const next = TTS_SPEEDS[(idx + 1) % TTS_SPEEDS.length];
                   localStorage.setItem("gd_tts_speed", String(next));
-                  // Apply to currently playing audio immediately
                   if (audioRef.current) audioRef.current.playbackRate = next;
                   return next;
                 });
               }}
+              onStar={async () => {
+                if (!currentSessionId) return;
+                try {
+                  await axios.patch(
+                    `${API}/api/ai/sessions/${currentSessionId}/star`,
+                    {},
+                    { headers: getAuthHeaders(), timeout: 5000 }
+                  );
+                  loadChatHistory();
+                } catch {}
+              }}
             />
           ))}
         </AnimatePresence>
+
+        {/* Memory Transfer Prompt */}
+        {showMemoryPrompt && (
+          <div style={{
+            margin: "12px 16px",
+            padding: "14px 16px",
+            borderRadius: 16,
+            background: ACC_SOFT,
+            border: `1px solid ${ACC}33`,
+          }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: TEXT, margin: 0 }}>
+              Carry forward medical findings?
+            </p>
+            <p style={{ fontSize: 12, color: SUB, margin: "4px 0 10px" }}>
+              Keep key findings from your last chat for better context
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => handleMemoryChoice(true)}
+                style={{
+                  flex: 1, padding: "8px 0", borderRadius: 10, border: "none",
+                  background: `linear-gradient(135deg, ${DEEP}, ${MID})`,
+                  color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer",
+                }}
+              >
+                Yes, Keep
+              </button>
+              <button
+                onClick={() => handleMemoryChoice(false)}
+                style={{
+                  flex: 1, padding: "8px 0", borderRadius: 10,
+                  border: `1px solid ${SUB}33`, background: "transparent",
+                  color: SUB, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                Fresh Start
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Message Limit Suggestion (15+ messages) */}
+        {messages.filter(m => m.role === "user").length >= 15 && !loading && (
+          <div style={{
+            margin: "12px 16px",
+            padding: "12px 16px",
+            borderRadius: 14,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            textAlign: "center",
+          }}>
+            <p style={{ fontSize: 12, color: SUB, margin: "0 0 8px" }}>
+              💡 This chat is getting long. For best AI accuracy, consider starting a new chat!
+            </p>
+            <button
+              onClick={startNewChat}
+              style={{
+                padding: "6px 16px", borderRadius: 10, border: "none",
+                background: `linear-gradient(135deg, ${DEEP}, ${MID})`,
+                color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer",
+              }}
+            >
+              Start New Chat
+            </button>
+          </div>
+        )}
 
         {loading && <ThinkingBlock hasFile={Boolean(attachedFile)} />}
 
@@ -2959,64 +3087,62 @@ export default function GoDavaiiAI() {
                     </div>
                   </div>
                 ) : (
-                  chatSessions.map((s) => {
-                    const lastMsg = s.messages?.[s.messages.length - 1]?.text || "";
-                    const preview = lastMsg.slice(0, 70) + (lastMsg.length > 70 ? "..." : "");
-                    const date = s.updatedAt
-                      ? new Date(s.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
-                      : "";
+                  (() => {
+                    const now = new Date();
+                    const todayStr = now.toDateString();
+                    const yestStr = new Date(now - 86400000).toDateString();
+                    const starred = chatSessions.filter(s => s.starred);
+                    const today = chatSessions.filter(s => !s.starred && new Date(s.updatedAt).toDateString() === todayStr);
+                    const yesterday = chatSessions.filter(s => !s.starred && new Date(s.updatedAt).toDateString() === yestStr);
+                    const older = chatSessions.filter(s => !s.starred && new Date(s.updatedAt).toDateString() !== todayStr && new Date(s.updatedAt).toDateString() !== yestStr);
 
-                    return (
-                      <motion.button
-                        key={s._id}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => loadSession(s._id)}
-                        style={{
-                          width: "100%",
-                          textAlign: "left",
-                          padding: "13px 13px",
-                          borderRadius: 18,
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          background: "rgba(255,255,255,0.05)",
-                          marginBottom: 8,
-                          cursor: "pointer",
-                          display: "block",
-                          backdropFilter: "blur(12px)",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 5 }}>
-                          <span style={{ fontSize: 12, fontWeight: 900, color: "#fff", fontFamily: "'Sora',sans-serif" }}>
-                            {s.whoForLabel || s.whoFor || "Self"}
-                          </span>
-                          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.58)", fontWeight: 700 }}>
-                            {date}
-                          </span>
-                        </div>
+                    const SectionLabel = ({ label }) => (
+                      <div style={{ fontSize: 10, fontWeight: 900, color: "rgba(255,255,255,0.45)", letterSpacing: 1, textTransform: "uppercase", padding: "10px 4px 4px", fontFamily: "'Sora',sans-serif" }}>
+                        {label}
+                      </div>
+                    );
 
-                        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.70)", fontWeight: 600, lineHeight: 1.45 }}>
-                          {preview || "Empty chat"}
-                        </div>
-
-                        {s.focus && (
-                          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                            <span
-                              style={{
-                                fontSize: 9.5,
-                                fontWeight: 900,
-                                color: "#B8FFE5",
-                                background: "rgba(24,226,161,0.12)",
-                                padding: "3px 7px",
-                                borderRadius: 999,
-                                border: "1px solid rgba(24,226,161,0.14)",
-                              }}
-                            >
-                              {s.focus}
+                    const SessionCard = ({ s }) => {
+                      const title = s.title || s.whoForLabel || s.whoFor || "Chat";
+                      const lastMsg = s.messages?.[s.messages.length - 1]?.text || "";
+                      const preview = lastMsg.slice(0, 60) + (lastMsg.length > 60 ? "..." : "");
+                      const date = s.updatedAt ? new Date(s.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "";
+                      return (
+                        <motion.button
+                          key={s._id}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => loadSession(s._id)}
+                          style={{
+                            width: "100%", textAlign: "left", padding: "12px 13px", borderRadius: 16,
+                            border: s.starred ? `1px solid ${ACC}33` : "1px solid rgba(255,255,255,0.08)",
+                            background: s.starred ? ACC_SOFT : "rgba(255,255,255,0.05)",
+                            marginBottom: 6, cursor: "pointer", display: "block", backdropFilter: "blur(12px)",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                            <span style={{ fontSize: 12, fontWeight: 900, color: "#fff", fontFamily: "'Sora',sans-serif", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {s.starred ? "⭐ " : ""}{title}
+                            </span>
+                            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.50)", fontWeight: 700, flexShrink: 0 }}>
+                              {date}
                             </span>
                           </div>
-                        )}
-                      </motion.button>
+                          <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.60)", fontWeight: 600, lineHeight: 1.4 }}>
+                            {preview || "Empty chat"}
+                          </div>
+                        </motion.button>
+                      );
+                    };
+
+                    return (
+                      <>
+                        {starred.length > 0 && <><SectionLabel label="⭐ Saved" />{starred.map(s => <SessionCard key={s._id} s={s} />)}</>}
+                        {today.length > 0 && <><SectionLabel label="Today" />{today.map(s => <SessionCard key={s._id} s={s} />)}</>}
+                        {yesterday.length > 0 && <><SectionLabel label="Yesterday" />{yesterday.map(s => <SessionCard key={s._id} s={s} />)}</>}
+                        {older.length > 0 && <><SectionLabel label="Older" />{older.map(s => <SessionCard key={s._id} s={s} />)}</>}
+                      </>
                     );
-                  })
+                  })()
                 )}
               </div>
             </motion.div>
