@@ -1481,7 +1481,7 @@ export default function GoDavaiiAI() {
 
     revealTimeoutsRef.current.set(id, scheduled);
     return id;
-  }, [throttledAutoScroll, prefetchTTSForText]);
+  }, [throttledAutoScroll]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pushErrorBubble = useCallback((err, retryPayload = null) => {
     const msg = String(getApiErrorMessage(err) || "Request failed.");
