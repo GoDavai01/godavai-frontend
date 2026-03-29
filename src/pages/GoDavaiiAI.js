@@ -1419,8 +1419,8 @@ export default function GoDavaiiAI() {
     const id = makeId();
     const cleanFull = String(fullText || "");
 
-    // Fire TTS prefetch IMMEDIATELY — don't wait for React render cycle
-    prefetchTTSForText(cleanFull);
+    // [chunk-on-demand] Eager prefetch disabled — TTS is now fetched on-demand when user clicks Listen
+    // prefetchTTSForText(cleanFull);
     const chunks = chunkTextForReveal(cleanFull);
 
     if (!cleanFull.trim() || chunks.length <= 1 || cleanFull.length < 60) {
@@ -1675,28 +1675,8 @@ export default function GoDavaiiAI() {
     };
 
     try {
+      // Legacy single-audio cache path (for entries cached before chunk-on-demand)
       const meta = ttsCacheRef.current.get(cacheKey);
-      if (meta?.chunked) {
-        // Chunked audio — play chunks sequentially
-        const chunks = splitTextForTTSChunks(text, 900);
-        console.log(`[TTS] Playing ${meta.totalChunks} chunks`);
-        setSpeakLoading(false);
-
-        for (let i = 0; i < meta.totalChunks; i++) {
-          if (gen !== speakGenRef.current) break;
-          const chunkKey = `${cacheKey}::${i}`;
-          const audio = await getChunkAudio(chunkKey, chunks[i] || "");
-          if (audio?.audioBase64) {
-            await playChunk(audio.audioBase64, String(audio.mimeType || "audio/mpeg"));
-          }
-        }
-        setSpeakingId(null);
-        setSpeakLoading(false);
-        audioRef.current = null;
-        return;
-      }
-
-      // Legacy single-audio path (for non-chunked cache entries)
       if (meta?.audioBase64) {
         console.log("[TTS] CACHE HIT single");
         setSpeakLoading(false);
@@ -1706,21 +1686,39 @@ export default function GoDavaiiAI() {
         return;
       }
 
-      // No prefetch at all — fire chunked prefetch now, then play
-      console.log("[TTS] No prefetch found — firing now");
+      // Chunk-on-demand with lookahead-1:
+      // Fetch only the current + next chunk instead of all chunks upfront
       const chunks = splitTextForTTSChunks(text, 900);
-      const masterMeta = { chunked: true, totalChunks: chunks.length };
-      ttsCacheRef.current.set(cacheKey, masterMeta);
+      console.log(`[TTS] Chunk-on-demand: ${chunks.length} chunk(s)`);
+
+      // Store master metadata so re-listen knows about chunks
+      if (!meta?.chunked) {
+        ttsCacheRef.current.set(cacheKey, { chunked: true, totalChunks: chunks.length });
+      }
 
       setSpeakLoading(false);
+
       for (let i = 0; i < chunks.length; i++) {
         if (gen !== speakGenRef.current) break;
+
         const chunkKey = `${cacheKey}::${i}`;
+
+        // Fetch current chunk (may already be cached from previous lookahead or re-listen)
         const audio = await getChunkAudio(chunkKey, chunks[i]);
+        if (gen !== speakGenRef.current) break;
+
+        // Start prefetching next chunk in background (lookahead-1)
+        if (i + 1 < chunks.length) {
+          const nextChunkKey = `${cacheKey}::${i + 1}`;
+          getChunkAudio(nextChunkKey, chunks[i + 1]).catch(() => {});
+        }
+
+        // Play current chunk
         if (audio?.audioBase64) {
           await playChunk(audio.audioBase64, String(audio.mimeType || "audio/mpeg"));
         }
       }
+
       setSpeakingId(null);
       setSpeakLoading(false);
       audioRef.current = null;
@@ -1733,15 +1731,15 @@ export default function GoDavaiiAI() {
     setSpeakLoading(false);
   }, [speakingId, replyLanguage]);
 
-  // Backup prefetch via useEffect (in case eager prefetch didn't fire)
-  useEffect(() => {
-    const last = [...messages]
-      .reverse()
-      .find((m) => m.role === "assistant" && !(m?.meta?.errorBubble));
-    if (last?.fullText || last?.text) {
-      prefetchTTSForText(last.fullText || last.text);
-    }
-  }, [messages, replyLanguage, prefetchTTSForText]);
+  // [chunk-on-demand] Backup prefetch disabled — TTS is now fetched on-demand when user clicks Listen
+  // useEffect(() => {
+  //   const last = [...messages]
+  //     .reverse()
+  //     .find((m) => m.role === "assistant" && !(m?.meta?.errorBubble));
+  //   if (last?.fullText || last?.text) {
+  //     prefetchTTSForText(last.fullText || last.text);
+  //   }
+  // }, [messages, replyLanguage, prefetchTTSForText]);
 
   async function submitFeedback(messageObj, rating, reason = "") {
     try {
