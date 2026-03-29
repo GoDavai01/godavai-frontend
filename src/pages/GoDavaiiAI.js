@@ -1359,6 +1359,7 @@ export default function GoDavaiiAI() {
   }, [stopRevealForMessage, throttledAutoScroll]);
 
   // Eagerly prefetch TTS audio in parallel chunks the moment full text arrives
+  // eslint-disable-next-line no-unused-vars
   const prefetchTTSForText = useCallback((rawText) => {
     const text = cleanAssistantText(rawText);
     if (!text || text.length < 20) return;
