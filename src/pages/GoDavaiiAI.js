@@ -609,15 +609,16 @@ function getSafeBottomPadding() {
   return "calc(env(safe-area-inset-bottom, 0px) + 10px)";
 }
 
-function createAssistantMessage({ id, text, meta = {}, isStreaming = false }) {
+function createAssistantMessage({ id, text, meta = {}, isStreaming = false, liveStream = false }) {
   const full = String(text || "");
   return {
     id,
     role: "assistant",
-    text: isStreaming ? "" : full,
+    text: liveStream ? full : (isStreaming ? "" : full),  // liveStream = real SSE, isStreaming = fake reveal
     fullText: full,
     isStreaming,
     streamDone: !isStreaming,
+    liveStream,
     meta,
   };
 }
@@ -2061,6 +2062,117 @@ export default function GoDavaiiAI() {
   throw lastErr || new Error("AI chat failed.");
 }
 
+  /**
+   * SSE Streaming chat — text appears word-by-word in 2-3s instead of waiting 60-90s
+   * Falls back to regular askBackend if streaming endpoint unavailable
+   */
+  async function askBackendStream(messageText, history, onChunk) {
+    const isNew = newChatFlagRef.current;
+    if (isNew) newChatFlagRef.current = false;
+    const payload = {
+      message: messageText,
+      history,
+      context: {
+        ...profileContext,
+        stickyContext: stickyContextRef.current || "",
+        ...(isNew ? { newChat: true } : {}),
+      },
+    };
+    const headers = getAuthHeaders();
+
+    try {
+      const response = await fetch(`${API}/api/ai/chat/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...headers,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      // If not SSE, fall back to regular JSON response
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("text/event-stream")) {
+        const data = await response.json();
+        return {
+          reply: data.reply || "",
+          sessionId: data.sessionId || null,
+          context: data.context || {},
+          meta: { ...(data.meta || {}), streamed: false },
+        };
+      }
+
+      // Parse SSE stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let fullText = "";
+      let sessionId = null;
+      let meta = {};
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+
+          try {
+            const event = JSON.parse(jsonStr);
+
+            switch (event.type) {
+              case "chunk":
+                fullText += event.text;
+                if (onChunk) onChunk(fullText);
+                break;
+
+              case "safety":
+                fullText += "\n" + event.text;
+                if (onChunk) onChunk(fullText);
+                break;
+
+              case "done":
+                if (event.fullText) fullText = event.fullText;
+                meta = event.meta || {};
+                meta.streamed = true;
+                break;
+
+              case "error":
+                throw new Error(event.error || "Stream error");
+
+              default:
+                break;
+            }
+          } catch (parseErr) {
+            if (parseErr.message && !parseErr.message.includes("JSON")) throw parseErr;
+          }
+        }
+      }
+
+      // Update sticky context
+      if (meta?.stickyContext) {
+        stickyContextRef.current = String(meta.stickyContext);
+      }
+
+      return {
+        reply: fullText,
+        sessionId,
+        context: {},
+        meta,
+      };
+    } catch (err) {
+      console.warn("[Stream] Failed, falling back to regular chat:", err?.message);
+      // Fallback to regular non-streaming endpoint
+      return askBackend(messageText, history);
+    }
+  }
+
   async function askBackendWithFile(messageText, history, fileOrFiles) {
     const headers = {
       ...getAuthHeaders(),
@@ -2228,20 +2340,68 @@ export default function GoDavaiiAI() {
 
     try {
       const filesToSend = activeFiles?.length > 1 ? activeFiles : activeFile;
-      const out = filesToSend
-        ? await askBackendWithFile(msg, buildCompactHistory(nextMessages), filesToSend)
-        : await askBackend(msg, buildCompactHistory(nextMessages));
 
-      if (out?.sessionId) setCurrentSessionId(out.sessionId);
+      if (filesToSend) {
+        // File uploads — use regular (non-streaming) endpoint
+        const out = await askBackendWithFile(msg, buildCompactHistory(nextMessages), filesToSend);
+        if (out?.sessionId) setCurrentSessionId(out.sessionId);
+        appendAssistantMessageWithReveal(out.reply, {
+          ...(out.meta || {}),
+          sessionId: out.sessionId || currentSessionId || null,
+        });
+        if (!customPayload) {
+          setAttachedFile(null);
+          setAttachedFiles([]);
+        }
+      } else {
+        // Text-only — use SSE streaming for instant perceived response
+        const streamMsgId = makeId();
 
-      appendAssistantMessageWithReveal(out.reply, {
-        ...(out.meta || {}),
-        sessionId: out.sessionId || currentSessionId || null,
-      });
+        // Create empty assistant message immediately (shows "thinking" state)
+        setMessages((prev) => [
+          ...prev,
+          createAssistantMessage({
+            id: streamMsgId,
+            text: "",
+            meta: {},
+            isStreaming: true,
+            liveStream: true,
+          }),
+        ]);
 
-      if (!customPayload && (activeFile || activeFiles?.length)) {
-        setAttachedFile(null);
-        setAttachedFiles([]);
+        const out = await askBackendStream(
+          msg,
+          buildCompactHistory(nextMessages),
+          (partialText) => {
+            // Update message with each new chunk — text flows like typing
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === streamMsgId
+                  ? { ...m, text: partialText, isStreaming: true }
+                  : m
+              )
+            );
+            throttledAutoScroll(false);
+          }
+        );
+
+        // Finalize the streamed message
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === streamMsgId
+              ? {
+                  ...m,
+                  text: out.reply || m.text,
+                  isStreaming: false,
+                  streamDone: true,
+                  meta: out.meta || {},
+                }
+              : m
+          )
+        );
+
+        if (out?.sessionId) setCurrentSessionId(out.sessionId);
+        throttledAutoScroll(true);
       }
     } catch (err) {
       pushErrorBubble(err, {
