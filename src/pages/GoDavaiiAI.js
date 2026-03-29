@@ -826,10 +826,14 @@ function ChatBubble({
             {m.text}
           </div>
         ) : (
-          <FormatReply text={displayText} screen={screen} uiLang={uiLang} />
+          {m.liveStream && m.isStreaming && !(m.text || "").trim() ? (
+            <div style={{ color: "#9CA3AF", fontSize: 13, fontStyle: "italic" }}>Thinking...</div>
+          ) : (
+            <FormatReply text={displayText} screen={screen} uiLang={uiLang} />
+          )}
         )}
 
-        {!isUser && (
+        {!isUser && !!(m.text || "").trim() && (!m.liveStream || m.streamDone) && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 11, flexWrap: "wrap" }}>
             <motion.button
               whileTap={{ scale: 0.95 }}
@@ -2385,15 +2389,17 @@ export default function GoDavaiiAI() {
           }
         );
 
-        // Finalize the streamed message
+        // Finalize the streamed message — show Listen/Save buttons now
         setMessages((prev) =>
           prev.map((m) =>
             m.id === streamMsgId
               ? {
                   ...m,
                   text: out.reply || m.text,
+                  fullText: out.reply || m.text,
                   isStreaming: false,
                   streamDone: true,
+                  liveStream: false,
                   meta: out.meta || {},
                 }
               : m
