@@ -825,12 +825,10 @@ function ChatBubble({
           >
             {m.text}
           </div>
+        ) : m.liveStream && m.isStreaming && !(m.text || "").trim() ? (
+          <div style={{ color: "#9CA3AF", fontSize: 13, fontStyle: "italic" }}>Thinking...</div>
         ) : (
-          {m.liveStream && m.isStreaming && !(m.text || "").trim() ? (
-            <div style={{ color: "#9CA3AF", fontSize: 13, fontStyle: "italic" }}>Thinking...</div>
-          ) : (
-            <FormatReply text={displayText} screen={screen} uiLang={uiLang} />
-          )}
+          <FormatReply text={displayText} screen={screen} uiLang={uiLang} />
         )}
 
         {!isUser && !!(m.text || "").trim() && (!m.liveStream || m.streamDone) && (
